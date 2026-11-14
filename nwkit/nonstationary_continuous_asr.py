@@ -77,7 +77,16 @@ def parse_eb_rate_bounds(value, tree):
     return lower, upper
 
 
-def _run_eb(tree, values_by_leaf, rate, sigma2, standard_errors, tree_validated):
+def _run_eb(
+    tree,
+    values_by_leaf,
+    rate,
+    sigma2,
+    standard_errors,
+    tree_validated,
+    *,
+    likelihood_only=False,
+):
     # The ASR command historically calls the two-sided exponential rate-change
     # model EB.  Internally it is the same process that regression calls ACDC,
     # including positive acceleration parameters.
@@ -95,6 +104,7 @@ def _run_eb(tree, values_by_leaf, rate, sigma2, standard_errors, tree_validated)
         standard_errors=standard_errors,
         _tree_validated=tree_validated,
         _process=process,
+        _likelihood_only=likelihood_only,
     )
     return posterior, fit
 
@@ -145,6 +155,7 @@ def compute_eb_marginals(
                         fixed_sigma2,
                         standard_errors,
                         _tree_validated,
+                        likelihood_only=True,
                     )
                 except (ValueError, ArithmeticError):
                     likelihood = None
@@ -236,6 +247,8 @@ def _run_drift(
     sigma2,
     standard_errors,
     tree_validated,
+    *,
+    likelihood_only=False,
 ):
     residual_values = {
         name: None
@@ -249,6 +262,7 @@ def _run_drift(
         sigma2=sigma2,
         standard_errors=standard_errors,
         _tree_validated=tree_validated,
+        _likelihood_only=likelihood_only,
     )
     posterior = {
         node: GaussianMarginal(marginal.mean + drift * depths[node], marginal.variance)
@@ -428,6 +442,7 @@ def compute_bm_drift_marginals(
                             fixed_sigma2,
                             standard_errors,
                             _tree_validated,
+                            likelihood_only=True,
                         )
                     except (ValueError, ArithmeticError):
                         likelihood = None

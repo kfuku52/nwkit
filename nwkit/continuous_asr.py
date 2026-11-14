@@ -546,6 +546,7 @@ def compute_bm_marginals(
     standard_errors=None,
     _tree_validated=False,
     _process=None,
+    _likelihood_only=False,
 ):
     """Return all-node Gaussian marginals and a fixed-rate or REML BM fit.
 
@@ -626,26 +627,28 @@ def compute_bm_marginals(
         ):
             break
         trait_exponent_ceiling = candidate_exponent
-    upward = _prune(data, rate)
-    smoothed = _smooth(data, rate, upward.inside)
-    restored = [
-        GaussianMarginal(
-            data.trait_center
-            + _ldexp(item.mean, data.trait_exponent, "Ancestral mean"),
-            _ldexp(item.variance, 2 * data.trait_exponent, "Ancestral variance"),
-        )
-        for item in smoothed
-    ]
-    if any(not math.isfinite(item.mean) for item in restored):
-        raise ValueError("An ancestral mean exceeds floating-point range.")
-    # Exact observations retain the original floating-point value, including
-    # after centering/scaling; all members of a zero-edge group share it.
-    posterior = {
-        node: GaussianMarginal(data.exact_values[group], 0.0)
-        if group in data.exact_values
-        else restored[group]
-        for node, group in data.node_groups.items()
-    }
+    upward = _prune(data, rate, collect_inside=not _likelihood_only)
+    posterior = {}
+    if not _likelihood_only:
+        smoothed = _smooth(data, rate, upward.inside)
+        restored = [
+            GaussianMarginal(
+                data.trait_center
+                + _ldexp(item.mean, data.trait_exponent, "Ancestral mean"),
+                _ldexp(item.variance, 2 * data.trait_exponent, "Ancestral variance"),
+            )
+            for item in smoothed
+        ]
+        if any(not math.isfinite(item.mean) for item in restored):
+            raise ValueError("An ancestral mean exceeds floating-point range.")
+        # Exact observations retain the original floating-point value, including
+        # after centering/scaling; all members of a zero-edge group share it.
+        posterior = {
+            node: GaussianMarginal(data.exact_values[group], 0.0)
+            if group in data.exact_values
+            else restored[group]
+            for node, group in data.node_groups.items()
+        }
     residual_df = data.num_effective - 1
     singular = upward.residual_df < residual_df
     log_likelihood = (
