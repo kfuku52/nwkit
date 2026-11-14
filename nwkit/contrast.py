@@ -1238,7 +1238,7 @@ def _sampling_covariance_table(
     tip_summary,
     compact_sampling_covariance,
 ):
-    covariance_rows = []
+    covariance_parts = []
     table = table.copy()
     for column in REPLICATE_CONTRAST_COLUMNS:
         table[column] = pd.Series([""] * len(table), index=table.index, dtype=object)
@@ -1255,10 +1255,9 @@ def _sampling_covariance_table(
             raise ValueError(
                 "Sampling covariance is absent for trait '{}'.".format(trait)
             )
-        row_indices = list(trait_rows.index)
-        contrast_ids = [
-            str(table.loc[index, "branch_clade_id"]) for index in row_indices
-        ]
+        row_indices = trait_rows.index
+        contrast_ids = trait_rows["branch_clade_id"].map(str).to_numpy()
+        tree_ids = trait_rows["tree_id"].map(str).to_numpy()
         leaf_names = leaf_names_by_trait[trait]
         coefficient_values = [
             coefficient_by_trait_and_clade[(trait, contrast_id)]
@@ -1281,83 +1280,95 @@ def _sampling_covariance_table(
             sampling_covariance_by_trait[trait],
             trait,
         )
-        for position, row_index in enumerate(row_indices):
-            coefficient = coefficients[position]
-            if sparse.issparse(coefficient):
-                coefficient = coefficient.tocsr()
-                supported_indices = coefficient.indices[
-                    np.abs(coefficient.data) > np.finfo(float).eps
-                ]
-            else:
-                supported_indices = np.flatnonzero(
-                    np.abs(coefficient) > np.finfo(float).eps
-                )
-            supported_leaves = [leaf_names[index] for index in supported_indices]
-            sample_sizes = [
-                n_by_trait_and_leaf[(trait, leaf)]
-                for leaf in supported_leaves
-                if (trait, leaf) in n_by_trait_and_leaf
-            ]
-            table.loc[row_index, "sampling_variance"] = float(
-                max(sampling_diagonal[position], 0.0)
-            )
-            table.loc[row_index, "evolutionary_variance"] = float(
-                table.loc[row_index, "contrast_variance"]
-            )
-            table.loc[row_index, "replicate_model"] = replicate_model_by_trait[trait]
-            table.loc[row_index, "min_n_biological"] = (
-                min(sample_sizes) if sample_sizes else ""
-            )
+        table.loc[row_indices, "sampling_variance"] = np.maximum(sampling_diagonal, 0.0)
+        table.loc[row_indices, "evolutionary_variance"] = trait_rows[
+            "contrast_variance"
+        ].to_numpy(dtype=float)
+        table.loc[row_indices, "replicate_model"] = replicate_model_by_trait[trait]
+        table.loc[row_indices, "min_n_biological"] = _minimum_contrast_sample_sizes(
+            coefficients,
+            [n_by_trait_and_leaf.get((trait, leaf)) for leaf in leaf_names],
+        )
         if (
             compact_sampling_covariance
             and diagonal_sampling
             and len(contrast_ids) > MAX_FULL_SAMPLING_COVARIANCE_CONTRASTS
         ):
             assert factor_latent_ids is not None
-            coo = contrast_factor.tocoo()
-            represented_rows = set(coo.row)
-            for row, column, value in zip(coo.row, coo.col, coo.data, strict=True):
-                covariance_rows.append(
-                    {
-                        "tree_id": str(table.loc[row_indices[row], "tree_id"]),
-                        "trait": trait,
-                        "contrast_id_1": contrast_ids[row],
-                        "contrast_id_2": factor_latent_ids[column],
-                        "sampling_covariance": float(value),
-                        "covariance_representation": "factor-loading",
-                    }
+            covariance_parts.append(
+                _contrast_factor_covariance_table(
+                    trait, contrast_ids, tree_ids, contrast_factor, factor_latent_ids
                 )
-            for row in sorted(set(range(len(contrast_ids))) - represented_rows):
-                covariance_rows.append(
-                    {
-                        "tree_id": str(table.loc[row_indices[row], "tree_id"]),
-                        "trait": trait,
-                        "contrast_id_1": contrast_ids[row],
-                        "contrast_id_2": "latent:zero",
-                        "sampling_covariance": 0.0,
-                        "covariance_representation": "factor-loading",
-                    }
-                )
+            )
         else:
             if contrast_covariance is None:
                 contrast_covariance = np.asarray(
                     (contrast_factor @ contrast_factor.T).toarray()
                 )
-            for row1, contrast_id_1 in enumerate(contrast_ids):
-                for row2 in range(row1, len(contrast_ids)):
-                    covariance_rows.append(
-                        {
-                            "tree_id": str(table.loc[row_indices[row1], "tree_id"]),
-                            "trait": trait,
-                            "contrast_id_1": contrast_id_1,
-                            "contrast_id_2": contrast_ids[row2],
-                            "sampling_covariance": float(
-                                contrast_covariance[row1, row2]
-                            ),
-                            "covariance_representation": "covariance",
-                        }
-                    )
-    return table, pd.DataFrame(covariance_rows, columns=SAMPLING_COVARIANCE_COLUMNS)
+            first, second = np.triu_indices(len(contrast_ids))
+            covariance_parts.append(
+                pd.DataFrame(
+                    {
+                        "tree_id": tree_ids[first],
+                        "trait": trait,
+                        "contrast_id_1": contrast_ids[first],
+                        "contrast_id_2": contrast_ids[second],
+                        "sampling_covariance": contrast_covariance[first, second],
+                        "covariance_representation": "covariance",
+                    },
+                    columns=SAMPLING_COVARIANCE_COLUMNS,
+                )
+            )
+    covariance_table = (
+        pd.concat(covariance_parts, ignore_index=True)
+        if covariance_parts
+        else pd.DataFrame(columns=SAMPLING_COVARIANCE_COLUMNS)
+    )
+    return table, covariance_table
+
+
+def _minimum_contrast_sample_sizes(coefficients, sizes_by_leaf):
+    present = np.fromiter((size is not None for size in sizes_by_leaf), dtype=bool)
+    result = np.full(coefficients.shape[0], "", dtype=object)
+    if not present.any():
+        return result
+    sample_sizes = np.asarray(sizes_by_leaf, dtype=object)
+    epsilon = np.finfo(float).eps
+    if sparse.issparse(coefficients):
+        coo = coefficients.tocoo()
+        supported = (np.abs(coo.data) > epsilon) & present[coo.col]
+        row, column = coo.row[supported], coo.col[supported]
+    else:
+        row, column = np.nonzero((np.abs(coefficients) > epsilon) & present[None, :])
+    minimum = np.full(coefficients.shape[0], math.inf, dtype=object)
+    np.minimum.at(minimum, row, sample_sizes[column])
+    result[row] = minimum[row]
+    return result
+
+
+def _contrast_factor_covariance_table(
+    trait, contrast_ids, tree_ids, factor, latent_ids
+):
+    coo = factor.tocoo()
+    missing = np.flatnonzero(np.diff(factor.indptr) == 0)
+    rows = np.concatenate((coo.row, missing))
+    columns = np.concatenate(
+        (
+            np.asarray(latent_ids, dtype=object)[coo.col],
+            np.full(len(missing), "latent:zero", dtype=object),
+        )
+    )
+    return pd.DataFrame(
+        {
+            "tree_id": tree_ids[rows],
+            "trait": trait,
+            "contrast_id_1": contrast_ids[rows],
+            "contrast_id_2": columns,
+            "sampling_covariance": np.concatenate((coo.data, np.zeros(len(missing)))),
+            "covariance_representation": "factor-loading",
+        },
+        columns=SAMPLING_COVARIANCE_COLUMNS,
+    )
 
 
 def _prune_sparse_factor_loadings(factor):
