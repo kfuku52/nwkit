@@ -223,7 +223,9 @@ def _zero_error_lambda_spectrum(covariance):
     return sd, eigenvalues, eigenvectors, projected_one, diagonal_logdet
 
 
-def _zero_error_lambda_profile(covariance, values, errors, prepare_profile=None):
+def _zero_error_lambda_profile(
+    covariance, values, errors, prepare_profile=None, cached_paths=None
+):
     """Prepare an exact-observation profile from the covariance spectrum."""
     if np.any(errors) or np.ptp(values) == 0:
         return None
@@ -245,15 +247,22 @@ def _zero_error_lambda_profile(covariance, values, errors, prepare_profile=None)
     def profile(value):
         if value in boundary:
             return boundary[value]
-        variance = (1 - value) + value * eigenvalues
-        weight = projected_one / np.sqrt(variance)
-        response = projected_y / np.sqrt(variance)
+        cached = None if cached_paths is None else cached_paths.get(value)
+        if cached is None:
+            variance = (1 - value) + value * eigenvalues
+            deviation = np.sqrt(variance)
+            logdet = diagonal_logdet + float(np.log(variance).sum())
+            if cached_paths is not None and len(cached_paths) < 64:
+                cached_paths[value] = deviation, logdet
+        else:
+            deviation, logdet = cached
+        weight = projected_one / deviation
+        response = projected_y / deviation
         mean = float(weight @ response / (weight @ weight))
         residual = response - mean * weight
         rate = float(residual @ residual / len(values))
         if rate <= 0:
             raise ValueError("Zero residual variance has no finite Gaussian density.")
-        logdet = diagonal_logdet + float(np.log(variance).sum())
         likelihood = -0.5 * (len(values) * (1 + np.log(2 * np.pi * rate)) + logdet)
         return float(likelihood), rate, float(mean + reference)
 
@@ -265,14 +274,29 @@ def lambda_fit(covariance, values, errors, ci_level=0.95):
     return _fit_lambda(covariance, values, errors, ci_level)
 
 
-def _fit_lambda(covariance, values, errors, ci_level, prepare_profile=None):
+def _lambda_covariance_parts(covariance):
     diagonal = np.diag(np.diag(covariance))
     shared = covariance - diagonal
-    if not np.any(shared):
+    return diagonal, shared, bool(np.any(shared))
+
+
+def _fit_lambda(
+    covariance,
+    values,
+    errors,
+    ci_level,
+    prepare_profile=None,
+    parts=None,
+    cached_paths=None,
+):
+    diagonal, shared, identifiable = (
+        _lambda_covariance_parts(covariance) if parts is None else parts
+    )
+    if not identifiable:
         return {"status": "unidentifiable_lambda"}
     cache = {}
     spectral_profile = _zero_error_lambda_profile(
-        covariance, values, errors, prepare_profile
+        covariance, values, errors, prepare_profile, cached_paths
     )
 
     def profile(value):
@@ -320,7 +344,8 @@ def lambda_parametric_bootstrap(
 ):
     """Simulate at the fitted lambda=0 null and refit both models each time."""
     diagonal = np.diag(covariance)
-    _, null_rate, null_mean = rate_fit(np.diag(diagonal), values, errors)
+    diagonal_matrix = np.diag(diagonal)
+    _, null_rate, null_mean = rate_fit(diagonal_matrix, values, errors)
     standard_deviation = np.sqrt(null_rate * diagonal + errors**2)
     if not np.all(np.isfinite(standard_deviation)):
         raise ValueError("Non-finite lambda null simulation variance.")
@@ -328,6 +353,8 @@ def lambda_parametric_bootstrap(
     # simulations would count as exceedances, so the Monte Carlo P is 1.
     if observed_lr == 0:
         return 1.0
+    shared = covariance - diagonal_matrix
+    parts = diagonal_matrix, shared, bool(np.any(shared))
 
     @cache
     def prepare_spectrum():
@@ -335,20 +362,21 @@ def lambda_parametric_bootstrap(
 
     @cache
     def prepare_null():
-        return _prepare_gls(np.diag(diagonal), len(diagonal))
+        return _prepare_gls(diagonal_matrix, len(diagonal))
 
     @cache
     def prepare_bm():
         return _prepare_gls(covariance, len(diagonal))
 
     cache_endpoints = False
+    cached_paths: dict[float, tuple[np.ndarray, float]] = {}
 
     def prepare_profile(simulated):
         nonlocal cache_endpoints
         # Finish the first eigensolve before retaining the endpoint factors.
         if not cache_endpoints:
             boundary = {
-                0.0: rate_fit(np.diag(diagonal), simulated, errors),
+                0.0: rate_fit(diagonal_matrix, simulated, errors),
                 1.0: rate_fit(covariance, simulated, errors),
             }
             spectrum = prepare_spectrum()
@@ -369,7 +397,9 @@ def lambda_parametric_bootstrap(
     tolerance = 1e-12 * max(1.0, abs(observed_lr))
     for _ in range(simulations):
         simulated = null_mean + standard_deviation * rng.standard_normal(len(values))
-        fit = _fit_lambda(covariance, simulated, errors, None, prepare_profile)
+        fit = _fit_lambda(
+            covariance, simulated, errors, None, prepare_profile, parts, cached_paths
+        )
         # A zero-rate or flat replicate has no detectable lambda effect (LR=0).
         lr = fit.get("likelihood_ratio", 0.0)
         exceed += lr >= observed_lr - tolerance
