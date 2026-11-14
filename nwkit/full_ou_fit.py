@@ -55,7 +55,7 @@ def _fixed_parameters(data, attraction, diffusion):
     return attraction, diffusion, covariance
 
 
-def _result(data, optimized, result, matrices, theta, fixed, diagnostic, boundary):
+def _result(data, optimized, likelihood, matrices, theta, fixed, diagnostic, boundary):
     attraction, diffusion, covariance = matrices
     status, rank, ratio = diagnostic
     statuses = []
@@ -69,8 +69,7 @@ def _result(data, optimized, result, matrices, theta, fixed, diagnostic, boundar
         sigma_rank=len(data.trait_names),
         sigma_estimated=fixed is None,
         restricted_log_likelihood=None,
-        log_likelihood=result.log_likelihood
-        - _likelihood_scale_adjustment(data, reml=False),
+        log_likelihood=likelihood - _likelihood_scale_adjustment(data, reml=False),
         num_observed=data.num_observed_tips,
         num_effective_observations=data.num_effective_positions,
         residual_df=len(data.values),
@@ -131,35 +130,39 @@ def fit_full_mvou(
         data.compiled, dimension, observed, error_covariances=errors
     )
 
-    def evaluate(parameters):
-        matrices = (
-            fixed
-            if fixed is not None
-            else decode_full_ou(parameters, dimension, time_scale)
-        )
-        theta = np.asarray(parameters[-dimension:])
-        process = vector_ou_process(tree, matrices[0], matrices[1], theta)
-        result = condition(process)
-        return result, matrices, theta
+    def decode_matrices(parameters):
+        if fixed is not None:
+            return fixed
+        return decode_full_ou(parameters, dimension, time_scale)
 
     def objective(parameters):
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("error", RuntimeWarning)
-                return -evaluate(parameters)[0].log_likelihood
+                attraction, diffusion, _ = decode_matrices(parameters)
+                theta = np.asarray(parameters[-dimension:])
+                process = vector_ou_process(tree, attraction, diffusion, theta)
+                return -condition(process, likelihood_only=True)
         except (ValueError, ArithmeticError, np.linalg.LinAlgError, RuntimeWarning):
             return 1e100
 
     optimized = deterministic_multistart(objective, initial, bounds, maxiter=1800)
-    _, matrices, _ = evaluate(optimized.x)
+    matrices = decode_matrices(optimized.x)
     zero_process = vector_ou_process(
         tree, matrices[0], matrices[1], np.zeros(dimension)
     )
     theta = stationary_mean_gls(zero_process, observed, errors)
     parameters = optimized.x.copy()
     parameters[-dimension:] = theta
-    result, matrices, theta = evaluate(parameters)
-    optimized = replace(optimized, x=parameters, fun=-result.log_likelihood)
+    process = vector_ou_process(tree, matrices[0], matrices[1], theta)
+    if compute_posterior:
+        result = condition(process)
+        likelihood = result.log_likelihood
+        posterior = restored_vector_posterior(result, data)
+    else:
+        likelihood = condition(process, likelihood_only=True)
+        posterior = {}
+    optimized = replace(optimized, x=parameters, fun=-likelihood)
     diagnostic = ("fixed_covariance_parameters", 0, 1.0)
     if fixed is None:
         design, complete = observation_moment_design(data)
@@ -171,7 +174,7 @@ def fit_full_mvou(
         or (high is not None and value >= high - 1e-5)
         for value, (low, high) in zip(optimized.x, bounds, strict=True)
     )
-    fit = _result(data, optimized, result, matrices, theta, fixed, diagnostic, boundary)
-    return (
-        restored_vector_posterior(result, data) if compute_posterior else {}
-    ), replace(fit, measurement_covariances=measurement_covariances)
+    fit = _result(
+        data, optimized, likelihood, matrices, theta, fixed, diagnostic, boundary
+    )
+    return posterior, replace(fit, measurement_covariances=measurement_covariances)

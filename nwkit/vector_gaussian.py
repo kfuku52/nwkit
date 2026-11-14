@@ -173,7 +173,9 @@ def _validated_positive_transition(transition, dimension):
     return slope, intercept, covariance
 
 
-def _propagate(precision, linear, constant, fixed, branch, dimension):
+def _propagate(
+    precision, linear, constant, fixed, branch, dimension, *, retain_conditional=True
+):
     slope, intercept, covariance = branch
     free, coordinates, reduced_linear, constant = _restrict(
         precision, linear, constant, fixed
@@ -219,9 +221,6 @@ def _propagate(precision, linear, constant, fixed, branch, dimension):
                         "Conditional branch covariance must be positive definite."
                     )
                 conditional_prior_covariance[0, 0] = float(residual)
-    conditional_covariance = np.zeros((dimension, dimension))
-    conditional_slope = np.zeros((dimension, dimension))
-    location = coordinates.copy()
     if len(free):
         local_precision = precision[np.ix_(free, free)]
         update = np.eye(len(free)) + conditional_prior_covariance @ local_precision
@@ -248,18 +247,20 @@ def _propagate(precision, linear, constant, fixed, branch, dimension):
             )
             + effective_linear @ mean
         )
+    message_precision = (message_precision + message_precision.T) / 2
+    message = (message_precision, message_linear, constant)
+    if not retain_conditional:
+        return message, None
+    conditional_covariance = np.zeros((dimension, dimension))
+    conditional_slope = np.zeros((dimension, dimension))
+    if len(free):
         conditional_covariance[np.ix_(free, free)] = posterior_covariance
         conditional_slope[free] = gain @ matrix
-        location[free] = gain @ mean + posterior_covariance @ reduced_linear
-    message_precision = (message_precision + message_precision.T) / 2
-    return (message_precision, message_linear, constant), (
-        conditional_slope,
-        location,
-        conditional_covariance,
-    )
+        coordinates[free] = gain @ mean + posterior_covariance @ reduced_linear
+    return message, (conditional_slope, coordinates, conditional_covariance)
 
 
-def _root(precision, linear, constant, fixed, process):
+def _root(precision, linear, constant, fixed, process, *, retain_conditional):
     d = process.dimension
     if process.root_mean is not None:
         mean = _array(process.root_mean, (d,), "Root mean")
@@ -270,18 +271,29 @@ def _root(precision, linear, constant, fixed, process):
         branch = _validated_positive_transition(
             VectorTransition(np.zeros((d, d)), mean, covariance), d
         )
-        message, conditional = _propagate(precision, linear, constant, fixed, branch, d)
+        message, conditional = _propagate(
+            precision,
+            linear,
+            constant,
+            fixed,
+            branch,
+            d,
+            retain_conditional=retain_conditional,
+        )
+        if conditional is None:
+            return None, None, float(message[2])
         return conditional[1], conditional[2], float(message[2])
     elif process.root_covariance is not None:
         raise ValueError("Root covariance requires a root mean.")
     free, mean, reduced_linear, constant = _restrict(precision, linear, constant, fixed)
-    covariance = np.zeros((d, d))
+    covariance = np.zeros((d, d)) if retain_conditional else None
     if len(free):
         inverse, logdet = _inverse(
             precision[np.ix_(free, free)], "Root posterior precision"
         )
         mean[free] = inverse @ reduced_linear
-        covariance[np.ix_(free, free)] = inverse
+        if covariance is not None:
+            covariance[np.ix_(free, free)] = inverse
         constant += 0.5 * (
             len(free) * math.log(2 * math.pi) - logdet + reduced_linear @ mean[free]
         )
@@ -301,27 +313,25 @@ def condition_vector_tree(process, observed, *, error_covariances=None):
 def prepare_vector_conditioning(
     compiled, dimension, observed, *, error_covariances=None
 ):
-    """Reuse the observation factors while fitting processes on one topology."""
+    """Reuse observation factors for likelihood or full posterior evaluation."""
     factors: list[_ObservationFactor | None] | None = None
 
-    def condition(process):
+    def condition(process, *, likelihood_only=False):
         nonlocal factors
         compiled.require_tree(process.tree)
         if process.dimension != dimension:
             raise ValueError("Vector process dimension differs from its observations.")
         if factors is None:
             factors = _observations(dimension, compiled, observed, error_covariances)
+        if likelihood_only:
+            return _prune_vector_tree(process, compiled, factors.copy())[2]
         return _condition_vector_tree(process, compiled, factors.copy())
 
     return condition
 
 
-def _condition_vector_tree(process, compiled, local):
+def _prune_vector_tree(process, compiled, local, conditionals=None):
     d = process.dimension
-    n = len(compiled.nodes)
-    slopes = np.zeros((n, d, d))
-    intercepts = np.zeros((n, d))
-    covariances = np.zeros((n, d, d))
     identity = np.eye(d)
     zero_covariance = np.zeros((d, d))
     zero_intercept = np.zeros(d)
@@ -329,6 +339,8 @@ def _condition_vector_tree(process, compiled, local):
     previous_transition = object()
     branch = None
     branch_covariance = None
+    if conditionals is not None:
+        slopes, intercepts, covariances = conditionals
     for index in compiled.postorder:
         if index == 0:
             break
@@ -349,9 +361,9 @@ def _condition_vector_tree(process, compiled, local):
         factor = local[index]
         if factor is None:
             # A subtree without observations leaves its branch prior unchanged.
-            if branch is None:
-                slopes[index] = identity
-            else:
+            if conditionals is None:
+                continue
+            if branch is not None:
                 if branch_covariance is None:
                     branch_covariance = (branch[2] + branch[2].T) / 2
                 slopes[index], intercepts[index], covariances[index] = (
@@ -359,6 +371,8 @@ def _condition_vector_tree(process, compiled, local):
                     branch[1],
                     branch_covariance,
                 )
+            else:
+                slopes[index] = identity
             continue
         precision, linear, constant, fixed = factor
         parent = compiled.parents[index]
@@ -376,11 +390,18 @@ def _condition_vector_tree(process, compiled, local):
                         )
                     parent_fixed[trait] = value
             message = precision, linear, constant
-            slopes[index] = identity
+            conditional = identity, zero_intercept, zero_covariance
         else:
             message, conditional = _propagate(
-                precision, linear, constant, fixed, branch, d
+                precision,
+                linear,
+                constant,
+                fixed,
+                branch,
+                d,
+                retain_conditional=conditionals is not None,
             )
+        if conditionals is not None:
             slopes[index], intercepts[index], covariances[index] = conditional
         local[parent] = (
             parent_precision + message[0],
@@ -389,8 +410,24 @@ def _condition_vector_tree(process, compiled, local):
             parent_fixed,
         )
     precision, linear, constant, fixed = local[0] or empty
-    intercepts[0], covariances[0], likelihood = _root(
-        precision, linear, constant, fixed, process
+    return _root(
+        precision,
+        linear,
+        constant,
+        fixed,
+        process,
+        retain_conditional=conditionals is not None,
+    )
+
+
+def _condition_vector_tree(process, compiled, local):
+    d = process.dimension
+    n = len(compiled.nodes)
+    slopes = np.zeros((n, d, d))
+    intercepts = np.zeros((n, d))
+    covariances = np.zeros((n, d, d))
+    intercepts[0], covariances[0], likelihood = _prune_vector_tree(
+        process, compiled, local, (slopes, intercepts, covariances)
     )
     means = intercepts.copy()
     marginal_covariances = covariances.copy()

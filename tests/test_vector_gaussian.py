@@ -132,7 +132,9 @@ def test_unobserved_subtree_keeps_its_branch_transitions():
         np.eye(2), np.zeros(2), np.zeros((2, 2))
     )
     observed_index = 2 * compiled.leaf_index_by_name["C"]
-    result = condition_vector_tree(process, {"C": [1.2, None]})
+    condition = prepare_vector_conditioning(compiled, 2, {"C": [1.2, None]})
+    likelihood = condition(process, likelihood_only=True)
+    result = condition(process)
     mean, covariance = dense_joint(process, compiled)
     cross = covariance[:, observed_index]
     variance = covariance[observed_index, observed_index]
@@ -147,6 +149,7 @@ def test_unobserved_subtree_keeps_its_branch_transitions():
     assert result.log_likelihood == pytest.approx(
         multivariate_normal.logpdf(1.2, mean[observed_index], variance), abs=1e-12
     )
+    assert likelihood == result.log_likelihood
 
 
 def test_zero_length_branches_preserve_exact_observations():

@@ -159,18 +159,24 @@ def fit_pruning_mvbm(
         data.compiled, dimension, observed, error_covariances=errors
     )
 
-    def evaluate(parameters):
-        sigma, _ = _decode_cholesky(parameters, dimension)
-        return sigma, condition(_brownian_process(data, sigma, time_scale))
-
     def objective(parameters):
         try:
-            return -evaluate(parameters)[1].log_likelihood
+            sigma, _ = _decode_cholesky(parameters, dimension)
+            process = _brownian_process(data, sigma, time_scale)
+            return -condition(process, likelihood_only=True)
         except (ValueError, ArithmeticError, OverflowError, np.linalg.LinAlgError):
             return 1e100
 
     optimized = deterministic_multistart(objective, initial, bounds, maxiter=1200)
-    sigma_scaled, result = evaluate(optimized.x)
+    sigma_scaled, _ = _decode_cholesky(optimized.x, dimension)
+    process = _brownian_process(data, sigma_scaled, time_scale)
+    if compute_posterior:
+        result = condition(process)
+        likelihood = result.log_likelihood
+        posterior = restored_vector_posterior(result, data)
+    else:
+        likelihood = condition(process, likelihood_only=True)
+        posterior = {}
     eigenvalues = np.linalg.eigvalsh(sigma_scaled)
     tolerance = (
         np.finfo(float).eps * max(1.0, float(np.max(eigenvalues))) * max(100, dimension)
@@ -181,7 +187,7 @@ def fit_pruning_mvbm(
         sigma=_restore_sigma(data, sigma_scaled / time_scale),
         sigma_rank=rank,
         sigma_estimated=True,
-        restricted_log_likelihood=result.log_likelihood
+        restricted_log_likelihood=likelihood
         - _likelihood_scale_adjustment(data, reml=True),
         log_likelihood=None,
         num_observed=data.num_observed_tips,
@@ -196,4 +202,4 @@ def fit_pruning_mvbm(
         model="MV-BM",
         measurement_covariances=measurement_covariances,
     )
-    return restored_vector_posterior(result, data) if compute_posterior else {}, fit
+    return posterior, fit
