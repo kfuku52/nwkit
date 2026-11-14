@@ -10,6 +10,11 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   and remain stochastic on very long branches. Asymmetric generators retain
   their directionality under reciprocal changes of rate and branch-length units.
 
+### Performance
+
+- Reuse equal-rates detection across branches and reduce small-state Mk
+  likelihood messages with NumPy in log space.
+
 ## [0.43.6] - 2026-09-08
 
 ### Fixed

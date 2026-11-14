@@ -64,6 +64,8 @@ _MAX_DIRECT_EXPONENT_NORM = 32.0
 _MAX_HIDDEN_EXPANDED_STATES = 64
 _MAX_COVARION_LOG_SPREAD = math.log(1e4)
 _MAX_FREE_TRANSITION_PARAMETERS = 256
+# A direct, stable reduction avoids SciPy's setup cost for small state spaces.
+_MAX_DIRECT_LOG_SUM_STATES = 16
 
 
 def _parse_comma_list(value, option_name):
@@ -454,6 +456,12 @@ def _log_probabilities(values):
         return np.log(values)
 
 
+def _edge_logsumexp(values):
+    if values.shape[1] <= _MAX_DIRECT_LOG_SUM_STATES:
+        return np.logaddexp.reduce(values, axis=1)
+    return logsumexp(values, axis=1)
+
+
 def _probabilities_from_logs(values):
     normalizer = float(logsumexp(values))
     if not math.isfinite(normalizer):
@@ -528,7 +536,7 @@ def _compute_log_inside_likelihoods(
                     )
                 matrix, log_matrix = transition_matrix_cache[cache_key]
             transition_matrices[child] = matrix
-            term = logsumexp(log_matrix + inside[child][None, :], axis=1)
+            term = _edge_logsumexp(log_matrix + inside[child][None, :])
             child_terms[node][child] = term
             likelihood += term
             log_scale += log_scales[child]
@@ -1183,7 +1191,7 @@ def _compute_log_outside_likelihoods(
             sibling_log_sum = prefix_log_sums[child_index] + suffix_log_sum
             parent_log_weight = outside[node] + sibling_log_sum
             matrix = _log_probabilities(transition_matrices[child])
-            outside[child] = logsumexp(matrix.T + parent_log_weight[None, :], axis=1)
+            outside[child] = _edge_logsumexp(matrix.T + parent_log_weight[None, :])
             total = float(logsumexp(outside[child]))
             if math.isfinite(total):
                 outside[child] -= total
@@ -1329,15 +1337,20 @@ def _posterior_for_rate_matrix(
 def _transition_matrices_for_tree(tree, rate_matrix):
     """Build each unique branch-length transition once for one generator."""
 
-    lengths = sorted({float(node.dist) for node in tree.traverse() if not node.is_root})
-    # An eigenvector expansion cancels small transition probabilities on short
-    # branches and amplifies roundoff in the zero eigenvalue on long branches.
-    by_length = {length: _transition_matrix(rate_matrix, length) for length in lengths}
+    num_states = rate_matrix.shape[0]
+    er_rate = _get_er_rate_from_matrix(rate_matrix)
+    by_length = {0.0: np.eye(num_states, dtype=float)}
     by_node = {}
     for node in tree.traverse(strategy="preorder"):
         if node.is_root:
             continue
-        length = float(node.dist)
+        length = _validated_branch_length(node.dist)
+        if length not in by_length:
+            by_length[length] = (
+                _general_transition_matrix(rate_matrix, length)
+                if er_rate is None
+                else _er_transition_matrix(length, er_rate, num_states)
+            )
         by_node[node] = by_length[length]
     return by_node
 

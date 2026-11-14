@@ -521,16 +521,19 @@ class TestAsrMain:
             "C": pd.Series([0.0, 1.0]).to_numpy(),
         }
         rate_matrix = asr._build_rate_matrix("ER", states, [0.2])
-        call_count = {"value": 0}
-        original_transition_matrix = asr._transition_matrix
+        lengths = []
+        original_transition_matrix = asr._er_transition_matrix
 
-        def counted_transition_matrix(rate_matrix_arg, branch_length_arg):
-            call_count["value"] += 1
-            return original_transition_matrix(rate_matrix_arg, branch_length_arg)
+        def counted_transition_matrix(length, rate, num_states):
+            lengths.append(length)
+            return original_transition_matrix(length, rate, num_states)
 
-        monkeypatch.setattr(asr, "_transition_matrix", counted_transition_matrix)
-        asr._compute_inside_likelihoods(tree, likelihood_by_leaf, rate_matrix)
-        assert call_count["value"] == 1
+        monkeypatch.setattr(asr, "_er_transition_matrix", counted_transition_matrix)
+        _, _, _, transitions = asr._compute_inside_likelihoods(
+            tree, likelihood_by_leaf, rate_matrix
+        )
+        assert lengths == [1.0]
+        assert all(matrix is transitions[tree["A"]] for matrix in transitions.values())
 
     def test_model_out_reports_fixed_er_metadata(self, tmp_nwk, tmp_path):
         infile = tmp_nwk("((A:1,B:1):1,C:2);", "tree.nwk")
