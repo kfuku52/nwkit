@@ -198,7 +198,10 @@ def hypotheses(tree, h1=None, h2=None, *, multree=False, max_candidates=10000):
 class Cell:
     score: int
     count: int
-    choices: list[tuple[int, int]]
+    choices: list[tuple[int, int]] | None
+
+
+_CONSUMED_STATE: dict[int, Cell] = {}
 
 
 class _SpeciesIndex:
@@ -225,6 +228,9 @@ class _GeneIndex:
             for node in self.nodes
             if node.is_leaf
         }
+        self.children = tuple(
+            tuple(self.indices[child] for child in node.children) for node in self.nodes
+        )
 
 
 def reconcile_genes(genes, species, parser, max_state_pairs=10000000):
@@ -234,12 +240,52 @@ def reconcile_genes(genes, species, parser, max_state_pairs=10000000):
     )
 
 
-def _reconcile_indexed_genes(genes, species, max_state_pairs):
+def _reconcile_indexed_genes(genes, species, max_state_pairs, *, keep_choices=True):
     species_index = None
     for gene in genes:
         if species_index is None:
             species_index = _SpeciesIndex(species)
-        yield Reconciliation._from_indexes(gene, species_index, max_state_pairs)
+        yield Reconciliation._from_indexes(
+            gene, species_index, max_state_pairs, keep_choices=keep_choices
+        )
+
+
+def _score_indexed_genes(genes, species, max_state_pairs):
+    """Compute exact minimum costs without counting or storing optimal maps."""
+    species_index = None
+    for gene in genes:
+        if species_index is None:
+            species_index = _SpeciesIndex(species)
+        depth = species_index.lca.depth
+        lca = species_index.lca.common_ancestor_indices
+        states = []
+        state_pairs = 0
+        for node, children in zip(gene.nodes, gene.children, strict=True):
+            if not children:
+                options = species_index.occurrences.get(gene.taxa[node])
+                if options is None:
+                    raise ValueError(f"Gene tip does not match a species: {node.name}")
+                states.append(dict.fromkeys(options, 0))
+                continue
+            left, right = states[children[0]], states[children[1]]
+            state_pairs += len(left) * len(right)
+            if state_pairs > max_state_pairs:
+                raise ValueError("Reconciliation exceeds --max-state-pairs.")
+            combined = {}
+            for first, score_left in left.items():
+                partial = score_left + depth[first]
+                for second, score_right in right.items():
+                    parent = lca(first, second)
+                    cost = partial + score_right + depth[second] - 2 * depth[parent]
+                    # A speciation adds -2 to the edge losses, a duplication +1.
+                    cost += 1 if parent in (first, second) else -2
+                    previous = combined.get(parent)
+                    if previous is None or cost < previous:
+                        combined[parent] = cost
+            states.append(combined)
+            # Each gene subtree is consumed exactly once in postorder.
+            states[children[0]] = states[children[1]] = None
+        yield min(score + depth[mapped] for mapped, score in states[-1].items())
 
 
 class Reconciliation:
@@ -254,12 +300,13 @@ class Reconciliation:
         self._solve(gene_index, _species_index, max_state_pairs)
 
     @classmethod
-    def _from_indexes(cls, gene, species, max_state_pairs):
+    def _from_indexes(cls, gene, species, max_state_pairs, *, keep_choices=True):
         result = cls.__new__(cls)
-        result._solve(gene, species, max_state_pairs)
+        result._solve(gene, species, max_state_pairs, keep_choices=keep_choices)
         return result
 
-    def _solve(self, gene, species, max_state_pairs):
+    def _solve(self, gene, species, max_state_pairs, *, keep_choices=True):
+        self._keep_choices = keep_choices
         self._species_index = species
         self.gene = gene.gene
         self.nodes = gene.nodes
@@ -272,20 +319,24 @@ class Reconciliation:
         self.combinations = 1
         self.ambiguous_tips = 0
         self.state_pairs = 0
-        for node in self.nodes:
-            if node.is_leaf:
+        for node, children in zip(self.nodes, gene.children, strict=True):
+            if not children:
                 options = species.occurrences.get(gene.taxa[node], ())
                 if not options:
                     raise ValueError(f"Gene tip does not match a species: {node.name}")
                 self.combinations *= len(options)
                 self.ambiguous_tips += len(options) > 1
-                self.states.append({index: Cell(0, 1, []) for index in options})
+                self.states.append({index: Cell(0, 1, None) for index in options})
             else:
-                left, right = (self.states[self.gene_index[c]] for c in node.children)
+                left, right = self.states[children[0]], self.states[children[1]]
                 self.state_pairs += len(left) * len(right)
                 if self.state_pairs > max_state_pairs:
                     raise ValueError("Reconciliation exceeds --max-state-pairs.")
-                self.states.append(self._combine(left, right))
+                self.states.append(self._combine(left, right, keep_choices))
+                if not keep_choices:
+                    self.states[children[0]] = self.states[children[1]] = (
+                        _CONSUMED_STATE
+                    )
         # GRAMPA includes missing lineages above the mapped gene root.
         self.score = min(
             cell.score + self.depth[index] for index, cell in self.states[-1].items()
@@ -303,7 +354,7 @@ class Reconciliation:
         losses += 2 * duplication - 2
         return duplication, losses
 
-    def _combine(self, left, right):
+    def _combine(self, left, right, keep_choices):
         result: dict[int, Cell] = {}
         for first, second in product(left, right):
             parent = self.lca.common_ancestor_indices(first, second)
@@ -312,10 +363,13 @@ class Reconciliation:
             count = left[first].count * right[second].count
             current = result.get(parent)
             if current is None or score < current.score:
-                result[parent] = Cell(score, count, [(first, second)])
+                result[parent] = Cell(
+                    score, count, [(first, second)] if keep_choices else None
+                )
             elif score == current.score:
                 current.count += count
-                current.choices.append((first, second))
+                if current.choices is not None:
+                    current.choices.append((first, second))
         return result
 
     def _trace(self, index, mapped, rank):
@@ -329,7 +383,9 @@ class Reconciliation:
             if node.is_leaf:
                 continue
             left, right = (self.gene_index[child] for child in node.children)
-            for first, second in self.states[index][mapped].choices:
+            choices = self.states[index][mapped].choices
+            assert choices is not None
+            for first, second in choices:
                 right_count = self.states[right][second].count
                 count = self.states[left][first].count * right_count
                 if rank >= count:
@@ -342,6 +398,8 @@ class Reconciliation:
         return mapping
 
     def mappings(self, max_maps=100000):
+        if not self._keep_choices:
+            raise ValueError("Reconciliation did not retain optimal mappings.")
         if self.num_maps > max_maps:
             raise ValueError(
                 "Optimal mapping output exceeds --max-maps; no maps were truncated."

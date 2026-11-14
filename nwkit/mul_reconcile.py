@@ -15,6 +15,7 @@ from nwkit import __version__
 from nwkit.mul_reconcile_model import (
     _GeneIndex,
     _reconcile_indexed_genes,
+    _score_indexed_genes,
     hypotheses,
     reconcile_genes,
 )
@@ -72,13 +73,13 @@ def annotated_mapping_text(gene, mapping, args=None):
 
 
 def _score_task(candidate, genes, limit, collect_checks):
+    if not collect_checks:
+        return candidate.id, sum(_score_indexed_genes(genes, candidate.tree, limit)), []
     checks, score = [], 0
     for number, result in enumerate(
-        _reconcile_indexed_genes(genes, candidate.tree, limit), 1
+        _reconcile_indexed_genes(genes, candidate.tree, limit, keep_choices=False), 1
     ):
         score += result.score
-        if not collect_checks:
-            continue
         checks.append(
             {
                 "mul.tree": candidate.id,

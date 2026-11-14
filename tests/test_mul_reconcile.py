@@ -107,11 +107,18 @@ def test_seeded_random_topologies_and_copy_counts_against_full_enumeration():
             second = subtrees.pop(rng.randrange(len(subtrees)))
             subtrees.append(f"({first},{second})")
         gene = tree(subtrees[0] + ";")
+        fast = {
+            index: score
+            for index, score, _ in run_search(
+                candidates, [gene], parser(), collect_checks=False
+            )
+        }
         for candidate in candidates:
             result = Reconciliation(gene, candidate.tree, parser())
             expected = exhaustive(gene, candidate.tree)
             assert sorted((dup, loss) for dup, loss, _ in result.mappings()) == expected
             assert result.score == sum(expected[0])
+            assert fast[candidate.id] == result.score
             assert result.num_maps == len(expected)
             checked += 1
     assert checked == 24 * len(candidates)
@@ -243,10 +250,13 @@ def test_child_order_and_branch_lengths_do_not_change_parsimony():
 
 
 def test_unused_check_rows_are_not_collected():
-    rows = run_search(
-        hypotheses(tree("(A,B);")), [tree("(a_A,b_B);")], parser(), collect_checks=False
-    )
-    assert all(checks == [] for _, _, checks in rows)
+    species = tree("(((A,B),C),D);")
+    genes = [tree("(((a_A,b_B),a2_A),(a3_A,(b2_B,c_C)));"), tree("(a_A,d_D);")]
+    candidates = hypotheses(species)
+    detailed = run_search(candidates, genes, parser(), collect_checks=True)
+    for cpus in (1, 2):
+        rows = run_search(candidates, genes, parser(), cpus=cpus, collect_checks=False)
+        assert rows == tuple((candidate, score, []) for candidate, score, _ in detailed)
 
 
 @pytest.mark.parametrize("cpus", [1, 2])
@@ -300,6 +310,14 @@ def test_state_limit_is_failure_not_candidate_dependent_filter():
     candidate = hypotheses(tree("((A,X),B);"), "X", "B")[1]
     with pytest.raises(ValueError, match="max-state-pairs"):
         Reconciliation(tree("((a_A,x1_X),(b_B,x2_X));"), candidate.tree, parser(), 1)
+    with pytest.raises(ValueError, match="max-state-pairs"):
+        run_search(
+            [candidate],
+            [tree("((a_A,x1_X),(b_B,x2_X));")],
+            parser(),
+            max_state_pairs=1,
+            collect_checks=False,
+        )
 
 
 def invoke(tmp_path, extra=(), text=None):
