@@ -230,6 +230,22 @@ class TestDistanceMetrics:
             1.0
         )
 
+    def test_path_length_counts_joint_crossings_of_changed_splits(self, monkeypatch):
+        names = list("CABED")
+        first = Tree("(((A:2,B:1):3,C:4):1,(D:5,E:6):1);", parser=1)
+        second = Tree("(((A:1,B:1):2,C:4):1,(D:6,E:6):1);", parser=1)
+        expected = math.sqrt(
+            sum(
+                (first.get_distance(a, b) - second.get_distance(a, b)) ** 2
+                for a, b in combinations(names, 2)
+            )
+        )
+        # Force exact computation on a small tree as well.
+        monkeypatch.setattr("nwkit.dist.PATH_MATRIX_MAX_TAXA", 0)
+        assert _path_distance(first, second, names, topological=False) == pytest.approx(
+            expected, rel=1e-15
+        )
+
     @pytest.mark.parametrize(
         ("lengths", "message"),
         [

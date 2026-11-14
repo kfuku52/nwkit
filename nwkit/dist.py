@@ -46,6 +46,7 @@ BRANCH_LENGTH_METRICS = frozenset(
 PATH_MATRIX_MAX_TAXA = 2000
 PATH_MATRIX_MAX_DYNAMIC_RANGE = 10**12
 PATH_MATRIX_ROUNDOFF_FACTOR = 16
+SPARSE_PATH_MAX_CHANGED_SPLITS = 32
 
 
 def _parse_metric_values(values):
@@ -473,12 +474,61 @@ def _rounded_dyadic_norm(squared, unit_exponent):
     return math.ldexp(lower, ulp_exponent)
 
 
+def _sparse_path_difference(first, second, num_taxa):
+    """Use changed split intervals to count how many paths cross each pair."""
+    changed: list[tuple[int, int, Fraction]] = []
+    keys = chain(first, (key for key in second if key not in first))
+    for key in keys:
+        left, right = first.get(key, ()), second.get(key, ())
+        if key == () or left == right:
+            continue
+        if not isinstance(key, tuple) or len(changed) == SPARSE_PATH_MAX_CHANGED_SPLITS:
+            return None
+        difference = sum(map(Fraction, left), Fraction()) - sum(
+            map(Fraction, right), Fraction()
+        )
+        if difference:
+            changed.append((*key, difference))
+    if not changed:
+        return 0.0
+    # Leave possible individual path overflow to the exact row calculation.
+    half_ulp = 1 << (sys.float_info.max_exp - sys.float_info.mant_dig - 1)
+    if (
+        sum(abs(weight) for _, _, weight in changed)
+        >= int(sys.float_info.max) + half_ulp
+    ):
+        return None
+    denominator = max(weight.denominator for _, _, weight in changed)
+    intervals = [
+        (lo, hi, weight.numerator * (denominator // weight.denominator))
+        for lo, hi, weight in changed
+    ]
+    squared = 0
+    for i, (lo, hi, weight) in enumerate(intervals):
+        size = hi - lo + 1
+        squared += weight**2 * size * (num_taxa - size)
+        for other_lo, other_hi, other_weight in intervals[:i]:
+            other_size = other_hi - other_lo + 1
+            both = max(0, min(hi, other_hi) - max(lo, other_lo) + 1)
+            neither = num_taxa - size - other_size + both
+            # A path crosses both splits when its ends differ in both memberships.
+            crossings = both * neither + (size - both) * (other_size - both)
+            squared += 2 * weight * other_weight * crossings
+    return _rounded_dyadic_norm(squared, denominator.bit_length() - 1)
+
+
 def _weighted_path_distance(tree1, tree2, leaf_names):
     import numpy as np
 
     first_vector, second_vector = _matched_edge_vectors(tree1, tree2, "unrooted")
-    if first_vector == second_vector:
-        return 0.0
+    try:
+        sparse_distance = _sparse_path_difference(
+            first_vector, second_vector, len(leaf_names)
+        )
+    except OverflowError:
+        raise ValueError("The path distance is too large to represent.") from None
+    if sparse_distance is not None:
+        return sparse_distance
     del first_vector, second_vector
 
     # Finite float lengths are integer multiples of a common power of two.
