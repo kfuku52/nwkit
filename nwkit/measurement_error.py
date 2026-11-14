@@ -23,6 +23,7 @@ from nwkit.gaussian import (
     grouped_mean_covariance_diagonal,
     is_diagonal,
     materialize_covariance,
+    materialize_low_rank_covariance,
     residual_variance_scale,
     scale_covariance_by_slope,
     solve_factor,
@@ -998,11 +999,9 @@ def _eiv_working_components(components, component_factors, n_observations, struc
         return normalized, scales
     for index, (name, matrix) in enumerate(normalized):
         if matrix is None:
-            loading = component_factors[name]
-            covariance = loading @ loading.T
             normalized[index] = (
                 name,
-                covariance.toarray() if sparse.issparse(covariance) else covariance,
+                materialize_low_rank_covariance(component_factors[name]),
             )
     return normalized, scales
 

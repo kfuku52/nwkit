@@ -913,14 +913,19 @@ def materialize_covariance(
 ) -> np.ndarray:
     """Materialize a diagonal-vector or dense covariance representation."""
     if isinstance(covariance, DiagonalLowRankCovariance):
-        update = covariance.low_rank @ covariance.low_rank.T
-        if sparse.issparse(update):
-            update = update.toarray()
-        return np.diag(covariance.diagonal) + np.asarray(update)
+        return np.diag(covariance.diagonal) + materialize_low_rank_covariance(
+            covariance.low_rank
+        )
     if isinstance(covariance, DiagonalSparsePrecisionCovariance):
         return _materialize_sparse_precision_covariance(covariance)
     covariance = np.asarray(covariance, dtype=float)
     return np.diag(covariance) if covariance.ndim == 1 else covariance
+
+
+def materialize_low_rank_covariance(loading):
+    """Return the covariance induced by a dense or sparse loading."""
+    covariance = loading @ loading.T
+    return covariance.toarray() if sparse.issparse(covariance) else covariance
 
 
 def sparse_precision_update_diagonal(loading, precision, *, solver=None) -> np.ndarray:

@@ -280,6 +280,32 @@ def test_large_structured_gaussian_fit_remains_available(monkeypatch):
     assert np.isfinite(result["objective"])
 
 
+def test_dense_gaussian_regression_accepts_implicit_variance_components():
+    response = np.array([1.0, 2.0, 4.0, 8.0, 6.0, 9.0])
+    design = np.column_stack((np.ones(len(response)), np.arange(len(response))))
+    fixed = 0.12 * np.eye(len(response)) + 0.03
+    loading = sparse.csr_matrix(np.eye(len(response)) + 0.04)
+    evolutionary = (loading @ loading.T).toarray()
+    reference = _profile_covariance_fit(
+        response, design, fixed, [("evolutionary_rate", evolutionary)], reml=True
+    )
+    implicit = _profile_covariance_fit(
+        response,
+        design,
+        fixed,
+        [("evolutionary_rate", None)],
+        reml=True,
+        component_factors={"evolutionary_rate": loading},
+    )
+    assert implicit["objective"] == pytest.approx(reference["objective"], abs=1e-10)
+    np.testing.assert_allclose(
+        implicit["beta"], reference["beta"], rtol=1e-6, atol=1e-8
+    )
+    np.testing.assert_allclose(
+        implicit["covariance"], reference["covariance"], rtol=1e-6, atol=1e-8
+    )
+
+
 def test_pgls_matches_standard_pic_regression_for_one_to_one_orthologs():
     species_tree = Tree("(((A:1,B:1):1,C:2):1,(D:1,E:1):2);", parser=1)
     gene_tree = Tree("(((A:1,B:1):1,C:2):1,(D:1,E:1):2);", parser=1)

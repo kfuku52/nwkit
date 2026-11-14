@@ -29,6 +29,7 @@ from nwkit.gaussian import (
     grouped_mean_covariance_diagonal,
     is_diagonal,
     materialize_covariance,
+    materialize_low_rank_covariance,
     residual_variance_scale,
     solve_factor,
     validate_psd_covariance,
@@ -1439,16 +1440,14 @@ def _profile_component_representation(
         normalized_components = [
             (
                 name,
-                None if matrix is None else materialize_covariance(matrix) / scale,
+                materialize_low_rank_covariance(normalized_factors[name])
+                if matrix is None
+                else materialize_covariance(matrix) / scale,
             )
             for (name, matrix), scale in zip(
                 component_matrices, component_scales, strict=True
             )
         ]
-        if any(component is None for _, component in normalized_components):
-            raise ValueError(
-                "Implicit low-rank components require diagonal fixed covariance."
-            )
         fixed_updates = []
     return (
         structured_model,
