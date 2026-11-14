@@ -59,8 +59,12 @@ def _stable_median(values):
 
 
 def _median_in_place(values):
-    values.sort()
-    return _midpoint(values[(len(values) - 1) // 2], values[len(values) // 2])
+    lower, upper = (len(values) - 1) // 2, len(values) // 2
+    if len(values) >= 128:
+        values.partition((lower, upper))
+    else:
+        values.sort()
+    return _midpoint(values[lower], values[upper])
 
 
 def _weighted_median(values, weights):
