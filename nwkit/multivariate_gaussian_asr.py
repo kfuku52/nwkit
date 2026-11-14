@@ -764,19 +764,7 @@ def _restored_posterior_marginals(data, start, nodes, means, covariance):
     for row, trait, _ in fixed:
         covariance[row, trait, :] = 0.0
         covariance[row, :, trait] = 0.0
-    eigenvalues, eigenvectors = np.linalg.eigh(covariance)
-    tolerance = (
-        np.finfo(float).eps
-        * np.maximum(1.0, np.max(np.abs(eigenvalues), axis=1))
-        * max(100, len(data.trait_names))
-    )
-    if np.any(eigenvalues[:, 0] < -tolerance):
-        raise ValueError(
-            "A multivariate posterior covariance is not positive semidefinite."
-        )
-    covariance = (eigenvectors * np.maximum(eigenvalues, 0.0)[:, None, :]) @ (
-        eigenvectors.swapaxes(1, 2)
-    )
+    _clip_roundoff_covariances(covariance, len(data.trait_names))
     means = data.centers + data.scales * means
     for row, trait, value in fixed:
         means[row, trait] = value
@@ -789,6 +777,28 @@ def _restored_posterior_marginals(data, start, nodes, means, covariance):
             nodes, means, covariance, strict=True
         )
     }
+
+
+def _clip_roundoff_covariances(covariance, dimension):
+    # Preserve positive semidefinite inputs as computed by the conditional
+    # solve. Only tiny negative eigenvalues need an eigenvector reconstruction.
+    eigenvalues = np.linalg.eigvalsh(covariance)
+    negative = eigenvalues[:, 0] < 0.0
+    if not np.any(negative):
+        return
+    tolerance = (
+        np.finfo(float).eps
+        * np.maximum(1.0, np.max(np.abs(eigenvalues[negative]), axis=1))
+        * max(100, dimension)
+    )
+    if np.any(eigenvalues[negative, 0] < -tolerance):
+        raise ValueError(
+            "A multivariate posterior covariance is not positive semidefinite."
+        )
+    eigenvalues, eigenvectors = np.linalg.eigh(covariance[negative])
+    covariance[negative] = (eigenvectors * np.maximum(eigenvalues, 0.0)[:, None, :]) @ (
+        eigenvectors.swapaxes(1, 2)
+    )
 
 
 def _exact_posterior_entries(data, start, size):

@@ -6,6 +6,7 @@ import pytest
 
 from nwkit.asr import _multivariate_fit_status_message
 from nwkit.multivariate_gaussian_asr import (
+    _clip_roundoff_covariances,
     _geometry,
     _prepare_observations,
     _restore_sigma,
@@ -19,6 +20,19 @@ from nwkit.util import read_tree
 
 def tree_from(source):
     return read_tree(source, "1", True, quiet=True, rooted="yes")
+
+
+def test_posterior_covariance_clips_only_negative_eigenvalues_within_roundoff():
+    valid = np.array([[2.0, 0.25], [0.25, 0.5]])
+    near_singular = np.array([[1.0, 1.0 + 2e-15], [1.0 + 2e-15, 1.0]])
+    covariances = np.stack((valid, near_singular))
+    _clip_roundoff_covariances(covariances, 2)
+    np.testing.assert_array_equal(covariances[0], valid)
+    np.testing.assert_allclose(
+        np.linalg.eigvalsh(covariances[1]), [0.0, 2.0], atol=1e-14
+    )
+    with pytest.raises(ValueError, match="not positive semidefinite"):
+        _clip_roundoff_covariances(np.array([[[1.0, 2.0], [2.0, 1.0]]]), 2)
 
 
 def test_covariance_unit_restoration_preserves_mixed_scale_symmetry():
