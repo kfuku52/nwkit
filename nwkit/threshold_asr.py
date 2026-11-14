@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+from scipy import special
 from scipy.special import log_ndtr, ndtri
 from scipy.stats import truncnorm
 
@@ -24,6 +25,8 @@ from nwkit.gaussian_tree import (
 )
 from nwkit.rooting_state import require_rooted
 from nwkit.util import assign_branch_ids, get_node_class, validate_unique_named_leaves
+
+_ndtri_exp = getattr(special, "ndtri_exp", None)
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,6 +169,20 @@ def _normal_interval_log_mass(lower, upper):
     return -math.inf
 
 
+def _truncated_quantile(lower, upper, rng):
+    if _ndtri_exp is None or not lower < upper:
+        return float(truncnorm.rvs(lower, upper, random_state=rng))
+    uniform = float(rng.random())
+    if uniform == 0.0:
+        return lower
+    log_mass = _normal_interval_log_mass(lower, upper)
+    if lower >= 0.0 or (upper > 0.0 and uniform > 0.5):
+        log_survival = np.logaddexp(log_ndtr(-upper), math.log1p(-uniform) + log_mass)
+        return -float(_ndtri_exp(min(0.0, log_survival)))
+    log_cdf = np.logaddexp(log_ndtr(lower), math.log(uniform) + log_mass)
+    return float(_ndtri_exp(min(0.0, log_cdf)))
+
+
 def _truncated_draw(mean, sd, allowed, thresholds, rng):
     bounds = _allowed_intervals(allowed, thresholds)
     intervals = [((lower - mean) / sd, (upper - mean) / sd) for lower, upper in bounds]
@@ -183,7 +200,7 @@ def _truncated_draw(mean, sd, allowed, thresholds, rng):
         index = int(rng.choice(len(intervals), p=weights / weights.sum()))
     a, b = intervals[index]
     lower, upper = bounds[index]
-    location = float(truncnorm.rvs(a, b, loc=mean, scale=sd, random_state=rng))
+    location = mean + sd * _truncated_quantile(a, b, rng)
     # Ordinal categories use (lower, upper]. A continuous tail draw can
     # round onto its excluded endpoint when projected back into trait units.
     return min(upper, max(location, math.nextafter(lower, math.inf)))

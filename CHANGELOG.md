@@ -71,6 +71,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   profiling.
 - Share order statistics between MCMCtree posterior medians and credible
   intervals.
+- Draw threshold liabilities with scalar log-space normal quantiles when
+  supported by SciPy.
 - Reuse continuous predictor loadings during dense errors-in-variables PGLS
   optimization, including automatic evolutionary-parameter searches.
 - Read singleton likelihood-group variances directly from the dense

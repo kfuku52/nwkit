@@ -1,10 +1,12 @@
 import numpy as np
 import pandas as pd
 import pytest
+from scipy.stats import truncnorm
 
 from nwkit.cli import main
 from nwkit.threshold_asr import (
     _truncated_draw,
+    _truncated_quantile,
     build_threshold_process,
     compute_threshold_marginals,
     parse_thresholds,
@@ -56,6 +58,19 @@ def test_disjoint_ordinal_intervals_keep_equal_mass_in_both_far_tails():
     )
     assert np.all(np.abs(draws) >= 40.0)
     assert 0.4 < np.mean(draws > 0.0) < 0.6
+
+
+@pytest.mark.parametrize(
+    ("lower", "upper"),
+    [(-np.inf, -40.0), (40.0, 40.01), (-2.0, 3.0), (0.0, np.inf)],
+)
+def test_truncated_quantile_matches_scipy_at_fixed_seed(lower, upper):
+    rng = np.random.default_rng(2916)
+    expected_rng = np.random.default_rng(2916)
+    actual = [_truncated_quantile(lower, upper, rng) for _ in range(50)]
+    expected = truncnorm.rvs(lower, upper, size=50, random_state=expected_rng)
+    np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
+    assert rng.random() == expected_rng.random()
 
 
 def test_liability_sampling_accepts_a_positive_subnormal_branch_length():
