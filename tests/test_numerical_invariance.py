@@ -56,6 +56,15 @@ def test_gaussian_covariance_readers_retain_small_variances(validate, diagonal):
             validate(-values, "Sampling covariance")
 
 
+def test_latent_predictor_retains_small_correlated_sampling_uncertainty():
+    prior = np.array([[1.0, 0.2, 0.0], [0.2, 1.0, 0.1], [0.0, 0.1, 1.2]])
+    sampling = 1e-24 * np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.25], [0.0, 0.25, 1.0]])
+    result = fit_latent_predictor(
+        np.array([0.0, 2.0, 1.0]), prior, sampling, include_intercept=True
+    )
+    np.testing.assert_allclose(result.covariance, sampling, rtol=1e-12, atol=0.0)
+
+
 @pytest.mark.parametrize("sampling", [0.0, 0.1])
 @pytest.mark.parametrize("reml", [False, True])
 def test_gaussian_fit_is_invariant_to_an_intercept_shift(sampling, reml):

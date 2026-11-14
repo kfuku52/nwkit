@@ -154,6 +154,19 @@ def _latent_predictor_likelihood(
     return objective, prior_mean, cholesky
 
 
+def _condition_dense_predictor(prior, sampling, factor, residual, prior_mean):
+    weighted_residual = _solve(factor, residual)
+    mean = prior_mean + prior @ weighted_residual
+    # The conditional covariance is R (P + R)^-1 P and its transpose,
+    # with P denoting prior covariance and R sampling covariance. Place
+    # the larger matrix inside the solve to preserve small variances.
+    larger, smaller = prior, sampling
+    if float(np.max(np.diag(sampling))) > float(np.max(np.diag(prior))):
+        larger, smaller = sampling, prior
+    covariance = smaller @ _solve(factor, larger)
+    return mean, (covariance + covariance.T) * 0.5
+
+
 def fit_latent_predictor(
     observed,
     evolutionary_covariance,
@@ -266,10 +279,12 @@ def fit_latent_predictor(
         posterior_mean = prior_mean + gain * residual
         posterior_covariance = np.diag(gain * np.diag(sampling_covariance))
     else:
-        gain_residual = prior_covariance @ _solve(observation_cholesky, residual)
-        posterior_mean = prior_mean + gain_residual
-        posterior_covariance = prior_covariance - (
-            prior_covariance @ _solve(observation_cholesky, prior_covariance.T)
+        posterior_mean, posterior_covariance = _condition_dense_predictor(
+            prior_covariance,
+            sampling_covariance,
+            observation_cholesky,
+            residual,
+            prior_mean,
         )
     posterior_covariance = _positive_semidefinite(
         posterior_covariance, "Latent predictor posterior covariance"
