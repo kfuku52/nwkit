@@ -149,6 +149,44 @@ def _fixed_doublings(species_tree, events):
     return by_node
 
 
+def _integrate_product(coefficients, left, right, factors, dtype):
+    i_values = np.flatnonzero(np.isfinite(left[:, 0]))
+    j_values = np.flatnonzero(np.isfinite(right[:, 0]))
+    # With a single coefficient on one side, all products target distinct
+    # powers. Otherwise retain the original reduction order within a power.
+    if len(j_values) == 1:
+        _add_polynomial_products(
+            coefficients, left, right, i_values, j_values[0], factors, dtype
+        )
+    else:
+        for i in i_values:
+            _add_polynomial_products(
+                coefficients, left, right, i, j_values, factors, dtype
+            )
+
+
+def _add_polynomial_products(coefficients, left, right, i, j, factors, dtype):
+    powers = i + j + 1
+    factor = factors[powers].astype(dtype)
+    coefficients[powers, 0] = np.logaddexp(
+        coefficients[powers, 0], factor + left[i, 0] + right[j, 0]
+    )
+    if coefficients.shape[1] > 1:
+        coefficients[powers, 1:] = np.logaddexp(
+            coefficients[powers, 1:],
+            factor[:, None]
+            + np.logaddexp(
+                left[i, 1:] + np.asarray(right[j, 0])[..., None],
+                np.asarray(left[i, 0])[..., None] + right[j, 1:],
+            ),
+        )
+
+
+def _integration_factors(tip_count):
+    log_power = np.array([0.0, *(math.log(k) for k in range(1, tip_count))])
+    return np.stack((-log_power, math.log(2) - log_power))
+
+
 class TopologyLikelihood:
     def __init__(
         self,
@@ -242,6 +280,7 @@ class TopologyLikelihood:
             self.tip_counts.append(
                 1 if not children else sum(self.tip_counts[child] for child in children)
             )
+        self.integration_factors = _integration_factors(len(tips))
 
     def _edge(self, survival, logs, duplication, loss, length, dtype, log_survival):
         if not length:
@@ -271,21 +310,8 @@ class TopologyLikelihood:
             )
             coefficients[0] = logs[node]
             left, right = (polynomials.pop(child) for child in children)
-            for i in np.flatnonzero(np.isfinite(left[:, 0])):
-                for j in np.flatnonzero(np.isfinite(right[:, 0])):
-                    power = i + j + 1
-                    factor = dtype(math.log(self.coefficients[node]) - math.log(power))
-                    coefficients[power, 0] = np.logaddexp(
-                        coefficients[power, 0], factor + left[i, 0] + right[j, 0]
-                    )
-                    if columns > 1:
-                        coefficients[power, 1:] = np.logaddexp(
-                            coefficients[power, 1:],
-                            factor
-                            + np.logaddexp(
-                                left[i, 1:] + right[j, 0], left[i, 0] + right[j, 1:]
-                            ),
-                        )
+            factors = self.integration_factors[self.coefficients[node] - 1]
+            _integrate_product(coefficients, left, right, factors, dtype)
             polynomials[node] = coefficients
             powers = np.arange(len(coefficients), dtype=dtype) * dtype(log_z)
             powers[0] = 0
