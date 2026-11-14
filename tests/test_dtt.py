@@ -541,13 +541,12 @@ def test_trait_tree_panels_use_retained_original_values(tmp_path, monkeypatch, c
             dtt_axis.transData.transform(endpoints)[:, 0], abs=1e-6
         )
     for index, panel in enumerate(panels):
-        assert np.asarray(panel.collections[0].get_array()) == pytest.approx(
+        dots = panel.collections[-1]
+        assert np.asarray(dots.get_array()) == pytest.approx(
             (DATA[:4, index] - DATA[:4, index].min()) / np.ptp(DATA[:4, index])
         )
         assert [text.get_text().split()[0] for text in panel.texts] == list("ABCD")
-        assert np.asarray(panel.collections[0].get_offsets())[:, 0] == pytest.approx(
-            np.ones(4)
-        )
+        assert np.asarray(dots.get_offsets())[:, 0] == pytest.approx(np.ones(4))
 
 
 @pytest.mark.parametrize("scale", ["raw", "standardize"])

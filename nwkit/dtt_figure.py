@@ -2,6 +2,7 @@
 
 import numpy as np
 from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.collections import LineCollection
 from matplotlib.figure import Figure
 from matplotlib.text import Text
 
@@ -16,22 +17,21 @@ def _tree_branches(ax, tree):
     depths = tree_depths(tree, allow_zero=True)
     height = max(depths[tip] for tip in tips)
     y = {tip: float(len(tips) - i - 1) for i, tip in enumerate(tips)}
+    segments = []
     for node in tree.traverse("postorder"):
+        x = depths[node] / height
         if not node.is_leaf:
-            y[node] = (y[node.children[0]] + y[node.children[-1]]) / 2
-            ax.plot(
-                [depths[node] / height] * 2,
-                [y[node.children[0]], y[node.children[-1]]],
-                color="#a3adb6",
-                linewidth=1,
-            )
+            first_y, last_y = y[node.children[0]], y[node.children[-1]]
+            y[node] = (first_y + last_y) / 2
+            segments.append(((x, first_y), (x, last_y)))
         if not node.is_root:
-            ax.plot(
-                [depths[node.up] / height, depths[node] / height],
-                [y[node], y[node]],
-                color="#a3adb6",
-                linewidth=1,
-            )
+            segments.append(((depths[node.up] / height, y[node]), (x, y[node])))
+    ax.add_collection(
+        LineCollection(
+            segments, colors="#a3adb6", linewidths=1, capstyle="projecting", zorder=2
+        ),
+        autolim=False,
+    )
     ax.set(
         xlim=(0, 1),
         ylim=(-0.7, len(tips) - 0.3),

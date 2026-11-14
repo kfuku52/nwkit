@@ -75,7 +75,7 @@ def test_raw_colors_are_invariant_to_extreme_unit_changes(layout):
         values = DATA[:, :1] * factor
         if layout == "trees":
             _trait_tree(left, color_axis, tree, list("ABCDEFGH"), values[:, 0], "size")
-            artist = left.collections[0]
+            artist = left.collections[-1]
         else:
             _trait_heatmap(
                 left, right, color_axis, tree, list("ABCDEFGH"), values, ["size"], "raw"
