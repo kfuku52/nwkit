@@ -230,7 +230,15 @@ def _birth_death_log_probabilities(duplication, loss, time):
 
 
 def _log_matrix_product(left, right):
-    return np.array([logsumexp(row[:, None] + right, axis=0) for row in left])
+    batch = max(1, min(64, _LOG_PRUNING_WORKSPACE_BYTES // (32 * right.size)))
+    if batch == 1:
+        return np.array([logsumexp(row[:, None] + right, axis=0) for row in left])
+    result = np.empty((len(left), right.shape[1]), dtype=float)
+    for first in range(0, len(left), batch):
+        last = min(first + batch, len(left))
+        # Keep the original reduction order within each matrix row.
+        result[first:last] = logsumexp(left[first:last, :, None] + right[None], axis=1)
+    return result
 
 
 def _log_pulse_transition(before, after, event):
@@ -843,9 +851,10 @@ class CountLikelihood:
                     missing,
                 )
                 continue
-            value = binom.logpmf(
-                np.where(missing, 0, counts)[:, None], states[None, :], detection
+            distinct, inverse = np.unique(
+                np.where(missing, 0, counts), return_inverse=True
             )
+            value = binom.logpmf(distinct[:, None], states[None, :], detection)[inverse]
             value[missing] = 0.0
             likelihoods[node] = value
         for node in range(len(self.tree.parents) - 1, -1, -1):
