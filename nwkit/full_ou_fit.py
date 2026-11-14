@@ -22,7 +22,7 @@ from nwkit.vector_fit import normalized_vector_observations, restored_vector_pos
 from nwkit.vector_gaussian import prepare_vector_conditioning
 from nwkit.vector_mean import stationary_mean_gls
 from nwkit.vector_ou_fit import _ou_geometry
-from nwkit.vector_processes import vector_ou_process
+from nwkit.vector_processes import _scale_similarity, vector_ou_process
 
 
 def _observations(tree, values, traits, errors, covariances):
@@ -49,9 +49,14 @@ def _fixed_parameters(data, attraction, diffusion):
     process = vector_ou_process(
         data.compiled.tree, attraction, diffusion, np.zeros(dimension)
     )
-    attraction = np.asarray(attraction) * data.scales[None, :] / data.scales[:, None]
-    diffusion = np.asarray(diffusion) / np.outer(data.scales, data.scales)
-    covariance = process.root_covariance / np.outer(data.scales, data.scales)
+    rows, columns = data.scales[:, None], data.scales[None, :]
+    attraction = _scale_similarity(np.asarray(attraction), columns, rows)
+    # Observation scales are powers of two. Apply both exponents at once so
+    # their product need not be representable in the original units.
+    exponents = 1 - np.frexp(data.scales)[1]
+    covariance_exponents = exponents[:, None] + exponents[None, :]
+    diffusion = np.ldexp(np.asarray(diffusion, dtype=float), covariance_exponents)
+    covariance = np.ldexp(process.root_covariance, covariance_exponents)
     return attraction, diffusion, covariance
 
 
@@ -83,7 +88,9 @@ def _result(data, optimized, likelihood, matrices, theta, fixed, diagnostic, bou
         diffusion_sigma=_restore_sigma(data, diffusion),
         theta=data.centers + data.scales * theta,
         theta_estimated=True,
-        attraction_matrix=attraction * data.scales[:, None] / data.scales[None, :],
+        attraction_matrix=_scale_similarity(
+            attraction, data.scales[:, None], data.scales[None, :]
+        ),
         attraction_estimated=fixed is None,
         identifiability_status=status,
         identifiability_rank=rank,
