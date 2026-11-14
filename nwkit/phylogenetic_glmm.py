@@ -772,53 +772,55 @@ def _random_mode(
             counts, fixed_linear + candidate.reshape(len(counts), dimension)
         )
 
+    return _dense_latent_mode(precision, terms, "Categorical", mode)
+
+
+def _dense_latent_mode(precision, likelihood_terms, label, mode):
+    def evaluate(candidate):
+        log_likelihood, likelihood_gradient, weights = likelihood_terms(candidate)
+        value = -log_likelihood + 0.5 * float(candidate @ precision @ candidate)
+        return value, likelihood_gradient, weights
+
+    def factor_hessian(weights):
+        return _positive_definite_cholesky(_dense_weight_matrix(weights) + precision)
+
+    state = evaluate(mode)
     converged = False
     for _iteration in range(80):
-        log_likelihood, likelihood_gradient, weights = terms(mode)
+        value, likelihood_gradient, weights = state
         gradient = likelihood_gradient + precision @ mode
         if not np.isfinite(gradient).all():
             break
         if float(np.max(np.abs(gradient))) < 1e-7:
             converged = True
             break
-        hessian = _dense_weight_matrix(weights) + precision
         try:
-            cholesky = _positive_definite_cholesky(hessian)
+            cholesky = factor_hessian(weights)
         except np.linalg.LinAlgError:
             break
         step = cho_solve((cholesky, True), gradient, check_finite=False)
-        current = -log_likelihood + 0.5 * float(mode @ precision @ mode)
-        step_scale = 1.0
         accepted = False
+        step_scale = 1.0
         for _backtrack in range(24):
             candidate = mode - step_scale * step
-            candidate_log_likelihood, _, _ = terms(candidate)
-            candidate_objective = -candidate_log_likelihood + 0.5 * float(
-                candidate @ precision @ candidate
-            )
-            if np.isfinite(candidate_objective) and candidate_objective <= current:
+            candidate_state = evaluate(candidate)
+            candidate_value = candidate_state[0]
+            if np.isfinite(candidate_value) and candidate_value <= value:
                 mode = candidate
+                state = candidate_state
                 accepted = True
                 break
             step_scale *= 0.5
         if not accepted:
             break
         if float(np.max(np.abs(step_scale * step))) < 1e-8:
-            converged = True
+            converged = _dense_mode_gradient_is_small(state[1] + precision @ mode)
             break
-    if converged:
-        _log_likelihood, likelihood_gradient, _weights = terms(mode)
-        converged = bool(
-            np.isfinite(likelihood_gradient).all()
-            and float(np.max(np.abs(likelihood_gradient + precision @ mode))) < 1e-5
-        )
     if not converged:
 
-        def value_and_gradient(candidate: np.ndarray):
-            log_likelihood, likelihood_gradient, _weights = terms(candidate)
-            value = -log_likelihood + 0.5 * float(candidate @ precision @ candidate)
-            gradient = likelihood_gradient + precision @ candidate
-            return value, gradient
+        def value_and_gradient(candidate):
+            value, likelihood_gradient, _weights = evaluate(candidate)
+            return value, likelihood_gradient + precision @ candidate
 
         fallback = minimize(
             value_and_gradient,
@@ -827,25 +829,22 @@ def _random_mode(
             jac=True,
             options={"maxiter": 1000, "ftol": 1e-12, "gtol": 1e-7},
         )
-        if (
-            not fallback.success
-            or not np.isfinite(fallback.fun)
-            or float(fallback.fun) >= 1e99
-        ):
+        if not _valid_optimizer_result(fallback):
             raise RuntimeError(
-                "Categorical random-effect mode optimization failed: {}".format(
-                    fallback.message
+                "{} random-effect mode optimization failed: {}".format(
+                    label, fallback.message
                 )
             )
         mode = np.asarray(fallback.x, dtype=float)
-    log_likelihood, _, weights = terms(mode)
-    objective = -log_likelihood + 0.5 * float(mode @ precision @ mode)
-    posterior_factor = _positive_definite_cholesky(
-        _dense_weight_matrix(weights) + precision
-    )
-    if not np.isfinite(objective):
-        raise RuntimeError("Categorical random-effect mode is non-finite.")
-    return mode, objective, posterior_factor
+        state = evaluate(mode)
+    value, _gradient, weights = state
+    if not np.isfinite(value):
+        raise RuntimeError("{} random-effect mode is non-finite.".format(label))
+    return mode, value, factor_hessian(weights)
+
+
+def _dense_mode_gradient_is_small(gradient):
+    return np.isfinite(gradient).all() and float(np.max(np.abs(gradient))) < 1e-5
 
 
 def _initial_coefficients(
@@ -2999,7 +2998,7 @@ def _scalar_random_mode(
     mode = np.zeros(len(precision), dtype=float)
 
     def terms(candidate: np.ndarray):
-        return _scalar_terms(
+        log_likelihood, gradient, weights = _scalar_terms(
             values,
             fixed_linear + candidate[observation_to_tip],
             family=family,
@@ -3010,95 +3009,15 @@ def _scalar_random_mode(
             censor_lower=censor_lower,
             censor_upper=censor_upper,
         )
-
-    converged = False
-    for _iteration in range(80):
-        log_likelihood, likelihood_gradient, weights = terms(mode)
-        mapped_gradient = np.zeros(len(mode), dtype=float)
-        np.add.at(mapped_gradient, observation_to_tip, likelihood_gradient)
+        mapped_gradient = np.bincount(
+            observation_to_tip, weights=gradient, minlength=len(mode)
+        )
         mapped_weights = np.bincount(
-            observation_to_tip,
-            weights=weights,
-            minlength=len(mode),
+            observation_to_tip, weights=weights, minlength=len(mode)
         )
-        gradient = mapped_gradient + precision @ mode
-        if not np.isfinite(gradient).all():
-            break
-        if float(np.max(np.abs(gradient))) < 1e-7:
-            converged = True
-            break
-        hessian = np.diag(mapped_weights) + precision
-        try:
-            cholesky = _positive_definite_cholesky(hessian)
-        except np.linalg.LinAlgError:
-            break
-        step = cho_solve((cholesky, True), gradient, check_finite=False)
-        current = -log_likelihood + 0.5 * float(mode @ precision @ mode)
-        accepted = False
-        step_scale = 1.0
-        for _backtrack in range(24):
-            candidate = mode - step_scale * step
-            candidate_log_likelihood, _, _ = terms(candidate)
-            candidate_objective = -candidate_log_likelihood + 0.5 * float(
-                candidate @ precision @ candidate
-            )
-            if np.isfinite(candidate_objective) and candidate_objective <= current:
-                mode = candidate
-                accepted = True
-                break
-            step_scale *= 0.5
-        if not accepted:
-            break
-        if float(np.max(np.abs(step_scale * step))) < 1e-8:
-            converged = True
-            break
-    if converged:
-        _log_likelihood, likelihood_gradient, _weights = terms(mode)
-        mapped_gradient = np.zeros(len(mode), dtype=float)
-        np.add.at(mapped_gradient, observation_to_tip, likelihood_gradient)
-        final_gradient = mapped_gradient + precision @ mode
-        converged = bool(
-            np.isfinite(final_gradient).all()
-            and float(np.max(np.abs(final_gradient))) < 1e-5
-        )
-    if not converged:
+        return log_likelihood, mapped_gradient, mapped_weights
 
-        def value_and_gradient(candidate: np.ndarray):
-            log_likelihood, likelihood_gradient, _weights = terms(candidate)
-            mapped_gradient = np.zeros(len(candidate), dtype=float)
-            np.add.at(mapped_gradient, observation_to_tip, likelihood_gradient)
-            value = -log_likelihood + 0.5 * float(candidate @ precision @ candidate)
-            return value, mapped_gradient + precision @ candidate
-
-        fallback = minimize(
-            value_and_gradient,
-            mode,
-            method="L-BFGS-B",
-            jac=True,
-            options={"maxiter": 1000, "ftol": 1e-12, "gtol": 1e-7},
-        )
-        if (
-            not fallback.success
-            or not np.isfinite(fallback.fun)
-            or float(fallback.fun) >= 1e99
-        ):
-            raise RuntimeError(
-                "Scalar random-effect mode optimization failed: {}".format(
-                    fallback.message
-                )
-            )
-        mode = np.asarray(fallback.x, dtype=float)
-    log_likelihood, _, weights = terms(mode)
-    objective = -log_likelihood + 0.5 * float(mode @ precision @ mode)
-    mapped_weights = np.bincount(
-        observation_to_tip,
-        weights=weights,
-        minlength=len(mode),
-    )
-    posterior_factor = _positive_definite_cholesky(np.diag(mapped_weights) + precision)
-    if not np.isfinite(objective):
-        raise RuntimeError("Scalar random-effect mode is non-finite.")
-    return mode, objective, posterior_factor
+    return _dense_latent_mode(precision, terms, "Scalar", mode)
 
 
 def _scalar_initial_coefficient(
