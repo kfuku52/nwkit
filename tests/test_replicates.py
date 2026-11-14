@@ -74,6 +74,18 @@ def test_pooled_biological_replicates_estimate_tip_sampling_variance():
     assert set(summary["variance_method"]) == {"pooled"}
 
 
+def test_pooled_replicate_sampling_variance_scales_in_tiny_trait_units():
+    data = _raw_replicates()
+    data["expression"] *= 1e-95
+    estimates = estimate_replicate_traits(
+        data, ["A", "B", "C"], ["expression"], biological_id="sample"
+    )
+    np.testing.assert_allclose(
+        estimates.sampling_covariance_by_trait["expression"], 1e-190, atol=0.0
+    )
+    np.testing.assert_allclose(estimates.tip_summary["standard_error"], 1e-95, atol=0.0)
+
+
 def test_mixed_replicate_traits_treat_one_observation_as_an_exact_tip_value():
     dataframe = pd.DataFrame(
         [

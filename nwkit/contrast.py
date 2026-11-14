@@ -12,7 +12,11 @@ from nwkit.evolution import (
     transformed_edge_variances,
     validate_evolution_parameter,
 )
-from nwkit.gaussian import DiagonalLowRankCovariance
+from nwkit.gaussian import (
+    DiagonalLowRankCovariance,
+    symmetric_average,
+    validate_psd_covariance,
+)
 from nwkit.rooting_state import require_rooted, rooting_option_for_input
 from nwkit.util import (
     assign_branch_ids,
@@ -1193,19 +1197,11 @@ def _dense_contrast_sampling_covariance(coefficients, tip_covariance):
         coefficients.toarray() if sparse.issparse(coefficients) else coefficients
     )
     covariance = dense_coefficients @ tip_covariance @ dense_coefficients.T
-    covariance = (covariance + covariance.T) / 2.0
-    if not np.isfinite(covariance).all():
-        raise ValueError("Contrast sampling covariance contains non-finite values.")
-    eigenvalues = np.linalg.eigvalsh(covariance)
-    tolerance = (
-        np.finfo(float).eps
-        * max(1.0, float(np.max(np.abs(covariance))))
-        * max(1, len(covariance))
+    return validate_psd_covariance(
+        symmetric_average(covariance),
+        "Contrast sampling covariance",
+        clip_negative_diagonal=True,
     )
-    if eigenvalues.size and float(eigenvalues.min()) < -tolerance:
-        raise ValueError("Contrast sampling covariance is not positive semidefinite.")
-    covariance[np.abs(covariance) < tolerance] = 0.0
-    return covariance
 
 
 def _contrast_sampling_representation(coefficients, leaf_names, value, trait):

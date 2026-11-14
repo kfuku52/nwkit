@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import pytest
 from ete4 import Tree
@@ -69,6 +70,26 @@ def test_tip_sampling_variance_diagonal_rejects_invalid_values(invalid):
             replicate_model_by_trait={"value": "pooled"},
             return_sampling_covariance=True,
         )
+
+
+def test_dense_tip_sampling_covariance_keeps_small_projected_variance():
+    tree = Tree("((A:1,B:1):1,C:2);", parser=1)
+    names = ["A", "B", "C"]
+    diagonal = np.array([1e-200, 2e-200, 1.0])
+    common = dict(
+        sampling_covariance_by_trait={
+            "value": pd.DataFrame(np.diag(diagonal), index=names, columns=names)
+        },
+        replicate_model_by_trait={"value": "pooled"},
+        return_sampling_covariance=True,
+    )
+    table, covariance = build_contrast_table(
+        tree, {"value": {"A": 1.0, "B": 3.0, "C": 4.0}}, **common
+    )
+    assert table["sampling_variance"].min() == pytest.approx(3e-200, abs=0.0)
+    assert covariance["sampling_covariance"].abs().min() == pytest.approx(
+        5e-201, abs=0.0
+    )
 
 
 def test_contrast_sign_is_invariant_to_newick_child_order():

@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from scipy import sparse
 
-from nwkit.gaussian import DiagonalLowRankCovariance
+from nwkit.gaussian import DiagonalLowRankCovariance, validate_psd_covariance
 from nwkit.model_matrix import CategoricalObservation, ReplicatedObservation
 
 TIP_SUMMARY_COLUMNS = [
@@ -1015,6 +1015,9 @@ def _expand_trait_estimates(
 
 
 def _validated_sampling_covariance(covariance, means, allow_missing):
+    invalid_means = np.isinf(means).any() or (
+        not allow_missing and not np.isfinite(means).all()
+    )
     if isinstance(covariance, DiagonalLowRankCovariance):
         diagonal = np.asarray(covariance.diagonal, dtype=float)
         loading = covariance.low_rank
@@ -1022,9 +1025,6 @@ def _validated_sampling_covariance(covariance, means, allow_missing):
             np.isfinite(loading.data).all()
             if sparse.issparse(loading)
             else np.isfinite(np.asarray(loading, dtype=float)).all()
-        )
-        invalid_means = np.isinf(means).any() or (
-            not allow_missing and not np.isfinite(means).all()
         )
         if (
             diagonal.shape != means.shape
@@ -1037,26 +1037,17 @@ def _validated_sampling_covariance(covariance, means, allow_missing):
             raise ValueError("Replicate estimation produced non-finite values.")
         return DiagonalLowRankCovariance(diagonal, loading)
     covariance = np.asarray(covariance, dtype=float)
+    if invalid_means or not np.isfinite(covariance).all():
+        raise ValueError("Replicate estimation produced non-finite values.")
     if covariance.ndim == 1:
         if np.any(covariance < 0.0):
             raise ValueError(
                 "Replicate estimation produced an invalid covariance diagonal."
             )
-        symmetric = covariance.copy()
-        minimum_eigenvalue = float(covariance.min())
-    else:
-        symmetric = (covariance + covariance.T) / 2.0
-        minimum_eigenvalue = float(np.linalg.eigvalsh(symmetric).min())
-    invalid_means = np.isinf(means).any() or (
-        not allow_missing and not np.isfinite(means).all()
+        return covariance.copy()
+    return validate_psd_covariance(
+        covariance, "Replicate sampling covariance", clip_negative_diagonal=True
     )
-    if invalid_means or not np.isfinite(symmetric).all():
-        raise ValueError("Replicate estimation produced non-finite values.")
-    tolerance = np.finfo(float).eps * max(1.0, float(np.max(np.abs(symmetric))))
-    if minimum_eigenvalue < -tolerance:
-        raise ValueError("Replicate estimation produced an invalid covariance matrix.")
-    symmetric[np.abs(symmetric) < tolerance] = 0.0
-    return symmetric
 
 
 def _replicate_tip_rows(
