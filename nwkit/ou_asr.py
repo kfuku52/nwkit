@@ -16,10 +16,14 @@ from nwkit.continuous_asr import (
     _tree_groups,
 )
 from nwkit.evolution import _finite_rate_bound
-from nwkit.gaussian_tree import ou_stationary_variance, ou_transition
+from nwkit.gaussian_tree import (
+    ou_stationary_variance,
+    ou_transition_from_root_variance,
+)
 
 _LOG_2PI = math.log(2.0 * math.pi)
 _LOG_2 = math.log(2.0)
+_LOG_FLOAT_MAX = math.log(sys.float_info.max)
 
 
 @dataclass(frozen=True)
@@ -297,31 +301,31 @@ def _prepare_data(
     )
 
 
-def _transition(alpha, sigma2, theta, length):
-    transition, root_variance = ou_transition(length, alpha, sigma2, theta)
+def _stationary_variance(alpha, sigma2):
+    root_variance = ou_stationary_variance(alpha, sigma2)
     if not math.isfinite(root_variance) or root_variance <= 0.0:
         raise ValueError(
             "The stationary OU variance is outside floating-point range; rescale units."
         )
-    return (
+    return root_variance
+
+
+def _propagate_up(factor, alpha, root_variance, theta, length):
+    if factor.marginal is None:
+        return factor
+    transition = ou_transition_from_root_variance(length, alpha, root_variance, theta)
+    decay, intercept, innovation = (
         transition.slope,
         transition.intercept,
         transition.variance,
-        root_variance,
     )
-
-
-def _propagate_up(factor, alpha, sigma2, theta, length):
-    if factor.marginal is None:
-        return factor
-    decay, intercept, innovation, _ = _transition(alpha, sigma2, theta, length)
     marginal = factor.marginal
     total_variance = marginal.variance + innovation
     if not math.isfinite(total_variance) or total_variance <= 0.0:
         raise ValueError("An OU pruning variance is not positive and finite.")
     exponent = alpha * length
     log_parent_variance = math.log(total_variance) + 2.0 * exponent
-    if decay == 0.0 or log_parent_variance >= math.log(np.finfo(float).max):
+    if decay == 0.0 or log_parent_variance >= _LOG_FLOAT_MAX:
         return _Factor(
             None,
             factor.log_weight
@@ -339,11 +343,16 @@ def _propagate_up(factor, alpha, sigma2, theta, length):
     )
 
 
-def _propagate_affine_up(factor, alpha, sigma2, theta_reference, length):
+def _propagate_affine_up(factor, alpha, root_variance, theta_reference, length):
     if factor.mean_offset is None:
         return factor
-    decay, intercept, innovation, _ = _transition(
-        alpha, sigma2, theta_reference, length
+    transition = ou_transition_from_root_variance(
+        length, alpha, root_variance, theta_reference
+    )
+    decay, intercept, innovation = (
+        transition.slope,
+        transition.intercept,
+        transition.variance,
     )
     total_variance = factor.variance + innovation
     if not math.isfinite(total_variance) or total_variance <= 0.0:
@@ -351,7 +360,7 @@ def _propagate_affine_up(factor, alpha, sigma2, theta_reference, length):
     exponent = alpha * length
     intercept_slope = -math.expm1(-exponent)
     log_parent_variance = math.log(total_variance) + 2.0 * exponent
-    if decay == 0.0 or log_parent_variance >= math.log(np.finfo(float).max):
+    if decay == 0.0 or log_parent_variance >= _LOG_FLOAT_MAX:
         extra = _normal_nll_polynomial(
             factor.mean_offset - intercept,
             factor.mean_slope - intercept_slope,
@@ -376,6 +385,7 @@ def _propagate_affine_up(factor, alpha, sigma2, theta_reference, length):
 def _profile_theta(data, alpha, sigma2, theta_reference):
     """Profile theta exactly from its quadratic tree likelihood in one pass."""
 
+    root_variance = _stationary_variance(alpha, sigma2)
     inside = [
         _AffineFactor(
             None if factor.marginal is None else factor.marginal.mean,
@@ -394,11 +404,10 @@ def _profile_theta(data, alpha, sigma2, theta_reference):
             upward[group] = _propagate_affine_up(
                 factor,
                 alpha,
-                sigma2,
+                root_variance,
                 theta_reference,
                 data.lengths[group],
             )
-    root_variance = ou_stationary_variance(alpha, sigma2)
     result = _combine_affine(
         _AffineFactor(theta_reference, 1.0, root_variance), inside[0]
     )
@@ -416,10 +425,15 @@ def _profile_theta(data, alpha, sigma2, theta_reference):
     return fitted_theta, negative_log_likelihood
 
 
-def _predict_down(factor, alpha, sigma2, theta, length):
-    decay, intercept, innovation, _ = _transition(alpha, sigma2, theta, length)
+def _predict_down(factor, alpha, root_variance, theta, length):
     if factor.marginal is None:
         return factor
+    transition = ou_transition_from_root_variance(length, alpha, root_variance, theta)
+    decay, intercept, innovation = (
+        transition.slope,
+        transition.intercept,
+        transition.variance,
+    )
     marginal = factor.marginal
     mean = decay * marginal.mean + intercept
     variance = decay * decay * marginal.variance + innovation
@@ -429,17 +443,17 @@ def _predict_down(factor, alpha, sigma2, theta, length):
 
 
 def _prune(data, alpha, sigma2, theta):
+    root_variance = _stationary_variance(alpha, sigma2)
     upward = list(data.local)
     for group in range(len(data.parents) - 1, -1, -1):
         factor = upward[group]
         for child in data.children[group]:
             factor = _combine(factor, upward[child])
         upward[group] = (
-            _propagate_up(factor, alpha, sigma2, theta, data.lengths[group])
+            _propagate_up(factor, alpha, root_variance, theta, data.lengths[group])
             if data.parents[group] >= 0
             else factor
         )
-    root_variance = ou_stationary_variance(alpha, sigma2)
     posterior_root = _combine(
         _Factor(GaussianMarginal(theta, root_variance)), upward[0]
     )
@@ -449,7 +463,7 @@ def _prune(data, alpha, sigma2, theta):
 
 
 def _smooth(data, alpha, sigma2, theta, upward):
-    root_variance = ou_stationary_variance(alpha, sigma2)
+    root_variance = _stationary_variance(alpha, sigma2)
     outside = [_Factor(None) for _ in data.parents]
     outside[0] = _Factor(GaussianMarginal(theta, root_variance))
     posterior = [None for _ in data.parents]
@@ -465,7 +479,7 @@ def _smooth(data, alpha, sigma2, theta, upward):
             child = children[index]
             cavity = _combine(prefix[index], suffix)
             outside[child] = _predict_down(
-                cavity, alpha, sigma2, theta, data.lengths[child]
+                cavity, alpha, root_variance, theta, data.lengths[child]
             )
             suffix = _combine(upward[child], suffix)
     if any(item is None for item in posterior):
