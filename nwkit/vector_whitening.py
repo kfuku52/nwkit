@@ -14,6 +14,7 @@ import numpy as np
 from scipy.linalg import get_lapack_funcs, solve_triangular
 
 from nwkit.gaussian_whitening import _normalize_mean_design
+from nwkit.vector_gaussian import _symmetric_part
 
 
 def _cholesky(matrix, label):
@@ -22,7 +23,7 @@ def _cholesky(matrix, label):
     ):
         raise ValueError(f"{label} must be finite and symmetric.")
     try:
-        return np.linalg.cholesky((matrix + matrix.T) / 2)
+        return np.linalg.cholesky(_symmetric_part(matrix))
     except np.linalg.LinAlgError as exc:
         raise ValueError(
             f"{label} is not positive definite; no jitter is applied."
@@ -117,10 +118,11 @@ class VectorTreeWhitening:
     def build(
         cls, compiled, mask, slopes, innovations, errors, *, root_covariance, plan=None
     ):
-        """Use tip-major observed-coordinate ordering, with diagonal slopes.
+        """Use tip-major observed-coordinate ordering.
 
-        mask has shape (tips,p); slopes (nodes,p); innovations (nodes,p,p);
-        errors (tips,p,p). Root state has zero mean and the supplied covariance.
+        Slopes can be diagonal (nodes,p) or full (nodes,p,p); innovations have
+        shape (nodes,p,p) and errors (tips,p,p). Root state has zero mean and
+        the supplied covariance.
         """
         mask = np.asarray(mask, dtype=bool)
         if mask.ndim != 2 or mask.shape[0] != len(compiled.leaf_indices):
@@ -133,8 +135,9 @@ class VectorTreeWhitening:
         innovations = np.asarray(innovations, dtype=float)
         errors = np.asarray(errors, dtype=float)
         root_covariance = np.asarray(root_covariance, dtype=float)
+        slope_shape = (n, p) if slopes.ndim == 2 else (n, p, p)
         for value, shape, label in (
-            (slopes, (n, p), "Slopes"),
+            (slopes, slope_shape, "Slopes"),
             (innovations, (n, p, p), "Innovations"),
             (errors, (len(mask), p, p), "Observation covariance"),
             (root_covariance, (p, p), "Root covariance"),
@@ -165,6 +168,7 @@ class VectorTreeWhitening:
                 "Vector observation plan belongs to a different tree or mask."
             )
         messages: dict[int, np.ndarray] = {}
+        diagonal_slopes = slopes.ndim == 2
         steps = []
         logdet = 0.0
         for node, children, row, observed, positions in plan.entries:
@@ -174,7 +178,10 @@ class VectorTreeWhitening:
                 covariance = covariance + errors[row][np.ix_(observed, observed)]
                 factor = _cholesky(covariance, "Observed branch covariance")
                 propagated = solve_triangular(
-                    factor, local * slopes[node], lower=True, check_finite=False
+                    factor,
+                    local * slopes[node] if diagonal_slopes else slopes[node][observed],
+                    lower=True,
+                    check_finite=False,
                 )
                 step = _Step(node, (), positions, None, len(observed), factor)
             else:
@@ -203,7 +210,10 @@ class VectorTreeWhitening:
                 covariance = np.eye(retained) + local @ innovations[node] @ local.T
                 factor = _cholesky(covariance, "Integrated branch covariance")
                 propagated = solve_triangular(
-                    factor, local * slopes[node], lower=True, check_finite=False
+                    factor,
+                    local * slopes[node] if diagonal_slopes else local @ slopes[node],
+                    lower=True,
+                    check_finite=False,
                 )
                 step = _Step(node, children, None, rotation, retained, factor)
             messages[node] = propagated

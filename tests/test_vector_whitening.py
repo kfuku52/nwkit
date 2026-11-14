@@ -9,18 +9,16 @@ from nwkit.vector_whitening import VectorTreeWhitening, _mean_design_qr, vector_
 
 
 def dense_covariance(compiled, slopes, innovations, root):
-    n, p = slopes.shape
+    n, p = slopes.shape[:2]
     blocks = np.zeros((n, n, p, p))
     blocks[0, 0] = root
     for i in range(1, n):
         parent = compiled.parents[i]
+        slope = np.diag(slopes[i]) if slopes.ndim == 2 else slopes[i]
         for j in range(i):
-            blocks[i, j] = slopes[i, :, None] * blocks[parent, j]
+            blocks[i, j] = slope @ blocks[parent, j]
             blocks[j, i] = blocks[i, j].T
-        blocks[i, i] = (
-            slopes[i, :, None] * blocks[parent, parent] * slopes[i, None, :]
-            + innovations[i]
-        )
+        blocks[i, i] = slope @ blocks[parent, parent] @ slope.T + innovations[i]
     return np.block(
         [[blocks[i, j] for j in compiled.leaf_indices] for i in compiled.leaf_indices]
     )
@@ -29,11 +27,14 @@ def dense_covariance(compiled, slopes, innovations, root):
 @pytest.mark.parametrize("missing", [False, True])
 @pytest.mark.parametrize("noise", [0.0, 0.2])
 @pytest.mark.parametrize("random_root", [False, True])
-def test_joint_whitening_matches_dense(missing, noise, random_root):
+@pytest.mark.parametrize("full_slopes", [False, True])
+def test_joint_whitening_matches_dense(missing, noise, random_root, full_slopes):
     tree = CompiledTree.from_tree(Tree("((a:1,b:1):1,(c:1,(d:0.5,e:0.5):0.5):1);"))
     rng = np.random.default_rng(4)
     p, n = 3, len(tree.nodes)
     slopes = rng.uniform(0.3, 0.95, (n, p))
+    if full_slopes:
+        slopes = slopes[:, :, None] * np.eye(p) + rng.normal(0, 0.1, (n, p, p))
     matrices = rng.normal(size=(n, p, p))
     innovations = matrices @ np.swapaxes(matrices, 1, 2) + np.eye(p) * 0.2
     root = innovations[0] if random_root else np.zeros((p, p))

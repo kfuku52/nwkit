@@ -126,6 +126,21 @@ def test_fixed_full_ou_normalizes_subnormal_diffusion(rate):
     )
 
 
+def test_fixed_full_ou_eliminates_duplicate_exact_zero_length_tip():
+    values = {"A": [1.4, -0.3], "B": [1.4, -0.3], "C": [0.4, 1.5]}
+    matrices = {
+        "attraction": np.array([[0.5, -0.2], [0.1, 0.6]]),
+        "diffusion": np.eye(2),
+    }
+    _, duplicated = fit_full_mvou(
+        _tree("(A:0,B:0,C:2)R;"), values, ("x", "y"), **matrices
+    )
+    values.pop("B")
+    _, unique = fit_full_mvou(_tree("(A:0,C:2)R;"), values, ("x", "y"), **matrices)
+    np.testing.assert_allclose(duplicated.theta, unique.theta, atol=1e-12)
+    assert duplicated.log_likelihood == pytest.approx(unique.log_likelihood, abs=1e-12)
+
+
 @pytest.mark.slow
 def test_free_full_ou_real_optimizer_returns_stable_finite_process():
     tree = _tree("(((A:1,B:2):1,(C:1,D:3):1):1,((E:2,F:1):2,(G:1,H:4):1):1)R;")
