@@ -326,6 +326,62 @@ def test_bootstrap_checkpoint_has_distinct_file_inputs_and_outputs(tmp_path):
             )
 
 
+def test_bootstrap_checkpoint_can_extend_but_not_shrink_same_seeded_scan(
+    tmp_path, monkeypatch
+):
+    import nwkit.wgd_count_fit as fitting
+
+    tree, counts = inputs(tmp_path)
+    checkpoint = tmp_path / "bootstrap.json"
+    small, extended, full = (
+        tmp_path / f"{name}.json" for name in ("small", "extended", "full")
+    )
+    args = command(tree, counts) + ["--seed", "815"]
+    checkpoint_args = ["--bootstrap-checkpoint", str(checkpoint)]
+    main(
+        args
+        + checkpoint_args
+        + ["--bootstrap", "2", "--model-out", str(small), "-o", str(tmp_path / "a.tsv")]
+    )
+    prefix = json.loads(checkpoint.read_text())["statistics"]
+    seen = []
+    fit = fitting._bootstrap_scan_statistic
+
+    def append(*args):
+        seen.append(1)
+        return fit(*args)
+
+    monkeypatch.setattr(fitting, "_bootstrap_scan_statistic", append)
+    main(
+        args
+        + checkpoint_args
+        + [
+            "--bootstrap",
+            "4",
+            "--model-out",
+            str(extended),
+            "-o",
+            str(tmp_path / "b.tsv"),
+        ]
+    )
+    assert len(seen) == 2
+    assert json.loads(checkpoint.read_text())["statistics"][:2] == prefix
+    main(
+        args
+        + ["--bootstrap", "4", "--model-out", str(full), "-o", str(tmp_path / "c.tsv")]
+    )
+    assert extended.read_bytes() == full.read_bytes()
+    assert (tmp_path / "b.tsv").read_bytes() == (tmp_path / "c.tsv").read_bytes()
+    saved = checkpoint.read_bytes()
+    with pytest.raises(ValueError, match="does not match"):
+        main(
+            args
+            + checkpoint_args
+            + ["--bootstrap", "3", "-o", str(tmp_path / "no.tsv")]
+        )
+    assert checkpoint.read_bytes() == saved
+
+
 def test_checkpoint_detects_input_mutation_after_last_null_draw(tmp_path, monkeypatch):
     import nwkit.wgd_count_fit as fitting
 

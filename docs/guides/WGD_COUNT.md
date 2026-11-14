@@ -152,9 +152,12 @@ bootstrap run in sequence, so their worker pools do not multiply each other.
 
 For long scans, `--bootstrap-checkpoint /path/to/bootstrap.json` saves each
 completed null refit. Rerun with the same file inputs, search settings, seed,
-number of draws and implementation to fill missing draws; worker counts may
-change. The observed fit is recomputed and checked before reuse. The original
-draw order is preserved even after out-of-order worker completions. This file
+and implementation to fill missing draws; worker counts may change.
+The draw target may stay the same or increase, but not decrease. Decide the
+new total independently of the interim result; this is not a sequential test
+or an adjustment for optional stopping. The observed fit is recomputed and
+checked before reuse. The original draw order is preserved even after
+out-of-order worker completions. This file
 is separate from the final TSV and model JSON and cannot replace an input or
 another output. Do not edit or share checkpoints between distinct analyses.
 

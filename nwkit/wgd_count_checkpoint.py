@@ -108,6 +108,20 @@ def _statistics_digest(values):
     ).hexdigest()
 
 
+def _compatible_draw_count(saved_identity, identity, draws):
+    if not isinstance(saved_identity, dict):
+        return None
+    previous = saved_identity.get("settings")
+    current = identity.get("settings")
+    if not isinstance(previous, dict) or not isinstance(current, dict):
+        return None
+    saved_draws = previous.get("bootstrap")
+    if type(saved_draws) is not int or not 1 <= saved_draws <= draws:
+        return None
+    updated = {**saved_identity, "settings": {**previous, "bootstrap": draws}}
+    return saved_draws if updated == identity else None
+
+
 @contextmanager
 def open_checkpoint(path, identity, draws):
     if path is None:
@@ -120,18 +134,19 @@ def open_checkpoint(path, identity, draws):
         if path.exists():
             with path.open(encoding="utf-8") as stream:
                 payload = json.load(stream)
-            if (
-                not isinstance(payload, dict)
-                or payload.get("schema_version") != 1
-                or payload.get("identity") != identity
-            ):
+            if not isinstance(payload, dict) or payload.get("schema_version") != 1:
+                raise ValueError("WGD bootstrap checkpoint has an unsupported schema.")
+            saved_draws = _compatible_draw_count(
+                payload.get("identity"), identity, draws
+            )
+            if saved_draws is None:
                 raise ValueError(
                     "WGD bootstrap checkpoint does not match the inputs, search, or runtime."
                 )
             saved = payload.get("statistics")
             if (
                 not isinstance(saved, list)
-                or len(saved) != draws
+                or len(saved) != saved_draws
                 or any(
                     x is not None
                     and (type(x) not in (float, int) or not math.isfinite(x) or x < 0)
@@ -146,6 +161,9 @@ def open_checkpoint(path, identity, draws):
                 raise ValueError(
                     "WGD bootstrap checkpoint statistics checksum does not match."
                 )
+            # Simulation consumes the same seeded prefix regardless of how many
+            # draws were requested. Existing holes still need to be refitted.
+            statistics = [*statistics, *([None] * (draws - saved_draws))]
         checkpoint = BootstrapCheckpoint(path, identity, statistics)
         if not path.exists():
             checkpoint.save(statistics)
