@@ -114,7 +114,7 @@ def open_checkpoint(path, identity, draws):
     path = Path(path).resolve()
     lock = output_lock_path(str(path)) + ".bootstrap"
     with acquire_exclusive_lock(lock, lock_label="WGD bootstrap checkpoint"):
-        statistics = [None] * draws
+        statistics: list[float | None] = [None] * draws
         if path.exists():
             with path.open(encoding="utf-8") as stream:
                 payload = json.load(stream)
@@ -126,19 +126,20 @@ def open_checkpoint(path, identity, draws):
                 raise ValueError(
                     "WGD bootstrap checkpoint does not match the inputs, search, or runtime."
                 )
-            statistics = payload.get("statistics")
+            saved = payload.get("statistics")
             if (
-                not isinstance(statistics, list)
-                or len(statistics) != draws
+                not isinstance(saved, list)
+                or len(saved) != draws
                 or any(
                     x is not None
                     and (type(x) not in (float, int) or not math.isfinite(x) or x < 0)
-                    for x in statistics
+                    for x in saved
                 )
             ):
                 raise ValueError(
                     "WGD bootstrap checkpoint contains invalid statistics."
                 )
+            statistics = saved
             if payload.get("statistics_sha256") != _statistics_digest(statistics):
                 raise ValueError(
                     "WGD bootstrap checkpoint statistics checksum does not match."

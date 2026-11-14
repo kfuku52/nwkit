@@ -140,6 +140,29 @@ def lineage_log_complements(log_survival, log_extinction, duplication, loss, len
     )
 
 
+def _root_clade_masks(tree, first_child):
+    root_side = [0] * len(tree.parents)
+    for node, parent in enumerate(tree.parents[1:], 1):
+        root_side[node] = (
+            (1 if node == first_child else 2) if parent == 0 else root_side[parent]
+        )
+    return {
+        name: root_side[node]
+        for name, node in zip(tree.tip_names, tree.tip_nodes, strict=True)
+    }
+
+
+def _requires_multiple_root_copies(gene_tree, species_side):
+    masks: list[int] = []
+    for name, children in zip(gene_tree.species, gene_tree.children, strict=True):
+        masks.append(
+            (masks[children[0]] | masks[children[1]])
+            if children
+            else species_side[name]
+        )
+    return sorted(masks[child] for child in gene_tree.children[-1]) != [1, 2]
+
+
 class TopologyLikelihood:
     def __init__(
         self,
@@ -200,20 +223,7 @@ class TopologyLikelihood:
             or np.any(self.scales <= 0)
         ):
             raise ValueError("Family-rate scales must be finite and positive.")
-        root_side = [0] * len(self.tree.parents)
-        for node, parent in enumerate(self.tree.parents[1:], 1):
-            root_side[node] = (
-                (1 if node == self.children[0][0] else 2)
-                if parent == 0
-                else root_side[parent]
-            )
-        species_side = dict(
-            zip(
-                self.tree.tip_names,
-                (root_side[node] for node in self.tree.tip_nodes),
-                strict=True,
-            )
-        )
+        species_side = _root_clade_masks(self.tree, self.children[0][0])
         both_root_clades = len({species_side[tip] for tip in tips}) == 2
         if ascertainment not in {"observed", "root-clades"}:
             raise ValueError("Unknown topology ascertainment rule.")
@@ -222,20 +232,9 @@ class TopologyLikelihood:
                 "Topology does not satisfy root-clade observation selection."
             )
         self.ascertainment = ascertainment
-        self.requires_multiple_root_copies = False
-        if both_root_clades:
-            masks = []
-            for name, children in zip(
-                gene_tree.species, gene_tree.children, strict=True
-            ):
-                masks.append(
-                    (masks[children[0]] | masks[children[1]])
-                    if children
-                    else species_side[name]
-                )
-            self.requires_multiple_root_copies = sorted(
-                masks[child] for child in gene_tree.children[-1]
-            ) != [1, 2]
+        self.requires_multiple_root_copies = (
+            both_root_clades and _requires_multiple_root_copies(gene_tree, species_side)
+        )
         signatures = gene_tree.signatures
         self.coefficients = np.array(
             [

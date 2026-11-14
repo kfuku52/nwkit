@@ -328,9 +328,12 @@ def _scan_candidate(
     )
     # At q=0 the event is the fitted null, not an improvement obtained by
     # comparing independent fits or different state bounds for the same model.
-    if fit.event.retention == 0 or fit.log_likelihood < background.log_likelihood:
+    event = fit.event
+    if event is None:
+        raise ValueError("Count scan returned a candidate without an event.")
+    if event.retention == 0 or fit.log_likelihood < background.log_likelihood:
         fit = _null_event_fit(
-            model, background, node, fit.event.fraction, multiplicity, options
+            model, background, node, event.fraction, multiplicity, options
         )
     if compare_bursts:
         burst_model = _burst_model(model, node)
@@ -352,7 +355,10 @@ def _scan_candidate(
     )
 
 
-_scan_worker_arguments = None
+_scan_worker_arguments: (
+    tuple[CountLikelihood, tuple[float, ...], int, CountFit, bool, dict[str, Any]]
+    | None
+) = None
 
 
 def _init_scan_worker(
@@ -371,8 +377,13 @@ def _init_scan_worker(
 
 
 def _scan_worker(node):
-    model, *options = _scan_worker_arguments
-    return _scan_candidate(model, node, *options)
+    arguments = _scan_worker_arguments
+    if arguments is None:
+        raise RuntimeError("Count scan worker has no initialized model.")
+    model, fractions, multiplicity, background, compare_bursts, options = arguments
+    return _scan_candidate(
+        model, node, fractions, multiplicity, background, compare_bursts, options
+    )
 
 
 def scan_counts(
@@ -621,15 +632,18 @@ def calibrate_scan(
             statistics=statistics,
             save=None if checkpoint is None else checkpoint.save,
         )
+    completed = tuple(value for value in statistics if value is not None)
+    if len(completed) != draws:
+        raise RuntimeError("Count bootstrap finished without every draw.")
     candidates = []
     for candidate in observed.candidates:
-        exceedances = sum(value >= candidate.improvement - 1e-9 for value in statistics)
+        exceedances = sum(value >= candidate.improvement - 1e-9 for value in completed)
         p_value = (1 + exceedances) / (1 + draws)
         mc_se = float(np.sqrt(p_value * (1 - p_value) / (draws + 1)))
         candidates.append(replace(candidate, p_value=p_value, p_value_mc_se=mc_se))
     return replace(
         observed,
         candidates=tuple(candidates),
-        bootstrap_statistics=tuple(statistics),
+        bootstrap_statistics=completed,
         calibration="plugin-parametric-bootstrap-search-maximum",
     )

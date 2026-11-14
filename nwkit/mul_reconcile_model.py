@@ -203,6 +203,7 @@ class Cell:
 
 
 _CONSUMED_STATE: dict[int, Cell] = {}
+_CONSUMED_SCORE: dict[int, int] = {}
 _LCA_CACHE_SIZE = 4096
 
 
@@ -263,7 +264,7 @@ def _score_indexed_genes(genes, species, max_state_pairs):
             species_index = _SpeciesIndex(species)
         depth = species_index.lca.depth
         lca = species_index.common_ancestor_indices
-        states = []
+        states: list[dict[int, int]] = []
         state_pairs = 0
         for node, children in zip(gene.nodes, gene.children, strict=True):
             if not children:
@@ -276,7 +277,7 @@ def _score_indexed_genes(genes, species, max_state_pairs):
             state_pairs += len(left) * len(right)
             if state_pairs > max_state_pairs:
                 raise ValueError("Reconciliation exceeds --max-state-pairs.")
-            combined = {}
+            combined: dict[int, int] = {}
             for first, score_left in left.items():
                 partial = score_left + depth[first]
                 for second, score_right in right.items():
@@ -289,7 +290,7 @@ def _score_indexed_genes(genes, species, max_state_pairs):
                         combined[parent] = cost
             states.append(combined)
             # Each gene subtree is consumed exactly once in postorder.
-            states[children[0]] = states[children[1]] = None
+            states[children[0]] = states[children[1]] = _CONSUMED_SCORE
         yield min(score + depth[mapped] for mapped, score in states[-1].items())
 
 

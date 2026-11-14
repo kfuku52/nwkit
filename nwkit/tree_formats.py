@@ -488,7 +488,12 @@ def _normalize_plain_suffixes(text):
     result: list[str] = []
     kinds: list[str] = []
     stream = _iter_tokens(text)
-    allowed = ([], ["name"], [":", "name"], ["name", ":", "name"])
+    allowed: tuple[list[str], ...] = (
+        [],
+        ["name"],
+        [":", "name"],
+        ["name", ":", "name"],
+    )
     try:
         for token in stream:
             if token.kind in {"(", ")", ",", ";"}:
