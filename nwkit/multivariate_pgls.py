@@ -598,6 +598,7 @@ def fit_multivariate_pgls(
     observed_response = response_vector[observed_indices]
     full_design = np.kron(np.eye(n_traits), design)
     observed_design = full_design[observed_indices]
+    observed_rhs = np.column_stack([observed_design, observed_response])
     dense_component, fixed_dense = _dense_covariance_inputs(
         covariance_components, n_tips, fixed_covariance, use_sparse
     )
@@ -644,20 +645,22 @@ def fit_multivariate_pgls(
         if len(observed_indices) < responses.size:
             observed_covariance = full_covariance[observed_covariance_index]
         cholesky = _positive_cholesky(observed_covariance)
-        inverse = cho_solve(
-            (cholesky, True),
-            np.column_stack([observed_design, observed_response]),
-            check_finite=False,
+        whitened = solve_triangular(
+            cholesky, observed_rhs, lower=True, check_finite=False
         )
-        inverse_design = inverse[:, :-1]
-        information = observed_design.T @ inverse_design
+        whitened_design = whitened[:, :-1]
+        whitened_response = whitened[:, -1]
+        information = whitened_design.T @ whitened_design
         information_factor = _positive_cholesky(information)
         beta_covariance = cho_solve(
             (information_factor, True), np.eye(len(information)), check_finite=False
         )
-        coefficients = beta_covariance @ (observed_design.T @ inverse[:, -1])
-        residual = observed_response - observed_design @ coefficients
-        whitened = solve_triangular(cholesky, residual, lower=True, check_finite=False)
+        coefficients = cho_solve(
+            (information_factor, True),
+            whitened_design.T @ whitened_response,
+            check_finite=False,
+        )
+        whitened_residual = whitened_response - whitened_design @ coefficients
         degrees_of_freedom = len(observed_response) - observed_design.shape[1]
         if reml and degrees_of_freedom <= 0:
             raise ValueError(
@@ -665,17 +668,12 @@ def fit_multivariate_pgls(
             )
         normalizing_count = degrees_of_freedom if reml else len(observed_response)
         objective = 0.5 * (
-            float(whitened @ whitened)
+            float(whitened_residual @ whitened_residual)
             + 2.0 * float(np.sum(np.log(np.diag(cholesky))))
             + normalizing_count * np.log(2.0 * np.pi)
         )
         if reml:
-            information_sign, information_logdet = np.linalg.slogdet(information)
-            if information_sign <= 0.0:
-                raise np.linalg.LinAlgError(
-                    "Multivariate fixed-effect information is singular."
-                )
-            objective += 0.5 * information_logdet
+            objective += float(np.sum(np.log(np.diag(information_factor))))
         return objective, coefficients, beta_covariance, full_covariance
 
     def objective(parameters: np.ndarray) -> float:
