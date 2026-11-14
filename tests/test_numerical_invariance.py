@@ -535,6 +535,20 @@ def test_negative_binomial_likelihood_preserves_near_poisson_limit(dispersion):
     )
 
 
+def test_poisson_log_mass_resolves_large_counts_near_the_fitted_mean():
+    counts = np.array([1e12, 1e15, 1e24, 1e100, 1e308])
+    eta = np.log(counts) + np.array([0.0, 1e-7, -1e-12, 0.0, 0.0])
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        mass = _count_log_likelihood(counts, eta, "poisson", None, None, 0.0)
+    # Evaluate the reference around the same representable log-count used in
+    # the deviance to distinguish cancellation from rounding the input logit.
+    relative = eta - np.log(counts)
+    expected_mass = -0.5 * (np.log(counts) + math.log(math.tau))
+    expected_mass -= (1.0 / counts) / 12.0
+    expected_mass -= ((counts * relative) * relative) * (0.5 + relative / 6.0)
+    np.testing.assert_allclose(mass, expected_mass, rtol=0.0, atol=5e-13)
+
+
 def test_beta_binomial_retains_endpoint_and_interior_mass_at_tiny_precision():
     dispersion = 1e-310
     values = np.array([0.0, 1.0, 2.0, 4.0, 0.0])

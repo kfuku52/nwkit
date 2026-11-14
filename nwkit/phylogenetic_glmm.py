@@ -126,7 +126,10 @@ _NB_LOG_GAMMA_RATIO_SERIES = (0.0,) + tuple(
 )
 _SMALL_BETA_PRECISION = 1e-20
 _LARGE_GAMMA_SHAPE = 128.0
-_GAMMA_DEVIANCE_SERIES = tuple(1.0 / math.factorial(order) for order in range(2, 11))
+_LARGE_POISSON_COUNT = 128.0
+_EXPONENTIAL_DEVIANCE_SERIES = tuple(
+    1.0 / math.factorial(order) for order in range(2, 11)
+)
 
 
 def _estimated_dense_glmm_gib(n_tips: int, random_dimension: int) -> float:
@@ -1082,13 +1085,37 @@ def _negative_binomial_log_pmf(values, log_means, dispersion):
     return log_pmf, log_zero, log_relative_mean
 
 
+def _poisson_log_mass(values, log_means):
+    with np.errstate(over="ignore", invalid="ignore"):
+        log_zero = -np.exp(log_means)
+        if np.max(values, initial=0.0) < _LARGE_POISSON_COUNT:
+            return values * log_means + log_zero - gammaln(values + 1.0), log_zero
+        result = _poisson_log_mass_with_large_counts(values, log_means, log_zero)
+    return result, log_zero
+
+
+def _poisson_log_mass_with_large_counts(values, log_means, log_zero):
+    large = values >= _LARGE_POISSON_COUNT
+    small = ~large
+    result = np.empty_like(values)
+    y, eta = values[small], log_means[small]
+    result[small] = y * eta + log_zero[small] - gammaln(y + 1.0)
+    counts = values[large]
+    log_counts = np.log(counts)
+    # A Stirling correction plus the Poisson deviance avoids cancellation
+    # between the factorial and the power of the mean. See Loader (2002).
+    result[large] = (
+        -0.5 * (math.log(math.tau) + log_counts)
+        - _stirling_log_gamma_correction(counts)
+        - _exponential_deviance(log_means[large] - log_counts, counts)
+    )
+    return result
+
+
 def _count_log_likelihood(values, linear, family, dispersion, zero_probability, offset):
     log_means = linear + offset
     if "negative-binomial" not in family:
-        with np.errstate(over="ignore"):
-            means = np.exp(log_means)
-        log_pmf = values * log_means - means - gammaln(values + 1.0)
-        log_zero = -means
+        log_pmf, log_zero = _poisson_log_mass(values, log_means)
         log_relative_mean = log_means
     else:
         if dispersion is None or dispersion <= 0.0:
@@ -1143,23 +1170,34 @@ def _gamma_log_density(log_values, log_ratio, shape):
     )
 
 
-def _large_shape_gamma_log_density(log_values, log_ratio, shape):
+def _stirling_log_gamma_correction(shape):
     inverse = 1.0 / shape
     inverse_squared = inverse * inverse
-    # Stirling's expansion for log Gamma(shape), after canceling its
-    # shape-sized terms from the log density. See DLMF 5.11.1.
-    correction = inverse * (1.0 / 12.0 - inverse_squared * (1.0 / 360.0))
+    return inverse * (1.0 / 12.0 - inverse_squared * (1.0 / 360.0))
+
+
+def _large_shape_gamma_log_density(log_values, log_ratio, shape):
+    # Cancel the shape-sized terms from the log density using DLMF 5.11.1.
+    correction = _stirling_log_gamma_correction(shape)
     normalization = 0.5 * (math.log(shape) - math.log(math.tau)) - correction
+    return normalization - log_values - _exponential_deviance(log_ratio, shape)
+
+
+def _exponential_deviance(log_ratio, scale):
+    scale = np.broadcast_to(scale, log_ratio.shape)
     close = np.abs(log_ratio) < 0.1
     relative = log_ratio[close]
     deviance = np.empty_like(log_ratio)
     deviance[close] = (
-        (shape * relative) * relative
-    ) * np.polynomial.polynomial.polyval(relative, _GAMMA_DEVIANCE_SERIES)
+        (scale[close] * relative) * relative
+    ) * np.polynomial.polynomial.polyval(relative, _EXPONENTIAL_DEVIANCE_SERIES)
     relative = log_ratio[~close]
-    with np.errstate(over="ignore"):
-        deviance[~close] = shape * (np.expm1(relative) - relative)
-    return normalization - log_values - deviance
+    with np.errstate(over="ignore", invalid="ignore"):
+        divergence = np.expm1(relative) - relative
+        deviance[~close] = scale[~close] * np.where(
+            np.isinf(relative), np.inf, divergence
+        )
+    return deviance
 
 
 def _lognormal_log_likelihood(values, linear, dispersion):
