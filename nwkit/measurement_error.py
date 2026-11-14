@@ -934,6 +934,11 @@ def _prepare_eiv_fixed_covariance(fixed_covariance, n_observations):
     return fixed_input
 
 
+def _eiv_working_fixed_covariance(fixed_covariance, n_observations, structured):
+    fixed = _prepare_eiv_fixed_covariance(fixed_covariance, n_observations)
+    return fixed if structured else materialize_covariance(fixed)
+
+
 def _prepare_eiv_components(components, component_factors, n_observations):
     normalized_components = []
     component_scales = []
@@ -1205,8 +1210,8 @@ def _dense_eiv_covariance(
     n_observations,
     continuous_loadings,
 ):
-    fixed_array = np.asarray(fixed_covariance, dtype=float)
-    covariance = np.diag(fixed_array) if fixed_array.ndim == 1 else fixed_array.copy()
+    covariance = fixed_covariance.copy()
+    diagonal = np.diag_indices_from(covariance)
     for columns, uncertainty, cached in zip(
         predictor_columns, predictor_uncertainties, continuous_loadings, strict=True
     ):
@@ -1216,9 +1221,10 @@ def _dense_eiv_covariance(
     for variance, (_, component) in zip(variances, normalized_components, strict=True):
         assert component is not None
         component_array = np.asarray(component)
-        covariance += variance * (
-            np.diag(component_array) if component_array.ndim == 1 else component_array
-        )
+        if component_array.ndim == 1:
+            covariance[diagonal] += variance * component_array
+        else:
+            covariance += variance * component_array
     return (covariance + covariance.T) / 2.0
 
 
@@ -1505,7 +1511,9 @@ def fit_conditional_eiv_gaussian(
         )
     if len(response) > MAX_DENSE_EIV_OBSERVATIONS and not structured:
         _validate_conditional_eiv_size(len(response), allow_large_dense)
-    fixed_covariance = _prepare_eiv_fixed_covariance(fixed_covariance, len(response))
+    fixed_covariance = _eiv_working_fixed_covariance(
+        fixed_covariance, len(response), structured
+    )
     if len(predictor_uncertainties) != len(predictor_columns):
         raise ValueError("Each uncertain predictor requires coefficient columns.")
     normalized_components, component_scales = _prepare_eiv_components(

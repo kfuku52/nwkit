@@ -101,6 +101,32 @@ def test_latent_predictor_rejects_indefinite_sampling_covariance():
         )
 
 
+def test_dense_eiv_accepts_fixed_covariance_as_a_sampling_factor():
+    rng = np.random.default_rng(873)
+    n = 16
+    design = np.column_stack((np.ones(n), rng.normal(size=n)))
+    response = design @ [0.3, -0.8] + rng.normal(size=n)
+    loading = sparse.csr_matrix(rng.normal(scale=0.1, size=(n, 3)))
+    fixed = DiagonalLowRankCovariance(np.full(n, 0.15), loading)
+    predictor_uncertainty = [np.diag(rng.uniform(0.1, 0.3, n))]
+    components = [("evolutionary_rate", np.ones(n))]
+    before = fit_conditional_eiv_gaussian(
+        response,
+        design,
+        predictor_uncertainty,
+        [1],
+        materialize_covariance(fixed),
+        components,
+        reml=False,
+    )
+    after = fit_conditional_eiv_gaussian(
+        response, design, predictor_uncertainty, [1], fixed, components, reml=False
+    )
+    for key in ("beta", "beta_covariance", "covariance"):
+        np.testing.assert_allclose(after[key], before[key], rtol=1e-7, atol=1e-8)
+    assert after["objective"] == pytest.approx(before["objective"], abs=1e-10)
+
+
 @pytest.mark.parametrize("factor_path", [False, True])
 @pytest.mark.parametrize("exponent", [-1023, 1023])
 def test_latent_predictor_normalizes_extreme_evolutionary_covariances(
