@@ -308,6 +308,43 @@ def test_diagonal_predictor_factor_matches_dense_eiv_covariance():
         )
 
 
+def test_dense_eiv_preserves_correlated_predictor_loading_with_repeated_tips():
+    response = np.array([1.1, 0.8, 2.6, 3.3, 4.9, 4.2])
+    predictor = np.array([0.0, 0.0, 1.0, 2.0, 3.0, 3.0])
+    design = np.column_stack((np.ones(len(response)), predictor))
+    loading = np.array([[0.3, 0.1], [0.2, 0.4], [0.0, 0.1], [0.3, 0.5]])
+    indices = np.array([0, 0, 1, 2, 3, 3])
+    scales = np.array([1.0, -1.5, 0.5, 2.0, 1.0, 0.75])
+    selected = loading[indices] * scales[:, None]
+    fixed = np.diag(np.linspace(0.03, 0.09, len(response)))
+    components = [("evolutionary", np.ones(len(response)))]
+    fit = fit_conditional_eiv_gaussian(
+        response,
+        design,
+        [ContinuousPredictorUncertainty(loading, indices, scales)],
+        [1],
+        fixed,
+        components,
+        reml=False,
+    )
+    reference = fit_conditional_eiv_gaussian(
+        response,
+        design,
+        [selected @ selected.T],
+        [1],
+        fixed,
+        components,
+        reml=False,
+    )
+    np.testing.assert_allclose(fit["beta"], reference["beta"], rtol=1e-5)
+    assert fit["objective"] == pytest.approx(reference["objective"], abs=1e-8)
+    for slope in (0.0, 1.2, -0.4):
+        covariance, _ = fit["covariance_for_beta"](np.array([0.0, slope]))
+        expected = fixed + slope**2 * (selected @ selected.T)
+        expected += np.eye(len(response)) * fit["component_variances"]["evolutionary"]
+        np.testing.assert_allclose(covariance, expected, rtol=2e-14, atol=1e-15)
+
+
 def test_sparse_precision_predictor_uncertainty_matches_dense_eiv_covariance():
     response = np.asarray([1.0, 2.0, 3.2, 4.1])
     design = np.column_stack([np.ones(4), np.arange(4.0)])

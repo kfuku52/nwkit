@@ -684,15 +684,14 @@ def _finite_difference_hessian(function, point):
     return (hessian + hessian.T) / 2.0
 
 
-def _predictor_error_covariance(beta, uncertainty, columns, n_observations):
+def _predictor_error_covariance(
+    beta, uncertainty, columns, n_observations, *, continuous_loading=None
+):
     """Project scalar or multicolumn predictor uncertainty onto the response."""
     if isinstance(uncertainty, ContinuousPredictorUncertainty):
-        if not isinstance(columns, (int, np.integer)):
-            raise ValueError("Continuous predictor uncertainty requires one column.")
-        loading = continuous_predictor_loading(
-            uncertainty, np.asarray([beta[int(columns)]])
+        return _continuous_predictor_error_covariance(
+            beta, uncertainty, columns, continuous_loading
         )
-        return np.asarray((loading @ loading.T).toarray())
     if isinstance(uncertainty, GroupedPredictorUncertainty):
         if isinstance(columns, (int, np.integer)):
             raise ValueError("Grouped predictor uncertainty requires column indices.")
@@ -744,6 +743,17 @@ def _predictor_error_covariance(beta, uncertainty, columns, n_observations):
     else:
         raise ValueError("Grouped predictor uncertainty has the wrong dimensions.")
     return _positive_semidefinite(covariance, "Grouped predictor covariance")
+
+
+def _continuous_predictor_error_covariance(beta, uncertainty, column, cached):
+    if not isinstance(column, (int, np.integer)):
+        raise ValueError("Continuous predictor uncertainty requires one column.")
+    slope = float(beta[column])
+    if cached is not None and math.isfinite(slope):
+        loading = slope * cached
+        return loading @ loading.T
+    loading = continuous_predictor_loading(uncertainty, np.asarray([slope]))
+    return (loading @ loading.T).toarray()
 
 
 def _predictor_error_variance_diagonal(beta, uncertainty, columns, n_observations):
@@ -1116,14 +1126,15 @@ def _dense_eiv_covariance(
     predictor_uncertainties,
     predictor_columns,
     n_observations,
+    continuous_loadings,
 ):
     fixed_array = np.asarray(fixed_covariance, dtype=float)
     covariance = np.diag(fixed_array) if fixed_array.ndim == 1 else fixed_array.copy()
-    for columns, uncertainty in zip(
-        predictor_columns, predictor_uncertainties, strict=True
+    for columns, uncertainty, cached in zip(
+        predictor_columns, predictor_uncertainties, continuous_loadings, strict=True
     ):
         covariance += _predictor_error_covariance(
-            beta, uncertainty, columns, n_observations
+            beta, uncertainty, columns, n_observations, continuous_loading=cached
         )
     for variance, (_, component) in zip(variances, normalized_components, strict=True):
         assert component is not None
@@ -1132,6 +1143,33 @@ def _dense_eiv_covariance(
             np.diag(component_array) if component_array.ndim == 1 else component_array
         )
     return (covariance + covariance.T) / 2.0
+
+
+def _cache_dense_continuous_uncertainties(uncertainties, columns, size, structured):
+    """Prepare slope-independent loadings once per small dense fit."""
+
+    if structured or size > MAX_DENSE_EIV_OBSERVATIONS:
+        return (None,) * len(uncertainties)
+    prepared = []
+    for uncertainty, column in zip(uncertainties, columns, strict=True):
+        if isinstance(uncertainty, ContinuousPredictorUncertainty):
+            if not isinstance(column, (int, np.integer)):
+                raise ValueError(
+                    "Continuous predictor uncertainty requires one column."
+                )
+            loading = continuous_predictor_loading(uncertainty, np.ones(1))
+            if loading.shape[0] != size:
+                raise ValueError(
+                    "Predictor posterior covariance has the wrong dimensions."
+                )
+            prepared.append(
+                loading.toarray()
+                if loading.shape[1] <= MAX_DENSE_EIV_OBSERVATIONS
+                else None
+            )
+        else:
+            prepared.append(None)
+    return tuple(prepared)
 
 
 def _conditional_eiv_covariance(
@@ -1148,6 +1186,7 @@ def _conditional_eiv_covariance(
     compute_marginal=False,
     gmrf_marginal_profiles=None,
     likelihood_groups=None,
+    dense_continuous_loadings=(),
 ):
     if structured:
         diagonal, updates = _structured_eiv_base(fixed_covariance)
@@ -1244,6 +1283,7 @@ def _conditional_eiv_covariance(
         predictor_uncertainties,
         predictor_columns,
         n_observations,
+        dense_continuous_loadings,
     )
     return covariance, factor_covariance(covariance)
 
@@ -1430,6 +1470,9 @@ def fit_conditional_eiv_gaussian(
         normalized_components
     )
     bounds = [(None, None)] * num_coefficients + variance_bounds
+    dense_continuous_loadings = _cache_dense_continuous_uncertainties(
+        predictor_uncertainties, predictor_columns, len(response), structured
+    )
 
     def evaluate(parameters, return_details=False):
         parameters = np.asarray(parameters, dtype=float)
@@ -1451,6 +1494,7 @@ def fit_conditional_eiv_gaussian(
                 compute_marginal=return_details,
                 gmrf_marginal_profiles=gmrf_marginal_profiles,
                 likelihood_groups=likelihood_groups,
+                dense_continuous_loadings=dense_continuous_loadings,
             )
         except (ValueError, np.linalg.LinAlgError):
             return float("inf")
@@ -1615,6 +1659,7 @@ def fit_conditional_eiv_gaussian(
             compute_marginal=False,
             gmrf_marginal_profiles=gmrf_marginal_profiles,
             likelihood_groups=likelihood_groups,
+            dense_continuous_loadings=dense_continuous_loadings,
         )
 
     details["covariance_for_beta"] = covariance_for_beta
