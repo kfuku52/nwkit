@@ -44,6 +44,9 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   and search remain finite under extreme branch-length rescaling.
 - Normalize branch times when computing complete-case MV-BM contrasts so
   branch rescaling preserves the likelihood and ancestral marginals.
+- Fit incomplete MV-BM relative to the common ancestor of the observed tips
+  so long unobserved stems preserve downstream differences. Propagate stem
+  uncertainty to nodes outside the observed clade.
 - Restore trait and time scales together for multivariate Gaussian
   covariances, and preserve exact observed trait coordinates after conditioning.
 - Fit diagonal MV-OU with row-scaled diffusion so the stationary covariance
@@ -116,15 +119,18 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   floating-point step.
 - Reject COVARION and MK-MIXTURE fits when no positive-length branch can
   affect an informative tip observation.
-- Mk mixture marginals average only categories with positive posterior mass.
+- Mk mixture marginals average only categories with positive posterior mass
+  and reject characters with zero likelihood before calculating posteriors.
 - COVARION, MK-REGIME, and MK-MIXTURE reuse the bounded Powell retry when
   SciPy rejects a finite-difference point that rounds outside a bound.
 
 ### Performance
 
-- Reuse equal-rates detection across branches and reduce small-state Mk
-  likelihood messages with NumPy in log space.
-- Batch Mk mixture likelihoods across characters and reuse fixed root priors.
+- Reuse generator scaling across branches and reduce small-state Mk
+  likelihood messages with NumPy in log space. Reuse upward messages for
+  posterior reconstruction.
+- Batch Mk mixture likelihoods and posteriors across characters. Fit one
+  category at a time to bound transition-matrix storage during optimization.
 - Read ASR trait and standard-error values from their selected table columns
   without creating a pandas Series for each tip.
 - Release child likelihood messages after they have contributed to a
@@ -153,6 +159,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Batch common-ancestor lookups when building dense Gaussian covariances.
 - Reuse the same Gaussian interval quantile throughout ancestral output tables.
 - Solve for dense multivariate posterior covariances in bounded node batches.
+- Reuse multivariate covariance indices and factor dense observation
+  covariances in place during optimization.
 - Check BMS-DRIFT rate identifiability from observed subtree splits without
   constructing every pairwise path.
 - Compute transformed and directional-drift Brownian likelihoods without
@@ -177,7 +185,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Reuse tree covariance and Cholesky factors across phylogenetic GLMM trials.
   Reuse accepted sparse-mode evaluations, batch multinomial curvature
   calculations, and avoid redundant assembly of sparse latent covariance
-  components. Build sparse sampling factors only when bootstrapping.
+  components. Reuse sparse Hessian row indices and build sampling factors
+  only when bootstrapping.
 - Reuse fixed predictor covariance projections in dense regression fits and
   evaluate only coefficient point estimates during GLMM bootstrap refits.
 - Reduce covariance copies and reuse sparse tree components in multivariate
