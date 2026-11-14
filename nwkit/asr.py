@@ -1818,16 +1818,16 @@ def compute_mk_mixture_marginals(
             else fixed_prior
         )
 
-    def character_scores(matrix, category_rates, weights, root_prior):
+    def character_scores(matrix, category_rates, weights, root_prior, *, retain=False):
         log_prior = _log_probabilities(root_prior)
-        transitions = [
-            _transition_matrices_for_tree(
+        transitions = []
+        columns = []
+        for rate, weight in zip(category_rates, weights, strict=True):
+            transition = _transition_matrices_for_tree(
                 tree, matrix * rate, prepared_branches=prepared_branches
             )
-            for rate in category_rates
-        ]
-        columns = []
-        for weight, transition in zip(weights, transitions, strict=True):
+            if retain:
+                transitions.append(transition)
             log_transitions = _mixture_log_transitions(compiled, transition)
             columns.append(
                 math.log(weight)
@@ -1859,7 +1859,7 @@ def compute_mk_mixture_marginals(
     base, matrix, category_rates, weights, shape = unpack(optimized.x)
     root_prior = prior_for(matrix)
     log_likelihood, scores, transition_matrices_by_category = character_scores(
-        matrix, category_rates, weights, root_prior
+        matrix, category_rates, weights, root_prior, retain=_compute_posterior
     )
     if not math.isfinite(log_likelihood):
         raise ValueError(
