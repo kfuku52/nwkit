@@ -720,6 +720,8 @@ def simulate_gaussian_process(
         return _simulate_selected_nodes(
             process, compiled, root_draws, rng, _output_indices
         )
+    if num_samples == 1:
+        return _simulate_single_draw(process, compiled, root_draws, rng)
     draws = np.empty((num_samples, len(compiled.nodes)), dtype=float)
     draws[:, 0] = root_draws
     for node_index in range(1, len(compiled.nodes)):
@@ -729,6 +731,21 @@ def simulate_gaussian_process(
     if np.any(~np.isfinite(draws)):
         raise ValueError("A Gaussian process simulation exceeds floating-point range.")
     return GaussianSamples(compiled.nodes, draws)
+
+
+def _simulate_single_draw(process, compiled, root, rng):
+    draws = np.empty(len(compiled.nodes), dtype=float)
+    draws[0] = root[0]
+    for index, node in enumerate(compiled.nodes[1:], start=1):
+        transition = process.transitions[node]
+        value = transition.slope * float(draws[compiled.parents[index]])
+        value += transition.intercept
+        if transition.variance > 0.0:
+            value += rng.normal(0.0, math.sqrt(transition.variance))
+        draws[index] = value
+    if not np.isfinite(draws).all():
+        raise ValueError("A Gaussian process simulation exceeds floating-point range.")
+    return GaussianSamples(compiled.nodes, draws[None, :])
 
 
 def _simulation_root_draws(process, root_values, num_samples, rng):
