@@ -693,6 +693,15 @@ def _product_ratio(*factors: float, denominator: float = 1.0) -> float:
         raise ValueError("Gaussian transition overflows floating-point range.") from exc
 
 
+def _mean_at_tiny_variance_ratio(mean1, mean2, variance1, variance2):
+    """Retain a mean contribution even when its weight is subnormal."""
+    # The precise weight rounds to one throughout this range.
+    if variance2 < variance1:
+        mean1, mean2, variance1, variance2 = mean2, mean1, variance2, variance1
+    contribution = _product_ratio(abs(mean2), variance1, denominator=variance2)
+    return mean1 + math.copysign(contribution, mean2)
+
+
 def ou_transition(
     length: float,
     alpha: float,

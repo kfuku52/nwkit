@@ -8,12 +8,13 @@ time-transformed BM, drift, and regime models differ only in how they build a
 
 import math
 from dataclasses import dataclass
+from sys import float_info
 from typing import Any, Mapping
 
 import numpy as np
 
 from nwkit.compiled_tree import CompiledTree
-from nwkit.gaussian_tree import GaussianTreeProcess
+from nwkit.gaussian_tree import GaussianTreeProcess, _mean_at_tiny_variance_ratio
 
 _LOG_2PI = math.log(2.0 * math.pi)
 _LOG_2 = math.log(2.0)
@@ -154,6 +155,10 @@ def _combine(first: _Factor, second: _Factor) -> _Factor:
         first_weight = (second.variance / larger) / denominator
         second_weight = (first.variance / larger) / denominator
         mean = first_weight * first.mean + second_weight * second.mean
+        if ratio < float_info.min:
+            mean = _mean_at_tiny_variance_ratio(
+                first.mean, second.mean, first.variance, second.variance
+            )
         variance = min(first.variance, second.variance) / denominator
         if variance <= 0.0 or not math.isfinite(variance):
             raise ValueError("A positive Gaussian variance underflowed during pruning.")

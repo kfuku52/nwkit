@@ -2,6 +2,7 @@
 
 import math
 from dataclasses import dataclass, replace
+from sys import float_info
 from typing import Any
 
 import numpy as np
@@ -14,7 +15,7 @@ from nwkit.continuous_asr import (
     _observations_by_group,
     _tree_groups,
 )
-from nwkit.gaussian_tree import ou_transition
+from nwkit.gaussian_tree import _mean_at_tiny_variance_ratio, ou_transition
 
 _LOG_2PI = math.log(2.0 * math.pi)
 _LOG_2 = math.log(2.0)
@@ -117,16 +118,19 @@ def _combine(first, second):
         larger = max(left.variance, right.variance)
         ratio = min(left.variance, right.variance) / larger
         denominator = 1.0 + ratio
-        left_weight = (right.variance / larger) / denominator
-        right_weight = (left.variance / larger) / denominator
         variance = min(left.variance, right.variance) / denominator
         if variance <= 0.0:
             raise ValueError(
                 "A positive OU conditional variance underflowed; rescale units."
             )
-        marginal = GaussianMarginal(
-            left_weight * left.mean + right_weight * right.mean, variance
-        )
+        left_weight = (right.variance / larger) / denominator
+        right_weight = (left.variance / larger) / denominator
+        mean = left_weight * left.mean + right_weight * right.mean
+        if ratio < float_info.min:
+            mean = _mean_at_tiny_variance_ratio(
+                left.mean, right.mean, left.variance, right.variance
+            )
+        marginal = GaussianMarginal(mean, variance)
     return _Factor(marginal, first.log_weight + second.log_weight + log_overlap)
 
 
