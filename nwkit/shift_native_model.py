@@ -384,6 +384,19 @@ def evaluate_trait(
     )
 
 
+def _restore_trait_variance(values, scale, rate=1.0, time=1.0, *, extra_power=0):
+    """Restore variance with the scale, rate, and time powers combined first."""
+    mantissa, exponent = np.frexp(values)
+    scale_part, scale_power = math.frexp(scale)
+    rate_part, rate_power = math.frexp(rate)
+    time_part, time_power = math.frexp(time)
+    with np.errstate(over="ignore", under="ignore"):
+        return np.ldexp(
+            mantissa * scale_part**2 * rate_part / time_part,
+            exponent + 2 * scale_power + rate_power - time_power + extra_power,
+        )
+
+
 def restore_trait_fit(data, trait, fit):
     scale, center = data.scales[trait], data.centers[trait]
     alpha = fit.alpha_height
@@ -396,20 +409,32 @@ def restore_trait_fit(data, trait, fit):
     coefficients[0] += center
     sigma2 = None
     if not math.isinf(alpha):
-        ratio = 1.0 if alpha == 0 else 2 * alpha / -np.expm1(-2 * alpha)
-        if fit.root_model == "OUrandomRoot":
-            ratio = 2 * alpha
-        sigma2 = fit.process_variance * scale**2 * ratio / data.tree.height
+        double_rate = 2 * alpha
+        if math.isinf(double_rate):
+            sigma2 = _restore_trait_variance(
+                fit.process_variance, scale, alpha, data.tree.height, extra_power=1
+            )
+        else:
+            ratio = double_rate
+            if fit.root_model == "OUfixedRoot":
+                ratio = 1.0 if alpha == 0 else double_rate / -np.expm1(-double_rate)
+            sigma2 = _restore_trait_variance(
+                fit.process_variance, scale, ratio, data.tree.height
+            )
     return {
         "trait": data.trait_names[trait],
         "alpha": None if math.isinf(alpha) else alpha / data.tree.height,
         "alpha_height": None if math.isinf(alpha) else alpha,
         "alpha_status": status,
         "sigma2": sigma2,
-        "process_tip_variance": fit.process_variance * scale**2,
-        "measurement_variance": fit.measurement_variance * scale**2,
+        "process_tip_variance": _restore_trait_variance(fit.process_variance, scale),
+        "measurement_variance": _restore_trait_variance(
+            fit.measurement_variance, scale
+        ),
         "scaled_regime_coefficients": coefficients.tolist(),
-        "coefficient_covariance": (fit.coefficient_covariance * scale**2).tolist(),
+        "coefficient_covariance": _restore_trait_variance(
+            fit.coefficient_covariance, scale
+        ).tolist(),
         "predicted": (center + scale * fit.predicted).tolist(),
         "log_likelihood": fit.log_likelihood - fit.num_observations * math.log(scale),
         "num_observations": fit.num_observations,

@@ -47,6 +47,19 @@ def test_trait_normalization_handles_finite_values_near_float_limits():
     )
 
 
+def test_trait_variance_output_avoids_squaring_extreme_scales():
+    tree = read_tree(TREE, "auto", True, quiet=True)
+    values = np.arange(8, dtype=float)[:, None] * 1e155
+    data = ShiftData.build(tree, values, ["x"])
+    fit = evaluate_trait(data, ShiftLayout.build(data.tree), 0, 0.6, 1e-5)
+    restored = restore_trait_fit(data, 0, fit)
+    assert restored["process_tip_variance"] == pytest.approx(1.225e306, rel=1e-15)
+    assert restored["measurement_variance"] == 0.0
+    expected_sigma2 = 1.225e306 * (1.2 / -np.expm1(-1.2)) / data.tree.height
+    assert restored["sigma2"] == pytest.approx(expected_sigma2, rel=1e-15)
+    assert np.isfinite(restored["coefficient_covariance"]).all()
+
+
 def dense_reference(tree, layout, alpha, variance, noise, root):
     """Propagate independent branch innovations and regime forcing directly."""
     compiled = tree.compiled
