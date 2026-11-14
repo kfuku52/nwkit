@@ -286,6 +286,44 @@ def test_sparse_latent_predictor_matches_dense_conditioning():
     )
 
 
+@pytest.mark.parametrize("include_batch", [False, True])
+def test_sparse_predictor_preserves_likelihood_at_tiny_sampling_variance(include_batch):
+    names = list("ABCDEFG")
+    tree = Tree("(((A:1,B:2):1,(C:1,D:2):1):1,((E:1,F:1):2,G:1):1);", parser=1)
+    observed = np.array([-0.4, 0.1, 0.5, 0.7, 1.3, -1.4, 1.0])
+    sampling_diagonal = np.full(len(names), 1e-200)
+    indices = np.arange(len(names))
+    if include_batch:
+        loading = sparse.csr_matrix(
+            (np.full(len(names), 0.12), (indices, indices // 2))
+        )
+        sampling = DiagonalLowRankCovariance(sampling_diagonal, loading)
+    else:
+        sampling = sampling_diagonal
+    dense = fit_latent_predictor(
+        observed,
+        build_evolutionary_covariance(tree, names),
+        sampling,
+        include_intercept=True,
+    )
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        fit = fit_sparse_latent_predictor(
+            observed,
+            build_sparse_evolutionary_model(tree, names),
+            sampling,
+            include_intercept=True,
+        )
+    assert fit.log_likelihood == pytest.approx(dense.log_likelihood, abs=1e-11)
+    assert fit.prior_mean == pytest.approx(dense.prior_mean, abs=1e-9)
+    assert fit.evolutionary_rate == pytest.approx(dense.evolutionary_rate, rel=1e-7)
+    np.testing.assert_allclose(fit.mean, dense.mean, atol=1e-9)
+    posterior = fit.covariance_model.materialize()
+    if include_batch:
+        np.testing.assert_allclose(posterior, dense.covariance, atol=1e-10)
+    else:
+        np.testing.assert_allclose(posterior, np.diag(sampling), atol=0.0, rtol=1e-12)
+
+
 @pytest.mark.parametrize("scale", [1.0, 1e-150, 1e150])
 def test_sparse_latent_predictor_supports_low_rank_batch_sampling_covariance(scale):
     tree = Tree("(((A:1,B:1):1,C:2):1,(D:1,E:1):2);", parser=1)

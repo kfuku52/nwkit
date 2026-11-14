@@ -42,6 +42,7 @@ from nwkit.sparse_laplace import (
     JointPredictorUncertainty,
     SparseCovarianceModel,
     continuous_predictor_loading,
+    factor_sparse_nonsingular,
     factor_sparse_positive_definite,
     grouped_predictor_loading,
     joint_predictor_loading,
@@ -535,16 +536,19 @@ def _sparse_predictor_covariance_model(
     latent_variance,
     sampling,
     observation_loading,
-    observation_information,
-    posterior_factor,
 ):
     nuisance_count = observation_loading.shape[1] - evolutionary_model.n_states
+    inverse_sampling = 1.0 / sampling
+    observation_information = (
+        observation_loading.T @ sparse.diags(inverse_sampling) @ observation_loading
+    )
     posterior_precision = _sparse_predictor_precision(
         evolutionary_model,
         latent_variance,
         nuisance_count,
         observation_information,
     )
+    posterior_factor = factor_sparse_positive_definite(posterior_precision)
     augmented_loading = sparse.hstack(
         [
             evolutionary_model.tip_loading,
@@ -584,7 +588,155 @@ def _sparse_predictor_covariance_model(
             [prior_factor, nuisance_factor, observation_factor], format="csr"
         ),
     )
-    return covariance_model, augmented_loading
+    return covariance_model, posterior_factor
+
+
+def _sparse_predictor_reparameterized_covariance(
+    evolutionary_model, variance, sampling, sampling_loading
+):
+    """Use scaled observation residuals as latent coordinates at distinct tips."""
+    tip_loading = evolutionary_model.tip_loading
+    if not np.all(np.diff(tip_loading.indptr) == 1):
+        return None
+    indices = tip_loading.indices
+    if len(np.unique(indices)) != len(indices) or np.any(tip_loading.data == 0.0):
+        return None
+    n_states = evolutionary_model.n_states
+    nuisance_count = sampling_loading.shape[1]
+    observation_sd = np.sqrt(sampling)
+    with np.errstate(over="ignore", divide="ignore"):
+        inverse_tip_loading = 1.0 / tip_loading.data
+        scaled_sd = observation_sd / tip_loading.data
+    if not np.all(np.isfinite(inverse_tip_loading) & np.isfinite(scaled_sd)):
+        return None
+    diagonal = np.ones(n_states, dtype=float)
+    diagonal[indices] = scaled_sd
+    tip_selector = sparse.csr_matrix(
+        (inverse_tip_loading, (indices, np.arange(len(indices)))),
+        shape=(n_states, len(indices)),
+    )
+    transform = sparse.hstack(
+        [
+            sparse.diags(diagonal, format="csr"),
+            -tip_selector @ sampling_loading,
+        ],
+        format="csr",
+    )
+    prior_factor = (
+        evolutionary_model.precision_factor() @ transform / math.sqrt(variance)
+    )
+    observation_factor = sparse.eye(n_states, format="csr")[indices]
+    independent = sparse.block_diag(
+        [observation_factor, sparse.eye(nuisance_count, format="csr")], format="csr"
+    )
+    sampling_factor = sparse.vstack([prior_factor, independent], format="csr")
+    precision = (sampling_factor.T @ sampling_factor).tocsc()
+    posterior_factor = factor_sparse_positive_definite(precision)
+    observed_loading = sparse.hstack(
+        [
+            observation_factor.multiply(observation_sd[:, None]),
+            -sampling_loading,
+        ],
+        format="csr",
+    )
+    return SparseCovarianceModel(
+        precision=precision,
+        tip_loading=observed_loading,
+        logdet_covariance=-posterior_factor.logdet,
+        sampling_parent=np.empty(0, dtype=int),
+        sampling_transition=np.empty(0),
+        sampling_variance=np.empty(0),
+        sampling_precision_factor=sampling_factor,
+    ), posterior_factor
+
+
+def _fitted_sparse_predictor_covariance(
+    model, variance, sampling, sampling_loading, observation_loading
+):
+    reparameterized = _sparse_predictor_reparameterized_covariance(
+        model, variance, sampling, sampling_loading
+    )
+    if reparameterized is not None:
+        return reparameterized
+    return _sparse_predictor_covariance_model(
+        model, variance, sampling, observation_loading
+    )
+
+
+def _sparse_predictor_observation_solver(
+    evolutionary_model,
+    observation_loading,
+    sampling,
+    nuisance_count,
+    observed,
+    include_intercept,
+):
+    n_states = evolutionary_model.n_states
+    latent_count = n_states + nuisance_count
+    observation_count = len(sampling)
+    independent = sparse.block_diag(
+        [
+            sparse.csc_matrix((n_states, n_states)),
+            sparse.eye(nuisance_count, format="csc"),
+        ],
+        format="csc",
+    )
+    observation_variance = sparse.diags(-sampling, format="csc")
+    coupling = sparse.bmat(
+        [
+            [independent, observation_loading.T],
+            [observation_loading, observation_variance],
+        ],
+        format="csc",
+    )
+    prior = sparse.block_diag(
+        [
+            evolutionary_model.precision,
+            sparse.csc_matrix((nuisance_count + observation_count,) * 2),
+        ],
+        format="csc",
+    )
+
+    response = (
+        np.column_stack((observed, np.ones_like(observed)))
+        if include_intercept
+        else observed[:, None]
+    )
+    right = np.vstack((np.zeros((latent_count, response.shape[1])), response))
+
+    def solve(variance):
+        # Schur complement is -(R + L Q^-1 L.T). The augmented solve
+        # keeps inverse-observation scores free of Woodbury cancellation.
+        factor = factor_sparse_nonsingular(prior / variance + coupling)
+        solved = factor.solve(right)
+        logdet = (
+            factor.logdet
+            + evolutionary_model.logdet_covariance
+            + n_states * math.log(variance)
+        )
+        return solved[:latent_count], -solved[latent_count:], logdet
+
+    return solve
+
+
+def _sparse_predictor_reported_rate(variance, covariance_scale, trait_exponent):
+    scale, exponent = math.frexp(covariance_scale)
+    return _restore_predictor_rate(variance / scale, 2 * trait_exponent - exponent)
+
+
+def _sparse_predictor_observation_fit(observed, latent, inverse, include_intercept):
+    if include_intercept:
+        denominator = float(np.sum(inverse[:, 1]))
+        if denominator <= 0.0:
+            raise np.linalg.LinAlgError(
+                "Predictor intercept information is nonpositive."
+            )
+        prior_mean = float(np.sum(inverse[:, 0])) / denominator
+        residual = observed - prior_mean
+        inverse_residual = inverse[:, 0] - prior_mean * inverse[:, 1]
+        latent_residual = latent[:, 0] - prior_mean * latent[:, 1]
+        return prior_mean, float(residual @ inverse_residual), latent_residual
+    return 0.0, float(observed @ inverse[:, 0]), latent[:, 0]
 
 
 def fit_sparse_latent_predictor(
@@ -605,12 +757,16 @@ def fit_sparse_latent_predictor(
     loading = evolutionary_model.tip_loading
     nuisance_count = sampling_loading.shape[1]
     observation_loading = sparse.hstack([loading, sampling_loading], format="csr")
-    inverse_sampling = 1.0 / sampling
-    observation_information = (
-        observation_loading.T @ sparse.diags(inverse_sampling) @ observation_loading
-    )
     observed_offset = float(np.mean(observed)) if include_intercept else 0.0
     observed = observed - observed_offset
+    observation_solver = _sparse_predictor_observation_solver(
+        evolutionary_model,
+        observation_loading,
+        sampling,
+        nuisance_count,
+        observed,
+        include_intercept,
+    )
     observed_scale = max(
         float(np.mean(observed**2)),
         float(np.mean(sampling)),
@@ -622,56 +778,24 @@ def fit_sparse_latent_predictor(
 
     def state(log_variance, *, return_details=False):
         variance = math.exp(float(log_variance))
-        posterior_precision = _sparse_predictor_precision(
-            evolutionary_model,
-            variance,
-            nuisance_count,
-            observation_information,
-        )
         try:
-            factor = factor_sparse_positive_definite(posterior_precision)
+            latent, inverse, logdet = observation_solver(variance)
+            prior_mean, quadratic, conditional_latent = (
+                _sparse_predictor_observation_fit(
+                    observed, latent, inverse, include_intercept
+                )
+            )
         except (RuntimeError, np.linalg.LinAlgError):
             return float("inf")
-
-        def inverse(values):
-            values = np.asarray(values, dtype=float)
-            weighted = inverse_sampling * values
-            latent_rhs = np.asarray(observation_loading.T @ weighted).reshape(-1)
-            correction = np.asarray(
-                observation_loading @ factor.solve(latent_rhs)
-            ).reshape(-1)
-            return weighted - inverse_sampling * correction
-
-        inverse_observed = inverse(observed)
-        if include_intercept:
-            ones = np.ones(len(observed), dtype=float)
-            inverse_ones = inverse(ones)
-            denominator = float(ones @ inverse_ones)
-            if denominator <= 0.0:
-                return float("inf")
-            prior_mean = float(ones @ inverse_observed / denominator)
-        else:
-            prior_mean = 0.0
-        residual = observed - prior_mean
-        quadratic = float(residual @ inverse(residual))
-        logdet = (
-            float(np.sum(np.log(sampling)))
-            + factor.logdet
-            + evolutionary_model.logdet_covariance
-            + evolutionary_model.n_states * math.log(variance)
-        )
         objective = 0.5 * (len(observed) * math.log(2.0 * math.pi) + logdet + quadratic)
         if not math.isfinite(objective):
             return float("inf")
         if not return_details:
             return objective
-        latent_rhs = np.asarray(
-            observation_loading.T @ (inverse_sampling * residual)
-        ).reshape(-1)
         posterior_mean = prior_mean + np.asarray(
-            loading @ factor.solve(latent_rhs)[: evolutionary_model.n_states]
+            loading @ conditional_latent[: evolutionary_model.n_states]
         ).reshape(-1)
-        return objective, prior_mean, posterior_mean, factor
+        return objective, prior_mean, posterior_mean
 
     grid = np.linspace(log_bounds[0], log_bounds[1], 21)
     candidates = [(float(state(value)), float(value), "grid") for value in grid]
@@ -696,16 +820,16 @@ def fit_sparse_latent_predictor(
     details = state(log_variance, return_details=True)
     if not isinstance(details, tuple):
         raise ValueError("Sparse predictor conditioning produced an invalid fit.")
-    _, prior_mean, posterior_mean, posterior_factor = details
+    _, prior_mean, posterior_mean = details
     latent_variance = math.exp(log_variance)
-    covariance_model, augmented_loading = _sparse_predictor_covariance_model(
+    covariance_model, posterior_factor = _fitted_sparse_predictor_covariance(
         evolutionary_model,
         latent_variance,
         sampling,
+        sampling_loading,
         observation_loading,
-        observation_information,
-        posterior_factor,
     )
+    augmented_loading = covariance_model.tip_loading
     # Only the mean marginal posterior variance is needed for diagnostics.
     # A deterministic Hutchinson trace estimate avoids n sparse solves and an
     # n-by-n covariance while remaining accurate enough for this diagnostic.
@@ -727,8 +851,8 @@ def fit_sparse_latent_predictor(
         ),
         mean_posterior_variance=math.ldexp(mean_posterior_variance, 2 * trait_exponent),
         prior_mean=math.ldexp(prior_mean + observed_offset, trait_exponent),
-        evolutionary_rate=math.ldexp(
-            latent_variance / evolutionary_model.covariance_scale, 2 * trait_exponent
+        evolutionary_rate=_sparse_predictor_reported_rate(
+            latent_variance, evolutionary_model.covariance_scale, trait_exponent
         ),
         log_likelihood=-float(objective_value)
         - len(observed) * trait_exponent * math.log(2.0),
