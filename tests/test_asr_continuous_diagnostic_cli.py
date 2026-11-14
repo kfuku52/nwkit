@@ -1,6 +1,7 @@
 import pandas as pd
 import pytest
 
+from nwkit import asr_regimes
 from nwkit.cli import main
 
 
@@ -104,6 +105,69 @@ def test_diagnostic_count_requires_its_output(tmp_path):
                 str(tmp_path / "out.tsv"),
             ]
         )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "model,columns", [("BMS-DRIFT", "sigma2\tdrift"), ("OUM", "theta")]
+)
+def test_bootstrap_reuses_original_fixed_regime_parameters(
+    tmp_path, monkeypatch, model, columns
+):
+    traits = tmp_path / "traits.tsv"
+    regime_map = tmp_path / "regimes.tsv"
+    parameters = tmp_path / "parameters.tsv"
+    bootstrap = tmp_path / "bootstrap.tsv"
+    traits.write_text("leaf_name\tvalue\nA\t0\nB\t1\nC\t3\nD\t4\n")
+    regime_map.write_text(
+        "branch_id\tregime\n0\tlow\n1\tlow\n2\thigh\n3\tlow\n4\tlow\n5\thigh\n6\thigh\n"
+    )
+    entries = (
+        "low\t1\t-0.2\nhigh\t2\t0.3\n"
+        if model == "BMS-DRIFT"
+        else "low\t-0.2\nhigh\t0.3\n"
+    )
+    parameters.write_text(f"regime\t{columns}\n{entries}")
+    read = asr_regimes.read_regime_parameters
+    reads = []
+
+    def read_once(*args, **kwargs):
+        parsed = read(*args, **kwargs)
+        reads.append(parsed)
+        return parsed
+
+    monkeypatch.setattr(asr_regimes, "read_regime_parameters", read_once)
+    model_options = ["--alpha", "0.8", "--sigma2", "1"] if model == "OUM" else []
+    main(
+        [
+            "asr",
+            "-i",
+            "[&R]((A:1,B:1):1,(C:1,D:1):1)R;",
+            "--trait",
+            str(traits),
+            "--state-column",
+            "value",
+            "--model",
+            model,
+            "--regime-map",
+            str(regime_map),
+            "--regime-parameters",
+            str(parameters),
+            "--bootstrap-out",
+            str(bootstrap),
+            "--bootstrap-simulations",
+            "3",
+            "--seed",
+            "31",
+            "-o",
+            str(tmp_path / "out.tsv"),
+            *model_options,
+        ]
+    )
+    assert len(reads) == 1
+    table = pd.read_csv(bootstrap, sep="\t")
+    assert len(table) == 3
+    assert set(table["fit_status"]) == {"ok"}
 
 
 def test_multivariate_diagnostics_are_rejected_explicitly(tmp_path):

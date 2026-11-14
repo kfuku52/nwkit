@@ -106,6 +106,7 @@ def compute_transformed_bm_marginals(
     profile_ci_level=None,
     standard_errors=None,
     _tree_validated=False,
+    _compute_posterior=True,
 ):
     """Fit and condition a transformed-time Brownian process."""
 
@@ -140,7 +141,9 @@ def compute_transformed_bm_marginals(
     if evolution_parameter is not None:
         fitted_parameter = validate_evolution_parameter(model, evolution_parameter)
         assert fitted_parameter is not None
-        posterior, brownian_fit = fit_at(fitted_parameter)
+        posterior, brownian_fit = fit_at(
+            fitted_parameter, compute_posterior=_compute_posterior
+        )
         parameter_estimated = False
         optimizer_success = True
         optimizer_message = "evolution parameter fixed"
@@ -185,7 +188,9 @@ def compute_transformed_bm_marginals(
         if not math.isfinite(float(optimized.fun)):
             raise ValueError(f"Failed to find a finite {model.upper()} likelihood.")
         fitted_parameter = float(decode(float(optimized.x)))
-        posterior, brownian_fit = fit_at(fitted_parameter)
+        posterior, brownian_fit = fit_at(
+            fitted_parameter, compute_posterior=_compute_posterior
+        )
         finite_objectives = np.asarray(
             [value for value in evaluated.values() if math.isfinite(value)], dtype=float
         )

@@ -93,6 +93,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Batch joint Gaussian posterior draws using precomputed branch conditionals.
 - Build posterior sample table metadata once per node and repeat it across draws.
 - Reuse the fixed simulation root and compiled tree across parametric bootstrap replicates.
+- Reuse fixed regime parameters from the original fit and skip Brownian
+  smoothing when bootstrap refits only return parameter estimates.
 - Reuse multivariate ASR branch distances across observations at the same node.
 - Batch common-ancestor lookups when building dense Gaussian covariances.
 - Solve for dense multivariate posterior covariances in bounded node batches.

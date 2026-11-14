@@ -113,6 +113,7 @@ def _refit(tree, simulated, errors, args, settings, original_fit, regime_assignm
             sigma2=None if original_fit.sigma2_estimated else original_fit.sigma2,
             standard_errors=errors,
             _tree_validated=True,
+            _compute_posterior=False,
         )[1]
     if model == "BMS":
         from nwkit.regime_continuous_asr import compute_bms_marginals
@@ -128,13 +129,18 @@ def _refit(tree, simulated, errors, args, settings, original_fit, regime_assignm
             _tree_validated=True,
         )[1]
     if model == "BMS-DRIFT":
-        from nwkit.asr_regimes import read_regime_parameters
         from nwkit.regime_drift_asr import compute_regime_drift_marginals
 
-        fixed = read_regime_parameters(
-            getattr(args, "regime_parameters", None),
-            regime_assignment.regimes,
-            ("sigma2", "drift"),
+        fixed = (
+            None
+            if original_fit.regime_parameters_source is None
+            else {
+                regime: {
+                    "sigma2": original_fit.sigma2_by_regime[regime],
+                    "drift": original_fit.drift_by_regime[regime],
+                }
+                for regime in regime_assignment.regimes
+            }
         )
         return compute_regime_drift_marginals(
             tree,
@@ -142,8 +148,8 @@ def _refit(tree, simulated, errors, args, settings, original_fit, regime_assignm
             regime_assignment,
             sigma2=getattr(args, "sigma2", None),
             drift=getattr(args, "drift", None),
-            regime_parameters=None if fixed is None else fixed[0],
-            regime_parameters_source=None if fixed is None else fixed[1],
+            regime_parameters=fixed,
+            regime_parameters_source=original_fit.regime_parameters_source,
             standard_errors=errors,
             _tree_validated=True,
         )[1]
@@ -163,6 +169,7 @@ def _refit(tree, simulated, errors, args, settings, original_fit, regime_assignm
             evolution_parameter_bounds=original_fit.evolution_parameter_bounds,
             standard_errors=errors,
             _tree_validated=True,
+            _compute_posterior=False,
         )[1]
     if model == "BM-DRIFT":
         from nwkit.nonstationary_continuous_asr import compute_bm_drift_marginals
@@ -174,6 +181,7 @@ def _refit(tree, simulated, errors, args, settings, original_fit, regime_assignm
             drift=None if original_fit.drift_estimated else original_fit.drift,
             standard_errors=errors,
             _tree_validated=True,
+            _compute_posterior=False,
         )[1]
     if model == "OU":
         if settings.root_prior == "stationary":
@@ -208,16 +216,26 @@ def _refit(tree, simulated, errors, args, settings, original_fit, regime_assignm
             standard_errors=errors,
         )[1]
     if model in {"OUM", "OUMA", "OUMV", "OUMVA"}:
-        from nwkit.asr_regimes import read_regime_parameters
         from nwkit.regime_gaussian_asr import (
             compute_regime_ou_marginals,
             regime_parameter_columns,
         )
 
-        fixed = read_regime_parameters(
-            getattr(args, "regime_parameters", None),
-            regime_assignment.regimes,
-            regime_parameter_columns(model),
+        fitted_maps = {
+            "alpha": original_fit.alpha_by_regime,
+            "sigma2": original_fit.sigma2_by_regime,
+            "theta": original_fit.theta_by_regime,
+        }
+        fixed = (
+            None
+            if original_fit.regime_parameters_source is None
+            else {
+                regime: {
+                    column: fitted_maps[column][regime]
+                    for column in regime_parameter_columns(model)
+                }
+                for regime in regime_assignment.regimes
+            }
         )
         return compute_regime_ou_marginals(
             tree,
@@ -227,8 +245,8 @@ def _refit(tree, simulated, errors, args, settings, original_fit, regime_assignm
             alpha=getattr(args, "alpha", None),
             sigma2=getattr(args, "sigma2", None),
             theta=getattr(args, "theta", None),
-            regime_parameters=None if fixed is None else fixed[0],
-            regime_parameters_source=None if fixed is None else fixed[1],
+            regime_parameters=fixed,
+            regime_parameters_source=original_fit.regime_parameters_source,
             alpha_bounds=original_fit.alpha_bounds,
             standard_errors=errors,
             _tree_validated=True,

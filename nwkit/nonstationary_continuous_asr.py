@@ -261,6 +261,7 @@ def compute_bm_drift_marginals(
     drift=None,
     standard_errors=None,
     _tree_validated=False,
+    _compute_posterior=True,
 ):
     """Return Brownian marginals with a fixed or fitted directional trend."""
 
@@ -285,6 +286,7 @@ def compute_bm_drift_marginals(
             fixed_sigma2,
             standard_errors,
             _tree_validated,
+            compute_posterior=_compute_posterior,
         )
         evaluations = 1
         success = True
@@ -378,6 +380,7 @@ def compute_bm_drift_marginals(
             fixed_sigma2,
             standard_errors,
             _tree_validated,
+            compute_posterior=_compute_posterior,
         )
     fit = BrownianDriftFit(
         sigma2=bm_fit.sigma2,
