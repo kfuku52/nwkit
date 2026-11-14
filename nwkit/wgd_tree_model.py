@@ -193,6 +193,12 @@ def _gene_splits(gene, targets):
     return nodes, children.reshape(-1, 2).T
 
 
+def _log_root_survival_normalizer(excess_mean, survival, log_survival):
+    if survival >= np.finfo(float).tiny or excess_mean == 0:
+        return math.log1p(excess_mean * survival)
+    return math.log1p(math.exp(math.log(excess_mean) + log_survival))
+
+
 def _add_species_split(result, left, right, nodes, first, second):
     result[nodes, 0] = np.logaddexp(result[nodes, 0], left[first, 0] + right[second, 0])
     if result.shape[1] > 1:
@@ -492,10 +498,11 @@ class TopologyLikelihood:
                 survivors[node] = math.exp(log_survivors[node])
         root_survival = survivors[0]
         r = root_mean - 1
+        root_normalizer = _log_root_survival_normalizer(
+            r, root_survival, log_survivors[0]
+        )
         if self.ascertainment == "observed":
-            selection_log = (
-                math.log(root_mean) + log_survivors[0] - math.log1p(r * root_survival)
-            )
+            selection_log = math.log(root_mean) + log_survivors[0] - root_normalizer
         else:
             left, right = self.children[0]
             with np.errstate(divide="ignore"):
@@ -510,9 +517,11 @@ class TopologyLikelihood:
                 + log_survivors[left]
                 + log_survivors[right]
                 + log_factor
-                - math.log1p(r * survivors[left])
-                - math.log1p(r * survivors[right])
-                - math.log1p(r * root_survival)
+                - _log_root_survival_normalizer(r, survivors[left], log_survivors[left])
+                - _log_root_survival_normalizer(
+                    r, survivors[right], log_survivors[right]
+                )
+                - root_normalizer
             )
         if not np.isfinite(selection_log):
             raise ValueError(

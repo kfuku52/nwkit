@@ -94,6 +94,20 @@ def test_root_clade_selection_with_very_large_geometric_mean(loss):
     assert actual.log_likelihood == pytest.approx(expected, abs=1e-10)
 
 
+def test_root_normalizer_preserves_underflowed_survival_times_root_mean():
+    from decimal import Decimal, localcontext
+
+    from nwkit.wgd_tree_model import _log_root_survival_normalizer
+
+    rate = 745.2
+    excess = 1e308
+    with localcontext() as context:
+        context.prec = 85
+        expected = float((1 + Decimal(excess) * (-Decimal(rate)).exp()).ln())
+    actual = _log_root_survival_normalizer(excess, math.exp(-rate), -rate)
+    assert actual == pytest.approx(expected, rel=1e-13, abs=0)
+
+
 @pytest.mark.parametrize("tip_count", [32, 64, 128])
 def test_comb_matches_exact_yule_colored_topology_probability(tip_count):
     tip = ("tip", "A")
