@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 
 import numpy as np
 from scipy import sparse
+from scipy.linalg import solve_triangular
 from scipy.optimize import minimize, minimize_scalar
 
 from nwkit.gaussian import (
@@ -154,18 +155,9 @@ def _latent_predictor_likelihood(
     covariance = rate * evolutionary_covariance + sampling_covariance
     try:
         cholesky = factor_covariance(covariance)
-        inverse_observed = _solve(cholesky, observed)
-        if include_intercept:
-            ones = np.ones(len(observed), dtype=float)
-            inverse_ones = _solve(cholesky, ones)
-            denominator = float(ones @ inverse_ones)
-            if denominator <= 0.0:
-                return float("inf")
-            prior_mean = float(ones @ inverse_observed / denominator)
-        else:
-            prior_mean = 0.0
-        residual = observed - prior_mean
-        quadratic = float(residual @ _solve(cholesky, residual))
+        prior_mean, quadratic = _latent_predictor_profile_moments(
+            observed, cholesky, include_intercept
+        )
         logdet = factor_logdet(cholesky)
     except np.linalg.LinAlgError:
         return float("inf")
@@ -173,6 +165,29 @@ def _latent_predictor_likelihood(
     if not return_details:
         return objective
     return objective, prior_mean, cholesky
+
+
+def _latent_predictor_profile_moments(observed, cholesky, include_intercept):
+    rhs = (
+        np.column_stack((observed, np.ones(len(observed))))
+        if include_intercept
+        else observed[:, None]
+    )
+    whitened = (
+        rhs / cholesky[:, None]
+        if cholesky.ndim == 1
+        else solve_triangular(cholesky, rhs, lower=True, check_finite=False)
+    )
+    whitened_values = whitened[:, 0]
+    prior_mean = 0.0
+    if include_intercept:
+        whitened_ones = whitened[:, 1]
+        denominator = float(whitened_ones @ whitened_ones)
+        if not math.isfinite(denominator) or denominator <= 0.0:
+            raise np.linalg.LinAlgError("Predictor intercept information is invalid.")
+        prior_mean = float(whitened_ones @ whitened_values) / denominator
+        whitened_values = whitened_values - prior_mean * whitened_ones
+    return prior_mean, float(whitened_values @ whitened_values)
 
 
 def _condition_dense_predictor(prior, sampling, factor, residual, prior_mean):
