@@ -1503,7 +1503,11 @@ def _scalar_terms(
     trials: np.ndarray | None,
     censor_lower: np.ndarray | None,
     censor_upper: np.ndarray | None,
+    center_small_beta: bool = False,
 ) -> tuple[float, np.ndarray, np.ndarray]:
+    if center_small_beta:
+        assert dispersion is not None
+        return _small_beta_terms(values, linear, dispersion, centered=True)
     if family in {"beta", "beta-binomial"}:
         return _beta_family_terms(values, linear, dispersion, trials, family)
     if family == "censored-gaussian":
@@ -2459,6 +2463,7 @@ def _scalar_random_mode(
     trials: np.ndarray | None,
     censor_lower: np.ndarray | None,
     censor_upper: np.ndarray | None,
+    center_small_beta: bool = False,
 ) -> tuple[np.ndarray, float, np.ndarray]:
     mode = np.zeros(len(precision), dtype=float)
 
@@ -2473,6 +2478,7 @@ def _scalar_random_mode(
             trials=trials,
             censor_lower=censor_lower,
             censor_upper=censor_upper,
+            center_small_beta=center_small_beta,
         )
 
     converged = False
@@ -2736,6 +2742,15 @@ def _fit_scalar_phylogenetic_glmm(
         component_names.append("group")
     coefficient_count = design.shape[1]
     estimate_dispersion = family in DISPERSION_FAMILIES and dispersion is None
+    # The large constant can hide changes in the scalar Laplace objective from
+    # numerical differences when beta precision is fixed near zero.
+    beta_offset = None
+    if (
+        family == "beta"
+        and dispersion is not None
+        and dispersion < _SMALL_BETA_PRECISION
+    ):
+        beta_offset = float(np.sum(_small_beta_log_base(values, dispersion)))
     estimate_zero = family in ZERO_COMPONENT_FAMILIES and zero_probability is None
     estimate_shape = evolution_parameter_bounds is not None
     initial = _scalar_initial_coefficient(
@@ -2831,6 +2846,7 @@ def _fit_scalar_phylogenetic_glmm(
                     trials=trial_values,
                     censor_lower=lower,
                     censor_upper=upper,
+                    center_small_beta=beta_offset is not None,
                 )
 
             mode, posterior_objective, weights, posterior_factor = _sparse_latent_mode(
@@ -2880,6 +2896,7 @@ def _fit_scalar_phylogenetic_glmm(
             trials=trial_values,
             censor_lower=lower,
             censor_upper=upper,
+            center_small_beta=beta_offset is not None,
         )
         mapped_weights = np.bincount(
             observation_to_tip,
@@ -2996,7 +3013,8 @@ def _fit_scalar_phylogenetic_glmm(
         component_variances=components,
         evolution_parameter=decoded,
         evolution_parameter_status="estimated" if estimate_shape else "fixed",
-        log_likelihood=_reported_log_likelihood(
+        log_likelihood=(beta_offset or 0.0)
+        + _reported_log_likelihood(
             fitted_objective,
             coefficients,
             coefficient_penalty,
@@ -4216,18 +4234,18 @@ def _small_beta_binomial_terms(values, linear, dispersion, trials):
     return float(np.sum(contributions)), gradient, curvature
 
 
-def _small_beta_terms(values, linear, dispersion):
+def _small_beta_log_base(values, dispersion):
+    return math.log(dispersion) - np.log(values) - np.log1p(-values)
+
+
+def _small_beta_terms(values, linear, dispersion, *, centered=False):
     mean = _beta_mean(linear)
     complement = 1.0 - mean
     # Gamma(1 + shape) is one to working precision at these shapes.
     # The beta density is then precision * mean * (1 - mean) / (y * (1 - y)).
-    contributions = (
-        math.log(dispersion)
-        + np.log(mean)
-        + np.log(complement)
-        - np.log(values)
-        - np.log1p(-values)
-    )
+    contributions = np.log(mean) + np.log(complement)
+    if not centered:
+        contributions += _small_beta_log_base(values, dispersion)
     interior_mean = (mean > 1e-10) & (mean < 1.0 - 1e-10)
     gradient = (mean - complement) * interior_mean
     curvature = (2.0 * mean * complement) * interior_mean
