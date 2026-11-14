@@ -392,8 +392,24 @@ def is_diagonal(matrix: np.ndarray) -> bool:
     matrix = np.asarray(matrix)
     if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
         return False
-    for index, row in enumerate(matrix):
-        if np.any(row[:index]) or np.any(row[index + 1 :]):
+    if len(matrix) == 0:
+        return True
+    return not np.any(matrix[0, 1:]) and _diagonal_by_blocks(matrix)
+
+
+def _diagonal_by_blocks(matrix):
+    if matrix.flags.f_contiguous:
+        matrix = matrix.T
+    size = len(matrix)
+    # A row block has only one diagonal position per row. Compare nonzero
+    # counts in compiled NumPy loops while keeping the early exit on dense input.
+    block_size = max(1, 32_768 // size)
+    diagonal = matrix.diagonal()
+    for start in range(0, size, block_size):
+        stop = min(start + block_size, size)
+        if np.count_nonzero(matrix[start:stop]) != np.count_nonzero(
+            diagonal[start:stop]
+        ):
             return False
     return True
 
