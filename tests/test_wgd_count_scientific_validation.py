@@ -13,11 +13,12 @@ homogeneous null. All four branches are searched on a fixed midpoint grid.
 The opt-in study defaults to eight datasets each for null/local SSD and four for
 the other regimes, with 19 refitted null draws per dataset (minimum p=.05).
 NWKIT_WGD_COUNT_STUDY_REPLICATES changes the null/SSD replication count;
-NWKIT_WGD_COUNT_STUDY_BOOTSTRAP changes draws for all regimes. Settings, seeds,
-all bootstrap statistics, failures, and exact 95% binomial intervals are saved
-in pytest's temporary directory and printed. No nominal power/FPR target is
-asserted: intervals describe this simulation experiment, not empirical genomes.
-Failed fits are recorded and fail validation, never silently discarded.
+NWKIT_WGD_COUNT_STUDY_BOOTSTRAP and NWKIT_WGD_COUNT_STUDY_FAMILIES change draws
+and family count for all regimes. The mixed scenario puts a weak WGD and a
+local SSD burst on different branches, so mode and localization are distinct
+failure modes. Settings, seeds, all bootstrap statistics, failures, and exact
+95% binomial intervals are saved in pytest's temporary directory and printed.
+No nominal power/FPR target is asserted. Failed fits fail validation.
 """
 
 import json
@@ -202,6 +203,14 @@ _SCENARIOS = (
         scales=(0.15, 0.55, 1.05, 2.25),
     ),
     _Scenario("missing-annotation", detection=(0.65, 0.8, 0.9), missing=True),
+    _Scenario("weak-wgd", event=MultiplicationEvent(1, 0.25)),
+    _Scenario(
+        "weak-wgd-with-local-ssd",
+        ((0.08, 0.15), (0.7, 0.15)),
+        event=MultiplicationEvent(1, 0.25),
+        groups=(0, 0, 0, 0, 1),
+        misspecified_groups=True,
+    ),
 )
 
 
@@ -246,23 +255,29 @@ def test_independent_scenarios_do_not_lose_known_feasible_likelihood(index, scen
     model = _scenario_model(scenario, 73131 + index)
     scan = _verified_scan(model)
     if scenario.misspecified_groups:
-        candidate = next(c for c in scan.candidates if c.node == 1)
+        (burst_node,) = (
+            node for node, group in enumerate(scenario.groups) if group == 1
+        )
+        candidate = next(c for c in scan.candidates if c.node == burst_node)
         fit = candidate.burst_fit
-        reference_model = _burst_model(model, 1)
+        reference_model = _burst_model(model, burst_node)
+        reference_event = None
     elif scenario.event is not None:
         fit = next(
             c.event_fit for c in scan.candidates if c.node == scenario.event.node
         )
         reference_model = model
+        reference_event = scenario.event
     else:
         fit, reference_model = scan.background, model
+        reference_event = None
     # Exact zero rates are outside the optimizer's documented numerical box.
     # The pure-WGD identity is checked below, but its feasible fit comparator
     # uses the same lower bound rather than claiming zero is an allowed MLE.
     time_unit = np.median([t for t in model.tree.lengths[1:] if t > 0])
     feasible_rates = np.maximum(scenario.rates, np.exp(-16.0) / time_unit)
     feasible = reference_model.log_likelihood(
-        feasible_rates, scenario.root_mean, fit.max_count, scenario.event
+        feasible_rates, scenario.root_mean, fit.max_count, reference_event
     )
     if scenario.name == "pure-wgd":
         np.testing.assert_array_equal(model.counts, np.tile([2, 2, 1], (64, 1)))
@@ -303,7 +318,9 @@ def test_replicated_independent_bootstrap_study(index, scenario, tmp_path):
     if scenario.name not in {"null", "local-ssd"}:
         replicates = min(replicates, 4)
     draws = int(os.environ.get("NWKIT_WGD_COUNT_STUDY_BOOTSTRAP", "19"))
-    assert replicates >= 1 and draws >= 19
+    families = int(os.environ.get("NWKIT_WGD_COUNT_STUDY_FAMILIES", "64"))
+    assert replicates >= 1 and draws >= 19 and families >= 1
+    event_node = scenario.event.node if scenario.event is not None else None
     records, failures = [], []
     start = time.perf_counter()
     path = tmp_path / f"{scenario.name}.json"
@@ -311,7 +328,7 @@ def test_replicated_independent_bootstrap_study(index, scenario, tmp_path):
         "regime": scenario.name,
         "replicates": replicates,
         "bootstrap_draws": draws,
-        "families": 64,
+        "families": families,
         "alpha": 0.05,
         "fractions": [0.5],
         "candidate_nodes": [1, 2, 3, 4],
@@ -326,6 +343,7 @@ def test_replicated_independent_bootstrap_study(index, scenario, tmp_path):
         "missing": scenario.missing,
         "fitted_null_groups_misspecified": scenario.misspecified_groups,
         "retention": None if scenario.event is None else scenario.event.retention,
+        "event_node": event_node,
         "python": sys.version,
         "numpy": np.__version__,
         "scipy": scipy.__version__,
@@ -334,7 +352,7 @@ def test_replicated_independent_bootstrap_study(index, scenario, tmp_path):
     for replicate in range(replicates):
         data_seed = 170000 + 1000 * index + replicate
         bootstrap_seed = 910000 + 1000 * index + replicate
-        model = _scenario_model(scenario, data_seed)
+        model = _scenario_model(scenario, data_seed, families)
         serialized_counts = [
             [None if np.isnan(value) else int(value) for value in row]
             for row in model.counts
@@ -357,6 +375,11 @@ def test_replicated_independent_bootstrap_study(index, scenario, tmp_path):
                 }
                 for c in calibrated.candidates
             ]
+            supported = {
+                c.node
+                for c in calibrated.candidates
+                if c.p_value <= 0.05 and c.burst_aic_difference > 0
+            }
             record = {
                 "replicate": replicate,
                 "data_seed": data_seed,
@@ -372,15 +395,14 @@ def test_replicated_independent_bootstrap_study(index, scenario, tmp_path):
                 "candidates": candidates,
                 "bootstrap_max_statistics": calibrated.bootstrap_statistics,
                 "raw_rejection": any(c.p_value <= 0.05 for c in calibrated.candidates),
-                "conditional_support": any(
-                    c.p_value <= 0.05 and c.burst_aic_difference > 0
-                    for c in calibrated.candidates
-                ),
-                "true_branch_top_rank": calibrated.candidates[0].node == 1,
-                "true_branch_supported": any(
-                    c.node == 1 and c.p_value <= 0.05 and c.burst_aic_difference > 0
-                    for c in calibrated.candidates
-                ),
+                "conditional_support": bool(supported),
+                "true_branch_top_rank": calibrated.candidates[0].node == event_node
+                if event_node is not None
+                else None,
+                "true_branch_supported": event_node in supported
+                if event_node is not None
+                else None,
+                "wrong_branch_supported": bool(supported - {event_node}),
             }
             records.append(record)
             print(
@@ -427,13 +449,15 @@ def test_replicated_independent_bootstrap_study(index, scenario, tmp_path):
         "conditional_support",
         "true_branch_top_rank",
         "true_branch_supported",
+        "wrong_branch_supported",
     ):
-        successes = sum(record[field] for record in records)
+        values = [record[field] for record in records if record[field] is not None]
+        successes = sum(values)
         summary[field] = {
             "count": successes,
-            "denominator": len(records),
-            "exact_95_percent_interval": _binomial_interval(successes, len(records))
-            if records
+            "denominator": len(values),
+            "exact_95_percent_interval": _binomial_interval(successes, len(values))
+            if values
             else None,
         }
     path.write_text(
