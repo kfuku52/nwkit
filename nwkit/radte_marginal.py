@@ -127,6 +127,7 @@ class MarginalDatingProblem(DatingProblem):
         self.measurement_logdet = shared_structure.measurement_logdet
         self._cached_sd = None
         self._cached_covariance = None
+        self._cached_inverse = None
 
     def _build_structure(self, key):
         likelihood = self.likelihood
@@ -193,12 +194,12 @@ class MarginalDatingProblem(DatingProblem):
         if sd != self._cached_sd:
             covariance = self.measurement_covariance + sd**2 * self.projected_covariance
             factor = cho_factor(covariance, lower=True)
-            inverse = cho_solve(factor, np.eye(len(covariance)))
             logdet = float(2 * np.log(np.diag(factor[0])).sum())
-            self._cached_sd, self._cached_covariance = sd, (factor, inverse, logdet)
+            self._cached_sd, self._cached_covariance = sd, (factor, logdet)
+            self._cached_inverse = None
         return self._cached_covariance
 
-    def components(self, x):
+    def components(self, x, *, include_inverse=True):
         ages = self.unpack_ages(x)
         duration = self.chronology.durations(ages)
         mu = x[len(self.free)]
@@ -217,7 +218,12 @@ class MarginalDatingProblem(DatingProblem):
         log_total = logsumexp(root_terms, axis=1)
         means[:, self.root_row] += log_total - log_duration[second]
         root_weight = np.exp(root_terms[:, 0] - log_total)
-        factor, inverse, logdet = self._covariance(sd)
+        factor, logdet = self._covariance(sd)
+        inverse = None
+        if include_inverse:
+            if self._cached_inverse is None:
+                self._cached_inverse = cho_solve(factor, np.eye(len(factor[0])))
+            inverse = self._cached_inverse
         residual = means - self.observation[None, :]
         precision_residual = cho_solve(factor, residual.T).T
         log_kernels = self.log_weights - 0.5 * np.sum(
@@ -242,7 +248,9 @@ class MarginalDatingProblem(DatingProblem):
             gradient = np.zeros_like(x)
             gradient[: len(self.free)] = self.age_gradient_design @ (2e12 * violation)
             return float(1e12 * (1 + violation @ violation)), gradient
-        value, duration, sd, z, root_weight, v, inverse, weights = self.components(x)
+        value, duration, sd, z, root_weight, v, inverse, weights = self.components(
+            x, include_inverse=self.fixed_sd is None
+        )
         root = self.root_row
         edge_gradient = np.zeros(len(duration))
         edge_gradient[self.rows_to_edges] = weights @ v / duration[self.rows_to_edges]
@@ -255,10 +263,12 @@ class MarginalDatingProblem(DatingProblem):
             [self.age_gradient_design @ edge_gradient, [weights @ v.sum(axis=1)]]
         )
         if self.fixed_sd is None:
+            assert inverse is not None
             covariance_derivative = self.projected_covariance
-            covariance_score = 0.5 * np.sum(
-                inverse * covariance_derivative.T
-            ) - 0.5 * np.einsum("ki,ij,kj->k", v, covariance_derivative, v)
+            covariance_score = 0.5 * (
+                np.einsum("ij,ji->", inverse, covariance_derivative)
+                - np.einsum("ki,ki->k", v @ covariance_derivative, v)
+            )
             if sd == 0:
                 # d E[f(sqrt(k*tau)*Z)] / d tau at zero = k*f''(0)/2.
                 # This right derivative includes the root log-sum curvature;
@@ -309,6 +319,7 @@ class MarginalDatingProblem(DatingProblem):
 
     def rate_posterior(self, x):
         _, _, sd, z, _, precision_residual, inverse, weights = self.components(x)
+        assert inverse is not None
         cross = sd**2 * self.conditional_covariance[:, self.rows_to_edges]
         means = (
             z[:, None] * self.conditional_slope[None, :] - precision_residual @ cross.T
