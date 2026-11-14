@@ -151,6 +151,18 @@ def test_delta_covariance_raises_ultrametric_node_depths_to_power():
     assert covariance[3, 4] == pytest.approx(4.0 / 3.0)
 
 
+@pytest.mark.parametrize(
+    "model, parameter, expected",
+    [("delta", 2.0, 2e-18), ("delta", 1.0, 1e-18), ("ou", 1e-300, 1e-18)],
+)
+def test_edge_transform_retains_branches_shorter_than_depth_precision(
+    model, parameter, expected
+):
+    tree = _tree("((A:1e-18,B:1e-18):1,C:1);")
+    edges = transformed_edge_variances(tree, model=model, parameter=parameter)
+    assert edges[tree["A"]] == pytest.approx(expected, rel=1e-14, abs=0)
+
+
 @pytest.mark.parametrize("model,rate_change", [("eb", -0.4), ("acdc", 0.2)])
 def test_rate_change_covariance_integrates_exponential_rate(model, rate_change):
     covariance = build_evolutionary_covariance(

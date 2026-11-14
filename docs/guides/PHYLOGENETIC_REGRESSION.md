@@ -628,6 +628,8 @@ The low-level `contrast` command supports `brownian`, `lambda`, `ou`, `kappa`,
 parameterized model. NWKIT calculates PICs on the exactly equivalent
 transformed tree and records the model, parameter, and branch-length mode in
 each output row. `delta` and contrast-based `ou` require an ultrametric tree.
+Their variance transforms use the original edge length so that short positive
+branches survive rounding in root-to-node depths.
 An arbitrary `custom` tip covariance is not accepted here because it need not
 factor into independent local tree contrasts; use it only in conventional
 tip-level PGLS.

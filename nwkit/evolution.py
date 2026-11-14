@@ -3,6 +3,7 @@
 import math
 from dataclasses import dataclass
 from io import StringIO
+from sys import float_info
 from typing import Any, Callable
 
 import numpy as np
@@ -151,6 +152,8 @@ def _tree_height(tree, depths: dict[Any, float]) -> float:
 def _require_ultrametric(tree, depths: dict[Any, float], model: str) -> float:
     tip_depths = np.asarray([depths[leaf] for leaf in tree.leaves()], dtype=float)
     height = float(np.max(tip_depths))
+    if not math.isfinite(height) or height <= 0.0:
+        raise ValueError("The evolutionary-model tree must have positive depth.")
     tolerance = max(
         1e-8 * max(1.0, height),
         np.finfo(float).eps * max(1.0, height) * max(100, len(tip_depths)),
@@ -199,53 +202,62 @@ def validate_evolution_parameter(model: str, parameter: float | None) -> float |
     return value
 
 
-def _exponential_time_transform(depth: float, rate_change: float) -> float:
-    if abs(rate_change * depth) < 1e-8:
-        return depth * (1.0 + 0.5 * rate_change * depth)
-    try:
-        value = math.expm1(rate_change * depth) / rate_change
-    except OverflowError as exc:
-        raise ValueError(
-            "The rate-change parameter overflows the tree time scale."
-        ) from exc
-    if not math.isfinite(value):
-        raise ValueError(
-            "The rate-change parameter produces non-finite branch lengths."
+def _delta_edge_variance(start, end, length, height, delta):
+    if length == 0.0 or delta == 1.0:
+        return length
+    scaled_depth = end / height
+    power = scaled_depth**delta
+    tiny = float_info.min
+    if power < tiny or scaled_depth < tiny:
+        log_end = math.log(height) + delta * (math.log(end) - math.log(height))
+        transformed_end = math.exp(log_end)
+    else:
+        transformed_end = height * power
+        log_end = None
+    if start == 0.0:
+        return transformed_end
+    # The branch length remains accurate even when end and start round to
+    # the same depth. Use the parent/child ratio for branches spanning most
+    # of the path so that log1p does not encounter a rounded -1.
+    fraction = length / end
+    if fraction <= 0.5:
+        log_ratio = math.log1p(-fraction)
+    else:
+        ratio = start / end
+        log_ratio = math.log(ratio) if ratio else math.log(start) - math.log(end)
+    change = -math.expm1(delta * log_ratio)
+    variance = transformed_end * change
+    if variance > 0 and change >= tiny:
+        return variance
+    if log_end is None:
+        log_end = math.log(height) + delta * math.log(scaled_depth)
+    if change >= tiny:
+        log_change = math.log(change)
+    else:
+        # For subnormal changes, -expm1(delta * log_ratio) rounds as
+        # -delta * log_ratio. Evaluate even an underflowing ratio in logs.
+        log_gap = (
+            math.log(-log_ratio)
+            if -log_ratio >= tiny
+            else math.log(length) - math.log(end)
         )
-    return value
+        log_change = math.log(delta) + log_gap
+    return math.exp(log_end + log_change)
 
 
-def _ou_ultrametric_depth(depth: float, height: float, alpha: float) -> float:
-    first = math.exp(-2.0 * alpha * (height - depth))
-    root = math.exp(-2.0 * alpha * height)
-    return (first - root) / (2.0 * alpha)
-
-
-def _transformed_node_depths(
-    tree,
-    model: str,
-    parameter: float,
-    base_depths: dict[Any, float],
-) -> dict[Any, float]:
-    height = _tree_height(tree, base_depths)
-    if model == "delta":
-        _require_ultrametric(tree, base_depths, model)
-        return {
-            node: height * (depth / height) ** parameter
-            for node, depth in base_depths.items()
-        }
-    if model in {"eb", "acdc"}:
-        return {
-            node: _exponential_time_transform(depth, parameter)
-            for node, depth in base_depths.items()
-        }
-    if model == "ou":
-        height = _require_ultrametric(tree, base_depths, model)
-        return {
-            node: _ou_ultrametric_depth(depth, height, parameter)
-            for node, depth in base_depths.items()
-        }
-    raise ValueError("Model '{}' is not a node-depth transform.".format(model))
+def _ou_edge_variance(length, remaining, alpha):
+    if length == 0:
+        return 0.0
+    exponent = 2.0 * (alpha * length)
+    if exponent <= math.ulp(1.0):
+        innovation = length
+    else:
+        innovation = (-math.expm1(-exponent) * 0.5) / alpha
+    log_decay = -2.0 * (alpha * remaining)
+    decay = math.exp(log_decay)
+    if decay < float_info.min and innovation > 0:
+        return math.exp(log_decay + math.log(innovation))
+    return decay * innovation
 
 
 def transformed_edge_variances(
@@ -294,7 +306,9 @@ def transformed_edge_variances(
             )
             for node in tree.traverse()
         }
-    return _node_transform_edge_variances(tree, model, parameter, base_depths)
+    return _node_transform_edge_variances(
+        tree, model, parameter, base_depths, base_edges
+    )
 
 
 def _kappa_edge_variances(tree, base_edges, parameter):
@@ -330,32 +344,24 @@ def _lambda_edge_variances(tree, base_edges, base_depths, parameter):
     return transformed
 
 
-def _node_transform_edge_variances(tree, model, parameter, base_depths):
-    transformed_depths = _transformed_node_depths(
-        tree,
-        model,
-        parameter,
-        base_depths,
-    )
-    edges = {
-        node: (
-            0.0
-            if node.is_root
-            else transformed_depths[node] - transformed_depths[node.up]
-        )
-        for node in tree.traverse()
-    }
-    scale = max(1.0, max(abs(value) for value in edges.values()))
-    tolerance = np.finfo(float).eps * scale * max(100, len(edges))
-    for node, value in edges.items():
-        if value < -tolerance or not math.isfinite(value):
+def _node_transform_edge_variances(tree, model, parameter, base_depths, base_edges):
+    height = _require_ultrametric(tree, base_depths, model)
+    edges = {tree: 0.0}
+    for node in tree.descendants():
+        length = base_edges[node]
+        if model == "delta":
+            value = _delta_edge_variance(
+                base_depths[node.up], base_depths[node], length, height, parameter
+            )
+        else:
+            value = _ou_edge_variance(length, height - base_depths[node], parameter)
+        if not math.isfinite(value):
             raise ValueError(
                 "Evolutionary model '{}' produced invalid transformed branches.".format(
                     model
                 )
             )
-        if value < 0.0:
-            edges[node] = 0.0
+        edges[node] = value
     return edges
 
 
