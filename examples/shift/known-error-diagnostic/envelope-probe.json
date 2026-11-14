@@ -1,0 +1,125 @@
+{
+  "scope": "Exploratory probes selected because old plug-in tests rejected; not a calibration rate study. Budget 8.",
+  "source_records_sha256": "395e7c7975755b2f818c9dabac3016220a739fcd79eed9fa3b7f6dea735712a8",
+  "prototype_sha256": "7068658d7bf94db3cbb5b9790290270db20e1347f3d7c10d391242d63728dab0",
+  "rows": [
+    {
+      "case_id": 93,
+      "historical_plugin_p": 0.03,
+      "envelope": {
+        "method": "research_known_error_finite_grid_envelope",
+        "statistic": 18.409856245471772,
+        "level": 0.05,
+        "replicates": 199,
+        "seed": 10437543340,
+        "p_value_lower_bound": 0.05,
+        "p_value_upper_bound": 1.0,
+        "reject": null,
+        "grid_complete": false,
+        "grid_point_count": 1324,
+        "evaluations": [
+          {
+            "alpha_height": 0.0,
+            "process_variance": 0.8942626837559531,
+            "probability": 0.03
+          },
+          {
+            "alpha_height": null,
+            "process_variance": 0.8942626837559531,
+            "probability": 0.05
+          },
+          {
+            "alpha_height": 0.001,
+            "process_variance": 0.8942626837559531,
+            "probability": 0.03
+          },
+          {
+            "alpha_height": 0.0017782794100389228,
+            "process_variance": 0.8942626837559531,
+            "probability": 0.03
+          },
+          {
+            "alpha_height": 0.0031622776601683794,
+            "process_variance": 0.8942626837559531,
+            "probability": 0.03
+          },
+          {
+            "alpha_height": 0.005623413251903491,
+            "process_variance": 0.8942626837559531,
+            "probability": 0.03
+          },
+          {
+            "alpha_height": 0.01,
+            "process_variance": 0.8942626837559531,
+            "probability": 0.03
+          },
+          {
+            "alpha_height": 0.01778279410038923,
+            "process_variance": 0.8942626837559531,
+            "probability": 0.03
+          }
+        ],
+        "scope": "No-shift family and declared finite alpha/process-variance grid only; no continuous-parameter guarantee."
+      }
+    },
+    {
+      "case_id": 105,
+      "historical_plugin_p": 0.025,
+      "envelope": {
+        "method": "research_known_error_finite_grid_envelope",
+        "statistic": 21.11076214277889,
+        "level": 0.05,
+        "replicates": 199,
+        "seed": 8225832920,
+        "p_value_lower_bound": 0.025,
+        "p_value_upper_bound": 1.0,
+        "reject": null,
+        "grid_complete": false,
+        "grid_point_count": 1324,
+        "evaluations": [
+          {
+            "alpha_height": null,
+            "process_variance": 1.59024891768936,
+            "probability": 0.025
+          },
+          {
+            "alpha_height": 0.0,
+            "process_variance": 1.59024891768936,
+            "probability": 0.025
+          },
+          {
+            "alpha_height": 0.001,
+            "process_variance": 1.59024891768936,
+            "probability": 0.025
+          },
+          {
+            "alpha_height": 0.0017782794100389228,
+            "process_variance": 1.59024891768936,
+            "probability": 0.025
+          },
+          {
+            "alpha_height": 0.0031622776601683794,
+            "process_variance": 1.59024891768936,
+            "probability": 0.025
+          },
+          {
+            "alpha_height": 0.005623413251903491,
+            "process_variance": 1.59024891768936,
+            "probability": 0.025
+          },
+          {
+            "alpha_height": 0.01,
+            "process_variance": 1.59024891768936,
+            "probability": 0.025
+          },
+          {
+            "alpha_height": 0.01778279410038923,
+            "process_variance": 1.59024891768936,
+            "probability": 0.025
+          }
+        ],
+        "scope": "No-shift family and declared finite alpha/process-variance grid only; no continuous-parameter guarantee."
+      }
+    }
+  ]
+}

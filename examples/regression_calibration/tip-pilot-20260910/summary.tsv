@@ -1,0 +1,8 @@
+case	method	generated	p_available	rejection_given_available	coverage_given_interval	fit_failures	seconds
+rsc-tips-n8	wald	200	1.0	0.09	0.91	0	41.93497560269316
+rsc-tips-n8-copies3	wald	200	1.0	0.0	1.0	0	107.83508212477318
+rsc-tips-n8-lambda-auto	wald	200	1.0	0.08	0.92	0	830.5006492570974
+rsc-tips-n8-partial-replicates	wald	200	0.965	0.06217616580310881	0.9378238341968912	7	58.01767615627614
+rsc-tips-n8-predictor-replicates	wald	200	0.995	0.035175879396984924	0.964824120603015	1	82.95414429309312
+rsc-tips-n8-replicates	wald	200	1.0	0.055	0.945	0	56.99047007088666
+rsc-tips-n8-technical	wald	200	1.0	0.045	0.955	0	58.69788314978359

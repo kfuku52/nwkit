@@ -1,0 +1,27 @@
+--- a/nwkit/shift_native_model.py
++++ b/nwkit/shift_native_model.py
+@@ -122,5 +122,3 @@
+-        for index, branch in enumerate(tree.branch_ids):
+-            if (
+-                branch in shifts
+-                and labels[index] == labels[tree.compiled.parents[index]]
+-            ):
++        for branch in shifts:
++            index = tree.indices_by_branch[branch]
++            if labels[index] == labels[tree.compiled.parents[index]]:
+@@ -135,6 +133,9 @@
+-        for index, branch in enumerate(tree.branch_ids):
+-            labels[index] = (
+-                aliases[branch]
+-                if branch in aliases
+-                else labels[tree.compiled.parents[index]]
+-            )
++        # Preorder makes each subtree contiguous. Apply ancestral regimes first,
++        # then overwrite their descendant intervals with each nested shift.
++        for index, group in sorted(
++            (tree.indices_by_branch[branch], group)
++            for branch, group in aliases.items()
++        ):
++            last_tip = tree.tip_intervals[index][1] - 1
++            stop = tree.compiled.leaf_indices[last_tip] + 1
++            labels[index:stop] = group

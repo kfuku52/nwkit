@@ -3,6 +3,7 @@
 import math
 import sys
 from dataclasses import dataclass, replace
+from sys import float_info
 from typing import Any
 
 import numpy as np
@@ -20,7 +21,8 @@ from nwkit.evolution import _finite_rate_bound
 from nwkit.gaussian_inference import _normal_log_density as _log_normal_density
 from nwkit.gaussian_inference import _normal_log_overlap
 from nwkit.gaussian_tree import (
-    _scaled_gaussian_variance,
+    _mean_at_tiny_variance_ratio,
+    _propagated_variance,
     ou_stationary_variance,
     ou_transition_from_root_variance,
 )
@@ -114,16 +116,19 @@ def _combine(first, second):
         larger = max(left.variance, right.variance)
         ratio = min(left.variance, right.variance) / larger
         denominator = 1.0 + ratio
-        left_weight = (right.variance / larger) / denominator
-        right_weight = (left.variance / larger) / denominator
         variance = min(left.variance, right.variance) / denominator
         if variance <= 0.0:
             raise ValueError(
                 "A positive OU conditional variance underflowed; rescale units."
             )
-        marginal = GaussianMarginal(
-            left_weight * left.mean + right_weight * right.mean, variance
-        )
+        left_weight = (right.variance / larger) / denominator
+        right_weight = (left.variance / larger) / denominator
+        mean = left_weight * left.mean + right_weight * right.mean
+        if ratio < float_info.min:
+            mean = _mean_at_tiny_variance_ratio(
+                left.mean, right.mean, left.variance, right.variance
+            )
+        marginal = GaussianMarginal(mean, variance)
     return _Factor(marginal, first.log_weight + second.log_weight + log_overlap)
 
 
@@ -449,7 +454,7 @@ def _predict_down(factor, alpha, root_variance, theta, length):
     )
     marginal = factor.marginal
     mean = decay * marginal.mean + intercept
-    variance = _scaled_gaussian_variance(decay, marginal.variance) + innovation
+    variance = _propagated_variance(decay, marginal.variance, innovation)
     if not math.isfinite(mean) or not math.isfinite(variance) or variance <= 0.0:
         raise ValueError("An OU smoothing message is not finite and positive.")
     return _Factor(GaussianMarginal(mean, variance), factor.log_weight)

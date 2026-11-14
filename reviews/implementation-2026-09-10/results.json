@@ -1,0 +1,27 @@
+{
+  "regime_parameter_overwrite": {
+    "input_changed": true,
+    "replacement_header": "branch_id\tparent\tnode_class\tname\ttrait\tobserved_value\tobserved_se\tis_imputed\tmean\tvariance\tsd\tci_lower\tci_upper\tci_level"
+  },
+  "ensemble_partial_publication": {
+    "error": "Every ensemble tree must contain exactly the reference tip set.",
+    "reference_changed": true,
+    "ensemble_changed": false
+  },
+  "pca_recursive_copy": {
+    "tips": 200,
+    "error": "maximum recursion depth exceeded",
+    "same_input_direct_fit_status": "ok",
+    "same_input_direct_fit_eigenvalues": [
+      422.0261174239691,
+      0.9968698249142601
+    ]
+  },
+  "head": "e2465b048f7529b7dad84cb6722278406bb49bbe",
+  "python": "3.10.14 | packaged by conda-forge | (main, Mar 20 2024, 12:53:34) [Clang 16.0.6 ]",
+  "source_sha256": {
+    "nwkit/asr.py": "57fd5af613c7634f86828f3c0f6581dd71a7e07c57c5e55bac54c73c944ab03e",
+    "nwkit/asr_tree_ensemble.py": "13549e910d034fbb0aa0f87eff3d146aef1bc9ab49b1da9316ce476fca44002f",
+    "nwkit/pca.py": "63f1b0d10767d86f24d5aae921c82b7751d465c93390a4974969014bd2f3f21b"
+  }
+}

@@ -1,0 +1,33 @@
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m ruff check nwkit tests setup.py tools
+All checks passed!
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m ruff format --check nwkit tests setup.py tools
+589 files already formatted
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m mypy
+Success: no issues found in 260 source files
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m pytest -q --durations=20 --durations-min=0.05 -m not slow tests/test_cli.py tests/test_cli_contracts.py tests/test_interface_conventions.py tests/test_signal.py tests/test_dtt.py tests/test_dtt_audit.py tests/test_regress.py::test_cluster_hc1_keeps_cancelling_score_reduction_order -rs
+........................................................................ [ 30%]
+........................................................................ [ 61%]
+........................................................................ [ 91%]
+...................                                                      [100%]
+============================= slowest 20 durations =============================
+19.70s call     tests/test_signal.py::test_lambda_bootstrap_cli_metadata_and_order
+8.12s call     tests/test_signal.py::test_lambda_bootstrap_missing_and_zero_rate
+3.77s call     tests/test_signal.py::test_cli_se_and_reproducible_permutations
+2.25s call     tests/test_signal.py::test_interior_lambda_with_errors_independent_optimization
+1.26s call     tests/test_signal.py::test_zero_rate_and_singular_zero_rate
+1.06s call     tests/test_cli_contracts.py::test_command_parser_reaches_its_real_handler[wgd-count]
+0.67s call     tests/test_cli_contracts.py::test_command_parser_reaches_its_real_handler[asrcompare]
+0.43s call     tests/test_cli_contracts.py::test_command_parser_reaches_its_real_handler[draw]
+0.37s call     tests/test_signal.py::test_k_permutations_preserve_refits_rng_and_covariance_lifetime[errors1]
+0.31s call     tests/test_dtt.py::test_parallel_seed_and_empirical_curve_reference
+0.25s call     tests/test_signal.py::test_lambda_bootstrap_matches_independent_null_draws
+0.23s call     tests/test_dtt_audit.py::test_plot_user_text_is_literal_even_with_tex_enabled
+0.21s call     tests/test_dtt.py::test_cli_artifacts_and_mdi_reconstruction[png-\x89PNG]
+0.20s call     tests/test_dtt.py::test_trait_tree_panels_use_retained_original_values
+0.18s call     tests/test_dtt.py::test_observed_only_rank_deficiency_and_json
+0.16s call     tests/test_dtt.py::test_cli_artifacts_and_mdi_reconstruction[pdf-%PDF]
+0.16s call     tests/test_dtt.py::test_cli_artifacts_and_mdi_reconstruction[svg-<?xml]
+0.16s call     tests/test_dtt.py::test_heatmap_order_scaling_alignment_and_unchanged_analysis[svg-standardize]
+0.14s call     tests/test_dtt.py::test_heatmap_order_scaling_alignment_and_unchanged_analysis[png-standardize]
+0.14s call     tests/test_dtt.py::test_heatmap_order_scaling_alignment_and_unchanged_analysis[png-raw]
+235 passed in 42.94s

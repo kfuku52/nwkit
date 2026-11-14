@@ -1,0 +1,1064 @@
+{
+  "baseline_commit": "d7116f80b9979739c69a5431a5e34b822795408b",
+  "environment": {
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "python": "3.12.14",
+    "numpy": "2.5.4",
+    "scipy": "1.17.1",
+    "nwkit": "0.43.54",
+    "threads": 1
+  },
+  "scope": "complete _profile_covariance_fit excluding fixture/import/prototype installation",
+  "workloads": [
+    {
+      "kind": "dense",
+      "observations": 128,
+      "predictors": 3,
+      "reml": false,
+      "batch": 97,
+      "timings": {
+        "baseline": {
+          "samples_seconds": [
+            0.0004919695058242255,
+            0.0005195820416064607,
+            0.0005459012055635145,
+            0.000538209617646776,
+            0.000488658081596122,
+            0.0004511864222202104,
+            0.00047387843279494453
+          ],
+          "median_seconds": 0.0004919695058242255,
+          "min_seconds": 0.0004511864222202104,
+          "max_seconds": 0.0005459012055635145,
+          "peak_python_bytes": 932128
+        },
+        "candidate": {
+          "samples_seconds": [
+            0.0003732727737329209,
+            0.00037786683557343854,
+            0.0003775889185958148,
+            0.0004361821230520139,
+            0.0003924175266406893,
+            0.0003961941548959189,
+            0.00035735481351460377
+          ],
+          "median_seconds": 0.00037786683557343854,
+          "min_seconds": 0.00035735481351460377,
+          "max_seconds": 0.0004361821230520139,
+          "peak_python_bytes": 934470
+        }
+      },
+      "speedup": 1.3019652944075613,
+      "equivalence": {
+        "objective": {
+          "max_absolute": 2.842170943040401e-14,
+          "max_scaled": 1.5283288129969253e-16
+        },
+        "beta": {
+          "max_absolute": 8.326672684688674e-17,
+          "max_scaled": 8.326672684688674e-17
+        },
+        "beta_covariance": {
+          "max_absolute": 1.0842021724855044e-19,
+          "max_scaled": 1.0842021724855044e-19
+        },
+        "residual": {
+          "max_absolute": 4.440892098500626e-16,
+          "max_scaled": 2.1916807230109584e-16
+        },
+        "inverse_residual": {
+          "max_absolute": 8.881784197001252e-16,
+          "max_scaled": 5.859908759883495e-16
+        },
+        "covariance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "quadratic": {
+          "max_absolute": 1.4210854715202004e-14,
+          "max_scaled": 1.1102230246251573e-16
+        },
+        "component_variances": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "log_variances": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "lower_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "upper_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        }
+      },
+      "solve_counts": {
+        "baseline": 6,
+        "candidate": 4
+      },
+      "solve_shapes": {
+        "baseline_first_six": [
+          [
+            128,
+            3
+          ],
+          [
+            128
+          ],
+          [
+            128
+          ],
+          [
+            128,
+            3
+          ],
+          [
+            128
+          ],
+          [
+            128
+          ]
+        ],
+        "candidate_first_six": [
+          [
+            128,
+            4
+          ],
+          [
+            128
+          ],
+          [
+            128,
+            4
+          ],
+          [
+            128
+          ]
+        ]
+      }
+    },
+    {
+      "kind": "dense",
+      "observations": 512,
+      "predictors": 8,
+      "reml": true,
+      "batch": 6,
+      "timings": {
+        "baseline": {
+          "samples_seconds": [
+            0.008325805499528846,
+            0.00796020832300807,
+            0.00814858335070312,
+            0.008834152831695974,
+            0.00804391666315496,
+            0.008479888822572926,
+            0.007991826491585622
+          ],
+          "median_seconds": 0.00814858335070312,
+          "min_seconds": 0.00796020832300807,
+          "max_seconds": 0.008834152831695974,
+          "peak_python_bytes": 14743913
+        },
+        "candidate": {
+          "samples_seconds": [
+            0.007293673659053941,
+            0.007238194501648347,
+            0.00719864583030964,
+            0.007106618005006264,
+            0.007990729160762081,
+            0.008058520848862827,
+            0.008230298505319903
+          ],
+          "median_seconds": 0.007293673659053941,
+          "min_seconds": 0.007106618005006264,
+          "max_seconds": 0.008230298505319903,
+          "peak_python_bytes": 14775609
+        }
+      },
+      "speedup": 1.117212495597187,
+      "equivalence": {
+        "objective": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "beta": {
+          "max_absolute": 1.6653345369377348e-16,
+          "max_scaled": 1.6653345369377348e-16
+        },
+        "beta_covariance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "residual": {
+          "max_absolute": 4.440892098500626e-16,
+          "max_scaled": 3.8899706351147553e-16
+        },
+        "inverse_residual": {
+          "max_absolute": 8.881784197001252e-16,
+          "max_scaled": 6.106226635438361e-16
+        },
+        "covariance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "quadratic": {
+          "max_absolute": 5.684341886080802e-14,
+          "max_scaled": 1.1278456123176195e-16
+        },
+        "component_variances": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "log_variances": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "lower_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "upper_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        }
+      },
+      "solve_counts": {
+        "baseline": 6,
+        "candidate": 4
+      },
+      "solve_shapes": {
+        "baseline_first_six": [
+          [
+            512,
+            8
+          ],
+          [
+            512
+          ],
+          [
+            512
+          ],
+          [
+            512,
+            8
+          ],
+          [
+            512
+          ],
+          [
+            512
+          ]
+        ],
+        "candidate_first_six": [
+          [
+            512,
+            9
+          ],
+          [
+            512
+          ],
+          [
+            512,
+            9
+          ],
+          [
+            512
+          ]
+        ]
+      }
+    },
+    {
+      "kind": "dense-fixed",
+      "observations": 128,
+      "predictors": 3,
+      "reml": true,
+      "batch": 11,
+      "timings": {
+        "baseline": {
+          "samples_seconds": [
+            0.005493022734299302,
+            0.004763689368370582,
+            0.004792056819000704,
+            0.004531958278014578,
+            0.004691757642748681,
+            0.005625640095042234,
+            0.005008825725367801
+          ],
+          "median_seconds": 0.004792056819000704,
+          "min_seconds": 0.004531958278014578,
+          "max_seconds": 0.005625640095042234,
+          "peak_python_bytes": 696646
+        },
+        "candidate": {
+          "samples_seconds": [
+            0.0037508333652195606,
+            0.004205840914933519,
+            0.003880030263892629,
+            0.004109856090508401,
+            0.0037185605403713203,
+            0.003803477273322642,
+            0.004721973461776294
+          ],
+          "median_seconds": 0.003880030263892629,
+          "min_seconds": 0.0037185605403713203,
+          "max_seconds": 0.004721973461776294,
+          "peak_python_bytes": 699125
+        }
+      },
+      "speedup": 1.2350565570571317,
+      "equivalence": {
+        "objective": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "beta": {
+          "max_absolute": 1.1102230246251565e-16,
+          "max_scaled": 1.1102230246251565e-16
+        },
+        "beta_covariance": {
+          "max_absolute": 2.710505431213761e-19,
+          "max_scaled": 2.710505431213761e-19
+        },
+        "residual": {
+          "max_absolute": 2.220446049250313e-16,
+          "max_scaled": 2.0291062602250387e-16
+        },
+        "inverse_residual": {
+          "max_absolute": 4.440892098500626e-16,
+          "max_scaled": 4.440892098500626e-16
+        },
+        "covariance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "quadratic": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "component_variances": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "log_variances": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "lower_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "upper_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        }
+      },
+      "solve_counts": {
+        "baseline": 63,
+        "candidate": 42
+      },
+      "solve_shapes": {
+        "baseline_first_six": [
+          [
+            128,
+            3
+          ],
+          [
+            128
+          ],
+          [
+            128
+          ],
+          [
+            128,
+            3
+          ],
+          [
+            128
+          ],
+          [
+            128
+          ]
+        ],
+        "candidate_first_six": [
+          [
+            128,
+            4
+          ],
+          [
+            128
+          ],
+          [
+            128,
+            4
+          ],
+          [
+            128
+          ],
+          [
+            128,
+            4
+          ],
+          [
+            128
+          ]
+        ]
+      }
+    },
+    {
+      "kind": "diagonal",
+      "observations": 2000,
+      "predictors": 5,
+      "reml": true,
+      "batch": 100,
+      "timings": {
+        "baseline": {
+          "samples_seconds": [
+            0.00031937292078509927,
+            0.00029842625022865834,
+            0.00034733250038698315,
+            0.0003586845798417926,
+            0.0003830258396919817,
+            0.0003508449997752905,
+            0.00032022625091485677
+          ],
+          "median_seconds": 0.00034733250038698315,
+          "min_seconds": 0.00029842625022865834,
+          "max_seconds": 0.0003830258396919817,
+          "peak_python_bytes": 326867
+        },
+        "candidate": {
+          "samples_seconds": [
+            0.0003523687506094575,
+            0.00032424457953311503,
+            0.00037814792012795805,
+            0.0004654479201417416,
+            0.00036328541929833594,
+            0.0005464116705115884,
+            0.00033507749903947113
+          ],
+          "median_seconds": 0.00036328541929833594,
+          "min_seconds": 0.00032424457953311503,
+          "max_seconds": 0.0005464116705115884,
+          "peak_python_bytes": 439139
+        }
+      },
+      "speedup": 0.9560870927818549,
+      "equivalence": {
+        "objective": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "beta": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "beta_covariance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "residual": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "inverse_residual": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "covariance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "quadratic": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "component_variances": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "log_variances": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "lower_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "upper_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        }
+      },
+      "solve_counts": {
+        "baseline": 6,
+        "candidate": 4
+      },
+      "solve_shapes": {
+        "baseline_first_six": [
+          [
+            2000,
+            5
+          ],
+          [
+            2000
+          ],
+          [
+            2000
+          ],
+          [
+            2000,
+            5
+          ],
+          [
+            2000
+          ],
+          [
+            2000
+          ]
+        ],
+        "candidate_first_six": [
+          [
+            2000,
+            6
+          ],
+          [
+            2000
+          ],
+          [
+            2000,
+            6
+          ],
+          [
+            2000
+          ]
+        ]
+      }
+    },
+    {
+      "kind": "lowrank",
+      "observations": 512,
+      "predictors": 4,
+      "reml": true,
+      "batch": 6,
+      "timings": {
+        "baseline": {
+          "samples_seconds": [
+            0.008979604152652124,
+            0.01027281250571832,
+            0.008226951351389289,
+            0.008826277839640776,
+            0.008431374987897774,
+            0.008326298673637211,
+            0.008137340327569595
+          ],
+          "median_seconds": 0.008431374987897774,
+          "min_seconds": 0.008137340327569595,
+          "max_seconds": 0.01027281250571832,
+          "peak_python_bytes": 474204
+        },
+        "candidate": {
+          "samples_seconds": [
+            0.0074220278377955156,
+            0.008178729156497866,
+            0.008541138842701912,
+            0.011995326494798064,
+            0.00807604166523864,
+            0.007660458330065012,
+            0.008739909836246321
+          ],
+          "median_seconds": 0.008178729156497866,
+          "min_seconds": 0.0074220278377955156,
+          "max_seconds": 0.011995326494798064,
+          "peak_python_bytes": 490922
+        }
+      },
+      "speedup": 1.0308905976179912,
+      "equivalence": {
+        "objective": {
+          "max_absolute": 1.1164047464262694e-10,
+          "max_scaled": 7.711744714186852e-14
+        },
+        "beta": {
+          "max_absolute": 6.7391041358444426e-09,
+          "max_scaled": 6.7391041358444426e-09
+        },
+        "beta_covariance": {
+          "max_absolute": 5.666720890272481e-12,
+          "max_scaled": 5.666720890272481e-12
+        },
+        "residual": {
+          "max_absolute": 1.816677741572903e-08,
+          "max_scaled": 1.760912038406559e-08
+        },
+        "inverse_residual": {
+          "max_absolute": 1.613918335863218e-06,
+          "max_scaled": 1.19052640812356e-06
+        },
+        "covariance": {
+          "max_absolute": 4.2448895748448123e-07,
+          "max_scaled": 4.2448895748448123e-07
+        },
+        "quadratic": {
+          "max_absolute": 4.639059125111089e-05,
+          "max_scaled": 1.6869795771414305e-08
+        },
+        "component_variances": {
+          "max_absolute": 1.7394897084549443e-07,
+          "max_scaled": 1.7394897084549443e-07
+        },
+        "log_variances": {
+          "max_absolute": 3.2086838372968884e-06,
+          "max_scaled": 1.1031763531698057e-06
+        },
+        "lower_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "upper_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "optimizer_message": {
+          "baseline": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+          "candidate": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL",
+          "exact_match": false
+        }
+      },
+      "solve_counts": {
+        "baseline": 123,
+        "candidate": 82
+      },
+      "solve_shapes": {
+        "baseline_first_six": [
+          [
+            512,
+            4
+          ],
+          [
+            512
+          ],
+          [
+            512
+          ],
+          [
+            512,
+            4
+          ],
+          [
+            512
+          ],
+          [
+            512
+          ]
+        ],
+        "candidate_first_six": [
+          [
+            512,
+            5
+          ],
+          [
+            512
+          ],
+          [
+            512,
+            5
+          ],
+          [
+            512
+          ],
+          [
+            512,
+            5
+          ],
+          [
+            512
+          ]
+        ]
+      }
+    }
+  ],
+  "edge_checks": [
+    {
+      "kind": "dense",
+      "reml": true,
+      "near_exact": false,
+      "response_scale": 1e-06,
+      "equivalence": {
+        "objective": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "beta": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "beta_covariance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "residual": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "inverse_residual": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "covariance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "quadratic": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "component_variances": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "log_variances": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "lower_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "upper_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "optimizer_message": {
+          "baseline": "closed-form single-scale covariance fit",
+          "candidate": "closed-form single-scale covariance fit",
+          "exact_match": true
+        }
+      }
+    },
+    {
+      "kind": "dense",
+      "reml": false,
+      "near_exact": false,
+      "response_scale": 1000000.0,
+      "equivalence": {
+        "objective": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "beta": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "beta_covariance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "residual": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "inverse_residual": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "covariance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "quadratic": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "component_variances": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "log_variances": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "lower_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "upper_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "optimizer_message": {
+          "baseline": "closed-form single-scale covariance fit",
+          "candidate": "closed-form single-scale covariance fit",
+          "exact_match": true
+        }
+      }
+    },
+    {
+      "kind": "dense",
+      "reml": true,
+      "near_exact": true,
+      "response_scale": 1.0,
+      "equivalence": {
+        "objective": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "beta": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "beta_covariance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "residual": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "inverse_residual": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "covariance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "quadratic": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "component_variances": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "log_variances": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "lower_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "upper_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "optimizer_message": {
+          "baseline": "closed-form single-scale covariance fit",
+          "candidate": "closed-form single-scale covariance fit",
+          "exact_match": true
+        }
+      }
+    },
+    {
+      "kind": "diagonal",
+      "reml": false,
+      "near_exact": true,
+      "response_scale": 1.0,
+      "equivalence": {
+        "objective": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "beta": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "beta_covariance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "residual": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "inverse_residual": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "covariance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "quadratic": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "component_variances": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "log_variances": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "lower_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "upper_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "optimizer_message": {
+          "baseline": "closed-form single-scale covariance fit",
+          "candidate": "closed-form single-scale covariance fit",
+          "exact_match": true
+        }
+      }
+    },
+    {
+      "kind": "lowrank",
+      "reml": true,
+      "near_exact": false,
+      "response_scale": 1.0,
+      "equivalence": {
+        "objective": {
+          "max_absolute": 1.7550405573274475e-12,
+          "max_scaled": 3.6980349025100384e-14
+        },
+        "beta": {
+          "max_absolute": 1.9935151640559923e-08,
+          "max_scaled": 1.9935151640559923e-08
+        },
+        "beta_covariance": {
+          "max_absolute": 1.5844399698511369e-09,
+          "max_scaled": 1.5844399698511369e-09
+        },
+        "residual": {
+          "max_absolute": 3.145728699749384e-08,
+          "max_scaled": 3.125303071893626e-08
+        },
+        "inverse_residual": {
+          "max_absolute": 4.860673863404941e-07,
+          "max_scaled": 4.242600024628729e-07
+        },
+        "covariance": {
+          "max_absolute": 2.2935221766218206e-07,
+          "max_scaled": 2.2935221766218206e-07
+        },
+        "quadratic": {
+          "max_absolute": 3.892398211746695e-06,
+          "max_scaled": 6.076333978791759e-08
+        },
+        "component_variances": {
+          "max_absolute": 9.670331371780527e-08,
+          "max_scaled": 9.670331371780527e-08
+        },
+        "log_variances": {
+          "max_absolute": 4.1461089739236456e-07,
+          "max_scaled": 2.8026584418553433e-07
+        },
+        "lower_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "upper_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "optimizer_message": {
+          "baseline": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL",
+          "candidate": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL",
+          "exact_match": true
+        }
+      }
+    },
+    {
+      "case": "singular_component",
+      "outcomes": [
+        {
+          "exception": "ValueError",
+          "message": "Variance-component closed-form fit produced an invalid covariance."
+        },
+        {
+          "exception": "ValueError",
+          "message": "Variance-component closed-form fit produced an invalid covariance."
+        }
+      ]
+    },
+    {
+      "case": "rank_deficient_design",
+      "outcomes": [
+        {
+          "exception": "ValueError",
+          "message": "Variance-component closed-form fit produced an invalid covariance."
+        },
+        {
+          "exception": "ValueError",
+          "message": "Variance-component closed-form fit produced an invalid covariance."
+        }
+      ]
+    },
+    {
+      "case": "invalid_sampling",
+      "outcomes": [
+        {
+          "exception": "ValueError",
+          "message": "Fixed sampling covariance diagonal must be non-negative."
+        },
+        {
+          "exception": "ValueError",
+          "message": "Fixed sampling covariance diagonal must be non-negative."
+        }
+      ]
+    },
+    {
+      "case": "ill_conditioned_covariance",
+      "condition_number": 3200000186.790844,
+      "equivalence": {
+        "objective": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "beta": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "beta_covariance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "residual": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "inverse_residual": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "covariance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "quadratic": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "component_variances": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "log_variances": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "lower_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "upper_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "optimizer_message": {
+          "baseline": "closed-form single-scale covariance fit",
+          "candidate": "closed-form single-scale covariance fit",
+          "exact_match": true
+        }
+      }
+    }
+  ]
+}

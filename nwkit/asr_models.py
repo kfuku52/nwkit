@@ -75,6 +75,15 @@ _MODEL_DEFINITIONS = (
         "CUSTOM", "discrete", "equal", ("equal", "empirical", "stationary")
     ),
     _evolution_definition("brownian"),
+    AsrModelDefinition(
+        "BRANCH-GAUSSIAN",
+        "continuous",
+        "flat",
+        ("fixed", "flat", "gaussian", "stationary"),
+    ),
+    AsrModelDefinition("JUMP-BM", "continuous", "flat", ("flat",)),
+    AsrModelDefinition("MM-BM", "continuous", "flat", ("flat",)),
+    AsrModelDefinition("MM-OU", "continuous", "flat", ("flat",)),
     AsrModelDefinition("BMS", "continuous", "flat", ("flat",)),
     AsrModelDefinition("BMS-DRIFT", "continuous", "flat", ("flat",)),
     _evolution_definition("lambda"),
@@ -86,6 +95,7 @@ _MODEL_DEFINITIONS = (
     AsrModelDefinition("MV-BM", "continuous", "flat", ("flat",)),
     AsrModelDefinition("MV-OU", "continuous", "stationary", ("stationary",)),
     AsrModelDefinition("MV-OU-DIAG", "continuous", "stationary", ("stationary",)),
+    AsrModelDefinition("MV-OU-FULL", "continuous", "stationary", ("stationary",)),
     _evolution_definition("ou"),
     AsrModelDefinition("OUM", "continuous", "stationary", ("stationary",)),
     AsrModelDefinition("OUMA", "continuous", "stationary", ("stationary",)),

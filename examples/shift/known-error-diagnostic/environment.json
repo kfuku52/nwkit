@@ -1,0 +1,16 @@
+{
+  "captured": "during study; supplemental environment record",
+  "python": "3.10.14 | packaged by conda-forge | (main, Mar 20 2024, 12:53:34) [Clang 16.0.6 ]",
+  "platform": "macOS-26.6.2-x86_64-i386-64bit",
+  "packages": {
+    "numpy": "1.26.4",
+    "scipy": "1.15.2",
+    "ete4": "4.4.0",
+    "nwkit": "0.43.15"
+  },
+  "worker_blas_environment": {
+    "OPENBLAS_NUM_THREADS": "1",
+    "OMP_NUM_THREADS": "1",
+    "VECLIB_MAXIMUM_THREADS": "1"
+  }
+}

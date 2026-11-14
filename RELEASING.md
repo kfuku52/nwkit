@@ -3,19 +3,20 @@
 1. Update `nwkit.__version__` for every change merged to `master` and move the
    relevant entries in `CHANGELOG.md` from `Unreleased` into a dated version
    section.
-2. Run the local release checks:
+2. From the repository root, use the environment setup and import preflight in
+   [DEVELOPMENT.md](DEVELOPMENT.md), then run the local release checks:
 
    ```sh
-   python -m venv .venv
-   . .venv/bin/activate
-   python -m pip install -U pip
-   python -m pip install -c constraints-dev.txt -e ".[dev,image]"
    python tools/check.py release
    ```
 
    The release runner derives `SOURCE_DATE_EPOCH` from the current commit when
    it is not already set, runs all quality and security gates, builds both
    wheel paths, and compares their bytes and contents.
+   Replicated scientific studies are separate from this regression gate. For
+   changes to their models or uncertainty methods, run the affected studies
+   with `python tools/check.py test -- --run-studies -m study -s -rs`, following
+   the relevant validation guide. The existing weekly/manual CI also runs them.
 
 3. Commit the version and changelog changes and merge them into `master`. The
    `Tests` workflow validates the push, after which the release-tag workflow

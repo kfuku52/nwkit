@@ -1,0 +1,733 @@
+{
+  "baseline_commit": "d7116f80b9979739c69a5431a5e34b822795408b",
+  "environment": {
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "python": "3.12.14",
+    "numpy": "2.5.4",
+    "scipy": "1.17.1",
+    "nwkit": "0.43.54",
+    "threads": 1,
+    "exclusive_lock": "/tmp/nwkit-perf-20261022-9fYwTD/measurement.lock",
+    "contention": "Other user jobs active outside this advisory lock"
+  },
+  "edges": {
+    "kernels": [
+      {
+        "args": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      },
+      {
+        "args": [
+          0,
+          0,
+          1,
+          20
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      },
+      {
+        "args": [
+          0,
+          0,
+          1,
+          86
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      },
+      {
+        "args": [
+          0.2,
+          0.3,
+          0,
+          1
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      },
+      {
+        "args": [
+          0.2,
+          0.3,
+          0,
+          20
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      },
+      {
+        "args": [
+          0.2,
+          0.3,
+          0,
+          86
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      },
+      {
+        "args": [
+          0,
+          0.3,
+          0.9,
+          1
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      },
+      {
+        "args": [
+          0,
+          0.3,
+          0.9,
+          20
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      },
+      {
+        "args": [
+          0,
+          0.3,
+          0.9,
+          86
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      },
+      {
+        "args": [
+          0.2,
+          0,
+          0.9,
+          1
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      },
+      {
+        "args": [
+          0.2,
+          0,
+          0.9,
+          20
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      },
+      {
+        "args": [
+          0.2,
+          0,
+          0.9,
+          86
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      },
+      {
+        "args": [
+          0.2,
+          0.2,
+          0.9,
+          1
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      },
+      {
+        "args": [
+          0.2,
+          0.2,
+          0.9,
+          20
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      },
+      {
+        "args": [
+          0.2,
+          0.2,
+          0.9,
+          86
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      },
+      {
+        "args": [
+          0.2,
+          0.200000000001,
+          0.9,
+          1
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      },
+      {
+        "args": [
+          0.2,
+          0.200000000001,
+          0.9,
+          20
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      },
+      {
+        "args": [
+          0.2,
+          0.200000000001,
+          0.9,
+          86
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      },
+      {
+        "args": [
+          1e-08,
+          0,
+          0.4,
+          1
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      },
+      {
+        "args": [
+          1e-08,
+          0,
+          0.4,
+          20
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      },
+      {
+        "args": [
+          1e-08,
+          0,
+          0.4,
+          86
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      },
+      {
+        "args": [
+          0.2,
+          0.4,
+          100,
+          1
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      },
+      {
+        "args": [
+          0.2,
+          0.4,
+          100,
+          20
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      },
+      {
+        "args": [
+          0.2,
+          0.4,
+          100,
+          86
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      },
+      {
+        "args": [
+          1e-200,
+          2e-200,
+          1e+200,
+          1
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      },
+      {
+        "args": [
+          1e-200,
+          2e-200,
+          1e+200,
+          20
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      },
+      {
+        "args": [
+          1e-200,
+          2e-200,
+          1e+200,
+          86
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      },
+      {
+        "args": [
+          2e+100,
+          1e+100,
+          1e-100,
+          1
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      },
+      {
+        "args": [
+          2e+100,
+          1e+100,
+          1e-100,
+          20
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      },
+      {
+        "args": [
+          2e+100,
+          1e+100,
+          1e-100,
+          86
+        ],
+        "array_equal": true,
+        "max_abs": 0.0
+      }
+    ],
+    "invalid_inputs": [
+      {
+        "args": [
+          "-0.2",
+          "0.3",
+          "1",
+          "4"
+        ],
+        "error": [
+          "ValueError",
+          "Duplication rate must be finite and nonnegative."
+        ]
+      },
+      {
+        "args": [
+          "0.2",
+          "nan",
+          "1",
+          "4"
+        ],
+        "error": [
+          "ValueError",
+          "Loss rate must be finite and nonnegative."
+        ]
+      },
+      {
+        "args": [
+          "0.2",
+          "0.3",
+          "inf",
+          "4"
+        ],
+        "error": [
+          "ValueError",
+          "Time must be finite and nonnegative."
+        ]
+      }
+    ]
+  },
+  "kernels": [
+    {
+      "args": [
+        0.2,
+        0.3,
+        0.9,
+        20
+      ],
+      "batch_calls": 24,
+      "equivalence": {
+        "baseline": {
+          "array_equal": true,
+          "max_abs": 0.0
+        },
+        "candidate": {
+          "array_equal": true,
+          "max_abs": 0.0
+        }
+      },
+      "timings": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.0012684635439654812,
+            0.0012931597496693332,
+            0.0012758333323290572,
+            0.0013002395814207073,
+            0.001656005207526808,
+            0.001267385411968765,
+            0.0012504201295087114
+          ],
+          "median_seconds": 0.0012758333323290572,
+          "min_seconds": 0.0012504201295087114,
+          "max_seconds": 0.001656005207526808,
+          "relative_range": 0.31789816721412467,
+          "speedup": 1.0
+        },
+        "candidate": {
+          "samples_seconds_per_call": [
+            0.0010851979168364778,
+            0.0011018472529637318,
+            0.0011224513727938756,
+            0.0011214080004720017,
+            0.0014081649181510632,
+            0.0011107691243523732,
+            0.001083857622385646
+          ],
+          "median_seconds": 0.0011107691243523732,
+          "min_seconds": 0.001083857622385646,
+          "max_seconds": 0.0014081649181510632,
+          "relative_range": 0.29196642997661865,
+          "speedup": 1.1486035255732587
+        }
+      },
+      "peak_python_bytes": {
+        "baseline": 32035,
+        "candidate": 35486
+      }
+    },
+    {
+      "args": [
+        0.2,
+        0.3,
+        0.9,
+        60
+      ],
+      "batch_calls": 7,
+      "equivalence": {
+        "baseline": {
+          "array_equal": true,
+          "max_abs": 0.0
+        },
+        "candidate": {
+          "array_equal": true,
+          "max_abs": 0.0
+        }
+      },
+      "timings": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.0066553154361567324,
+            0.006363874999806285,
+            0.006345208285243383,
+            0.006334333431108722,
+            0.0063598154145958164,
+            0.006498732138425112,
+            0.006499351151952786
+          ],
+          "median_seconds": 0.006363874999806285,
+          "min_seconds": 0.006334333431108722,
+          "max_seconds": 0.0066553154361567324,
+          "relative_range": 0.05043813793605017,
+          "speedup": 1.0
+        },
+        "candidate": {
+          "samples_seconds_per_call": [
+            0.004749101154240114,
+            0.004597577432702694,
+            0.004519940437083798,
+            0.004562904709018767,
+            0.004576803584183965,
+            0.0047151428547554785,
+            0.004635297560266086
+          ],
+          "median_seconds": 0.004597577432702694,
+          "min_seconds": 0.004519940437083798,
+          "max_seconds": 0.004749101154240114,
+          "relative_range": 0.04984379719769146,
+          "speedup": 1.384180058510786
+        }
+      },
+      "peak_python_bytes": {
+        "baseline": 242507,
+        "candidate": 272657
+      }
+    },
+    {
+      "args": [
+        0.2,
+        0.3,
+        0.9,
+        120
+      ],
+      "batch_calls": 2,
+      "equivalence": {
+        "baseline": {
+          "array_equal": true,
+          "max_abs": 0.0
+        },
+        "candidate": {
+          "array_equal": true,
+          "max_abs": 0.0
+        }
+      },
+      "timings": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.02939179149689153,
+            0.029574916523415595,
+            0.029205875005573034,
+            0.030675958492793143,
+            0.028138125024270266,
+            0.029264229000546038,
+            0.029410916496999562
+          ],
+          "median_seconds": 0.02939179149689153,
+          "min_seconds": 0.028138125024270266,
+          "max_seconds": 0.030675958492793143,
+          "relative_range": 0.08634497386085763,
+          "speedup": 1.0
+        },
+        "candidate": {
+          "samples_seconds_per_call": [
+            0.017914478958118707,
+            0.017669646011199802,
+            0.01732668752083555,
+            0.020036749949213117,
+            0.01787256251554936,
+            0.01778412499697879,
+            0.017017145990394056
+          ],
+          "median_seconds": 0.01778412499697879,
+          "min_seconds": 0.017017145990394056,
+          "max_seconds": 0.020036749949213117,
+          "relative_range": 0.1697921016261435,
+          "speedup": 1.6526982070742686
+        }
+      },
+      "peak_python_bytes": {
+        "baseline": 948106,
+        "candidate": 1065310
+      }
+    }
+  ],
+  "tree_likelihoods": [
+    {
+      "name": "ordinary_probability_control",
+      "families": 3,
+      "tips": 3,
+      "max_count": 40,
+      "rates": [
+        [
+          0.2,
+          0.3
+        ]
+      ],
+      "event": null,
+      "log_kernel_calls": {
+        "baseline": 0,
+        "candidate": 0
+      },
+      "batch_calls": 48,
+      "equivalence": {
+        "baseline": {
+          "array_equal": true,
+          "max_abs": 0.0
+        },
+        "candidate": {
+          "array_equal": true,
+          "max_abs": 0.0
+        }
+      },
+      "timings": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.000645729165019778,
+            0.0006063333324467143,
+            0.0006811727483485205,
+            0.0006107647495809942,
+            0.0006073237915794986,
+            0.0006449175416491926,
+            0.0006567205006528335
+          ],
+          "median_seconds": 0.0006449175416491926,
+          "min_seconds": 0.0006063333324467143,
+          "max_seconds": 0.0006811727483485205,
+          "relative_range": 0.11604493763718345,
+          "speedup": 1.0
+        },
+        "candidate": {
+          "samples_seconds_per_call": [
+            0.0007331571250688285,
+            0.0007505303753229479,
+            0.0007231397515473267,
+            0.0006362864587572403,
+            0.0006114574595509718,
+            0.0006105816040265685,
+            0.0006547795201186091
+          ],
+          "median_seconds": 0.0006547795201186091,
+          "min_seconds": 0.0006105816040265685,
+          "max_seconds": 0.0007505303753229479,
+          "relative_range": 0.21373419142832778,
+          "speedup": 0.9849384744537671
+        }
+      },
+      "peak_python_bytes": {
+        "baseline": 69610,
+        "candidate": 69306
+      }
+    },
+    {
+      "name": "rare_yule_missing",
+      "families": 3,
+      "tips": 3,
+      "max_count": 86,
+      "rates": [
+        [
+          1e-08,
+          0
+        ]
+      ],
+      "event": null,
+      "log_kernel_calls": {
+        "baseline": 4,
+        "candidate": 4
+      },
+      "batch_calls": 1,
+      "equivalence": {
+        "baseline": {
+          "array_equal": true,
+          "max_abs": 0.0
+        },
+        "candidate": {
+          "array_equal": true,
+          "max_abs": 0.0
+        }
+      },
+      "timings": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.057526083081029356,
+            0.056245499989017844,
+            0.05505891691427678,
+            0.05355175002478063,
+            0.05371758306864649,
+            0.10378895804751664,
+            0.05488599999807775
+          ],
+          "median_seconds": 0.05505891691427678,
+          "min_seconds": 0.05355175002478063,
+          "max_seconds": 0.10378895804751664,
+          "relative_range": 0.9124263759302084,
+          "speedup": 1.0
+        },
+        "candidate": {
+          "samples_seconds_per_call": [
+            0.03498708305414766,
+            0.036314416909590364,
+            0.03642895899247378,
+            0.035369417048059404,
+            0.03920670796651393,
+            0.13197720795869827,
+            0.03615233290474862
+          ],
+          "median_seconds": 0.036314416909590364,
+          "min_seconds": 0.03498708305414766,
+          "max_seconds": 0.13197720795869827,
+          "relative_range": 2.6708435150155543,
+          "speedup": 1.5161724075414285
+        }
+      },
+      "peak_python_bytes": {
+        "baseline": 926097,
+        "candidate": 986986
+      }
+    },
+    {
+      "name": "rare_yule_pulse_detection",
+      "families": 2,
+      "tips": 3,
+      "max_count": 86,
+      "rates": [
+        [
+          1e-08,
+          0
+        ]
+      ],
+      "event": {
+        "node": 2,
+        "retention": 0.3,
+        "fraction": 0.5,
+        "multiplicity": 2
+      },
+      "log_kernel_calls": {
+        "baseline": 6,
+        "candidate": 6
+      },
+      "batch_calls": 1,
+      "equivalence": {
+        "baseline": {
+          "array_equal": true,
+          "max_abs": 0.0
+        },
+        "candidate": {
+          "array_equal": true,
+          "max_abs": 0.0
+        }
+      },
+      "timings": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.10451558302156627,
+            0.10169449995737523,
+            0.1017364579020068,
+            0.10399379197042435,
+            0.10216000000946224,
+            0.10371616703923792,
+            0.1048554580193013
+          ],
+          "median_seconds": 0.10371616703923792,
+          "min_seconds": 0.10169449995737523,
+          "max_seconds": 0.1048554580193013,
+          "relative_range": 0.030477004233392203,
+          "speedup": 1.0
+        },
+        "candidate": {
+          "samples_seconds_per_call": [
+            0.07428395794704556,
+            0.07418991695158184,
+            0.07687375007662922,
+            0.07581862504594028,
+            0.07481962500605732,
+            0.07419499999377877,
+            0.07526183302979916
+          ],
+          "median_seconds": 0.07481962500605732,
+          "min_seconds": 0.07418991695158184,
+          "max_seconds": 0.07687375007662922,
+          "relative_range": 0.035870710723691884,
+          "speedup": 1.3862160767424476
+        }
+      },
+      "peak_python_bytes": {
+        "baseline": 1167286,
+        "candidate": 1227843
+      }
+    }
+  ]
+}

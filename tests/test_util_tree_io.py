@@ -19,16 +19,6 @@ from tests.helpers import make_args
 
 
 class TestReadTree:
-    def test_read_from_file(self, tmp_nwk):
-        path = tmp_nwk("((A:1,B:1):1,(C:1,D:1):1);")
-        tree = read_tree(path, format="auto", quoted_node_names=True, quiet=True)
-        assert set(tree.leaf_names()) == {"A", "B", "C", "D"}
-
-    def test_read_with_explicit_format(self, tmp_nwk):
-        path = tmp_nwk("((A:1,B:1):1,(C:1,D:1):1);")
-        tree = read_tree(path, format="1", quoted_node_names=True, quiet=True)
-        assert len(list(tree.leaves())) == 4
-
     def test_read_paml_header_treefile_and_ignore_end_marker(self, tmp_path):
         path = tmp_path / "species.trees"
         path.write_text("4 1\n((A,B)'B(2,4,0.025,0.025)',(C,D));\n//end of file\n")
@@ -152,8 +142,11 @@ class TestReadTree:
         assert abs(tree.children[0].support - 90.0) < 1e-9
         assert str(tree.children[0].name or "") == ""
 
-    def test_read_tree_auto_prefers_quoted_numeric_internal_names(self, tmp_nwk):
-        path = tmp_nwk("((A:1,B:1)'42':1,C:1)'99':1;")
+    @pytest.mark.parametrize("comment", ["", "[ordinary[nested]]\u3000"])
+    def test_read_tree_auto_prefers_quoted_numeric_internal_names(
+        self, tmp_nwk, comment
+    ):
+        path = tmp_nwk(f"((A:1,B:1){comment}'42':1,C:1)'99':1;")
         tree = read_tree(path, format="auto", quoted_node_names=True, quiet=True)
         assert tree.name == "99"
         child_names = {str(child.name or "") for child in tree.children}

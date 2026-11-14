@@ -1,0 +1,30 @@
+{
+  "status": "passed",
+  "command": "python tools/check.py full",
+  "base_commit": "cabf8f073dea6555b2966d2cedd93493f0765cfb",
+  "scope": "Base commit plus only this response; unrelated working changes excluded",
+  "passed": 3752,
+  "skipped": 27,
+  "seconds": 902.75,
+  "branch_coverage_percent": 85,
+  "coverage_required_percent": 80,
+  "static_and_type_checks": "passed; Ruff 435 files, mypy 201 modules",
+  "dependency_consistency": "passed",
+  "bandit": "passed",
+  "pip_audit": "no known vulnerabilities",
+  "maintainability": "all hard limits respected; informational baseline warnings retained in log",
+  "final_readonly_loader_change": "After the full-check snapshot, the archive loader was changed to avoid writing bytecode in evidence. Final loader and its input-fingerprint test passed in the 49-test focused run; production package source is unchanged.",
+  "focused_tests": 49,
+  "focused_skipped": 0,
+  "real_R_backends": "Original and corrected kfl1ou 3.0.9 both exercised",
+  "platform": "macOS-26.6.2-x86_64-i386-64bit",
+  "python": "3.10.14",
+  "libraries": {
+    "numpy": "1.26.4",
+    "scipy": "1.15.2",
+    "pytest": "9.0.2",
+    "ruff": "0.16.1"
+  },
+  "other_platforms": "Other Python versions and CI operating systems were not run",
+  "distribution_record": "Repository-only reviews/shift-integration-distribution.json"
+}

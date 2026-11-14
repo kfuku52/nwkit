@@ -1,0 +1,70 @@
+{
+  "passed": [
+    [
+      "fit10-known-before-0.json",
+      "fit10-known-after-0.json"
+    ],
+    [
+      "fit10-known-before-1.json",
+      "fit10-known-after-1.json"
+    ],
+    [
+      "fit10-known-before-2.json",
+      "fit10-known-after-2.json"
+    ],
+    [
+      "fit10-pectinate-before-0.json",
+      "fit10-pectinate-after-0.json"
+    ],
+    [
+      "fit10-pectinate-before-1.json",
+      "fit10-pectinate-after-1.json"
+    ],
+    [
+      "fit10-pectinate-before-2.json",
+      "fit10-pectinate-after-2.json"
+    ],
+    [
+      "fit100-before-0.json",
+      "fit100-after-0.json"
+    ],
+    [
+      "fit100-before-1.json",
+      "fit100-after-1.json"
+    ],
+    [
+      "fit100-before-2.json",
+      "fit100-after-2.json"
+    ],
+    [
+      "search10-before-0.json",
+      "search10-after-0.json"
+    ],
+    [
+      "search10-before-1.json",
+      "search10-after-1.json"
+    ],
+    [
+      "search10-before-2.json",
+      "search10-after-2.json"
+    ]
+  ],
+  "rtol": 1e-06,
+  "atol": 1e-06,
+  "validation": "check_equivalence.check invoked for every pair by successful run_final_after.py",
+  "baseline_reused": true,
+  "before_sha256": {
+    "fit10-known-before-0.json": "7c60ab3937470ef25654ac1af91fece07101a06d902a801d6c34bfac60fb2791",
+    "fit10-known-before-1.json": "d6ec10dc839183266bcd826a8659f04cceeb29276cf88b460be4f9b0f91cdcfc",
+    "fit10-known-before-2.json": "d7dedac865be6a0b83637788550780b1f3f9eb4250cd9d1deadf3d348afdb451",
+    "fit10-pectinate-before-0.json": "8263fa1fd8f7b404e181ab77627afcd7b98aaba1fd24442131f6b8b4ac195ddb",
+    "fit10-pectinate-before-1.json": "8742617f5f77946c69b396509ec8d0b4e8d8308cd2c9408b857028e1de1629ae",
+    "fit10-pectinate-before-2.json": "0f3bdfd2157197accf15160fbf018fc11d8f54f370bacccdc42b244c93300bb4",
+    "fit100-before-0.json": "73bb2f0c2519694bae8d77fea025d5e12843e02a72315e2c2a6b4c638cd93b92",
+    "fit100-before-1.json": "98f92257ae4b5489f7ff0f53863a834fc9d4bcae157966beb18f84f193fa9991",
+    "fit100-before-2.json": "a2c6f05009758f35c3f4a2fd13b6edde273e12ff7398309ad205510977499514",
+    "search10-before-0.json": "dd60c372db98ce1e6762fce39055071066e963fb3c15083c4cd84877c3e8c78c",
+    "search10-before-1.json": "9eb88e0e0bd0e3021b321a4d903d25e62465f3304ad43f0444ad4fc7b6c0d349",
+    "search10-before-2.json": "f327469a4200d50b3b004c580a0bee6d31a232084bd53ebde4f31c5507f21956"
+  }
+}

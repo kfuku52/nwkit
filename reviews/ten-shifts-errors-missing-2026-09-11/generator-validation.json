@@ -1,0 +1,62 @@
+[
+  {
+    "replicate": 0,
+    "truth": "shared",
+    "affected_tips": 60,
+    "latent_tip_correlation": 0.8000000000000002
+  },
+  {
+    "replicate": 0,
+    "truth": "different",
+    "affected_tips": 60,
+    "latent_tip_correlation": 0.5917100908452538
+  },
+  {
+    "replicate": 1,
+    "truth": "shared",
+    "affected_tips": 62,
+    "latent_tip_correlation": 0.8000000000000002
+  },
+  {
+    "replicate": 1,
+    "truth": "different",
+    "affected_tips": 62,
+    "latent_tip_correlation": 0.5917100908452538
+  },
+  {
+    "replicate": 2,
+    "truth": "shared",
+    "affected_tips": 63,
+    "latent_tip_correlation": 0.8000000000000002
+  },
+  {
+    "replicate": 2,
+    "truth": "different",
+    "affected_tips": 63,
+    "latent_tip_correlation": 0.5917100908452538
+  },
+  {
+    "replicate": 3,
+    "truth": "shared",
+    "affected_tips": 63,
+    "latent_tip_correlation": 0.8000000000000002
+  },
+  {
+    "replicate": 3,
+    "truth": "different",
+    "affected_tips": 63,
+    "latent_tip_correlation": 0.5917100908452538
+  },
+  {
+    "replicate": 4,
+    "truth": "shared",
+    "affected_tips": 63,
+    "latent_tip_correlation": 0.8000000000000002
+  },
+  {
+    "replicate": 4,
+    "truth": "different",
+    "affected_tips": 63,
+    "latent_tip_correlation": 0.5917100908452538
+  }
+]

@@ -1,0 +1,29 @@
+{"branches": [], "status": "complete", "seconds": 23.022098552028183}
+{"branches": [27], "status": "complete", "seconds": 30.159052554983646}
+{"branches": [27, 30], "status": "complete", "seconds": 22.249702551984228}
+{"branches": [24, 27], "status": "complete", "seconds": 31.772794098011218}
+{"branches": [24, 27, 30], "status": "complete", "seconds": 37.60015143395867}
+{"branches": [23, 27, 30], "status": "complete", "seconds": 37.133407392015215}
+{"branches": [17, 24, 27, 30], "status": "complete", "seconds": 31.38200672302628}
+{"branches": [18, 24, 27, 30], "status": "complete", "seconds": 39.84892564301845}
+{"branches": [17, 24, 26, 27, 30], "status": "complete", "seconds": 32.98312863998581}
+{"branches": [17, 20, 24, 27, 30], "status": "complete", "seconds": 49.05297985597281}
+{"branches": [17, 20, 24, 26, 27, 30], "status": "complete", "seconds": 52.9998450660496}
+{"branches": [17, 20, 23, 24, 27, 30], "status": "complete", "seconds": 44.98464406200219}
+{"branches": [17, 20, 23, 24, 26, 27, 30], "status": "complete", "seconds": 35.71922435000306}
+{"branches": [17, 20, 24, 26, 27, 29, 30], "status": "complete", "seconds": 40.52101585199125}
+{"branches": [17, 20, 24, 26, 27, 28, 29, 30], "status": "complete", "seconds": 35.21291897399351}
+{"branches": [17, 18, 20, 23, 24, 26, 27, 30], "status": "complete", "seconds": 66.09855815500487}
+{"branches": [17, 18, 20, 23, 24, 26, 27, 30, 139], "status": "complete", "seconds": 51.8141916479799}
+{"branches": [17, 20, 24, 26, 27, 28, 29, 30, 139], "status": "complete", "seconds": 69.94118128204718}
+{"branches": [17, 18, 20, 24, 26, 27, 28, 29, 30, 139], "status": "complete", "seconds": 67.86167915601982}
+{"branches": [17, 18, 20, 23, 24, 26, 27, 30, 57, 139], "status": "complete", "seconds": 22.594062468968332}
+{"branches": [17, 18, 20, 23, 24, 26, 27, 28, 29, 30, 139], "status": "complete", "seconds": 88.56029203999788}
+/opt/conda/lib/python3.12/site-packages/scipy/optimize/_numdiff.py:686: RuntimeWarning: invalid value encountered in subtract
+  df = [f_eval - f0 for f_eval in f_evals]
+{"branches": [17, 18, 20, 23, 24, 26, 27, 29, 30, 57, 139], "status": "complete", "seconds": 68.61975594901014}
+{"branches": [17, 18, 20, 23, 24, 26, 27, 28, 29, 30, 133, 139], "status": "complete", "seconds": 60.46625756996218}
+{"branches": [17, 18, 20, 23, 24, 26, 27, 28, 29, 30, 139, 176], "status": "complete", "seconds": 53.57534023298649}
+{"branches": [17, 18, 20, 23, 24, 26, 27, 28, 29, 30, 129, 139], "status": "complete", "seconds": 55.40082827600418}
+{"branches": [17, 18, 20, 24, 26, 27, 28, 29, 30, 133, 139], "status": "complete", "seconds": 68.00831865699729}
+{"job": {"truth": "shared", "mode": "shared", "replicate": 4, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "accuracy"}, "status": "complete", "elapsed": 1218.0447376829688, "error": null}

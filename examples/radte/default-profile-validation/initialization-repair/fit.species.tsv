@@ -1,0 +1,8 @@
+species_event_id	node	age	age_min	age_max	input_interval_lower	input_interval_upper	input_interval_level	input_interval_kind	input_interval_source	estimated_age	interval_lower	interval_upper	interval_status	estimation_status
+clade-sha256:0766342b8a4cddd5bc4145233cb9a7d3d4fd2cbddbeab1d545576daf2f90fd1f	N0	10.0	10.0	10.0	NA	NA	NA			10.0	10.0	10.0	conditional-profile-calibration-limited	represented-gene-event
+clade-sha256:a7e07ed1f942c885f43028fbd5277840889673d1fc87d37baa301056bcfaa869	N1	5.0	5.0	5.0	NA	NA	NA			5.0	5.0	5.0	conditional-profile-calibration-limited	represented-gene-event
+clade-sha256:76c4acf11468f87e33e47341d226f15a36314bc65e2eb8ad4701b5a191a27997	N2	5.0	5.0	5.0	NA	NA	NA			5.0	5.0	5.0	conditional-profile-calibration-limited	represented-gene-event
+clade-sha256:dd4ad8d24395af090fb9a7e6b7dc66d796c1e84648e8fb0ef82f61a44bd672ec	S0	0.0	0.0	0.0	NA	NA	NA			0.0	NA	NA	conditional-profile-calibration-limited	calibration-only
+clade-sha256:a9e5cb93a27fcb13fa0e80b3529667a7b49dce4fd49d7d4cd4eb316a431fdae9	S1	0.0	0.0	0.0	NA	NA	NA			0.0	NA	NA	conditional-profile-calibration-limited	calibration-only
+clade-sha256:1692ece058644223bf0a6bf2a5d064bc938a8415895e17fb012fd877cdd294d4	S2	0.0	0.0	0.0	NA	NA	NA			0.0	NA	NA	conditional-profile-calibration-limited	calibration-only
+clade-sha256:752d8519fa16cb635161639775119bf4355f06fc8b3ed507931f8a64511b7df8	S3	0.0	0.0	0.0	NA	NA	NA			0.0	NA	NA	conditional-profile-calibration-limited	calibration-only

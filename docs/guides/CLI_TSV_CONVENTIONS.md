@@ -1,0 +1,814 @@
+# CLI and TSV conventions
+
+This document defines the shared interface conventions for NWKIT commands.
+Command-specific help remains authoritative for options and columns that are
+unique to one command.
+
+ASR diagnostic schemas are described in [ASR.md](ASR.md). THRESHOLD
+`--liability-diagnostics-out` uses one row per node/quantity or threshold;
+unavailable diagnostics are missing numeric fields with an explicit status,
+not zero ESS or apparent convergence. Its method version and aggregate status
+are included in `--model-out`. Joint samples use one
+row per sample/node/trait. Predictive checks add a topology-sensitive sister-clade
+discrepancy; multivariate checks identify trait pairs with `trait`/`other_trait`.
+Scalar cross-validation writes one row per held-out observed tip, including its
+fold and predictive observation score. Bootstrap prediction-error intervals
+are distinct from fitted-parameter conditional intervals in the primary table.
+
+## CLI option names
+
+- Canonical long options use kebab-case: `--species-map-tsv`,
+  `--quoted-node-names`, and `--retain-per-clade`.
+- Existing snake_case spellings remain accepted as unadvertised compatibility
+  aliases. Using one writes a deprecation warning to standard error naming its
+  canonical replacement. New documentation and scripts should use the
+  canonical kebab-case names.
+- Most boolean options use explicit `yes|no` values; `--debug` is a value-less
+  flag. `mcmctree --add-header`
+  continues to accept the historical value-less form as well as `yes|no`.
+- `-i/--infile`, `-o/--outfile`, and `-of/--outformat` are reserved for the
+  primary input, primary output, and Newick output format. Commands producing
+  tables, text, images, or MCMCtree syntax do not expose `--outformat`.
+- Secondary tabular audits use `--report` where one file is produced. Other
+  metadata outputs use a noun followed by `-out`, such as `--tree-out`,
+  `--model-out`, `--manifest-out`, and `--attribution-out`.
+- `-` means standard input for a supported input or standard output for the
+  primary output. Only one input may own standard input in a command. Auxiliary
+  metadata and report outputs require file paths so that result streams cannot
+  be mixed. `intersection --seqout` is a second primary result and may use
+  standard output only when `--outfile` is a file path.
+
+Files read by the shared tree/trait-table input reader use UTF-8, with an
+optional byte-order mark (BOM), on all operating systems. Tree file output also
+uses UTF-8. Standard input is already decoded by the Python input stream.
+`info` identifies non-file inputs as `Tree input: stdin` or
+`Tree input: inline text`; real files retain the `Tree file PATH:` line with
+their resolved absolute path.
+
+### Configuration and external resources
+
+The CLI does not load a global NWKIT configuration file. Command options use
+their parser defaults unless supplied explicitly; model/configuration input
+files are read only by the options that name them. The optional IQ-TREE worker
+has its own [CLI/environment/PATH precedence](IQTREE_LIBRARY.md#runtime-selection).
+
+`image` also reads `NWKIT_IMAGE_LOOKUP_WORKERS` and
+`NWKIT_IMAGE_DOWNLOAD_WORKERS` as positive integer worker counts, capped at the
+number of species. Download workers default to four; lookup workers default to
+two when taxonomy is needed (PhyloPic, NCBI, or family fallback), otherwise four.
+Invalid or nonpositive environment values fall back to four. There are no
+corresponding CLI worker options for `image`.
+
+With `image --download-dir auto` (the default), image and provider-query caches
+live under `<out-dir>/.nwkit-cache/`; an explicit download directory instead
+uses `<download-dir>/nwkit/image-cache` and `image-query-cache`.
+`--refresh-cache yes` bypasses provider-query caches, not cached media.
+`--query-cache-max-age-hours` defaults to 168; zero disables query expiration.
+NCBI taxonomy uses separate `--taxonomy-cache-max-age-days` and
+`--refresh-taxonomy-cache` controls. These external-resource caches are distinct
+from analysis result files; ordinary tree/trait analyses do not resume a saved
+fit automatically on rerun.
+
+`mcmctree --angiocal v1.0` imports a checksum-verified fossil dataset and is
+exclusive with TimeTree, posterior conversion and manual calibration selection.
+Its original Ma ages, crown/stem placement rules, source/report schemas, cache
+paths and nominal-bound checks are documented in [ANGIOCAL.md](ANGIOCAL.md).
+Its tree/report pair is staged together; an all-excluded import intentionally
+writes the diagnostic report while leaving the result tree untouched.
+
+`constrain`, `root`, and `mcmctree` can use a checksum-verified VertLife
+reference. The [VertLife guide](VERTLIFE.md) describes the cache, source
+selection, topology and age semantics, and companion TSV schemas.
+
+## Related outputs and node editing
+
+`sample`, `skim`, `annotate`, `transfer`, and `compose` stage a successful tree
+and its companion tables before replacing any output files. A handled write
+or installation failure restores the previous files. This is not a guarantee
+against a process/system crash during a multi-file commit. With tree output on
+stdout, serialization finishes first, but bytes already delivered to a stream
+cannot be retracted. Strict `transfer`/`compose` failures intentionally still
+produce their diagnostic report without writing the result tree.
+
+Standalone Newick file outputs are also staged before replacement. `annotate`
+rejects tree/report outputs that replace its input trait table and report outputs
+that replace its input tree; intentional in-place primary tree updates remain
+supported. CLI outputs cannot replace a declared input of another role, including
+secondary trees, trait tables, sequence files and mapping tables. `image` stages
+its manifest, unmatched table and attribution file as one output set. Audit logs
+must be distinct from all declared inputs and outputs, including
+`shift-simulate` generating JSON, truth JSON, and latent tables.
+
+`label` skips names already retained anywhere in the tree, including nodes
+outside `--target`. `--force yes` releases the old names of nodes being renamed,
+but does not overwrite names outside that target. Numbering may therefore skip
+occupied suffixes. `mark --target-only-clade yes` includes the root clade when
+every tip matches. All ordinary category strings, including `_MIXED_`, remain
+valid `skim` trait values. `table2nwk` rejects duplicate column headers rather
+than silently selecting one of the identically named columns.
+
+## Tree input containers
+
+Shared tree readers accept standard Newick/NHX plus the PAML/MCMCtree
+containers commonly encountered in dating workflows:
+
+- a PAML treefile beginning with `nTips nTrees`;
+- a direct-label NEXUS `TREE` or `UTREE` statement, including MCMCtree
+  `FigTree.tre` (NEXUS `TRANSLATE` tables are not applied); and
+- the annotated species-tree block in MCMCtree's main text output.
+
+MCMCtree/FigTree `95%HPD` and legacy `95%` node-age comments are normalized to
+`age_ci_low`, `age_ci_high`, `age_ci_kind`, and `age_ci_level` NHX properties.
+This normalization happens before command-specific processing, including for
+STDIN, so a header-bearing `nwkit mcmctree --add-header` result remains valid
+input to other NWKIT commands.
+
+### Rootedness and root polytomies
+
+Tree inputs accept `--input-rooted auto|yes|no` (default `auto`). This controls
+how the current top-level node is interpreted; it does not move the root or
+resolve any polytomy.
+
+- `auto` respects an explicit leading `[&R]` (rooted) or `[&U]` (unrooted),
+  including tokens in supported NEXUS tree statements. It also accepts the
+  root-only NHX property `nwkit_rooted=yes|no|unknown`.
+- Without a declaration, roots with at most two children retain the legacy
+  rooted interpretation. Roots with three or more children are `unknown`, not
+  necessarily unrooted. A root name, numeric support (including `0`, `1`, or
+  `100`), or stem length is not evidence of rootedness.
+- `yes` treats the current top-level node as the root, including a multifurcating
+  root. `no` treats the tree as unrooted, even when that node has two children.
+  Overriding an explicit opposite declaration emits a warning. Malformed or
+  mutually conflicting declarations still fail, as do other input-validation
+  errors.
+
+Auxiliary trees have independent options: `--infile2-rooted`,
+`--reference-rooted`, `--species-tree-rooted`, `--reconciliation-tree-rooted`,
+`--root-source-rooted`, `--name-source-rooted`, `--support-source-rooted`,
+`--length-source-rooted`, `--property-source-rooted`, and
+`--densitree-trees-rooted`, wherever the corresponding input exists. In
+`regress`, `--input-rooted` applies to the primary `--tree`, `--gene-tree`, or
+every member of `--gene-tree-ensemble`; it does not override the species tree.
+Collection inputs apply their selected mode to every tree, while `auto` reads
+each tree's declaration independently.
+
+For example, either input below enables ASR at a multifurcating root:
+
+```sh
+nwkit asr -i '[&R](A:1,B:1,C:1);' --trait traits.tsv --state-column state
+nwkit asr -i '(A:1,B:1,C:1);' --input-rooted yes --trait traits.tsv --state-column state
+```
+
+ASR supports both internal and root polytomies. Rooted RF distance compares the
+displayed nontrivial descendant clades without inventing binary resolutions;
+normalized RF divides by the sum of the two displayed-clade counts (zero when
+both counts are zero). Contrasts and reconciliation retain their strictly
+bifurcating-tree requirement. Conventional phylogenetic regression, root transfer,
+and MCMCtree output still require exactly two root children. A rooting override
+does not waive any of these structural requirements.
+`consensus --comparison rooted|unrooted` continues to select the comparison for
+unmarked inputs; an explicit unrooted declaration is incompatible with rooted
+comparison unless the corresponding input override is used.
+
+Tree writers default to `--rooting-token no`: no leading `[&R]` or `[&U]` is
+emitted for standalone Newick/NHX. Use `--rooting-token yes` to emit the token
+for a known rooted or unrooted state, including an inferred binary-root state.
+The switch does not move the root or change topology, lengths, support or names.
+An ordinary rooted binary tree needs no new annotation with the default. An
+explicitly unrooted tree, rooted polytomy, or unknown state pruned to a binary
+root cannot retain its interpretation through bare Newick: shared writers add
+root-only `nwkit_rooted=yes|no|unknown` NHX only when needed. Existing root NHX
+remains NHX, including alongside an explicitly requested compatible token.
+`--rooting-nhx yes` explicitly selects NHX and suppresses the leading token;
+it takes priority when both switches are enabled. Unknown cannot be represented
+by either R/U token. Root declarations remain independent of selected annotation
+properties. NWKIT reads both forms; ETE's direct Newick reader requires NHX.
+Rooting operations replace the input interpretation with rooted status; label
+and support changes do not.
+
+The same options apply to the shared writer's primary, companion, stdout and
+multiple-tree outputs, and to direct RADTE dated trees, MUL D+L topology/mapping
+trees, fixed/fitted MSC dated trees, locus-model JSON population trees and
+gene-tree-search result/candidate trees. Dating writers retain their full branch
+precision. Internal IQ-TREE/GeneRax worker syntax and SHIFT's saved analysis-token
+contract are not presentation outputs and retain their native requirements.
+`convert --to figtree` retains its format-specific NEXUS rooting declaration
+regardless of the standalone token option. Strict `convert --to newick` rejects
+states that cannot be preserved without a token; choose `--rooting-token yes` or
+`--to nhx/figtree`. `mcmctree --posterior` uses the common output policy; its
+calibration/PAML treefile syntax remains unchanged.
+
+| Tree output path | Commands / artifacts |
+| --- | --- |
+| Shared writer, including companion/stdout/candidate bundles | `annotate`, `asr`, `constrain`, `collapse`, `compose`, `consensus`, `drop`, `intersection`, `label`, `rename`, `mark`, `nhx2nwk`, `prune`, `rescale`, `root`, `sanitize`, `shuffle`, `skim`, `sample`, `subtree`, `transfer`, `table2nwk` |
+| Container-preserving conversion | `convert`: Newick, NHX, FigTree/NEXUS |
+| Full-precision dated trees | `radte`: `.dated.nwk`; `mul-reconcile` MSC fixed/fitted `--tree-out`, TSV tree columns and JSON scores |
+| Other direct result serializers | `mul-reconcile`: D+L topology/mapping columns and `--tree-out`, locus JSON population trees; `gene-tree-search`: selected and candidate trees |
+| Native format boundary | `mcmctree`: posterior trees use the policy; PAML calibration syntax is unchanged. Native external-worker inputs and SHIFT analysis tokens retain their private format contracts. |
+The `nwkit_rooted` property and private `_nwkit_rooting_*` bookkeeping properties
+are reserved and cannot be reassigned through annotation/property transfer.
+The Python `read_tree` and `read_trees` helpers expose the same policy through
+the keyword-only `rooted="auto"|"yes"|"no"` argument.
+
+`validate` retains the boolean `is_rooted` column and adds `rooting_state`
+(`rooted`, `unrooted`, or `unknown`) and `rooting_source` (for input trees:
+`marker`, `nhx`, `override`, `topology`, or `unknown`).
+`--require-same-rooting yes` compares all immediate root-child clades, independent
+of their order, rather than assuming two root children, and distinguishes unknown
+from explicitly unrooted trees. `diff --comparison rooted` likewise compares the
+full root partition when both trees are rooted; its existing `root_split` summary
+row uses `reason=projected_root_partition` for multifurcating roots and lists all
+sides separated by `|`. Binary roots retain `reason=projected_root_bipartition`.
+An explicitly unrooted input instead produces an unresolved root summary with
+`reason=input_explicitly_unrooted`. Audit JSON's
+`primary_input` additionally records `first_tree_rooting_state`,
+`first_tree_rooting_source`, and `first_tree_rooting_declared`; the latter retains
+the original `yes`/`no`/`unknown` declaration, or an empty string if absent, even
+when a CLI override changes its interpretation.
+
+## Tip-keyed TSV files
+
+`annotate --table` and the `--trait` files used by `asr`, `asrcompare`,
+`contrast`, `draw`, `monophyly`, `sample`, and `skim` follow one shared
+contract:
+
+- The first-class key is `leaf_name`.
+- `leaf_name` values are exact tree tip labels and must be non-empty. They are
+  normally unique. `contrast --biological-id` instead accepts multiple rows
+  per tip, and `draw --tip-image-manifest` accepts multiple ranked image rows
+  and uses the first. Values such as `001`, `NA`, `NaN`, and `null` are
+  preserved as literal labels rather than inferred as numbers or missing data.
+- Required command-specific data columns must be present. Extra columns are
+  retained where the command can use or report them.
+- `--missing-values CSV` controls missing markers in non-key columns. The
+  default is the empty string, `NA`, `NaN`, `nan`, `?`, `missing`, and
+  `unknown`.
+- `--unmatched warn|error|ignore` controls table-only rows and tree-only tips.
+  The default is `error` for `contrast` and `warn` for the other tip-metadata
+  commands listed above. Table-only rows are not applied to the tree; commands
+  that can operate on absent metadata treat tree-only tips as missing. Choosing
+  `warn` or `ignore` does not waive a command's requirement for estimable traits.
+- `sample --rank` places missing values last in both numeric and text ranks,
+  for either direction, and preserves input metadata columns in its report.
+  With `--report`, file outputs are staged together: serialization or handled
+  installation failures preserve existing tree and report files. Standard output
+  is emitted after the report is installed; an output error restores the report,
+  although already-emitted stream bytes cannot be recalled.
+
+## Specialized input TSV schemas
+
+Species mappings (`--species-map-tsv` and `image --species-name-tsv`) and
+rename mappings (`--name-tsv`) accept UTF-8 files with an optional BOM.
+Headers must be unique and nonempty, and every row must have the same number
+of fields as its header. Additional named columns are allowed; leave optional
+cells explicitly empty rather than omitting their fields.
+
+| Option or command | Required columns | Additional rules |
+|---|---|---|
+| `--species-map-tsv` | `leaf_name`, and at least one of `species_label` or `taxonomy_query` | Every row must define at least one mapping value. |
+| `image --species-name-tsv` | `leaf_name`, `species_name` | Legacy image-only mapping; prefer `--species-map-tsv` for new workflows. |
+| `draw --tip-image-manifest` | `leaf_name`, `local_path` | Multiple rows per tip are allowed and the first is used. Relative paths use the manifest directory or `--tip-image-root`; broken paths are rejected. |
+| `rename --name-tsv` | `old_name`, `new_name` | Both values are non-empty and `old_name` is unique. Headers must be nonempty and unique, and every row must match the header width. |
+| `--taxid-tsv` | `leaf_name`, `taxid` | `taxid` must be a non-missing integer. |
+| `--weight-tsv` | `weight` | Positive finite weights. Optional `tree_id` values are unique, 1-based input-tree numbers; without it, row order is used and row count must equal tree count. |
+| `contrast --reconciliation` | Output columns from `nwkit reconcile` | Stable `gene_clade_id` values must uniquely and exactly cover the contrast tree. Event/status enums, orientation clades, coverage states, and `tree_id` consistency are validated. |
+| `contrast --trait` with `--biological-id` | `leaf_name`, biological-ID column, and selected numeric traits | Multiple rows per tip are biological observations. Optional technical IDs are nested within leaf and biological ID; optional batch values are categorical and complete. Missing trait cells are allowed, but every tip needs an estimable mean. Under pooled variance, a trait with exactly one observation at every fitted tip remains exact tip data even when another selected trait is replicated. |
+| `contrast --trait` with `--within-variance known-se` | `leaf_name`, selected means, and one SE column per trait | Exactly one row per tip. SEs are finite and non-negative. Optional sample-size columns contain positive integers. |
+| `regress --data` | `leaf_name`, selected `--responses` and `--predictors`, plus optional response- and predictor-replicate columns | Conventional regression requires every tree tip. Either role can use biological/technical replicates, batch adjustment, or role-specific known-SE columns. A non-replicated role must have one value per tip, or the same value on all rows created by the other role's replicate design. |
+| `regress --evolution-covariance` | First column `leaf_name`; remaining columns named for tree tips | Wide square covariance matrix. Row and column names must each exactly match all tree tips; values are reordered by name and must be numeric, finite, symmetric, and positive definite. |
+| `regress --expression` | `leaf_name`, selected `--responses`, and optional replicate columns | End-to-end mode applies the same replicate, technical-replicate, batch, missing-value, and known-SE rules as `contrast --trait`. Gene-tip labels must match `--gene-tree`. |
+| `regress --species-traits` | `leaf_name`, selected `--predictors`, and optional predictor-replicate columns | End-to-end mode accepts continuous and categorical predictors. Every `--species-tree` tip needs an estimable value or category distribution. Continuous predictor replicates use the `--predictor-*` biological/technical ID, batch, variance, known-SE, and sample-size options; categorical replicates follow the policies in the regression guide. |
+| `regress` input | Reconciled output columns from `nwkit contrast` | Selected responses must be speciation contrasts. Eligible rows require stable gene, lineage, species-event, and orientation IDs plus positive finite contrast variance. |
+| `regress --predictor-contrasts` | Species-tree output columns from `nwkit contrast` | Selected predictor traits must uniquely identify every joined `branch_clade_id`; event taxa and signed orientation must exactly match the response table. |
+| `regress --response-sampling-covariance` | `tree_id`, `trait`, `contrast_id_1`, `contrast_id_2`, `sampling_covariance` | Complete explicit covariance or sparse factor loadings, as described below. Required when response contrasts contain replicate metadata. |
+| `regress --predictor-sampling-covariance` | `tree_id`, `trait`, `contrast_id_1`, `contrast_id_2`, `sampling_covariance` | Complete explicit covariance or sparse factor loadings for every selected predictor. The predictor contrast table must also contain positive `contrast_variance`; together they define the phylogenetic prior and observation-error covariance of the latent predictor. |
+| `table2nwk` input | `branch_id`, `parent` | Column headers must be unique. Optional `name`, `dist`, `support`, and `rooted`; exactly one root has `parent = -1`. Only its row may set `rooted` to `yes`, `no`, or `unknown`; all other rows must leave it empty. |
+
+All supported input TSV options may use `-` for standard input, subject to the
+single-standard-input rule.
+
+### Sampling-covariance representations
+
+The two sampling-covariance inputs above describe scalar contrasts, grouped by
+`tree_id` and `trait`. The optional `covariance_representation` column selects
+the meaning of each row. Omitting the column means `covariance`; when supplied,
+each row must name one of the representations below.
+
+- `covariance`: both IDs identify contrasts and `sampling_covariance` is their
+  covariance. Every selected unordered pair, including each diagonal, must
+  occur exactly once. NWKIT writes the upper triangle; the reader reconstructs
+  its symmetric counterpart and requires finite, positive-semidefinite matrices.
+- `factor-loading`: `contrast_id_1` identifies a contrast, `contrast_id_2`
+  identifies a latent error column, and `sampling_covariance` is a loading in
+  a factor matrix `U`. The covariance is `M = U U'`, not the table of loadings
+  itself. Omitted loadings are zero. Every selected contrast must occur at
+  least once, including an explicit zero row for a contrast with no sampling
+  error. Contrast/latent-column pairs must be unique and loadings finite.
+
+One `tree_id`/`trait` group cannot mix the two representations. Reconciled
+scalar analyses can emit factor loadings above 500 contrasts, avoiding a dense
+matrix while retaining off-diagonal covariance. See the
+[regression guide](PHYLOGENETIC_REGRESSION.md#conventional-tip-level-regression)
+for the propagation and numerical precision rules.
+
+These scalar re-input schemas are distinct from tip-level regression audit
+tables and categorical-predictor audits containing `trait_2` cross-column
+covariances. Do not interpret those cross-column blocks as separate scalar
+sidecars; use the raw-input regression mode to propagate categorical predictor
+uncertainty.
+
+## Output TSV vocabulary
+
+- `branch_id` identifies nodes with 0-based level-order numbering. The root is
+  `0`; `parent = -1` denotes no parent. Branch IDs are local to one exact tree
+  serialization and are not cross-file join keys.
+- `branch_clade_id`, `gene_clade_id`, `species_event_id`, and
+  `lineage_clade_id` use a `clade-sha256:` digest of sorted descendant tip
+  labels. They are invariant to Newick child order and are the supported keys
+  for matching corresponding clades across files.
+- Qualified IDs retain the same suffix, for example `target_branch_id` and
+  `source_branch_id`.
+- `node_class` values are `root`, `intnode`, and `leaf`.
+- Columns containing comma-separated taxon labels end in `_taxa`, such as
+  `descendant_taxa`, `target_taxa`, and `intruder_taxa`. Their values are sorted
+  for deterministic output. Counts use `num_*_taxa`.
+- Empty result sets still contain their documented header row.
+- Missing output cells are empty. Literal names that resemble missing markers
+  remain intact in identifier columns and in `nwk2table`/`table2nwk`
+  round-trips.
+- `nwk2table` adds the optional root-only `rooted` column when needed to preserve
+  a rooting interpretation. Without this column, `table2nwk` uses the legacy
+  root-degree inference described above.
+- `nwk2table` always writes `branch_id`, `parent`, `name`, `dist`, and `support`.
+  Its default `--sister yes` adds the ID of **one** sister, not all sisters at a
+  polytomy; `-1` means none. `--age yes` requires an ultrametric tree and adds
+  node ages in input branch-length units (tips at zero). It does not infer
+  calendar dates or convert substitution lengths to time. `table2nwk` uses
+  `dist` to restore lengths; it does not reconstruct them from `age` or use
+  `sister` to determine the topology.
+- `reconcile` qualifies gene- and species-tree IDs as `gene_branch_id` and
+  `species_branch_id`. It retains repeated species-tree IDs when distinct
+  paralog lineages map to the same speciation event. `tree_id` plus
+  `lineage_clade_id` identifies lineage segments separated by observed or
+  pruning-collapsed non-speciation events. Stable cross-file species-event joins
+  use `species_event_id`, not `species_branch_id`.
+- `contrast` uses `numerator_*` and `denominator_*` columns to make signed
+  contrasts auditable. With a reconciliation table, the order follows the
+  canonical sorted order of the mapped species-tree daughter clades.
+- Replicate-aware `contrast` output adds `sampling_variance`,
+  `evolutionary_variance`, `replicate_model`, and `min_n_biological`. Its
+  sampling-covariance sidecar stores the full propagated `L D L'` upper
+  triangle rather than only marginal variances. The optional tip summary
+  records mean estimation and replicate counts. Every contrast row also records
+  `evolution_model`, `evolution_parameter_name`, `evolution_parameter`, and
+  `branch_length_mode` for the transformed-tree calculation.
+- Conventional `regress --tree/--data` reports one row per response coefficient,
+  including `(intercept)` by default. It records the number of species,
+  evolutionary model and generic shape parameter, whether the parameter was
+  estimated or fixed, branch-length mode, evolutionary rate, sampling-variance
+  contribution, likelihood, and optimization diagnostics. Its optional
+  sampling-covariance sidecar uses `tree_id`, `trait`, `leaf_name_1`,
+  `leaf_name_2`, and `sampling_covariance`.
+  Predictor replicates have separate `--predictor-sampling-covariance-out` and
+  `--predictor-tip-summary-out` files. Result rows distinguish the input
+  predictor sampling variance from the posterior latent-predictor variance and
+  report the fitted predictor evolutionary rate and optimization diagnostics.
+- Conventional `regress --model-comparison-out` reports one row per response and
+  candidate evolutionary model. It contains the ML log likelihood, AIC, AICc,
+  BIC, likelihood parameter count, estimated shape parameter, convergence and
+  boundary diagnostics, delta AIC and AIC weight, and delta AICc and AICc
+  weight. An individual AICc is empty when its sample size is insufficient;
+  delta AICc and AICc weights are empty for the response if any candidate lacks
+  AICc. AIC-derived cells remain available.
+- Reconciled `regress` reports one coefficient row per `tree_id`, response, and predictor.
+  `n_gene_contrasts` is the physical input-row count, whereas
+  `n_species_events` and `degrees_of_freedom` expose the effective independent
+  species-event count. Variance-component diagnostics state whether event and
+  lineage effects were fitted. The optional random-effects table contains
+  conditional modes, their grouping IDs, fitted variance component, and group
+  observation count. Precomputed response and predictor inputs must retain the
+  `tree_id` and evolutionary-transform metadata emitted by `contrast`; mixed
+  transforms or multiple predictor-tree IDs are rejected. Each coefficient row
+  records `predictor_tree_id` and both transforms. Raw mode additionally records
+  whether each shape parameter was fixed, estimated, or not applicable;
+  optimizer convergence and boundary diagnostics; predictor marginal
+  log-likelihood; and whether bootstrap inference re-estimated the gene
+  parameter.
+- End-to-end `regress --out-prefix PREFIX` additionally writes deterministic
+  `.reconciliation.tsv`, `.gene-contrasts.tsv`, `.species-contrasts.tsv`,
+  `.random-effects.tsv`, and `.regression.tsv` files. Replicate-aware input also
+  writes `.response-sampling-covariance.tsv` and `.response-tip-summary.tsv`
+  for responses and `.predictor-sampling-covariance.tsv` and
+  `.predictor-tip-summary.tsv` for predictors, whenever the corresponding role
+  has replicates or known SEs.
+  Applicable files are staged and committed as one recoverable transaction,
+  with concurrent writers serialized by prefix/output locks; an ordinary write
+  or commit failure does not leave a partial mixed bundle.
+  Without `--out-prefix`, intermediate tables remain in memory and only the
+  requested primary and random-effect outputs are written.
+  Gene and species contrast rows, and every final reconciled result, retain the
+  independently selected response and predictor evolutionary models, parameter
+  names and fixed or automatically estimated values, and branch-length modes.
+
+## ASR defaults and Newick annotations
+
+`asr --trait-type auto` and `asrcompare --trait-type auto` are the defaults.
+Only non-missing values in the selected column for tips present in the tree
+determine the type: numeric values select continuous BM; otherwise the trait is
+discrete Mk. Non-finite numeric inputs are rejected on the continuous path, not
+reclassified as categories. An all-missing column cannot be auto-classified.
+Use `--trait-type discrete` for numeric category codes, which retain their
+original spelling, or explicitly select `continuous` to reject nonnumeric data.
+Detection is reported on STDERR and in optional model metadata. Incompatible
+mode-specific options are errors; they do not override automatic type detection.
+
+`asrcompare` routes model-specific options only to applicable candidates that
+consume them. Its TSV retains one row per requested candidate, including
+not-applicable, not-fitted, failed, nonregular, and statistically equivalent
+rows. Compatibility groups include trait dimensionality, likelihood convention,
+and root prior. Count and rank fields are integral when present; unavailable
+values are empty. Shared input-preparation and per-candidate fit durations are
+reported separately; shared preparation includes tree/trait parsing and cached
+auxiliary inputs. Structurally equivalent rows identify their fitted
+representative in `equivalent_to` and do not duplicate criterion weights. The
+equivalence contract distinguishes binary GTR from directly bounded ARD/F81,
+and collapses exact neutral/fixed or one-regime reductions only when every
+relevant option and root contract matches. MV-BM, MV-OU, and MV-OU-DIAG sample
+sizes count distinct observed phylogenetic positions rather than scalar
+coordinates. Pagel's two-binary-trait joint likelihood is grouped separately
+from the across-character MK-MIXTURE likelihood.
+
+Discrete ASR defaults to ER, equal root-state probabilities, and probability
+output. Likelihoods, marginals, and conditional node-state sampling use log-space
+messages to avoid child-product underflow at large polytomies; zero-length
+branches retain their exact no-transition constraint.
+Stochastic maps distinguish exactly zero rates from small positive rates: scaling branch lengths
+and inversely scaling a fixed rate matrix preserves the process and seeded map
+counts. Bounds for estimated rates remain expressed in inverse branch-length
+units; adjust `--rate-bounds` when changing those units.
+
+Continuous ASR defaults to BM, a flat prior on the root value, REML rate
+estimation, and mean/variance/interval summaries. `--sigma2` fixes the rate;
+`--standard-error-column` optionally provides finite, non-negative known SEs for
+observed tips. Absent SE input means exact observations. Intervals include root
+uncertainty but condition on the fixed/fitted rate and input tree. Zero-length
+edges enforce identical latent values; identical exact observations at one such
+position count once. A singular zero-rate boundary has an empty residual
+log-likelihood field and an explicit fit status, never a substituted finite
+density. See [ASR.md](ASR.md) for schemas, boundary rules, and examples.
+
+Both modes use the existing rootedness contract, including declared/forced root
+polytomies. Rootedness is separate from the prior on the root's trait value.
+Annotated Newick uses the shared writer, preserving quoted numeric internal
+names, root declarations, and missing-support handling. Discrete NHX fields use
+`asr_state`/`asr_probability`; continuous fields use `asr_mean`, `asr_variance`,
+`asr_sd`, and interval properties.
+
+## Protecting related outputs
+
+`asr --figure-out` accepts PDF, SVG, or PNG for continuous traits and includes all
+nodes independently of TSV `--target`. Its destination must differ from inputs
+and other outputs. The figure alone uses recoverable replacement; other ASR
+outputs are not part of the same transaction. See [ASR visualization](ASR.md#visualizing-continuous-ancestral-traits)
+for the interpretation of node intervals and connecting lines.
+
+`asr --figure-simulations N` adds sampled BM/OU branch histories to that figure.
+It requires `--figure-out`; `--figure-simulation-mode` chooses unconditional
+model histories (default) or histories conditioned on observed tips.
+`--figure-simulation-steps` controls the finite grid, and `--seed` controls the
+local simulation RNG. These figure options do not change ASR TSV values or IDs.
+See [branch simulations](ASR.md#simulated-evolution-along-branches) for supported
+models and root treatment.
+
+`--figure-tip-heatmap yes` adds an observed tip heatmap to ASR figures (default
+`no`). Missing observations remain gray, and every model uses the same per-trait
+observed range. Multiple traits have separate numbered rows and color keys.
+The option requires a figure; `asrcompare` also requires panel layout. It does
+not change inference or TSV output.
+
+ASR figure circles also accept `--species-overlap-node-plot auto|yes|no` and
+the shared `--species-parser`, `--species-regex`, `--species-map-tsv` controls.
+Node event colors follow `draw` (blue speciation, red duplication); branch
+colors remain regime colors. Simulation circles use the root and original
+branching nodes, never interpolation-grid points. These display controls do not
+change inference or output TSV values.
+
+`asrcompare --figure-out` remains PDF-only. The default `--figure-layout table`
+shows comparison statistics; `--figure-layout panels` shows one row per continuous
+model, reusing its fit and posterior. Optional simulations, their mode/grid, seed,
+and page dimensions follow the continuous ASR figure controls. The entire model
+set occupies one custom-size page, with ranks separated by comparison set.
+Panel rendering is part of the same output transaction as the comparison TSV.
+
+`draw`, `asrcompare`, `rootcompare`, `regress`, and `intersection` share
+recoverable output installation. All file destinations are validated before
+writing, staged beside their targets, and installed after generation succeeds.
+Handled write/rename failures restore existing outputs and remove newly
+installed files. Recovery backups are retained if restoration itself fails.
+Existing file modes and the process creation mask are respected.
+
+`draw` rejects outputs that alias each other or any input, including species maps
+and referenced tip images. Checks cover symbolic links, hard links, and equivalent
+names on case-insensitive filesystems. Image and layout-report failures preserve
+the previous complete pair. As with any separate filesystem renames, this is not
+a crash-atomic multi-file transaction. Output locks coordinate NWKIT writers, not
+arbitrary external programs. A stdout write can trigger file rollback on failure,
+but already emitted stdout bytes cannot be retracted.
+
+`draw --node-label-property branch_id --node-label-target all` computes the same
+input-tree IDs as `nwk2table` and `asr`. Labels are integers and are assigned before
+display ladderization or collapse; a collapsed clade retains its original root
+ID. This computed property replaces any input NHX `branch_id` for the drawing.
+See [preparing ASR regimes](ASR.md#find-branch-ids-before-assigning-regimes).
+
+## Compatibility names
+
+The following older names remain accepted, but canonical output and new
+examples use the replacements below. Option aliases emit a deprecation
+warning; legacy ASR target values are normalized without an option-name warning.
+
+| Older interface | Canonical interface |
+|---|---|
+| snake_case long options such as `--species_map_tsv` | kebab-case, for example `--species-map-tsv` |
+| `dist -d RF` / `dist --dist RF` | `dist --metric rf` |
+| `image --name-tsv` | `image --species-name-tsv` |
+| `image --manifest` / `--attribution` | `--manifest-out` / `--attribution-out` |
+| `sample --output-table` | `sample --report` |
+| `skim --output-groupfile yes` | `skim --group-table-prefix PATH` |
+| ASR `node_type` with value `tip` | `node_class` with value `leaf` |
+| ASR `--target tip` / `missing_tip` values | `leaf` / `missing-leaf` |
+| clade frequency `leaf_set`, `num_leaves` | `descendant_taxa`, `num_taxa` |
+| monophyly `*_leaves`, `num_*_leaves` | `*_taxa`, `num_*_taxa` |
+| transfer/compose `*_taxon_count` | `num_*_taxa` |
+| report `node_id`, `target_node_id`, `source_node_id` | `branch_id`, `target_branch_id`, `source_branch_id` |
+
+## ASR observation extensions
+
+Discrete `--cross-validation-out` uses one row per held-out tip with fold,
+training count, marginal observation probability/log score, JSON state
+probabilities and fit diagnostics. Brier scores are present only for one-hot
+known-state likelihoods. Clade folds remove all members together but report
+marginal tip scores, not a joint clade probability.
+
+Latent-history ASR (`JUMP-BM`, `MM-BM`, `MM-OU`) retains the scalar summary columns
+but uses mixture quantiles. Model TSVs explicitly report fixed parameters,
+Monte Carlo likelihood/ESS/relative error and history uncertainty. History TSVs
+use `history, weight, branch_id` plus `jump_count`, or `regime, segments`, where
+segments are JSON `[state,duration]` arrays. Weights are normalized across
+histories, repeated for each branch, and must not be summed across branches.
+These models are excluded from ordinary information-criterion ranking.
+
+ASR observation extensions use long TSVs: `--measurement-covariance` requires
+`leaf_name, trait, other_trait, covariance` (all ordered entries), and
+`--replicate-observations` requires `leaf_name, trait, value, standard_error`.
+These input tables are distinct from ancestral output and are protected against
+output-path collisions. See [ASR.md](ASR.md) for missingness and likelihood rules.
+
+## Tree conversion
+
+`convert --node-label PROPERTY` copies a property to internal node names before
+`--properties drop` explicitly removes normalized NHX/age properties. The
+default is `--properties keep`; tip names and ordinary comments remain intact.
+
+`convert` uses `--from`/`--to` for container formats; `--format` retains its ETE
+parser meaning. It writes one tree/document, never a directory or implicit
+sidecars. See [CONVERT.md](CONVERT.md) for annotation, scaling, ambiguity and
+loss contracts. `validate --require-all-lengths yes` adds the issue
+`missing_branch_length` for absent non-root lengths without changing TSV columns.
+
+### Tip labels beneath continuous trait panels
+
+`asr --figure-trait-tip-labels yes` and
+`asrcompare --figure-layout panels --figure-trait-tip-labels yes` add optional
+full tip names in detached strips below ASR and simulation panels. `--figure-out`
+is required. Values repeat on the main panel's x scale; thin connectors lead to
+evenly spaced names sorted by value. ASR labels use posterior tip means,
+including imputed tips. Simulation labels use the first sampled history's tip
+endpoints, explicitly identified when several histories are drawn. Labels are
+off by default. The input names and numerical outputs are unchanged.
+
+
+### RADTE species-age uncertainty
+
+`radte --species-node-intervals-tsv` takes `node` or `species_event_id` plus
+`lower`, `upper`, `level`, `kind`, and `source`. This is external display evidence,
+separate from the hard `node`, `age_min`, `age_max` bounds table. The `.species.tsv`
+output retains external `input_interval_*` fields alongside the result's
+`interval_lower`, `interval_upper`, and `interval_status`.
+
+Eligible branch-only exact contrasts use `conditional-exact-log-duration-t`
+or `conditional-exact-log-duration-normal` in these existing status columns
+and the manifest. Empty confidence-set intersections and estimated zero
+marginal variance retain `NA` endpoints with explicit unavailable statuses;
+they are not zero-width estimates.
+
+RADTE also publishes `.conditional-intervals.tsv` and
+`.uncertainty-components.tsv`, empty when not applicable. Input sample IDs and
+shared-age IDs identify rows; missing estimates are `NA`, never zero.
+`radte-compare` publishes `.comparison.tsv` and `.uncertainty-components.tsv`
+with its PDF and hash manifest. See
+[species-age uncertainty](RADTE_SPECIES_UNCERTAINTY.md) for semantics and schemas.
+
+## Exploratory regression selection
+
+`regress-select --data` requires unique `leaf_name` rows, a finite numeric
+response and finite numeric predictors. `--folds` requires unique `leaf_name`
+and non-empty `fold` values; both files must match the tree tips exactly.
+`--predictor-file` contains one predictor name per line without a header.
+Binary responses require numeric 0/1 and an explicit `--family binomial`.
+The six-file prefix bundle and its non-inferential schema are specified in
+[the selection guide](REGRESSION_SELECTION.md#output-bundle).
+
+## Disparity through time
+
+`dtt --trait` uses the shared tip-keyed TSV policies. `--columns` selects jointly
+analyzed continuous traits; `--missing error|drop` controls incomplete tips.
+The primary TSV is keyed by one-based `time_index`, with `phase` distinguishing
+the pre/post-split rows at relative time zero. It includes observed disparity,
+non-singleton clade counts and BM mean/median/pointwise envelope columns.
+`--n-sim 0` leaves BM columns and summary MDI fields empty. Auxiliary summary,
+clade and simulation tables, the model JSON and PNG/PDF/SVG figure participate
+in the same output transaction. The figure uses one tree plus a heatmap by default
+for any number of displayed traits, including one.
+`--figure-columns` and `--figure-scale` affect only display, independently of
+`--columns` and `--scale`. See [DTT](DTT.md) for definitions, units and limits.
+
+
+## Regression inference metadata
+
+Reconciled Gaussian results distinguish `estimand` (`event-average` by default,
+`common` for the auxiliary likelihood), `objective_kind`, `covariance_basis`,
+`nuisance_estimator`, and `log_likelihood_basis`. Event-average coefficient rows
+have `reml=not-applicable`; the covariance fit can separately use REML. New
+`--regression-estimand` and legacy `--event-weighting` options must agree.
+`studentized-bootstrap` is an opt-in Gaussian coefficient inference method;
+`p_value_method` and `interval_method` identify its studentized reference.
+
+GLMM tables report `objective_value`, `penalty_value`, `p_value_method`,
+`interval_method`, and `observation_model`. Penalized point estimates do not
+carry frequentist Wald standard errors, p-values or intervals. Null-bootstrap
+rows report an objective-difference statistic (not a Wald z), Monte Carlo error,
+and attempted/successful/failed dataset counts; any failed refit aborts that
+inference. Counts for GLMM bootstrap are totals over coefficients and requested
+profile candidates. Gaussian coefficient and lineage rows count their own draws.
+
+`coefficient_profile` is a JSON array of tested coefficient candidates, their
+p-values, Monte Carlo standard errors and acceptance flags. It preserves
+non-connected acceptance on the specified grid. It is not a continuous
+confidence interval and does not classify values outside or between candidates.
+Missing interval endpoints must not be filled using penalized curvature.
+
+## Shift inference
+
+`shift` writes the two-column `branch_id, regime` map consumed by ASR, including
+the root. Its required `--model-out` JSON records the external backend, original
+time units, input fingerprint, tip-token mapping, candidate configurations and
+root model. JSON schema v3 also includes effects, regime optima, tip predictions
+and structured search diagnostics. `--standard-error-column` supplies known
+independent SEs; `standard_error` and `observation_variance` are retained in the
+tip summaries, with zero for omitted errors. Optional `--effects-out`,
+`--regime-parameters-out` and `--tip-summary-out` write those tables with `NA` for
+unidentified optima. `--fit-out` optionally preserves the full external R fit. These
+outputs are staged together. See [SHIFT.md](SHIFT.md) for supported inputs and
+the distinction between shift discovery and a conditional ASR refit.
+
+With `shift --convergence`, different shift branches can share a regime label.
+Effects still have one row per shift location; regime parameters have one row
+per shared optimum, with the smallest member branch ID as representative.
+Model JSON `convergence.groups` contains the complete membership, including
+background ID 0. Bootstrap records ancestry partitions separately from
+partitions sharing an optimum.
+
+Calibrated shift selection (the default) writes schema-7 JSON: `selection=calibrated`,
+`parameters.contrast_log_likelihood` and `calibration.tests` replace the IC score.
+`parameters.alpha_status` distinguishes finite, Brownian and independent limits.
+At the independent limit, `alpha` and `sigma2` are JSON null. Optimum fields are
+null in JSON / `NA` in TSV whenever an α limit is supported; finite mean predictions
+remain available. Legacy `--selection ic` retains schema 5. See
+[calibrated selection](../validation/SHIFT_CALIBRATION.md) for limits and grid semantics.
+`model_family` distinguishes finite OU, the scaled-effect drift limit and the
+independent-tip limit. Calibration metadata separates likelihood scale from
+bootstrap generation scale and labels later-stage family selection. Legacy
+pBIC JSON also records the same-process backend capability attestation.
+These fields do not establish continuous-parameter or convergence error control.
+
+Schema 7 also exports the null calibration method and each test's
+`p_value_kind`. With `conservative_upper_bound`, the reported p-value is 1 and
+`p_value_lower_bound` records the evaluated partial maximum; neither is a
+posterior probability. `grid_supremum` denotes a completed alpha-grid maximum.
+`plugin` denotes the known-error or later-stage approximation. Historical
+schema-6 files used a plug-in first-stage test as well.
+
+## Phylogenetic signal
+
+`signal --trait` follows the shared tip-keyed TSV, missing-value and unmatched
+policies. `--columns` selects continuous traits and `--standard-error-column`
+selects paired SE columns. Each trait/method retains a row, including
+unestimable traits; unavailable fields are empty. BH families are separate
+for K and lambda. See [SIGNAL.md](SIGNAL.md) for statistics and the schema.
+
+## Phylogenetic PCA
+
+`pca --trait` uses the shared tip-keyed TSV contract. `--columns` selects
+continuous traits, with missing rows rejected by default or jointly excluded
+by `--missing drop`. Primary output is `leaf_name, PC1, PC2, ...`.
+Auxiliary loadings, eigenvalues, model JSON, ancestral scores and figures use
+recoverable output installation and input-alias protection. Original input-tree
+branch IDs are retained in ancestral scores. See [PCA.md](PCA.md) for schemas.
+
+## Individual-level multivariate ASR
+
+With `asr --within-species-covariance full|diagonal`, `--trait` contains
+`leaf_name, individual_id, trait, value`; `--state-column` lists traits.
+Compound individual/trait keys must be unique. IDs remain literal strings,
+and missing-value tokens apply only to `value`. Outputs distinguish latent
+species/ancestral values from `--individual-out` predictions. Model output
+contains both evolutionary Sigma and within-species W. Details and all columns
+are documented in [ASR_INDIVIDUALS.md](ASR_INDIVIDUALS.md).
+
+## Discrete stochastic histories
+
+ASR map tables preserve original branch IDs. Histories use one-based draw and
+segment indices and local/root-relative branch-length coordinates. Duration
+summaries include zero-occupancy states; probabilities include both endpoints.
+Time-bin output reports durations and directed transitions normalized by actual
+lineage-time exposure. These are conditional map draws with fixed model
+parameters. See [STOCHASTIC_MAPS.md](STOCHASTIC_MAPS.md) for complete schemas,
+zero-length conventions, and the distinction between map variation and Monte
+Carlo error.
+
+## Branch-specific Gaussian models
+
+`asr --model BRANCH-GAUSSIAN` reads either a direct `branch_id, model, ...` TSV or separate
+`branch_id, regime` and `regime, model, ...` TSVs. Model names are `BM`, `OU`,
+and `JUMP`; numeric parameters are `sigma2`, `alpha`, `theta`, `jump_mean`, and
+`jump_variance`, as applicable. Unused cells must be blank, and all non-root IDs
+must appear exactly once. Unlike ASR's regime map, root 0 is excluded.
+
+Model tables reject duplicate/unknown columns, duplicate IDs, empty/ragged rows,
+non-finite numbers, missing required parameters and nonblank unused parameters.
+Trait missing markers do not apply to model tables. UTF-8 BOMs and one stdin
+input are supported. `--branch-models-out` emits a direct-assignment TSV suitable for
+reinput using 17 significant digits. `--model-out` remains the ASR model TSV;
+`--process-out` exports the process/run JSON. See
+[BRANCH_GAUSSIAN.md](BRANCH_GAUSSIAN.md) for required parameters, root treatment
+and the ASR, likelihood and simulation output schemas.
+
+
+With `--branch-fit FILE`, BRANCH-GAUSSIAN additionally reads an explicit fitting
+TSV: `regime, parameter, group, lower, upper`. Named regimes are required;
+repeated groups tie one diffusion parameter across regimes with identical
+starting values/bounds. Unlisted parameters and all jumps/root parameters stay
+fixed. `--branch-models-out` contains fitted values; the model TSV includes a
+`parameter_estimation` JSON cell, and process JSON schema 2 has an `estimation`
+object with estimates, bounds, local rank and optimizer diagnostics. See the
+[fixed-assignment estimation contract](BRANCH_GAUSSIAN.md#estimation-at-a-fixed-assignment).
+
+### Reconciliation loss counts
+
+`reconcile` includes nullable integer `implied_losses` per gene-tree event.
+Its companion `implied_loss_species_clade_ids` is a JSON array of stable
+species-clade IDs identifying the incoming edges of missing sister lineages.
+Repeated IDs represent separate lost copies; the array length equals
+`implied_losses`. Mapped LCA gene leaves have `[]`. Locations, like counts,
+remain missing for other event sources or unmapped events. Only edges below
+the gene-root mapping are considered. Consumers must match these IDs against
+the same complete rooted species tree, rather than traversal indices.
+For LCA events these count missing lineages on species-tree edges below the
+event; leaves have zero losses. Losses above the gene root are excluded.
+Non-LCA and unmapped events have missing values, never fabricated zeros.
+See [reconciliation exports](RECONCILIATION_EXPORTS.md).
+
+### MUL/MSC prototype
+
+`mul-reconcile --score-model dl` preserves the GRAMPA-compatible D+L tables.
+The experimental `--score-model msc` has a distinct likelihood schema:
+`mul.tree, h1.node, h2.node, log_likelihood, delta_log_likelihood, dated.tree,
+status, reason`. Excluded candidates have blank likelihoods and dated trees,
+not fabricated zeros or ranked infinite penalties. `--report` and `--check-out`
+contain gene-level likelihood, assignment count and work diagnostics for every
+evaluated candidate; they contain no inferred duplication/loss counts.
+The JSON method/schema distinguishes this conditional model from D+L.
+See [MUL/MSC](MUL_MSC.md) for units, exclusions, and interpretation.
+
+Bounded `--msc-fit age|ne|joint` uses `nwkit-mul-msc-fit-v1`, adding fitted
+age/Ne columns and local/flat/boundary status; withheld point estimates and
+dated trees are blank. Its JSON method is separate from fixed MSC. Profiles
+refit nuisance parameters but are not confidence intervals. Fitted tree output
+requires a unique numerical best parent and locally distinguishable interior
+parameters; otherwise the entire output bundle is preserved on failure.
+See [bounded MUL/MSC estimation](MUL_MSC_FIT.md).
+
+`--score-model locus-mc` uses the separate `nwkit-mul-locus-mc-v1` schema,
+with candidate/grid scores and Monte Carlo bounds, including a normalized
+no-polyploidy candidate. It never puts likelihood estimates into D+L integer
+scores. Zero MC hits do not become pseudocounts or proof of zero biological
+probability; nonfinite values are missing and explicitly interpreted in JSON.
+Bootstrap event calibration and gene-tree stability are distinct outputs.
+`--locus-null-calibration grid-supremum` maximizes P-values over every supplied
+null grid point; default `plug-in` retains fitted-null calibration. The
+grid-mode calibration TSV adds `generating_null_grid`, separately from the
+refitted `null_grid`; JSON records per-point results, total work and the
+finite-grid restriction. Neither method calibrates an omitted inference-error
+process or arbitrary off-grid nuisance parameters.
+See [locus DL + ILS](MUL_LOCUS_MC.md) for the complete observation contract.

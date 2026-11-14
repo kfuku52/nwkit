@@ -64,6 +64,30 @@ def test_predictor_uncertainty_report_averages_large_finite_variances():
     assert result["predictor_uncertainty_fraction"] == pytest.approx(1.0)
 
 
+@pytest.mark.parametrize(
+    "matrix,expected",
+    [
+        (np.empty((0, 0)), True),
+        (np.zeros((2, 3)), False),
+        (np.diag([1.0, np.inf]), True),
+        (np.diag([1.0, np.nan]), False),
+        (np.array([[1.0, -0.0], [0.0, 2.0]]), True),
+        (np.array([[1.0, np.nextafter(0.0, 1.0)], [0.0, 2.0]]), False),
+        (np.array([[1.0, 0.0], [np.nan, 2.0]]), False),
+    ],
+)
+@pytest.mark.parametrize("transpose", [False, True])
+def test_sampling_diagonal_classification_preserves_special_values(
+    matrix, expected, transpose
+):
+    if transpose:
+        matrix = matrix.T
+    assert (
+        bool(regression_pipeline_mod._is_diagonal_sampling_covariance(matrix))
+        is expected
+    )
+
+
 def _write_raw_regression_inputs(tmp_path, *, biological_replicates=False):
     gene_tree = tmp_path / "gene.nwk"
     species_tree = tmp_path / "species.nwk"
@@ -355,7 +379,9 @@ def test_pgls_matches_standard_pic_regression_for_one_to_one_orthologs():
         tree_id="OG1",
     )
 
-    result = fit_reconciled_pgls(response, predictor, ["expression"], ["body_size"])
+    result = fit_reconciled_pgls(
+        response, predictor, ["expression"], ["body_size"], regression_estimand="common"
+    )
 
     joined = response.merge(
         predictor[predictor["trait"] == "body_size"],
@@ -554,10 +580,10 @@ def test_equal_event_weighting_is_invariant_to_identical_paralog_copies():
     assert observation_result.iloc[0]["coefficient"] == pytest.approx(22.0 / 14.0)
     assert equal_result.iloc[0]["n_gene_contrasts"] == 11
     assert equal_result.iloc[0]["n_species_events"] == 2
-    assert equal_result.iloc[0]["degrees_of_freedom"] == 1
+    assert equal_result.iloc[0]["degrees_of_freedom"] == float("inf")
 
 
-def test_equal_event_pseudolikelihood_is_copy_invariant():
+def test_event_average_coefficient_is_copy_invariant_but_independent_noise_is_not():
     base = pd.DataFrame(
         [
             _response_row(index, value)
@@ -588,16 +614,19 @@ def test_equal_event_pseudolikelihood_is_copy_invariant():
         model="replicate-reml",
     ).iloc[0]
 
-    for column in [
-        "coefficient",
-        "standard_error",
-        "evolutionary_rate",
-        "log_likelihood",
-    ]:
-        assert repeated[column] == pytest.approx(baseline[column], rel=1e-10)
+    assert repeated["coefficient"] == pytest.approx(baseline["coefficient"], rel=1e-10)
+    # Distinct gene IDs with independent residuals add biological information.
+    # REML rate = RSS/(n-p); do not preserve the former pseudo-likelihood scale.
+    assert repeated["evolutionary_rate"] / baseline[
+        "evolutionary_rate"
+    ] == pytest.approx(25 / 29)
+    assert repeated["standard_error"] / baseline["standard_error"] == pytest.approx(
+        np.sqrt(5 / 29)
+    )
+    assert repeated["log_likelihood_basis"] == "auxiliary-common-fit"
 
 
-def test_equal_event_eiv_pseudolikelihood_is_uneven_copy_invariant():
+def test_event_average_eiv_preserves_shared_predictor_uncertainty_under_uneven_copies():
     values = (1.0, 6.0, 7.0, 11.0, 8.0, 13.0)
     predictor = _predictor_table(values=tuple(float(i) for i in range(1, 7)))
     predictor["contrast_variance"] = 1.0
@@ -631,13 +660,23 @@ def test_equal_event_eiv_pseudolikelihood_is_uneven_copy_invariant():
     baseline = fit_reconciled_pgls(response_contrasts=base, **common).iloc[0]
     duplicated = fit_reconciled_pgls(response_contrasts=repeated, **common).iloc[0]
 
-    for column in [
-        "coefficient",
-        "standard_error",
-        "evolutionary_rate",
-        "log_likelihood",
-    ]:
-        assert duplicated[column] == pytest.approx(baseline[column], rel=2e-6)
+    assert duplicated["coefficient"] == pytest.approx(baseline["coefficient"], rel=2e-6)
+    rho = float(duplicated["predictor_evolutionary_rate"])
+    latent_mean = (rho / (rho + 0.05)) * np.arange(1.0, 7.0)
+    posterior_variance = rho * 0.05 / (rho + 0.05)
+    membership = np.r_[np.zeros(5, dtype=int), np.arange(1, 6)]
+    design = latent_mean[membership]
+    weights = 1.0 / np.bincount(membership)[membership]
+    operator = weights * design / np.sum(weights * design**2)
+    covariance = float(duplicated["evolutionary_rate"]) * np.eye(len(membership))
+    covariance += (
+        float(duplicated["coefficient"]) ** 2
+        * posterior_variance
+        * (membership[:, None] == membership[None, :])
+    )
+    assert duplicated["standard_error"] ** 2 == pytest.approx(
+        float(operator @ covariance @ operator), rel=1e-6
+    )
 
 
 def test_categorical_omnibus_row_reports_its_actual_wald_inference():
@@ -718,6 +757,103 @@ def test_species_event_cluster_hc1_standard_error_matches_reference_formula():
     assert result["standard_error"] == pytest.approx(np.sqrt(variance))
     assert result["statistic"] == pytest.approx(coefficient / np.sqrt(variance))
     assert result["degrees_of_freedom"] == degrees_of_freedom
+
+
+@pytest.mark.parametrize("weighting", ["event", "contrast"])
+def test_cluster_hc1_unbalanced_events_preserve_score_products(weighting):
+    from nwkit.model_matrix import PredictorTerm
+    from nwkit.regress import _fit_model
+
+    rng = np.random.default_rng(713)
+    event = np.repeat(np.arange(7), [31, 2, 5, 1, 9, 3, 8])
+    rng.shuffle(event)
+    design = rng.normal(size=(len(event), 2))
+    y = design @ np.array([0.5, -1.2]) + rng.normal(size=len(event))
+    frame = pd.DataFrame(
+        {
+            "tree_id": "family",
+            "trait": "y",
+            "raw_contrast": y,
+            "contrast_variance": 1.0,
+            "_predictor_values": list(design),
+            "species_event_id": event.astype(str),
+            "lineage_clade_id": "lineage",
+        }
+    )
+    weights = (
+        1 / np.bincount(event)[event] if weighting == "event" else np.ones(len(event))
+    )
+    gram = design.T @ (weights[:, None] * design)
+    beta = np.linalg.solve(gram, design.T @ (weights * y))
+    residual = y - design @ beta
+    meat = np.zeros((2, 2))
+    for identifier in range(7):
+        selected = event == identifier
+        score = design[selected].T @ (weights[selected] * residual[selected])
+        meat += np.outer(score, score)
+    bread = np.linalg.inv(gram)
+    expected = 7 / 5 * bread @ meat @ bread
+    result = _fit_model(
+        frame,
+        ["x", "z"],
+        confidence_level=0.95,
+        event_weighting=weighting,
+        coverage_policy="complete",
+        excluded_ineligible=0,
+        excluded_coverage=0,
+        predictor_metadata={
+            name: PredictorTerm(name, name, "continuous") for name in ("x", "z")
+        },
+        predictor_groups={name: (name,) for name in ("x", "z")},
+    )
+    np.testing.assert_allclose([row["coefficient"] for row in result], beta, rtol=1e-13)
+    np.testing.assert_allclose(
+        [row["standard_error"] for row in result],
+        np.sqrt(np.diag(expected)),
+        rtol=1e-13,
+    )
+
+
+def test_cluster_hc1_keeps_cancelling_score_reduction_order():
+    from nwkit.model_matrix import PredictorTerm
+    from nwkit.regress import _fit_model
+
+    rng = np.random.default_rng(18)
+    event = np.repeat(np.arange(3), 8)
+    y = np.concatenate(
+        [rng.permutation(np.tile([1e16, 1.0, -1e16, 1.0], 2)) for _ in range(3)]
+    )
+    design = np.ones((len(y), 1))
+    frame = pd.DataFrame(
+        {
+            "tree_id": "family",
+            "trait": "y",
+            "raw_contrast": y,
+            "contrast_variance": 1.0,
+            "_predictor_values": list(design),
+            "species_event_id": event.astype(str),
+            "lineage_clade_id": "lineage",
+        }
+    )
+    result = _fit_model(
+        frame,
+        ["x"],
+        confidence_level=0.95,
+        event_weighting="contrast",
+        coverage_policy="complete",
+        excluded_ineligible=0,
+        excluded_coverage=0,
+        predictor_metadata={"x": PredictorTerm("x", "x", "continuous")},
+        predictor_groups={"x": ("x",)},
+    )[0]
+    residual = y - result["coefficient"]
+    meat = np.zeros((1, 1))
+    for identifier in range(3):
+        selected = event == identifier
+        score = design[selected].T @ residual[selected]
+        meat += np.outer(score, score)
+    expected = float(np.sqrt(1.5 * meat[0, 0] / len(y) ** 2))
+    assert result["standard_error"] == pytest.approx(expected, rel=1e-14, abs=1e-14)
 
 
 def test_pgls_fits_each_tree_and_response_separately():
@@ -970,7 +1106,8 @@ def test_pgls_cli_writes_coefficient_table(tmp_path):
     output = pd.read_csv(output_path, sep="\t")
     assert output.iloc[0]["term"] == "body_size"
     assert output.iloc[0]["model"] == "hierarchical"
-    assert output.iloc[0]["covariance_estimator"] == "gaussian-REML"
+    assert output.iloc[0]["covariance_estimator"] == "event-average-model-sandwich"
+    assert output.iloc[0]["estimand"] == "event-average"
     assert output.iloc[0]["n_species_events"] == 3
 
 
@@ -1032,6 +1169,7 @@ def test_replicate_reml_matches_gls_with_evolutionary_and_sampling_covariance():
         ["expression"],
         ["body_size"],
         model="replicate-reml",
+        regression_estimand="common",
         response_sampling_covariance=sidecar,
     ).iloc[0]
 
@@ -1349,7 +1487,7 @@ def test_lineage_inference_and_leave_one_out_separate_average_and_subset_effects
     assert set(np.sign(sensitivity["coefficient_change"])) == {-1.0, 1.0}
 
 
-def test_lineage_joint_parametric_bootstrap_reports_calibrated_p_values():
+def test_lineage_joint_parametric_bootstrap_reports_empirical_tail_and_dispatch():
     rows = []
     for event_index in range(1, 7):
         for gene_index, slope in [(1, 1.5), (2, 2.5)]:
@@ -1403,7 +1541,10 @@ def test_hierarchical_model_estimates_shared_species_event_effects():
     assert set(random_effects["n_observations"]) == {2}
 
 
-def test_parametric_bootstrap_is_reproducible_and_reports_empirical_inference():
+@pytest.mark.parametrize("inference", ["parametric-bootstrap", "studentized-bootstrap"])
+def test_parametric_bootstrap_is_reproducible_and_reports_empirical_inference(
+    inference,
+):
     response = pd.DataFrame(
         [
             _response_row(1, 1.8),
@@ -1425,7 +1566,7 @@ def test_parametric_bootstrap_is_reproducible_and_reports_empirical_inference():
         predictors=["body_size"],
         predictor_sampling_covariance=predictor_sampling,
         model="replicate-reml",
-        inference="parametric-bootstrap",
+        inference=inference,
         bootstrap_replicates=12,
         seed=19,
     )
@@ -1440,9 +1581,59 @@ def test_parametric_bootstrap_is_reproducible_and_reports_empirical_inference():
         "confidence_interval_upper",
     ]:
         assert first[column] == pytest.approx(second[column])
-    assert first["inference_method"] == "parametric-bootstrap"
+    assert first["inference_method"] == inference
     assert first["measurement_error_model"] == "latent-predictor"
     assert 0.0 < first["p_value"] <= 1.0
+
+
+def test_studentized_bootstrap_uses_fitted_event_average_standard_errors():
+    response = pd.DataFrame([_response_row(1, 0.7), _response_row(2, -1.2)])
+    predictor = _predictor_table(values=(1.0, 1.0))
+    predictor = predictor.iloc[:2].copy()
+    result = fit_reconciled_pgls(
+        response,
+        predictor,
+        ["expression"],
+        ["body_size"],
+        model="replicate-reml",
+        inference="studentized-bootstrap",
+        bootstrap_replicates=1999,
+        seed=41,
+    ).iloc[0]
+    exact_p = 2.0 * regression_mod.student_t.sf(abs(result["statistic"]), df=1)
+    assert result["estimand"] == "event-average"
+    assert result["p_value_method"] == "studentized-parametric-bootstrap"
+    assert result["interval_method"] == "studentized-parametric-bootstrap"
+    assert result["p_value"] == pytest.approx(exact_p, abs=0.04)
+    assert result["bootstrap_succeeded"] == 1999
+
+
+def test_studentized_bootstrap_aborts_after_a_failed_fixed_attempt(monkeypatch):
+    response = pd.DataFrame([_response_row(1, 0.7), _response_row(2, -1.2)])
+    predictor = _predictor_table(values=(1.0, 1.0)).iloc[:2].copy()
+    original = regression_mod._fit_profile_or_eiv
+    calls = 0
+
+    def fail_first(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise ValueError("simulated refit failure")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(regression_mod, "_fit_profile_or_eiv", fail_first)
+    with pytest.raises(ValueError, match="only 1 successful fits in 2 attempts"):
+        fit_reconciled_pgls(
+            response,
+            predictor,
+            ["expression"],
+            ["body_size"],
+            model="replicate-reml",
+            inference="studentized-bootstrap",
+            bootstrap_replicates=2,
+            seed=41,
+        )
+    assert calls == 2
 
 
 def test_model_specific_options_are_validated_instead_of_ignored():
@@ -1902,7 +2093,8 @@ def test_reconciled_multilevel_factor_preserves_cross_column_uncertainty(tmp_pat
     assert len(coefficients) == 2
     assert set(coefficients["measurement_error_model"]) == {"latent-predictor"}
     assert coefficients["predictor_evolution_parameter"].nunique() == 1
-    assert set(coefficients["covariance_estimator"]) == {"gaussian-eiv-ML"}
+    assert set(coefficients["covariance_estimator"]) == {"event-average-model-sandwich"}
+    assert set(coefficients["nuisance_estimator"]) == {"gaussian-ML"}
     covariance = pd.read_csv(
         tmp_path / "multilevel-latent.predictor-sampling-covariance.tsv", sep="\t"
     )
@@ -2099,6 +2291,8 @@ def test_reconciled_negative_binomial_keeps_biological_count_replicates(tmp_path
             "body_size",
             "--response-biological-id",
             "sample",
+            "--coefficient-penalty",
+            "none",
             "--inference",
             "parametric-bootstrap",
             "--bootstrap-replicates",
@@ -2383,8 +2577,9 @@ def test_pgls_raw_mode_propagates_response_and_predictor_replicates_together(
     assert set(summary["n_biological"]) == {2}
     assert set(response_summary["n_biological"]) == {2}
     assert set(result["measurement_error_model"]) == {"latent-predictor"}
-    assert set(result["reml"]) == {"no"}
-    assert set(result["covariance_estimator"]) == {"gaussian-eiv-ML"}
+    assert set(result["reml"]) == {"not-applicable"}
+    assert set(result["nuisance_estimator"]) == {"gaussian-ML"}
+    assert set(result["covariance_estimator"]) == {"event-average-model-sandwich"}
     assert result.iloc[0]["mean_sampling_variance"] > 0.0
     assert result.iloc[0]["mean_predictor_sampling_variance"] > 0.0
     assert set(result["response_evolution_parameter_status"]) == {"estimated"}
@@ -2660,7 +2855,14 @@ def test_large_predictor_factor_loading_remains_structured(monkeypatch):
         lineage_random_slope="no",
     )
 
-    assert result.iloc[0]["coefficient"] == pytest.approx(1.5, rel=0.02)
+    rho = float(result.iloc[0]["predictor_evolutionary_rate"])
+    conditional_predictor = predictor_values * rho / (rho + 0.05)
+    expected = float(
+        conditional_predictor
+        @ response["raw_contrast"].to_numpy(float)
+        / (conditional_predictor @ conditional_predictor)
+    )
+    assert result.iloc[0]["coefficient"] == pytest.approx(expected, rel=1e-6)
     assert result.iloc[0]["measurement_error_model"] == "latent-predictor"
 
 
@@ -3182,7 +3384,8 @@ def test_pgls_raw_auto_gene_parameter_rejects_cluster_hc1_before_io():
 
 @pytest.mark.integration
 @pytest.mark.slow
-def test_pgls_raw_bootstrap_refits_automatic_gene_parameter(tmp_path):
+@pytest.mark.parametrize("inference", ["parametric-bootstrap", "studentized-bootstrap"])
+def test_pgls_raw_bootstrap_refits_automatic_gene_parameter(tmp_path, inference):
     gene_tree, species_tree, expression, species_traits = _write_raw_regression_inputs(
         tmp_path, biological_replicates=True
     )
@@ -3210,7 +3413,7 @@ def test_pgls_raw_bootstrap_refits_automatic_gene_parameter(tmp_path):
             "--gene-evolution-model",
             "lambda",
             "--inference",
-            "parametric-bootstrap",
+            inference,
             "--bootstrap-replicates",
             "2",
             "--seed",
@@ -3223,7 +3426,7 @@ def test_pgls_raw_bootstrap_refits_automatic_gene_parameter(tmp_path):
     result = pd.read_csv(outfile, sep="\t")
     assert result.iloc[0]["response_evolution_parameter_status"] == "estimated"
     assert result.iloc[0]["response_evolution_parameter_bootstrap_refit"] == "yes"
-    assert result.iloc[0]["inference_method"] == "parametric-bootstrap"
+    assert result.iloc[0]["inference_method"] == inference
     assert np.isfinite(result.iloc[0]["standard_error"])
 
 

@@ -1,0 +1,13 @@
+{"branches": [], "status": "complete", "seconds": 0.6338664579670876}
+{"branches": [16], "status": "complete", "seconds": 0.5887468759901822}
+{"branches": [16, 27], "status": "complete", "seconds": 0.6166724169743247}
+{"branches": [16, 17], "status": "complete", "seconds": 0.6777417089906521}
+{"branches": [16, 17, 27], "status": "complete", "seconds": 0.7425281250034459}
+{"branches": [16, 20, 27], "status": "complete", "seconds": 0.6520610000006855}
+{"branches": [16, 17, 25, 27], "status": "complete", "seconds": 0.5962885839981027}
+{"branches": [16, 17, 20, 27], "status": "complete", "seconds": 0.7671388339949772}
+{"branches": [16, 17, 19, 25, 27], "status": "complete", "seconds": 0.8968339170096442}
+{"branches": [16, 17, 20, 25, 27], "status": "complete", "seconds": 0.6769389580003917}
+{"branches": [16, 17, 19, 23, 25, 27], "status": "complete", "seconds": 0.7687446260242723}
+{"branches": [16, 17, 20, 23, 25, 27], "status": "complete", "seconds": 1.1317089999793097}
+{"job": {"truth": "shared", "mode": "trait-specific", "replicate": 0, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "timing"}, "status": "failed", "elapsed": 8.901848504028749, "error": "ValueError: A native search covariance mode failed; complete the fit before selection: {'alpha_mode': 'finite', 'success': False, 'message': \"Joint covariance optimizer failed checked convergence: [{'success': False, 'message': 'CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH', 'projected_score': 0.001464731269607}, {'success': False, 'message': 'CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH', 'projected_score': 0.001464725585265114}, {'success': False, 'message': 'CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH', 'projected_score': 0.001464722743094171}]\"}"}

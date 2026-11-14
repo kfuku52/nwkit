@@ -1,0 +1,67 @@
+100 2 OUfixedRoot [0.008969208400230855, 0.00926014999859035, 0.008929183403961361, 0.008986141602508723, 0.00952444999711588, 0.008888549997936934, 0.009379266598261892]
+100 2 OUrandomRoot [0.008617533394135535, 0.008555458195041865, 0.008288424997590482, 0.008335133397486061, 0.008007575001101941, 0.008093133405782282, 0.008226208202540875]
+100 5 OUfixedRoot [0.008746816799975932, 0.009002033201977611, 0.008969633397646249, 0.008607099996879697, 0.008748041605576873, 0.009005324996542186, 0.008810066606383771]
+100 5 OUrandomRoot [0.0108623499982059, 0.010892208199948072, 0.010402808396611363, 0.010842983203474432, 0.010729216795880347, 0.010517650004476308, 0.010771283193025737]
+1000 2 OUfixedRoot [0.0794408084009774, 0.08385552520630882, 0.0960520000080578, 0.08074718340067193, 0.08010161680867896, 0.07731420840136707, 0.07853075839811936]
+1000 2 OUrandomRoot [0.09535997500643134, 0.09698705020127818, 0.08185292519629002, 0.0846697499975562, 0.08627045840257778, 0.09016949160723016, 0.07874527499079705]
+1000 5 OUfixedRoot [0.08403594999108463, 0.0832743918057531, 0.10281744999811053, 0.0997380584012717, 0.10126140019856393, 0.08375774159794673, 0.08304956679930911]
+1000 5 OUrandomRoot [0.08541420840192586, 0.08524421659531072, 0.08548400820000097, 0.08300689180614426, 0.08301485840929672, 0.09142792500788346, 0.09177288339706138]
+100 2 OUfixedRoot [0.0015165168093517422, 0.0014345916104502976, 0.0013528082054108381, 0.00134742499794811, 0.001339733402710408, 0.0013362666009925305, 0.0013305500033311546]
+100 2 OUrandomRoot [0.0007266166037879884, 0.0007221581996418536, 0.0007198917912319303, 0.0007205749978311359, 0.0007215499994345009, 0.0007164750015363098, 0.0007180250016972422]
+100 5 OUfixedRoot [0.00944296659436077, 0.010052066599018871, 0.010818841599393636, 0.008613783400505781, 0.009863191598560661, 0.010302108200266957, 0.00925643319496885]
+100 5 OUrandomRoot [0.008965891599655152, 0.008628691802732647, 0.008776558400131761, 0.008644991600885988, 0.008862591802608222, 0.009147983393631876, 0.00912990840151906]
+1000 2 OUfixedRoot [0.07704169159987942, 0.0757022749981843, 0.07542696659220383, 0.07627104159910232, 0.07840380020206794, 0.07576614159625024, 0.07773069998947904]
+1000 2 OUrandomRoot [0.07530074180103838, 0.07669331659562886, 0.07767295020166784, 0.07694503320381045, 0.07460725019918754, 0.07263401659438387, 0.07171969179762527]
+1000 5 OUfixedRoot [0.09709024160401895, 0.10049112499691545, 0.09509027519961818, 0.08818855000426992, 0.08826838339446112, 0.09805354999843985, 0.08225101659772918]
+1000 5 OUrandomRoot [0.07973675819812343, 0.08226293340558186, 0.0804651916027069, 0.08176924180006609, 0.08103113339748233, 0.08176434999331832, 0.08740987499477341]
+{"branches": [], "status": "complete", "seconds": 17.116846591001377}
+{"branches": [16], "status": "complete", "seconds": 18.547760840971023}
+{"branches": [16, 27], "status": "complete", "seconds": 19.631854717968963}
+{"branches": [16, 17], "status": "complete", "seconds": 36.197661432030145}
+{"branches": [16, 17, 27], "status": "complete", "seconds": 35.51744205702562}
+{"branches": [16, 20, 27], "status": "complete", "seconds": 27.49039905401878}
+{"branches": [16, 17, 25, 27], "status": "complete", "seconds": 35.3032734739827}
+{"branches": [16, 17, 20, 27], "status": "complete", "seconds": 23.418592260975856}
+{"branches": [16, 17, 19, 25, 27], "status": "complete", "seconds": 26.5138400120195}
+{"branches": [16, 17, 20, 25, 27], "status": "complete", "seconds": 30.583464056020603}
+{"branches": [16, 17, 19, 23, 25, 27], "status": "complete", "seconds": 28.39863242901629}
+{"branches": [16, 17, 20, 23, 25, 27], "status": "complete", "seconds": 41.21894564398099}
+{"branches": [16, 17, 19, 23, 25, 27, 29], "status": "complete", "seconds": 22.611927885038313}
+{"branches": [16, 17, 19, 23, 25, 27, 178], "status": "complete", "seconds": 24.11921442701714}
+{"branches": [16, 17, 19, 23, 25, 27, 29, 161], "status": "complete", "seconds": 23.21985067805508}
+{"branches": [16, 17, 19, 23, 25, 27, 29, 178], "status": "complete", "seconds": 21.184543551004026}
+{"branches": [16, 17, 19, 23, 25, 27, 29, 161, 178], "status": "complete", "seconds": 24.453946635010652}
+{"branches": [16, 17, 19, 23, 25, 27, 29, 107, 178], "status": "complete", "seconds": 20.641576050024014}
+{"branches": [16, 17, 19, 23, 25, 27, 29, 107, 161, 178], "status": "complete", "seconds": 35.35154780803714}
+{"branches": [16, 17, 19, 23, 25, 27, 29, 161, 168, 178], "status": "complete", "seconds": 37.427822142024525}
+{"branches": [16, 17, 19, 23, 25, 27, 29, 107, 161, 168, 178], "status": "complete", "seconds": 36.413942390994634}
+{"branches": [16, 17, 19, 20, 23, 25, 27, 29, 107, 161, 178], "status": "complete", "seconds": 27.3768600950134}
+{"branches": [16, 17, 19, 20, 23, 25, 27, 29, 107, 161, 168, 178], "status": "complete", "seconds": 35.524326184007805}
+{"branches": [11, 16, 17, 19, 23, 25, 27, 29, 107, 161, 168, 178], "status": "complete", "seconds": 20.090160675987136}
+{"branches": [11, 16, 17, 19, 20, 23, 25, 27, 29, 161, 168, 178], "status": "complete", "seconds": 54.5371852319804}
+{"branches": [16, 17, 20, 23, 25, 27, 29, 107, 161, 168, 178], "status": "complete", "seconds": 37.59946185100125}
+{"job": {"truth": "shared", "mode": "shared", "replicate": 0, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "timing"}, "status": "complete", "elapsed": 760.7386806350551, "error": null}
+{"completed": 1, "total": 4, "job": {"truth": "shared", "mode": "shared", "replicate": 0, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "timing"}, "status": "complete"}
+{"completed": 2, "total": 4, "job": {"truth": "shared", "mode": "trait-specific", "replicate": 0, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "timing"}, "status": "complete"}
+{"completed": 3, "total": 4, "job": {"truth": "different", "mode": "trait-specific", "replicate": 0, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "timing"}, "status": "complete"}
+{"completed": 4, "total": 4, "job": {"truth": "different", "mode": "shared", "replicate": 0, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "timing"}, "status": "complete"}
+{"completed": 1, "total": 20, "job": {"truth": "different", "mode": "shared", "replicate": 0, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "accuracy"}, "status": "complete"}
+{"completed": 2, "total": 20, "job": {"truth": "shared", "mode": "shared", "replicate": 0, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "accuracy"}, "status": "complete"}
+{"completed": 3, "total": 20, "job": {"truth": "different", "mode": "shared", "replicate": 1, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "accuracy"}, "status": "complete"}
+{"completed": 4, "total": 20, "job": {"truth": "different", "mode": "trait-specific", "replicate": 0, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "accuracy"}, "status": "complete"}
+{"completed": 5, "total": 20, "job": {"truth": "shared", "mode": "shared", "replicate": 1, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "accuracy"}, "status": "complete"}
+{"completed": 6, "total": 20, "job": {"truth": "shared", "mode": "trait-specific", "replicate": 0, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "accuracy"}, "status": "complete"}
+{"completed": 7, "total": 20, "job": {"truth": "different", "mode": "trait-specific", "replicate": 1, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "accuracy"}, "status": "complete"}
+{"completed": 8, "total": 20, "job": {"truth": "shared", "mode": "trait-specific", "replicate": 1, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "accuracy"}, "status": "complete"}
+{"completed": 9, "total": 20, "job": {"truth": "shared", "mode": "shared", "replicate": 2, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "accuracy"}, "status": "complete"}
+{"completed": 10, "total": 20, "job": {"truth": "shared", "mode": "trait-specific", "replicate": 2, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "accuracy"}, "status": "complete"}
+{"completed": 11, "total": 20, "job": {"truth": "different", "mode": "shared", "replicate": 2, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "accuracy"}, "status": "complete"}
+{"completed": 12, "total": 20, "job": {"truth": "different", "mode": "trait-specific", "replicate": 2, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "accuracy"}, "status": "complete"}
+{"completed": 13, "total": 20, "job": {"truth": "shared", "mode": "shared", "replicate": 3, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "accuracy"}, "status": "complete"}
+{"completed": 14, "total": 20, "job": {"truth": "shared", "mode": "trait-specific", "replicate": 3, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "accuracy"}, "status": "complete"}
+{"completed": 15, "total": 20, "job": {"truth": "different", "mode": "shared", "replicate": 3, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "accuracy"}, "status": "complete"}
+{"completed": 16, "total": 20, "job": {"truth": "different", "mode": "trait-specific", "replicate": 3, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "accuracy"}, "status": "complete"}
+{"completed": 17, "total": 20, "job": {"truth": "shared", "mode": "shared", "replicate": 4, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "accuracy"}, "status": "complete"}
+{"completed": 18, "total": 20, "job": {"truth": "different", "mode": "shared", "replicate": 4, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "accuracy"}, "status": "complete"}
+{"completed": 19, "total": 20, "job": {"truth": "different", "mode": "trait-specific", "replicate": 4, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "accuracy"}, "status": "complete"}
+{"completed": 20, "total": 20, "job": {"truth": "shared", "mode": "trait-specific", "replicate": 4, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "accuracy"}, "status": "complete"}

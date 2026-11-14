@@ -1,0 +1,13 @@
+{
+  "changed_source_files": [
+    "nwkit/gaussian_whitening.py",
+    "nwkit/shift_native_quick.py",
+    "nwkit/shift_native_screen.py"
+  ],
+  "current_nwkit_sources_match_measured_final_snapshot": true,
+  "harness_sha256": {
+    "tools/benchmark_native_screen.py": "daf0f14ad20ce1eb9d139f00b8c787bb80d73b72cc8a4d446866f7f3d9b99203",
+    "tools/benchmark_native_search.py": "53ec7e0729e14e75db296c710a8160b5b121813254edd5c45165a82fb854d8ad",
+    "reviews/native-optimization-2026-09-11/run_benchmarks.py": "897524688754e62150e5027d8250bea31dd11c548fac5e0e5d1047ae79ae039c"
+  }
+}

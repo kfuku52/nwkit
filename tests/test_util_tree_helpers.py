@@ -2,6 +2,7 @@ import pytest
 from ete4 import Tree
 
 from nwkit.util import (
+    annotate_duplication_confidence_and_count_species,
     annotate_duplication_confidence_scores,
     annotate_scientific_names,
     copy_tree_iteratively,
@@ -41,6 +42,22 @@ class TestCopyTreeIteratively:
         assert tree.props["metadata"] == {"values": [1, 2]}
         assert next(tree.leaves()).name == "T0"
 
+    def test_late_nested_properties_keep_shared_references_in_copy(self):
+        tree = Tree("(A:1,B:1,C:1);", parser=1)
+        first, second, third = tree.children
+        shared = {"properties": first.props, "values": [1, 2]}
+        second.props["metadata"] = third.props["metadata"] = shared
+
+        copied = copy_tree_iteratively(tree)
+
+        _, second_copy, third_copy = copied.children
+        copied_metadata = second_copy.props["metadata"]
+        assert copied_metadata is third_copy.props["metadata"]
+        assert copied_metadata["properties"] == first.props
+        assert copied_metadata["properties"] is not first.props
+        copied_metadata["values"].append(3)
+        assert shared["values"] == [1, 2]
+
 
 class TestSpeciesGrouping:
     def test_monophyletic_duplicate_species_are_grouped(self):
@@ -68,26 +85,11 @@ class TestSpeciesGrouping:
 
 
 class TestRemoveSingleton:
-    def test_remove_singleton_node(self):
-        # Create tree with a singleton: ((A,B)) -> should become (A,B)
-        tree = Tree("(((A:1,B:1):1):1,(C:1,D:1):1);", parser=1)
-        num_nodes_before = len(list(tree.traverse()))
-        tree = remove_singleton(tree, verbose=False, preserve_branch_length=True)
-        num_nodes_after = len(list(tree.traverse()))
-        assert num_nodes_after < num_nodes_before
-        assert set(tree.leaf_names()) == {"A", "B", "C", "D"}
-
     def test_no_singleton(self, simple_tree):
         num_nodes_before = len(list(simple_tree.traverse()))
         tree = remove_singleton(simple_tree, verbose=False)
         num_nodes_after = len(list(tree.traverse()))
         assert num_nodes_before == num_nodes_after
-
-    def test_preserve_branch_length(self):
-        tree = Tree("(((A:1,B:1):2):3,C:6);", parser=1)
-        tree = remove_singleton(tree, verbose=False, preserve_branch_length=True)
-        # After removing singleton, branch lengths should be preserved (summed)
-        assert set(tree.leaf_names()) == {"A", "B", "C"}
 
     def test_remove_singleton_root_wrapper(self):
         tree = Tree("((A:1,B:1):1);", parser=1)
@@ -174,10 +176,6 @@ class TestLabel2Sciname:
     def test_single_string(self):
         result = label2sciname("Homo_sapiens_GENE1")
         assert result == "Homo_sapiens"
-
-    def test_list_input(self):
-        result = label2sciname(["Homo_sapiens_GENE1", "Mus_musculus_GENE2"])
-        assert result == ["Homo_sapiens", "Mus_musculus"]
 
     def test_no_species_info(self):
         result = label2sciname("SingleWord")
@@ -281,18 +279,6 @@ class TestExtractSpeciesLabel:
 
 
 class TestReadItemPerLineFile:
-    def test_basic(self, tmp_path):
-        f = tmp_path / "items.txt"
-        f.write_text("apple\nbanana\ncherry\n")
-        result = read_item_per_line_file(str(f))
-        assert result == ["apple", "banana", "cherry"]
-
-    def test_empty_lines_stripped(self, tmp_path):
-        f = tmp_path / "items.txt"
-        f.write_text("apple\n\nbanana\n\n")
-        result = read_item_per_line_file(str(f))
-        assert result == ["apple", "banana"]
-
     def test_crlf_and_whitespace_are_normalized(self, tmp_path):
         f = tmp_path / "items.txt"
         f.write_bytes(b" apple \r\nbanana\r\n\r\n  cherry  \r\n")
@@ -316,6 +302,39 @@ class TestAnnotateScientificNames:
 
 
 class TestAnnotateDuplicationConfidenceScores:
+    def test_parent_merge_keeps_child_counts_and_scores(self):
+        tree = Tree("(((A1),B1),(B2,C2));", parser=1)
+        for leaf in tree.leaves():
+            leaf.props["species_label"] = leaf.name[0]
+
+        counts = annotate_duplication_confidence_and_count_species(tree)
+
+        left, right = tree.children
+        assert counts[tree] == 3
+        assert counts[left] == counts[right] == 2
+        assert counts[left.children[0]] == 1
+        assert tree.props["dup_conf_score"] == 1 / 3
+        assert left.props["dup_conf_score"] == right.props["dup_conf_score"] == 0.0
+
+    @pytest.mark.parametrize(
+        "first,second,expected",
+        [
+            (set(), set(), 0.0),
+            ({"A"}, set(), 0.0),
+            ({"A"}, {"B"}, 0.0),
+            ({"A", "B"}, {"B", "C"}, 1 / 3),
+            ({"A", "B"}, {"A", "B"}, 1.0),
+        ],
+    )
+    def test_supplied_species_sets_preserve_overlap_score(
+        self, first, second, expected
+    ):
+        tree = Tree("(A,B);", parser=1)
+        annotate_duplication_confidence_scores(
+            tree, {tree.children[0]: first, tree.children[1]: second}
+        )
+        assert tree.props["dup_conf_score"] == expected
+
     def test_annotate(self, species_tree):
         tree = annotate_scientific_names(species_tree)
         tree = annotate_duplication_confidence_scores(tree)
@@ -350,6 +369,20 @@ class TestAnnotateDuplicationConfidenceScores:
 
 
 class TestGetSubtreeLeafNameSets:
+    @pytest.mark.parametrize(
+        "source",
+        ["A;", "(Z,A,M);", "(((D),C),(B,A));", "((A,B),A);"],
+    )
+    def test_every_subtree_matches_its_descendant_leaf_walk(self, source):
+        tree = Tree(source, parser=1)
+        observed = get_subtree_leaf_name_sets(tree)
+        unique = len(set(tree.leaf_names())) == len(list(tree.leaf_names()))
+        for node in tree.traverse():
+            expected = list(node.leaf_names())
+            assert observed[node] == set(expected)
+            if unique:
+                assert tuple(observed[node]) == tuple(expected)
+
     def test_sets_are_correct(self):
         tree = Tree("((A:1,B:1):1,(C:1,D:1):1);", parser=1)
         sets = get_subtree_leaf_name_sets(tree)

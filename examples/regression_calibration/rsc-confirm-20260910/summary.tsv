@@ -1,0 +1,4 @@
+case	method	generated	p_available	rejection_given_available	coverage_given_interval	fit_failures	seconds
+rsc-e7-control	oracle	5000	1.0	0.0492	0.9508	0	2.813460116070928
+rsc-e7-control	wald	5000	1.0	0.0466	0.9534	0	177.37474133833894
+rsc-tips-n8	wald	5000	1.0	0.0486	0.9514	0	1292.076078449085

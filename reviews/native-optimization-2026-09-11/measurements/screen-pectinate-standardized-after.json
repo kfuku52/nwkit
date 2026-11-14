@@ -1,0 +1,35 @@
+{
+  "scope": "screening matrix setup only; excludes lasso/search/calibration",
+  "configuration": {
+    "tips": 1000,
+    "traits": 4,
+    "shape": "pectinate",
+    "optimum_increments": false,
+    "source": null,
+    "output": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-screen-matrices-dxo39g5j/screen-pectinate-standardized-after.json"
+  },
+  "measurements": [
+    {
+      "warmup": true,
+      "wall_seconds": 0.2896734999958426
+    },
+    {
+      "warmup": false,
+      "wall_seconds": 0.2505287079839036
+    },
+    {
+      "warmup": false,
+      "wall_seconds": 0.2526709159719758
+    },
+    {
+      "warmup": false,
+      "wall_seconds": 0.24154595797881484
+    }
+  ],
+  "peak_rss_bytes": 352571392,
+  "input_sha256": "9d24b1d4a27031de86ceec7439689a9c4a58f84e79b07305f9512b33b09e11ef",
+  "source_sha256": "d079e845896b56dca72a59191ffd10da1040930c93a1adc61639c73546e423e3",
+  "python": "3.10.14",
+  "numpy": "1.26.4",
+  "platform": "macOS-26.6.2-x86_64-i386-64bit"
+}

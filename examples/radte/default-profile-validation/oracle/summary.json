@@ -1,0 +1,70 @@
+{
+  "original": {
+    "families": 50,
+    "point_successes": 50,
+    "intervals_returned": 48,
+    "truth_covered": 43,
+    "coverage_among_returned": 0.8958333333333334,
+    "correct_return_fraction": 0.86,
+    "availability": 0.96,
+    "bias": 0.7990593833014655,
+    "rmse": 4.092439214554764,
+    "median_width": 13.597410671919555,
+    "statuses": {
+      "complete": 50
+    },
+    "interval_statuses": {
+      "conditional-profile": 48,
+      "unavailable-strict-clock-limit": 2
+    },
+    "estimators": {
+      "sequence-empirical-bayes-map": 48,
+      "sequence-marginal-quadratic": 2
+    },
+    "coverage_wilson95": [
+      0.7783257830561368,
+      0.9546782809581869
+    ],
+    "availability_wilson95": [
+      0.8653990931249297,
+      0.9889611156723802
+    ],
+    "correct_return_wilson95": [
+      0.7381380628941446,
+      0.9304916657298371
+    ]
+  },
+  "known_sd": {
+    "families": 50,
+    "point_successes": 50,
+    "intervals_returned": 50,
+    "truth_covered": 47,
+    "coverage_among_returned": 0.94,
+    "correct_return_fraction": 0.94,
+    "availability": 1.0,
+    "bias": 0.7322917137580766,
+    "rmse": 4.034467922824526,
+    "median_width": 13.168298439007007,
+    "statuses": {
+      "complete": 50
+    },
+    "interval_statuses": {
+      "conditional-profile": 50
+    },
+    "estimators": {
+      "sequence-empirical-bayes-map": 50
+    },
+    "coverage_wilson95": [
+      0.8378290831116182,
+      0.979385029651026
+    ],
+    "availability_wilson95": [
+      0.9286524008666412,
+      1.0
+    ],
+    "correct_return_wilson95": [
+      0.8378290831116182,
+      0.979385029651026
+    ]
+  }
+}

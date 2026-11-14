@@ -1,0 +1,686 @@
+{
+  "baseline_commit": "d7116f80b9979739c69a5431a5e34b822795408b",
+  "environment": {
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "python": "3.12.14",
+    "numpy": "2.5.4",
+    "scipy": "1.17.1",
+    "pandas": "3.0.6",
+    "nwkit": "0.43.54",
+    "threads": 1,
+    "exclusive_lock": "/tmp/nwkit-perf-20261022-9fYwTD/measurement.lock"
+  },
+  "whole_helper": [
+    {
+      "observations": 200,
+      "events": 50,
+      "predictors": 3,
+      "event_weighting": "event",
+      "equivalence": {
+        "numeric_fields": 60,
+        "max_absolute": 0.0,
+        "max_scaled": 0.0
+      },
+      "measurements": {
+        "baseline": {
+          "seconds": [
+            0.0006392078939825296,
+            0.0006546250078827143,
+            0.0006258330540731549,
+            0.0006200420903041959,
+            0.0006112499395385385,
+            0.000843374989926815,
+            0.0008600839646533132
+          ],
+          "median_seconds": 0.0006392078939825296,
+          "min_seconds": 0.0006112499395385385,
+          "max_seconds": 0.0008600839646533132,
+          "peak_python_bytes": 57190,
+          "speedup_over_baseline": 1.0
+        },
+        "candidate": {
+          "seconds": [
+            0.0014216670533642173,
+            0.0011483749840408564,
+            0.00038058299105614424,
+            0.0003757909871637821,
+            0.0019130000146105886,
+            0.0007438750471919775,
+            0.0004403749480843544
+          ],
+          "median_seconds": 0.0007438750471919775,
+          "min_seconds": 0.0003757909871637821,
+          "max_seconds": 0.0019130000146105886,
+          "peak_python_bytes": 58121,
+          "speedup_over_baseline": 0.8592947113839193
+        }
+      }
+    },
+    {
+      "observations": 200,
+      "events": 50,
+      "predictors": 3,
+      "event_weighting": "contrast",
+      "equivalence": {
+        "numeric_fields": 60,
+        "max_absolute": 0.0,
+        "max_scaled": 0.0
+      },
+      "measurements": {
+        "baseline": {
+          "seconds": [
+            0.0006318329833447933,
+            0.0006241670344024897,
+            0.0006088339723646641,
+            0.0006018339190632105,
+            0.00111941690556705,
+            0.0006650839932262897,
+            0.0017658750293776393
+          ],
+          "median_seconds": 0.0006318329833447933,
+          "min_seconds": 0.0006018339190632105,
+          "max_seconds": 0.0017658750293776393,
+          "peak_python_bytes": 57185,
+          "speedup_over_baseline": 1.0
+        },
+        "candidate": {
+          "seconds": [
+            0.0003826660104095936,
+            0.0003791250055655837,
+            0.0003678339999169111,
+            0.0003628750564530492,
+            0.0006167080719023943,
+            0.0004831660771742463,
+            0.001982291927561164
+          ],
+          "median_seconds": 0.0003826660104095936,
+          "min_seconds": 0.0003628750564530492,
+          "max_seconds": 0.001982291927561164,
+          "peak_python_bytes": 58038,
+          "speedup_over_baseline": 1.651134321202187
+        }
+      }
+    },
+    {
+      "observations": 3000,
+      "events": 600,
+      "predictors": 8,
+      "event_weighting": "event",
+      "equivalence": {
+        "numeric_fields": 160,
+        "max_absolute": 7.105427357601002e-15,
+        "max_scaled": 1.5767351842220403e-16
+      },
+      "measurements": {
+        "baseline": {
+          "seconds": [
+            0.010037166997790337,
+            0.012748625013045967,
+            0.010645709000527859,
+            0.009595416020601988,
+            0.009715375024825335,
+            0.009917166084051132,
+            0.009585457970388234
+          ],
+          "median_seconds": 0.009917166084051132,
+          "min_seconds": 0.009585457970388234,
+          "max_seconds": 0.012748625013045967,
+          "peak_python_bytes": 1056612,
+          "speedup_over_baseline": 1.0
+        },
+        "candidate": {
+          "seconds": [
+            0.0022540000500157475,
+            0.005577375064603984,
+            0.002223749994300306,
+            0.0020757499150931835,
+            0.0021612918935716152,
+            0.002058084006421268,
+            0.0021000830456614494
+          ],
+          "median_seconds": 0.0021612918935716152,
+          "min_seconds": 0.002058084006421268,
+          "max_seconds": 0.005577375064603984,
+          "peak_python_bytes": 1056580,
+          "speedup_over_baseline": 4.588536196127885
+        }
+      }
+    },
+    {
+      "observations": 3000,
+      "events": 600,
+      "predictors": 8,
+      "event_weighting": "contrast",
+      "equivalence": {
+        "numeric_fields": 160,
+        "max_absolute": 7.105427357601002e-15,
+        "max_scaled": 1.5245402554822133e-16
+      },
+      "measurements": {
+        "baseline": {
+          "seconds": [
+            0.012131707975640893,
+            0.010925999958999455,
+            0.010345208924263716,
+            0.009620167082175612,
+            0.009715417050756514,
+            0.009560666978359222,
+            0.010400000028312206
+          ],
+          "median_seconds": 0.010345208924263716,
+          "min_seconds": 0.009560666978359222,
+          "max_seconds": 0.012131707975640893,
+          "peak_python_bytes": 1056661,
+          "speedup_over_baseline": 1.0
+        },
+        "candidate": {
+          "seconds": [
+            0.0021468750201165676,
+            0.0020562499994412065,
+            0.002323207911103964,
+            0.002127166953869164,
+            0.0021312080789357424,
+            0.002059833030216396,
+            0.003249333007261157
+          ],
+          "median_seconds": 0.0021312080789357424,
+          "min_seconds": 0.0020562499994412065,
+          "max_seconds": 0.003249333007261157,
+          "peak_python_bytes": 1056629,
+          "speedup_over_baseline": 4.854152453020816
+        }
+      }
+    },
+    {
+      "observations": 12000,
+      "events": 3000,
+      "predictors": 4,
+      "event_weighting": "event",
+      "equivalence": {
+        "numeric_fields": 80,
+        "max_absolute": 7.105427357601002e-14,
+        "max_scaled": 1.1730446440083466e-15
+      },
+      "measurements": {
+        "baseline": {
+          "seconds": [
+            0.12258874997496605,
+            0.11609141703229398,
+            0.11712279100902379,
+            0.12318337499164045,
+            0.12706016702577472,
+            0.12798241700511426,
+            0.12051525001879781
+          ],
+          "median_seconds": 0.12258874997496605,
+          "min_seconds": 0.11609141703229398,
+          "max_seconds": 0.12798241700511426,
+          "peak_python_bytes": 2872949,
+          "speedup_over_baseline": 1.0
+        },
+        "candidate": {
+          "seconds": [
+            0.006884500035084784,
+            0.0066545839654281735,
+            0.007023792015388608,
+            0.006759624928236008,
+            0.007546333014033735,
+            0.008560082991607487,
+            0.006999040953814983
+          ],
+          "median_seconds": 0.006999040953814983,
+          "min_seconds": 0.0066545839654281735,
+          "max_seconds": 0.008560082991607487,
+          "peak_python_bytes": 2872868,
+          "speedup_over_baseline": 17.51507824913445
+        }
+      }
+    },
+    {
+      "observations": 12000,
+      "events": 3000,
+      "predictors": 4,
+      "event_weighting": "contrast",
+      "equivalence": {
+        "numeric_fields": 80,
+        "max_absolute": 7.105427357601002e-14,
+        "max_scaled": 1.1730446440083466e-15
+      },
+      "measurements": {
+        "baseline": {
+          "seconds": [
+            0.13863733306061476,
+            0.1331480419030413,
+            0.16060787509195507,
+            0.16638295794837177,
+            0.14652683294843882,
+            0.131251291022636,
+            0.12906887498684227
+          ],
+          "median_seconds": 0.13863733306061476,
+          "min_seconds": 0.12906887498684227,
+          "max_seconds": 0.16638295794837177,
+          "peak_python_bytes": 2872900,
+          "speedup_over_baseline": 1.0
+        },
+        "candidate": {
+          "seconds": [
+            0.00916191702708602,
+            0.010416250093840063,
+            0.01813599991146475,
+            0.01855804189108312,
+            0.007586332969367504,
+            0.009526291978545487,
+            0.006903041037730873
+          ],
+          "median_seconds": 0.009526291978545487,
+          "min_seconds": 0.006903041037730873,
+          "max_seconds": 0.01855804189108312,
+          "peak_python_bytes": 2872917,
+          "speedup_over_baseline": 14.553126586172775
+        }
+      }
+    }
+  ],
+  "kernel": [
+    {
+      "observations": 200,
+      "events": 50,
+      "predictors": 3,
+      "event_weighting": "event",
+      "max_absolute_differences": {
+        "candidate": 1.4210854715202004e-14,
+        "add_at": 1.4210854715202004e-14
+      },
+      "measurements": {
+        "baseline": {
+          "seconds": [
+            0.0002472080523148179,
+            0.0002461249241605401,
+            0.0002470830222591758,
+            0.0007020409684628248,
+            0.0005897500086575747,
+            0.0005730000557377934,
+            0.0006111250258982182
+          ],
+          "median_seconds": 0.0005730000557377934,
+          "min_seconds": 0.0002461249241605401,
+          "max_seconds": 0.0007020409684628248,
+          "peak_python_bytes": 4128,
+          "speedup_over_baseline": 1.0
+        },
+        "candidate": {
+          "seconds": [
+            8.458038792014122e-06,
+            7.833004929125309e-06,
+            8.082948625087738e-06,
+            7.3749106377363205e-06,
+            4.4082989916205406e-05,
+            2.13750172406435e-05,
+            3.516697324812412e-05
+          ],
+          "median_seconds": 8.458038792014122e-06,
+          "min_seconds": 7.3749106377363205e-06,
+          "max_seconds": 4.4082989916205406e-05,
+          "peak_python_bytes": 4952,
+          "speedup_over_baseline": 67.74620805461502
+        },
+        "add_at": {
+          "seconds": [
+            1.091696321964264e-05,
+            9.874929673969746e-06,
+            1.0791001841425896e-05,
+            9.875046089291573e-06,
+            3.8874917663633823e-05,
+            2.720800694078207e-05,
+            3.504101186990738e-05
+          ],
+          "median_seconds": 1.091696321964264e-05,
+          "min_seconds": 9.874929673969746e-06,
+          "max_seconds": 3.8874917663633823e-05,
+          "peak_python_bytes": 13888,
+          "speedup_over_baseline": 52.48712890291759
+        }
+      }
+    },
+    {
+      "observations": 200,
+      "events": 50,
+      "predictors": 3,
+      "event_weighting": "contrast",
+      "max_absolute_differences": {
+        "candidate": 2.2737367544323206e-13,
+        "add_at": 2.2737367544323206e-13
+      },
+      "measurements": {
+        "baseline": {
+          "seconds": [
+            0.00024504202883690596,
+            0.0002436659997329116,
+            0.00024029205087572336,
+            0.00024270801804959774,
+            0.00024016608949750662,
+            0.000240708002820611,
+            0.00024120800662785769
+          ],
+          "median_seconds": 0.00024120800662785769,
+          "min_seconds": 0.00024016608949750662,
+          "max_seconds": 0.00024504202883690596,
+          "peak_python_bytes": 4128,
+          "speedup_over_baseline": 1.0
+        },
+        "candidate": {
+          "seconds": [
+            8.25000461190939e-06,
+            7.416936568915844e-06,
+            7.2909751906991005e-06,
+            7.4160052463412285e-06,
+            7.1660615503787994e-06,
+            7.082941010594368e-06,
+            7.166992872953415e-06
+          ],
+          "median_seconds": 7.2909751906991005e-06,
+          "min_seconds": 7.082941010594368e-06,
+          "max_seconds": 8.25000461190939e-06,
+          "peak_python_bytes": 4952,
+          "speedup_over_baseline": 33.083092497086014
+        },
+        "add_at": {
+          "seconds": [
+            1.0666903108358383e-05,
+            9.792041964828968e-06,
+            1.0041054338216782e-05,
+            9.582960046827793e-06,
+            1.0082963854074478e-05,
+            9.499955922365189e-06,
+            1.0124989785254002e-05
+          ],
+          "median_seconds": 1.0041054338216782e-05,
+          "min_seconds": 9.499955922365189e-06,
+          "max_seconds": 1.0666903108358383e-05,
+          "peak_python_bytes": 13888,
+          "speedup_over_baseline": 24.022179195844735
+        }
+      }
+    },
+    {
+      "observations": 3000,
+      "events": 600,
+      "predictors": 8,
+      "event_weighting": "event",
+      "max_absolute_differences": {
+        "candidate": 2.842170943040401e-14,
+        "add_at": 2.842170943040401e-14
+      },
+      "measurements": {
+        "baseline": {
+          "seconds": [
+            0.010305791976861656,
+            0.007594082970172167,
+            0.00755899993237108,
+            0.007583166938275099,
+            0.0075877910712733865,
+            0.0075515409698709846,
+            0.0075255000265315175
+          ],
+          "median_seconds": 0.007583166938275099,
+          "min_seconds": 0.0075255000265315175,
+          "max_seconds": 0.010305791976861656,
+          "peak_python_bytes": 7672,
+          "speedup_over_baseline": 1.0
+        },
+        "candidate": {
+          "seconds": [
+            9.595800656825304e-05,
+            8.358398918062449e-05,
+            7.879198528826237e-05,
+            8.200004231184721e-05,
+            8.004100527614355e-05,
+            8.245802018791437e-05,
+            7.212499622255564e-05
+          ],
+          "median_seconds": 8.200004231184721e-05,
+          "min_seconds": 7.212499622255564e-05,
+          "max_seconds": 9.595800656825304e-05,
+          "peak_python_bytes": 102960,
+          "speedup_over_baseline": 92.47759787045253
+        },
+        "add_at": {
+          "seconds": [
+            0.0002079580444842577,
+            0.00019329204224050045,
+            0.0001968329306691885,
+            0.00019262498244643211,
+            0.00020004203543066978,
+            0.0001931249862536788,
+            0.00019500008784234524
+          ],
+          "median_seconds": 0.00019500008784234524,
+          "min_seconds": 0.00019262498244643211,
+          "max_seconds": 0.0002079580444842577,
+          "peak_python_bytes": 321424,
+          "speedup_over_baseline": 38.8880180628738
+        }
+      }
+    },
+    {
+      "observations": 3000,
+      "events": 600,
+      "predictors": 8,
+      "event_weighting": "contrast",
+      "max_absolute_differences": {
+        "candidate": 9.094947017729282e-13,
+        "add_at": 9.094947017729282e-13
+      },
+      "measurements": {
+        "baseline": {
+          "seconds": [
+            0.007664332981221378,
+            0.008005957934074104,
+            0.008842292008921504,
+            0.00799966708291322,
+            0.009306541993282735,
+            0.007844625040888786,
+            0.007610208005644381
+          ],
+          "median_seconds": 0.00799966708291322,
+          "min_seconds": 0.007610208005644381,
+          "max_seconds": 0.009306541993282735,
+          "peak_python_bytes": 7672,
+          "speedup_over_baseline": 1.0
+        },
+        "candidate": {
+          "seconds": [
+            8.816702757030725e-05,
+            9.049999061971903e-05,
+            9.691703598946333e-05,
+            8.420797530561686e-05,
+            0.00010350008960813284,
+            8.804211392998695e-05,
+            9.012501686811447e-05
+          ],
+          "median_seconds": 9.012501686811447e-05,
+          "min_seconds": 8.420797530561686e-05,
+          "max_seconds": 0.00010350008960813284,
+          "peak_python_bytes": 102960,
+          "speedup_over_baseline": 88.76189276746133
+        },
+        "add_at": {
+          "seconds": [
+            0.00023308303207159042,
+            0.00020004203543066978,
+            0.0002019589301198721,
+            0.000194125110283494,
+            0.00021308299619704485,
+            0.00019570800941437483,
+            0.00020116695668548346
+          ],
+          "median_seconds": 0.00020116695668548346,
+          "min_seconds": 0.000194125110283494,
+          "max_seconds": 0.00023308303207159042,
+          "peak_python_bytes": 321424,
+          "speedup_over_baseline": 39.76630762188435
+        }
+      }
+    },
+    {
+      "observations": 12000,
+      "events": 3000,
+      "predictors": 4,
+      "event_weighting": "event",
+      "max_absolute_differences": {
+        "candidate": 2.2737367544323206e-12,
+        "add_at": 2.2737367544323206e-12
+      },
+      "measurements": {
+        "baseline": {
+          "seconds": [
+            0.11815224995370954,
+            0.11524654203094542,
+            0.11180137505289167,
+            0.12778950005304068,
+            0.1310684169875458,
+            0.11233083403203636,
+            0.12741987500339746
+          ],
+          "median_seconds": 0.11815224995370954,
+          "min_seconds": 0.11180137505289167,
+          "max_seconds": 0.1310684169875458,
+          "peak_python_bytes": 24720,
+          "speedup_over_baseline": 1.0
+        },
+        "candidate": {
+          "seconds": [
+            0.000177083071321249,
+            0.00013545795809477568,
+            0.00016158400103449821,
+            0.0001330830855295062,
+            0.00016729196067899466,
+            0.00013404199853539467,
+            0.00015762506518512964
+          ],
+          "median_seconds": 0.00015762506518512964,
+          "min_seconds": 0.0001330830855295062,
+          "max_seconds": 0.000177083071321249,
+          "peak_python_bytes": 289152,
+          "speedup_over_baseline": 749.5778023307428
+        },
+        "add_at": {
+          "seconds": [
+            0.0004980419762432575,
+            0.0005069999024271965,
+            0.00046624999959021807,
+            0.0004551670281216502,
+            0.00046979100443422794,
+            0.00045549997594207525,
+            0.00046204100362956524
+          ],
+          "median_seconds": 0.00046624999959021807,
+          "min_seconds": 0.0004551670281216502,
+          "max_seconds": 0.0005069999024271965,
+          "peak_python_bytes": 643024,
+          "speedup_over_baseline": 253.40965159796727
+        }
+      }
+    },
+    {
+      "observations": 12000,
+      "events": 3000,
+      "predictors": 4,
+      "event_weighting": "contrast",
+      "max_absolute_differences": {
+        "candidate": 3.637978807091713e-11,
+        "add_at": 3.637978807091713e-11
+      },
+      "measurements": {
+        "baseline": {
+          "seconds": [
+            0.1181389590492472,
+            0.1289027079474181,
+            0.13472600001841784,
+            0.1389413330471143,
+            0.12359199998900294,
+            0.1137942090863362,
+            0.11464579100720584
+          ],
+          "median_seconds": 0.12359199998900294,
+          "min_seconds": 0.1137942090863362,
+          "max_seconds": 0.1389413330471143,
+          "peak_python_bytes": 24720,
+          "speedup_over_baseline": 1.0
+        },
+        "candidate": {
+          "seconds": [
+            0.00038187496829777956,
+            0.00024320895317941904,
+            0.0001819579629227519,
+            0.00014683394692838192,
+            0.0003095000283792615,
+            0.0001573750050738454,
+            0.0003969999961555004
+          ],
+          "median_seconds": 0.00024320895317941904,
+          "min_seconds": 0.00014683394692838192,
+          "max_seconds": 0.0003969999961555004,
+          "peak_python_bytes": 289152,
+          "speedup_over_baseline": 508.172081550909
+        },
+        "add_at": {
+          "seconds": [
+            0.0009530410170555115,
+            0.0007434999570250511,
+            0.0004978749202564359,
+            0.0005491661140695214,
+            0.0005003750557079911,
+            0.0004830000689253211,
+            0.0005506250308826566
+          ],
+          "median_seconds": 0.0005491661140695214,
+          "min_seconds": 0.0004830000689253211,
+          "max_seconds": 0.0009530410170555115,
+          "peak_python_bytes": 643024,
+          "speedup_over_baseline": 225.05394419393633
+        }
+      }
+    }
+  ],
+  "failure_equivalence": [
+    {
+      "case": "few-events",
+      "exception": [
+        "ValueError",
+        "Model 'synthetic-family:response' needs more unique species events than predictors (events=1; predictors=3)."
+      ]
+    },
+    {
+      "case": "rank-deficient",
+      "exception": [
+        "ValueError",
+        "Model 'synthetic-family:response' predictor matrix is rank deficient (rank=1; predictors=3)."
+      ]
+    },
+    {
+      "case": "zero-variance",
+      "exception": [
+        "LinAlgError",
+        "SVD did not converge"
+      ]
+    }
+  ],
+  "omnibus_equivalence": {
+    "numeric_fields": 76,
+    "max_absolute": 0.0,
+    "max_scaled": 0.0
+  },
+  "response_rescale_1e-12": {
+    "numeric_fields": 76,
+    "max_absolute": 0.0,
+    "max_scaled": 0.0
+  },
+  "response_rescale_1000000000000.0": {
+    "numeric_fields": 76,
+    "max_absolute": 5.684341886080802e-14,
+    "max_scaled": 2.644770592810419e-16
+  }
+}

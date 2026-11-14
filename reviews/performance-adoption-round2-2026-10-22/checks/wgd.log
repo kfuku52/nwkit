@@ -1,0 +1,21 @@
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m ruff check nwkit tests setup.py tools
+All checks passed!
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m ruff format --check nwkit tests setup.py tools
+589 files already formatted
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m mypy
+Success: no issues found in 260 source files
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m pytest -q --durations=20 --durations-min=0.05 -m not slow tests/test_wgd_count_model.py tests/test_wgd_count.py -rs
+........................................................................ [ 67%]
+..................................                                       [100%]
+============================= slowest 20 durations =============================
+4.41s call     tests/test_wgd_count.py::test_real_bootstrap_cli_respects_seed_and_search
+1.04s call     tests/test_wgd_count.py::test_real_cli_and_metadata_no_uncalibrated_probability
+0.93s call     tests/test_wgd_count.py::test_single_stdin_owner_and_stdout_primary
+0.49s call     tests/test_wgd_count_model.py::test_simulated_frequency_matches_conditional_probability
+0.17s call     tests/test_wgd_count_model.py::test_pruning_matches_brute_force_and_ascertainment
+0.12s call     tests/test_wgd_count_model.py::test_root_clade_simulation_observation_and_missingness_selection
+0.11s call     tests/test_wgd_count_model.py::test_high_copy_low_birth_likelihood_remains_finite_against_yule_law
+0.06s call     tests/test_wgd_count_model.py::test_high_copy_rare_pulse_likelihood_matches_independent_yule_sum
+
+(12 durations < 0.05s hidden.)
+106 passed in 7.99s

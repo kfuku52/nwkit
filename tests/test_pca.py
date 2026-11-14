@@ -1,0 +1,507 @@
+"""Independent R, algebraic and CLI verification of phylogenetic PCA."""
+
+import json
+from io import StringIO
+
+import numpy as np
+import pandas as pd
+import pytest
+from scipy.optimize import minimize, minimize_scalar
+
+from nwkit import phylogenetic_pca
+from nwkit.cli import main
+from nwkit.evolution import build_evolutionary_covariance, build_evolutionary_process
+from nwkit.phylogenetic_pca import fit_pca
+from nwkit.util import read_tree
+from tests.test_signal import TREE, VALUES
+
+MIXED = np.array([1, 4, 2, 3, 1.5, 4.2, 1.8, 3.8])
+DATA = np.column_stack([VALUES, MIXED])
+
+
+def covariance():
+    return build_evolutionary_covariance(read_tree(TREE, 0, False), list("ABCDEFGH"))
+
+
+@pytest.mark.parametrize("mode", ["cov", "corr"])
+def test_final_likelihood_reuses_tree_factor_without_changing_ml(mode, monkeypatch):
+    matrix = covariance()
+    expected = phylogenetic_pca._profile_likelihood(matrix, DATA)
+    original = np.linalg.cholesky
+    factors = []
+
+    def factor(value):
+        factors.append(value)
+        return original(value)
+
+    monkeypatch.setattr(np.linalg, "cholesky", factor)
+    fit = fit_pca(matrix, DATA, mode=mode)
+    assert len(factors) == 1
+    assert fit.log_likelihood == expected
+
+
+@pytest.mark.parametrize(
+    "mode,expected",
+    [
+        ("cov", [1.9920819577, 0.462058344532]),
+        ("corr", [1.32793034219, 0.672069657807]),
+    ],
+)
+def test_phytools_230_reference(mode, expected):
+    # R: phyl.pca(read.tree(TREE), DATA, method="BM", mode=mode).
+    fit = fit_pca(covariance(), DATA, mode=mode)
+    assert fit.eigenvalues == pytest.approx(expected, rel=1e-10)
+    if mode == "cov":
+        assert fit.loadings[:, 0] == pytest.approx([0.429554290824, 0.993968472466])
+        assert fit.scores[0] == pytest.approx([-2.042969, -1.4631407])
+    else:
+        assert np.abs(fit.rotation) == pytest.approx(np.full((2, 2), np.sqrt(0.5)))
+        assert np.abs(fit.loadings[:, 0]) == pytest.approx([0.8148406, 0.8148406])
+
+
+def test_phytools_fixed_lambda_likelihood():
+    fit = fit_pca(covariance(), DATA, model="LAMBDA", lambda_value=0.4)
+    # phytools 2.3.0 plugs n-1 covariance into its likelihood. NWKIT profiles
+    # the ML covariance (divisor n); the difference is constant in lambda.
+    r_likelihood = -25.36392
+    correction = 8 * 2 / 2 * np.log(8 / 7) - 2 / 2
+    assert fit.log_likelihood == pytest.approx(r_likelihood + correction, abs=1e-5)
+    assert fit.eigenvalues == pytest.approx([1.1359193, 0.5874151], abs=1e-7)
+
+
+@pytest.mark.parametrize("mode", ["cov", "corr"])
+def test_gls_orthogonality_and_reconstruction(mode):
+    fit = fit_pca(covariance(), DATA, mode=mode)
+    inverse = np.linalg.inv(fit.covariance)
+    assert np.ones(8) @ inverse @ fit.scores == pytest.approx(np.zeros(2), abs=1e-12)
+    assert fit.scores.T @ inverse @ fit.scores / 7 == pytest.approx(
+        np.diag(fit.eigenvalues), abs=1e-12
+    )
+    restored = (fit.scores @ fit.rotation.T) * fit.scale + fit.center
+    assert restored == pytest.approx(DATA, abs=1e-12)
+    assert fit.rotation.T @ fit.rotation == pytest.approx(np.eye(2), abs=1e-12)
+    assert np.abs(fit.loadings).max() <= 1 + 1e-12
+
+
+def test_lambda_joint_fit_against_independent_matrix_normal():
+    c = covariance()
+    fit = fit_pca(c, DATA, model="LAMBDA")
+
+    def objective(params):
+        lam = params[0]
+        matrix = lam * c + (1 - lam) * np.diag(np.diag(c))
+        inverse = np.linalg.inv(matrix)
+        center = (np.ones(8) @ inverse @ DATA) / inverse.sum()
+        residual = DATA - center
+        trait = residual.T @ inverse @ residual / 8
+        return 0.5 * (
+            16 * (np.log(2 * np.pi) + 1)
+            + 2 * np.linalg.slogdet(matrix)[1]
+            + 8 * np.linalg.slogdet(trait)[1]
+        )
+
+    candidates = [
+        minimize(objective, [start], bounds=[(0, 1)], method="L-BFGS-B")
+        for start in [0, 0.25, 0.5, 0.75, 1]
+    ]
+    best = min(candidates, key=lambda item: item.fun)
+    assert fit.log_likelihood == pytest.approx(-best.fun, abs=1e-7)
+    assert fit.lambda_value == pytest.approx(best.x[0], abs=1e-5)
+
+
+def test_correlation_pca_and_lambda_are_invariant_to_units():
+    first = fit_pca(covariance(), DATA, model="LAMBDA", mode="corr")
+    second = fit_pca(
+        covariance(),
+        DATA * np.array([1e10, 1e-8]) + [1e11, 1e-7],
+        model="LAMBDA",
+        mode="corr",
+    )
+    assert second.lambda_value == pytest.approx(first.lambda_value, abs=1e-5)
+    assert second.eigenvalues == pytest.approx(first.eigenvalues, abs=1e-5)
+    assert np.abs(second.scores) == pytest.approx(np.abs(first.scores), abs=1e-5)
+
+
+@pytest.mark.parametrize("model", ["BM", "LAMBDA"])
+def test_correlation_pca_handles_extreme_finite_trait_units(model):
+    matrix = covariance()
+    values = np.array(
+        [
+            [-1, 0.5],
+            [-0.8, -0.5],
+            [0.8, 0.8],
+            [1, -1],
+            [-0.4, 0.3],
+            [0.4, -0.2],
+            [0.5, -0.3],
+            [-0.5, 1],
+        ]
+    )
+    units = np.array([1e308, 1e-305])
+    reference = fit_pca(matrix, values, model=model, mode="corr")
+    with np.errstate(over="raise", invalid="raise"):
+        fit = fit_pca(matrix, values * units, model=model, mode="corr")
+    assert fit.lambda_value == pytest.approx(reference.lambda_value)
+    np.testing.assert_allclose(fit.eigenvalues, reference.eigenvalues, atol=1e-13)
+    np.testing.assert_allclose(fit.scores, reference.scores, atol=1e-13)
+    np.testing.assert_allclose(fit.center / units, reference.center, atol=1e-13)
+    np.testing.assert_allclose(fit.scale / units, reference.scale, atol=1e-13)
+    assert fit.log_likelihood == pytest.approx(
+        reference.log_likelihood - len(values) * np.log(units).sum(), abs=1e-11
+    )
+
+
+def test_spectral_lambda_profile_agrees_with_cholesky():
+    matrix = np.kron(np.eye(9), covariance())
+    rng = np.random.default_rng(256)
+    values = rng.normal(size=(len(matrix), 4))
+    values -= values[0].copy()
+    profile = phylogenetic_pca._spectral_lambda_profile(
+        matrix, matrix.diagonal(), values
+    )
+    assert profile is not None
+    for lam in (0.0, 0.3, 0.8, 1.0):
+        fixed = fit_pca(matrix, values, model="LAMBDA", lambda_value=lam)
+        assert -profile(lam) == pytest.approx(fixed.log_likelihood, abs=1e-10)
+
+
+@pytest.mark.parametrize("tip_difference", [0.15, 1e-5])
+def test_free_lambda_can_fit_with_a_singular_brownian_endpoint(tip_difference):
+    tree = read_tree("[&R]((A:0,B:0):1,C:1,D:1,E:1,F:1);", 0, False)
+    c = build_evolutionary_process(tree, allow_zero=True).tip_covariance(list("ABCDEF"))
+    values = np.array(
+        [
+            [0, 0],
+            [tip_difference, -tip_difference],
+            [2, -1],
+            [0, 2],
+            [-1, -1],
+            [1.5, 1.5],
+        ]
+    )
+    with pytest.raises(np.linalg.LinAlgError):
+        fit_pca(c, values, model="BM")
+
+    fit = fit_pca(c, values, model="LAMBDA")
+
+    # The only correlated tips are A and B. The three eigenspaces have
+    # eigenvalues 1 + lambda, 1 - lambda and 1, so the inverse is explicit.
+    def objective(log_distance):
+        distance = np.exp(log_distance)
+        plus_eigenvalue = 2 - distance
+        plus, minus = (values[0] + values[1]) / 2, (values[0] - values[1]) / 2
+        center = (2 * plus / plus_eigenvalue + values[2:].sum(axis=0)) / (
+            2 / plus_eigenvalue + 4
+        )
+        residual = values[2:] - center
+        trait = (
+            residual.T @ residual
+            + 2 * np.outer(plus - center, plus - center) / plus_eigenvalue
+            + 2 * np.outer(minus, minus) / distance
+        ) / 6
+        return 0.5 * (
+            12 * (np.log(2 * np.pi) + 1)
+            + 2 * (log_distance + np.log(plus_eigenvalue))
+            + 6 * np.linalg.slogdet(trait)[1]
+        )
+
+    reference = minimize_scalar(objective, bounds=(-32, 0), method="bounded")
+    assert reference.success
+    assert 1 - fit.lambda_value == pytest.approx(np.exp(reference.x), rel=1e-4)
+    assert fit.log_likelihood == pytest.approx(-reference.fun, abs=1e-8)
+
+
+def test_free_lambda_rejects_unbounded_likelihood_at_singular_endpoint():
+    covariance = np.eye(6)
+    covariance[0, 1] = covariance[1, 0] = 1
+    values = np.array([[0, 0], [0, 0], [2, -1], [0, 2], [-1, -1], [1.5, 1.5]])
+    with pytest.raises(ValueError, match="unbounded near singular lambda=1"):
+        fit_pca(covariance, values, model="LAMBDA")
+
+
+def test_rank_deficiency_is_supported_only_for_fixed_tree_model():
+    data = np.column_stack([VALUES, VALUES * 2])
+    fit = fit_pca(covariance(), data)
+    assert fit.status == "rank_deficient"
+    assert fit.scores.shape == (8, 1)
+    assert (fit.scores @ fit.rotation.T) + fit.center == pytest.approx(data)
+    with pytest.raises(ValueError, match="full-rank"):
+        fit_pca(covariance(), data, model="LAMBDA")
+
+
+def command(tmp_path, extra=(), data=None):
+    path = tmp_path / "traits.tsv"
+    if data is None:
+        data = pd.DataFrame({"leaf_name": list("ABCDEFGH"), "x": VALUES, "y": MIXED})
+    data.to_csv(path, sep="\t", index=False)
+    return ["pca", "-i", TREE, "--trait", str(path), "--columns", "x,y", *extra]
+
+
+def test_cli_all_artifacts_and_asr(tmp_path, capsys):
+    roles = {
+        "loadings-out": "loadings.tsv",
+        "eigenvalues-out": "eigenvalues.tsv",
+        "model-out": "model.json",
+        "ancestral-out": "ancestors.tsv",
+        "figure-out": "figure.png",
+    }
+    flags = [
+        token
+        for role, name in roles.items()
+        for token in ["--" + role, str(tmp_path / name)]
+    ]
+    main(command(tmp_path, flags))
+    scores = pd.read_csv(StringIO(capsys.readouterr().out), sep="\t")
+    assert list(scores.columns) == ["leaf_name", "PC1", "PC2"]
+    model = json.loads((tmp_path / "model.json").read_text())
+    assert model["used_taxa"] == list("ABCDEFGH")
+    assert (tmp_path / "figure.png").read_bytes().startswith(b"\x89PNG")
+    ancestors = pd.read_csv(tmp_path / "ancestors.tsv", sep="\t")
+    assert len(ancestors) == 30
+    tips = ancestors[ancestors.node_class == "leaf"].pivot(
+        index="name", columns="component", values="mean"
+    )
+    assert tips.to_numpy() == pytest.approx(scores.set_index("leaf_name").to_numpy())
+    assert (ancestors[ancestors.node_class == "leaf"].variance == 0).all()
+    assert ancestors.loc[ancestors.node_class == "root", "mean"].abs().max() < 1e-10
+    assert ancestors.variance.min() >= 0
+
+
+def test_ancestral_covariance_matches_gaussian_conditioning(tmp_path, capsys):
+    from nwkit.cli import parser
+    from nwkit.evolution import build_evolutionary_process
+    from nwkit.pca import _read_data, ancestral_scores
+
+    args = parser.parse_args(command(tmp_path))
+    tree, _, names, _, values = _read_data(args)
+    process = build_evolutionary_process(tree)
+    leaves = {n.name: n for n in tree.leaves()}
+    nodes = list(tree.traverse())
+    joint = process.covariance(nodes + [leaves[name] for name in names])
+    c = joint[len(nodes) :, len(nodes) :]
+    cross = joint[: len(nodes), len(nodes) :]
+    inverse = np.linalg.inv(c)
+    fit = fit_pca(c, values)
+    table = ancestral_scores(tree, names, fit, 0.95)
+    expected_mean = cross @ inverse @ fit.scores
+    expected_var = (
+        np.diag(joint[: len(nodes), : len(nodes)] - cross @ inverse @ cross.T)
+        + (1 - cross @ inverse @ np.ones(8)) ** 2 / inverse.sum()
+    )
+    for j in range(2):
+        selected = table[table.component == f"PC{j + 1}"].set_index("branch_id")
+        for i, node in enumerate(nodes):
+            row = selected.loc[node.props["_nwkit_pca_input_branch_id"]]
+            assert row["mean"] == pytest.approx(expected_mean[i, j], abs=1e-10)
+            assert row.variance == pytest.approx(
+                expected_var[i] * fit.eigenvalues[j], abs=1e-10
+            )
+
+
+def test_drop_preserves_input_ids_and_omits_incomplete_tips(tmp_path, capsys):
+    data = pd.DataFrame({"leaf_name": list("ABCDEFGH"), "x": VALUES, "y": MIXED})
+    data.loc[4:, "y"] = np.nan
+    with pytest.raises(ValueError, match="complete trait"):
+        main(command(tmp_path, data=data))
+    main(
+        command(
+            tmp_path,
+            [
+                "--missing",
+                "drop",
+                "--model-out",
+                str(tmp_path / "model.json"),
+                "--ancestral-out",
+                str(tmp_path / "nodes.tsv"),
+            ],
+            data,
+        )
+    )
+    result = pd.read_csv(StringIO(capsys.readouterr().out), sep="\t")
+    assert result.leaf_name.tolist() == list("ABCD")
+    model = json.loads((tmp_path / "model.json").read_text())
+    assert model["root_branch_id"] == 1
+    assert model["excluded_taxa"] == list("EFGH")
+    nodes = pd.read_csv(tmp_path / "nodes.tsv", sep="\t")
+    assert set(nodes[nodes.node_class == "leaf"]["name"]) == set("ABCD")
+    assert set(nodes.branch_id) == {1, 3, 4, 7, 8, 9, 10}
+
+
+def test_render_failure_rolls_back_all_outputs(tmp_path, monkeypatch):
+    import nwkit.pca_figure
+
+    score, model, figure = [
+        tmp_path / name for name in ["scores.tsv", "model.json", "figure.png"]
+    ]
+    for path in (score, model, figure):
+        path.write_text("original")
+
+    def fail(*args):
+        raise ValueError("render failed")
+
+    monkeypatch.setattr(nwkit.pca_figure, "draw_pca", fail)
+    with pytest.raises(ValueError, match="render failed"):
+        main(
+            command(
+                tmp_path,
+                [
+                    "-o",
+                    str(score),
+                    "--model-out",
+                    str(model),
+                    "--figure-out",
+                    str(figure),
+                ],
+            )
+        )
+    assert all(path.read_text() == "original" for path in (score, model, figure))
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        ["--lambda-value", ".5"],
+        ["--model", "LAMBDA", "--lambda-value", "nan"],
+        ["--ci-level", "0"],
+        ["--figure-out", "bad.jpg"],
+        ["--model-out", "-"],
+        ["--columns", "x,x"],
+        ["--input-rooted", "no"],
+    ],
+)
+def test_invalid_options(tmp_path, extra):
+    with pytest.raises(ValueError):
+        main(command(tmp_path, extra))
+
+
+def test_output_aliases_and_trait_stdin(tmp_path, monkeypatch, capsys):
+    output = tmp_path / "both.tsv"
+    with pytest.raises(ValueError, match="distinct"):
+        main(command(tmp_path, ["-o", str(output), "--loadings-out", str(output)]))
+    monkeypatch.setattr(
+        "sys.stdin", StringIO("leaf_name\tx\ty\nA\t1\t2\nB\t2\t4\nC\t3\t1\n")
+    )
+    main(["pca", "-i", "((A:1,B:1):1,C:2);", "--trait", "-", "--columns", "x,y"])
+    assert len(pd.read_csv(StringIO(capsys.readouterr().out), sep="\t")) == 3
+
+
+@pytest.mark.parametrize("mode", ["cov", "corr"])
+def test_branch_unit_rescaling(mode):
+    first = fit_pca(covariance(), DATA, mode=mode)
+    second = fit_pca(covariance() * 10, DATA, mode=mode)
+    assert second.eigenvalues == pytest.approx(
+        first.eigenvalues / (10 if mode == "cov" else 1)
+    )
+    assert second.scores == pytest.approx(
+        first.scores * (1 if mode == "cov" else np.sqrt(10))
+    )
+
+
+@pytest.mark.parametrize("extension,magic", [("pdf", b"%PDF-"), ("svg", b"<?xml")])
+def test_figure_formats_and_zero_lambda_ancestors(tmp_path, capsys, extension, magic):
+    picture = tmp_path / f"figure.{extension}"
+    nodes = tmp_path / "ancestors.tsv"
+    main(
+        command(
+            tmp_path,
+            [
+                "--model",
+                "LAMBDA",
+                "--lambda-value",
+                "0",
+                "--figure-out",
+                str(picture),
+                "--ancestral-out",
+                str(nodes),
+                "--figure-tip-labels",
+                "no",
+            ],
+        )
+    )
+    capsys.readouterr()
+    assert picture.read_bytes().startswith(magic)
+    table = pd.read_csv(nodes, sep="\t")
+    ancestors = table[table.node_class != "leaf"]
+    assert ancestors["mean"].abs().max() < 1e-10
+    for _, group in ancestors.groupby("component"):
+        assert group.variance.max() == pytest.approx(group.variance.min())
+
+
+def test_more_traits_than_tips_and_star_model():
+    rng = np.random.default_rng(55)
+    x = rng.normal(size=(4, 7))
+    fit = fit_pca(np.eye(4), x, mode="corr")
+    assert fit.scores.shape == (4, 3)
+    assert fit.status == "rank_deficient"
+    assert (fit.scores @ fit.rotation.T) * fit.scale + fit.center == pytest.approx(x)
+    with pytest.raises(ValueError, match="unidentifiable"):
+        fit_pca(np.eye(4), x, model="LAMBDA")
+
+
+def test_input_file_and_audit_aliases_are_protected(tmp_path):
+    arguments = command(tmp_path)
+    data = tmp_path / "traits.tsv"
+    original = data.read_bytes()
+    with pytest.raises(ValueError, match="overwrite input"):
+        main([*arguments, "--loadings-out", str(data)])
+    assert data.read_bytes() == original
+    alias = tmp_path / "alias.tsv"
+    with pytest.raises(ValueError):
+        main([*arguments, "--loadings-out", str(alias), "--audit", str(alias)])
+
+
+@pytest.mark.parametrize("drop", [False, True])
+def test_deep_tree_cli_preserves_covariance_and_input_ids(tmp_path, drop):
+    from nwkit.pca import _ID, _retained_tree
+    from nwkit.util import assign_branch_ids
+
+    count = 200
+    text = "(t0:1,t1:1):1"
+    for index in range(2, count):
+        text = f"({text},t{index}:1):1"
+    text += ";"
+    tree = read_tree(text, 1, True, quiet=True, rooted="yes")
+    original_ids = assign_branch_ids(tree)
+    names = sorted(tree.leaf_names())
+    used = [name for name in names if not drop or name != "t100"]
+    retained = _retained_tree(tree, used)
+    assert all(_ID not in node.props for node in tree.traverse())
+    assert {node.props[_ID] for node in retained.traverse()} <= set(
+        original_ids.values()
+    )
+    original = build_evolutionary_covariance(tree, used)
+    actual = build_evolutionary_covariance(retained, used)
+    np.testing.assert_allclose(actual, original)
+    table = tmp_path / "traits.tsv"
+    table.write_text(
+        "leaf_name\tx\ty\n"
+        + "".join(
+            f"t{i}\t{'NA' if drop and i == 100 else i}\t{(i * i) % 97}\n"
+            for i in range(count)
+        )
+    )
+    eigenvalues = tmp_path / "eigenvalues.tsv"
+    main(
+        [
+            "pca",
+            "-i",
+            text,
+            "--input-rooted",
+            "yes",
+            "--trait",
+            str(table),
+            "--columns",
+            "x,y",
+            "--missing",
+            "drop",
+            "-o",
+            str(tmp_path / "scores.tsv"),
+            "--eigenvalues-out",
+            str(eigenvalues),
+        ]
+    )
+    values = np.array([[int(name[1:]), (int(name[1:]) ** 2) % 97] for name in used])
+    expected = fit_pca(original, values)
+    np.testing.assert_allclose(
+        pd.read_csv(eigenvalues, sep="\t").eigenvalue, expected.eigenvalues
+    )

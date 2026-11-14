@@ -1,0 +1,55 @@
+{
+  "event_objective": {
+    "interpretation": "Expected ML objective, known zero mean; no simulation error",
+    "true_residual_and_event_variance": [
+      1.0,
+      1.0
+    ],
+    "expected_gradient_at_truth": [
+      -2.083333333757764,
+      -0.4166666665028628
+    ],
+    "population_optimum": [
+      1.3660261006190528,
+      1.0000004661442248
+    ],
+    "optimizer_success": true
+  },
+  "event_bootstrap_scale": {
+    "fitted_rate": 0.7003925624875719,
+    "working_row_variance": 1.4007851249751437,
+    "exact_expected_bootstrap_refit_rate": 1.3307458687263864,
+    "expected_bootstrap_rate_ratio": 1.9,
+    "scope": "replicate-reml covariance without random effects, ML fit, intercept only"
+  },
+  "threshold_diagnostics": {
+    "scope": "diagnostic helper counterexample, not an actual fitted threshold chain",
+    "drifting_chain_rhat": 0.9995801572657921,
+    "drifting_chain_ess": 1092.3464706693815,
+    "passes_current_status_cutoffs": true,
+    "plain_split_rhat": 1.359713831866306,
+    "constant_chain_rhat": 1.0,
+    "constant_chain_ess": 4000.0
+  },
+  "censored_bootstrap": {
+    "scope": "known SD, zero latent variance limit, common detection threshold 0",
+    "censored_rows_remaining_censored": 50,
+    "exact_rows_generated_below_detection_threshold": 25,
+    "expected_refit_loglikelihood_score_at_generating_mean": -39.89422804195897
+  },
+  "penalized_likelihood_ratio": {
+    "scope": "generic helper counterexample; not an end-to-end GLMM calibration",
+    "reported_statistic": 1.0,
+    "reported_p_value": 0.31731050786291115,
+    "exact_null_tail_for_this_statistic": 0.04550026389635857,
+    "null_distribution": "chi-square(1) / 4, not chi-square(1)"
+  },
+  "source_sha256": {
+    "nwkit/regress.py": "b6d77775ba510e90e173b01f2b62bef1203a3d58a28abf95fdcb934c4a1db2cd",
+    "nwkit/gaussian.py": "a2a4eb7e58b811f06c7f9e98a6797f40480c9b23ab7a23b5bac3402faf355eea",
+    "nwkit/threshold_asr.py": "cc1954c441699e5c87c210ff665698458c7c8f9eca7b411221ec383651499a34",
+    "nwkit/phylogenetic_glmm.py": "45b12f49afd0e2cf3606c32e9e79ac803cbfff7f2bb323c6539eeda312ec92e6",
+    "nwkit/shift_backend.py": "8946565fda853185329b9e702cbd9d42accb7d14941d81bd5d64efc8eb55613e",
+    "nwkit/shift_cli.py": "77137e1f66b0a3832c3b6829855266a519cd5b104f769b20b9f2f6ba421de28c"
+  }
+}

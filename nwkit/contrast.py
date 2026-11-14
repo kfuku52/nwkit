@@ -1,6 +1,7 @@
 import csv
 import math
 from io import StringIO
+from sys import float_info
 
 import numpy as np
 import pandas as pd
@@ -17,6 +18,7 @@ from nwkit.gaussian import (
     symmetric_average,
     validate_psd_covariance,
 )
+from nwkit.gaussian_tree import _product_ratio
 from nwkit.rooting_state import require_rooted, rooting_option_for_input
 from nwkit.util import (
     assign_branch_ids,
@@ -939,14 +941,20 @@ def _read_reconciliation(path, clades):
 
 
 def _orient_children(tree, clades, reconciliation_by_id):
-    node_by_clade_id = {
-        clades.clade_id_for_node(node): node for node in tree.traverse()
-    }
+    if reconciliation_by_id is not None:
+        node_by_clade_id = {
+            clades.clade_id_for_node(node): node for node in tree.traverse()
+        }
+    first_tip = {}
     orientation_by_node = dict()
-    for node in tree.traverse():
+    for node in tree.traverse("postorder"):
         if node.is_leaf:
+            first_tip[node] = str(node.name)
             continue
-        children = sorted(node.children, key=clades.names_for_node)
+        # Sibling clades have disjoint tip names. Their smallest names
+        # determine the lexicographic order of the complete name lists.
+        children = sorted(node.children, key=first_tip.__getitem__)
+        first_tip[node] = first_tip[children[0]]
         if reconciliation_by_id is not None:
             record = reconciliation_by_id[clades.clade_id_for_node(node)]
             numerator_id = record["contrast_numerator_gene_clade_id"]
@@ -1079,6 +1087,15 @@ def _stable_adjusted_variance(variance1, variance2):
     return smaller / (1.0 + smaller / larger)
 
 
+def _weighted_ancestral_value(value, weight, opposite_variance, total_variance):
+    if weight >= float_info.min:
+        return value * weight
+    return math.copysign(
+        _product_ratio(abs(value), opposite_variance, denominator=total_variance),
+        value,
+    )
+
+
 def _prepare_contrast_branches(
     tree, branch_length, evolution_model, evolution_parameter, orientation_by_node
 ):
@@ -1111,7 +1128,16 @@ def _prepare_contrast_branches(
             "adjusted variance",
         )
         branches.append(
-            (node, numerator, denominator, contrast_variance, weight1, weight2)
+            (
+                node,
+                numerator,
+                denominator,
+                contrast_variance,
+                weight1,
+                weight2,
+                numerator_variance,
+                denominator_variance,
+            )
         )
     return branches
 
@@ -1128,7 +1154,7 @@ def _contrast_coefficients(leaves, branches, sparse_coefficients):
             coefficients = np.zeros(len(leaves), dtype=float)
             coefficients[index] = 1.0
         coefficient_by_node[leaf] = coefficients
-    for node, numerator, denominator, _, weight1, weight2 in branches:
+    for node, numerator, denominator, _, weight1, weight2, _, _ in branches:
         first = coefficient_by_node.pop(numerator)
         second = coefficient_by_node.pop(denominator)
         contrast_coefficient_by_node[node] = first - second
@@ -1139,14 +1165,28 @@ def _contrast_coefficients(leaves, branches, sparse_coefficients):
 def _evaluate_contrasts(leaves, values_by_leaf, branches):
     estimate_by_node = {leaf: values_by_leaf[str(leaf.name)] for leaf in leaves}
     contrast_by_node = {}
-    for node, numerator, denominator, contrast_variance, weight1, weight2 in branches:
+    for (
+        node,
+        numerator,
+        denominator,
+        contrast_variance,
+        weight1,
+        weight2,
+        numerator_variance,
+        denominator_variance,
+    ) in branches:
         numerator_estimate = estimate_by_node[numerator]
         denominator_estimate = estimate_by_node[denominator]
         raw_contrast = _require_finite(
             numerator_estimate - denominator_estimate, "raw contrast"
         )
         ancestral_estimate = _require_finite(
-            numerator_estimate * weight1 + denominator_estimate * weight2,
+            _weighted_ancestral_value(
+                numerator_estimate, weight1, denominator_variance, contrast_variance
+            )
+            + _weighted_ancestral_value(
+                denominator_estimate, weight2, numerator_variance, contrast_variance
+            ),
             "ancestral estimate",
         )
         standardized_contrast = _require_finite(
@@ -1673,3 +1713,7 @@ def contrast_main(args):
         _write_dataframes_transactionally(file_outputs)
     if args.outfile == "-":
         print(table.to_csv(sep="\t", index=False), end="")
+
+
+# Public trait preparation API; private spellings remain compatible.
+read_mixed_replicate_traits = _read_mixed_replicate_traits

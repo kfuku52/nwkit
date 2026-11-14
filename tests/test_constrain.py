@@ -1,4 +1,7 @@
+import json
 from argparse import Namespace
+from collections import Counter
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -6,6 +9,7 @@ import pytest
 from ete4 import Tree
 
 from nwkit.constrain import (
+    _read_apg_backbone,
     check_input_file,
     collapse_genes,
     constrain_main,
@@ -20,6 +24,31 @@ from nwkit.constrain import (
     taxid2tree,
 )
 from tests.helpers import make_args
+
+
+@pytest.fixture
+def apgv_figure_clades():
+    """Rooted clades from an independent transcription of APG V Figure 1."""
+    reference = json.loads(
+        (Path(__file__).parent / "data" / "apgv_figure1.json").read_text()
+    )
+    clades = Counter()
+
+    def visit(name):
+        children = reference["children"].get(name)
+        leaves = (
+            frozenset().union(*(visit(child) for child in children))
+            if children is not None
+            else frozenset([name])
+        )
+        clades[leaves] += 1
+        return leaves
+
+    leaves = visit(reference["root"])
+    assert len(leaves) == 68
+    assert len(reference["children"]) == 55
+    assert sum(clades.values()) == 123
+    return clades
 
 
 class TestGetMaxAncestorOverlapNode:
@@ -330,6 +359,186 @@ class TestNcbiDownloadDirRouting:
 
 
 class TestConstrainMain:
+    @pytest.mark.parametrize(
+        ("backbone", "expected_leaf_count"),
+        [("ncbi_apgiv", 64), ("ncbi_apgv", 68)],
+    )
+    def test_apg_backbone_resources_have_expected_tips(
+        self, backbone, expected_leaf_count
+    ):
+        tree = _read_apg_backbone(backbone)
+        leaf_names = list(tree.leaf_names())
+        leaves = set(leaf_names)
+
+        assert len(leaf_names) == expected_leaf_count
+        assert len(leaves) == expected_leaf_count
+        if backbone == "ncbi_apgv":
+            assert {"Oncothecales", "Metteniusales", "Cardiopteridales"} <= leaves
+            assert {"Huaceae", "Columelliaceae"} <= leaves
+
+    def test_apgv_all_rooted_clades_match_figure1(self, apgv_figure_clades):
+        tree = _read_apg_backbone("ncbi_apgv")
+        # Equality, rather than subset checks, also rejects invented resolutions
+        # of polytomies. Counts detect redundant unary nodes and duplicate tips.
+        actual = Counter(frozenset(node.leaf_names()) for node in tree.traverse())
+        assert actual == apgv_figure_clades
+
+    @pytest.mark.parametrize("collapse", [False, True])
+    def test_apgv_full_constraint_preserves_figure1(
+        self, monkeypatch, tmp_path, apgv_figure_clades, collapse
+    ):
+        taxa = sorted(next(iter(c)) for c in apgv_figure_clades if len(c) == 1)
+        taxids = {name: i for i, name in enumerate(taxa, start=1)}
+        names = {i: name for name, i in taxids.items()}
+
+        class FakeNCBI:
+            db = None
+
+            def get_name_translator(self, queries):
+                return {
+                    q: [taxids[q.split()[0]]] for q in queries if q.split()[0] in taxids
+                }
+
+            def get_lineage(self, taxid):
+                # Include the NCBI orders that otherwise compete with the two
+                # family-level tips, while also retaining those order tips.
+                order = {"Huaceae": "Oxalidales", "Columelliaceae": "Bruniales"}
+                name = names[taxid]
+                return [taxids[order[name]], taxid] if name in order else [taxid]
+
+            def get_taxid_translator(self, lineage):
+                return {taxid: names[taxid] for taxid in lineage}
+
+        monkeypatch.setattr(
+            "nwkit.constrain.get_ete_ncbitaxa", lambda args=None: FakeNCBI()
+        )
+        species_path = tmp_path / "species.txt"
+        species_path.write_text("".join(f"{taxon}_example_gene\n" for taxon in taxa))
+        outfile = tmp_path / "constraint.nwk"
+        constrain_main(
+            make_args(
+                outfile=str(outfile),
+                species_list=str(species_path),
+                taxid_tsv=None,
+                backbone="ncbi_apgv",
+                rank="no",
+                collapse=collapse,
+            )
+        )
+        tree = Tree(outfile.read_text(), parser=9)
+        for leaf in tree.leaves():
+            expected_suffix = "_example" if collapse else "_example_gene"
+            assert leaf.name.endswith(expected_suffix)
+            leaf.name = leaf.name.removesuffix(expected_suffix)
+        actual = Counter(frozenset(node.leaf_names()) for node in tree.traverse())
+        assert actual == apgv_figure_clades
+
+    def test_ncbi_apgv_backbone_matches_species_to_orders(self, monkeypatch, tmp_path):
+        class FakeNCBI:
+            db = None
+
+            def get_name_translator(self, names):
+                return {
+                    name: [taxid]
+                    for name, taxid in (
+                        ("Oncotheca balansae", 1),
+                        ("Cardiopteris moluccana", 2),
+                    )
+                    if name in names
+                }
+
+            def get_lineage(self, taxid):
+                return [int(taxid)]
+
+            def get_taxid_translator(self, lineage):
+                return {
+                    taxid: order
+                    for taxid, order in (
+                        (1, "Oncothecales"),
+                        (2, "Cardiopteridales"),
+                    )
+                    if taxid in lineage
+                }
+
+        monkeypatch.setattr(
+            "nwkit.constrain.get_ete_ncbitaxa", lambda args=None: FakeNCBI()
+        )
+        species_path = tmp_path / "species.txt"
+        species_path.write_text("Oncotheca_balansae\nCardiopteris_moluccana\n")
+        outfile = tmp_path / "constraint.nwk"
+
+        constrain_main(
+            make_args(
+                outfile=str(outfile),
+                species_list=str(species_path),
+                taxid_tsv=None,
+                backbone="ncbi_apgv",
+                rank="no",
+                collapse=False,
+            )
+        )
+
+        assert set(Tree(outfile.read_text(), parser=9).leaf_names()) == {
+            "Oncotheca_balansae",
+            "Cardiopteris_moluccana",
+        }
+
+    def test_ncbi_apgv_backbone_prefers_unplaced_family_matches(
+        self, monkeypatch, tmp_path
+    ):
+        class FakeNCBI:
+            db = None
+
+            def get_name_translator(self, names):
+                return {
+                    name: [taxid]
+                    for name, taxid in (
+                        ("Hua gabonii", 1),
+                        ("Columellia oblonga", 2),
+                    )
+                    if name in names
+                }
+
+            def get_lineage(self, taxid):
+                return {
+                    1: [11, 12, 1],
+                    2: [21, 22, 2],
+                }[int(taxid)]
+
+            def get_taxid_translator(self, lineage):
+                names = {
+                    1: "Hua gabonii",
+                    2: "Columellia oblonga",
+                    11: "Oxalidales",
+                    12: "Huaceae",
+                    21: "Bruniales",
+                    22: "Columelliaceae",
+                }
+                return {taxid: names[taxid] for taxid in lineage}
+
+        monkeypatch.setattr(
+            "nwkit.constrain.get_ete_ncbitaxa", lambda args=None: FakeNCBI()
+        )
+        species_path = tmp_path / "species.txt"
+        species_path.write_text("Hua_gabonii\nColumellia_oblonga\n")
+        outfile = tmp_path / "constraint.nwk"
+
+        constrain_main(
+            make_args(
+                outfile=str(outfile),
+                species_list=str(species_path),
+                taxid_tsv=None,
+                backbone="ncbi_apgv",
+                rank="no",
+                collapse=False,
+            )
+        )
+
+        assert set(Tree(outfile.read_text(), parser=9).leaf_names()) == {
+            "Hua_gabonii",
+            "Columellia_oblonga",
+        }
+
     def test_user_backbone_single_match_outputs_a_direct_leaf(self, tmp_path):
         species_path = tmp_path / "species.txt"
         species_path.write_text("A_a_g1\n")

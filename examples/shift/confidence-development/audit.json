@@ -1,0 +1,13 @@
+{
+  "status": "passed",
+  "independent_blocks": 100,
+  "paired_observations": 400,
+  "generating_truth": "exactly regenerated",
+  "selected_likelihood_and_null_profile": "independently checked",
+  "maximum_likelihood_error": 2.6645352591003757e-14,
+  "all_block_banks_replayed": 100,
+  "confidence_sets_and_corrections": "reconstructed",
+  "screening_summary": "matched",
+  "record_sha256": "4c377b1b54f7d98512d55f6888e71e53fc9dcac2ba913107215d93b6598110d0",
+  "verifier_sha256": "cc19f9dc9d44daee76631cef92a12912f7e887e8f2b8ef7d7eabebf230be9a23"
+}

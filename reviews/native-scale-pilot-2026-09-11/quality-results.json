@@ -1,0 +1,41 @@
+{
+  "quick": {
+    "command": [
+      "/Users/kf/miniforge3/bin/python",
+      "tools/check.py",
+      "quick",
+      "--",
+      "-m",
+      "",
+      "tests/test_reconciliation_exports.py",
+      "tests/test_gaussian_whitening.py",
+      "tests/test_gaussian.py",
+      "tests/test_gaussian_tree.py",
+      "tests/test_numerical_invariance.py",
+      "tests/test_shift_layout_intervals.py",
+      "tests/test_whitening_levels.py",
+      "tests/test_shift_screen_blocks.py",
+      "tests/test_native_optimization_audit.py",
+      "tests/test_shift_native_bootstrap.py",
+      "tests/test_shift_native_cli.py",
+      "tests/test_shift_native_fit.py",
+      "tests/test_shift_native_heuristic.py",
+      "tests/test_shift_native_ic.py",
+      "tests/test_shift_native_identifiability.py",
+      "tests/test_shift_native_limits.py",
+      "tests/test_shift_native_model.py",
+      "tests/test_shift_native_path.py",
+      "tests/test_shift_native_quick.py",
+      "tests/test_shift_native_rank.py",
+      "tests/test_shift_native_search.py"
+    ],
+    "returncode": 0
+  },
+  "maintainability": {
+    "command": [
+      "/Users/kf/miniforge3/bin/python",
+      "tools/check_maintainability.py"
+    ],
+    "returncode": 0
+  }
+}

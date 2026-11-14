@@ -1,0 +1,532 @@
+{
+  "type": "object",
+  "required": [
+    "schema_version",
+    "kind",
+    "trees",
+    "reconciliations",
+    "transformations",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "0.1.0"
+    },
+    "kind": {
+      "const": "reconciliation_document"
+    },
+    "title": {
+      "type": "string"
+    },
+    "trees": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/tree"
+      },
+      "minItems": 1
+    },
+    "reconciliations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/reconciliation"
+      }
+    },
+    "transformations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/transformation"
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "display_selection": {
+          "$ref": "#/$defs/display_selection"
+        }
+      }
+    },
+    "annotations": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:reconciliation-document:0.1.0",
+  "title": "Reconciliation document 0.1.0 \u2014 file contract",
+  "$defs": {
+    "node": {
+      "type": "object",
+      "required": [
+        "id",
+        "label",
+        "children",
+        "branch_length"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label": {
+          "type": "string"
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "branch_length": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "annotations": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    "tree": {
+      "type": "object",
+      "required": [
+        "id",
+        "root",
+        "nodes",
+        "branch_length_unit"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "root": {
+          "type": "string",
+          "minLength": 1
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/node"
+          }
+        },
+        "branch_length_unit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1
+        },
+        "annotations": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    "event": {
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "lower_node",
+        "upper_node"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "enum": [
+            "leaf",
+            "speciation",
+            "duplication",
+            "loss",
+            "transfer",
+            "transfer_out",
+            "transfer_in",
+            "origin",
+            "unresolved",
+            "empty_observation"
+          ]
+        },
+        "lower_node": {
+          "type": "string",
+          "minLength": 1
+        },
+        "upper_node": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "donor_node": {
+          "type": "string",
+          "minLength": 1
+        },
+        "recipient_node": {
+          "type": "string",
+          "minLength": 1
+        },
+        "recipient_lower_node": {
+          "type": "string",
+          "minLength": 1
+        },
+        "time": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "support": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/support"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "annotations": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "transfer",
+                  "transfer_out"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "donor_node",
+              "recipient_node",
+              "recipient_lower_node"
+            ]
+          }
+        }
+      ]
+    },
+    "support": {
+      "type": "object",
+      "required": [
+        "kind",
+        "value",
+        "conditional_on"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "conditional_on": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "value": {
+                "type": "number"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "conditional_on": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "time": {
+      "type": "object",
+      "required": [
+        "lower",
+        "upper",
+        "unit"
+      ],
+      "properties": {
+        "lower": {
+          "type": "number",
+          "minimum": 0
+        },
+        "upper": {
+          "type": "number",
+          "minimum": 0
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "reconciliation": {
+      "type": "object",
+      "required": [
+        "id",
+        "lower_tree",
+        "upper_tree",
+        "history_kind",
+        "events",
+        "model",
+        "selection"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lower_tree": {
+          "type": "string",
+          "minLength": 1
+        },
+        "upper_tree": {
+          "type": "string",
+          "minLength": 1
+        },
+        "history_kind": {
+          "enum": [
+            "representative",
+            "sample",
+            "expectation",
+            "unspecified"
+          ]
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/event"
+          }
+        },
+        "model": {
+          "type": "object"
+        },
+        "selection": {
+          "type": "object"
+        },
+        "summary": {
+          "type": "object"
+        },
+        "annotations": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "history_kind": {
+                "const": "representative"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "selection": {
+                "required": [
+                  "method"
+                ],
+                "properties": {
+                  "method": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "transformation": {
+      "type": "object",
+      "required": [
+        "id",
+        "source_tree",
+        "target_tree",
+        "model_id",
+        "blocks"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_tree": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target_tree": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "blocks": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "annotations": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "model_id": {
+                "const": "X1"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "blocks": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/x1_block"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "x1_block": {
+      "type": "object",
+      "required": [
+        "id",
+        "source_nodes",
+        "target_nodes",
+        "boundaries",
+        "resolution"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_nodes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true
+        },
+        "target_nodes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true
+        },
+        "boundaries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "source_node",
+              "target_node"
+            ],
+            "properties": {
+              "source_node": {
+                "type": "string",
+                "minLength": 1
+              },
+              "target_node": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "resolution": {
+          "enum": [
+            1,
+            2
+          ]
+        },
+        "annotations": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    "display_selection": {
+      "type": "object",
+      "required": [
+        "tree",
+        "node",
+        "inference_recomputed",
+        "summaries"
+      ],
+      "properties": {
+        "tree": {
+          "type": "string",
+          "minLength": 1
+        },
+        "node": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inference_recomputed": {
+          "const": false
+        },
+        "summaries": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

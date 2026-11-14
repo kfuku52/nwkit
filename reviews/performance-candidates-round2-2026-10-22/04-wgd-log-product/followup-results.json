@@ -1,0 +1,251 @@
+{
+  "environment": {
+    "python": "3.12.14 (main, Aug 25 2026, 13:50:33) [Clang 22.1.3 ]",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "numpy": "2.5.4",
+    "scipy": "1.17.1",
+    "pandas": "3.0.6",
+    "nwkit": "0.43.55",
+    "nwkit_source": "/tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/__init__.py",
+    "baseline_commit": "86c8f2c537769d852c17e2c789340f6c9de4ef54",
+    "timing_limit": "Exploratory host-local measurements; unrelated CPU jobs are active.",
+    "memory_limit": "tracemalloc peak is not complete RSS or all native allocations."
+  },
+  "cases": [
+    {
+      "case": "rare_1",
+      "scope": "complete family_log_likelihoods, longer samples",
+      "comparison": {
+        "exact": true,
+        "shape": [
+          1
+        ],
+        "dtype": "float64",
+        "max_absolute_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 4,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.08196206248248927,
+            0.07715868749073707,
+            0.07465845849947073,
+            0.07324764574877918,
+            0.09094913525041193,
+            0.09567183323088102,
+            0.12145016650902107
+          ],
+          "median_seconds": 0.08196206248248927,
+          "min_seconds": 0.07324764574877918,
+          "max_seconds": 0.12145016650902107
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.06962702074088156,
+            0.06784680223790929,
+            0.0680080832389649,
+            0.06655089600826614,
+            0.07374147925293073,
+            0.10780188548960723,
+            0.08029775001341477
+          ],
+          "median_seconds": 0.06962702074088156,
+          "min_seconds": 0.06655089600826614,
+          "max_seconds": 0.10780188548960723
+        },
+        "speedup": 1.1771588330270921
+      },
+      "product_calls": [
+        [
+          [
+            87,
+            87
+          ],
+          [
+            87,
+            87
+          ]
+        ],
+        [
+          [
+            87,
+            87
+          ],
+          [
+            87,
+            87
+          ]
+        ]
+      ]
+    },
+    {
+      "case": "rare_16",
+      "scope": "complete family_log_likelihoods, longer samples",
+      "comparison": {
+        "exact": true,
+        "shape": [
+          16
+        ],
+        "dtype": "float64",
+        "max_absolute_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 4,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.0801626562315505,
+            0.07845023949630558,
+            0.07898072924581356,
+            0.07835584375425242,
+            0.08321487499051727,
+            0.08079387500765733,
+            0.08664241677615792
+          ],
+          "median_seconds": 0.0801626562315505,
+          "min_seconds": 0.07835584375425242,
+          "max_seconds": 0.08664241677615792
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.07617040624609217,
+            0.07261090623796917,
+            0.07557080200058408,
+            0.0748552915174514,
+            0.07761874998686835,
+            0.0733442292548716,
+            0.07470970851136371
+          ],
+          "median_seconds": 0.0748552915174514,
+          "min_seconds": 0.07261090623796917,
+          "max_seconds": 0.07761874998686835
+        },
+        "speedup": 1.0709016638170699
+      },
+      "product_calls": [
+        [
+          [
+            87,
+            87
+          ],
+          [
+            87,
+            87
+          ]
+        ],
+        [
+          [
+            87,
+            87
+          ],
+          [
+            87,
+            87
+          ]
+        ]
+      ]
+    },
+    {
+      "case": "ordinary_control",
+      "scope": "complete family_log_likelihoods, longer samples",
+      "comparison": {
+        "exact": true,
+        "shape": [
+          16
+        ],
+        "dtype": "float64",
+        "max_absolute_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 169,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.0018542066034612924,
+            0.0018493745086119462,
+            0.0018986323965470907,
+            0.004582996301755265,
+            0.0033706809702665494,
+            0.0037516141537654066,
+            0.003514449947001137
+          ],
+          "median_seconds": 0.0033706809702665494,
+          "min_seconds": 0.0018493745086119462,
+          "max_seconds": 0.004582996301755265
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.0018613330893130346,
+            0.0018086802247448785,
+            0.0027058002953665584,
+            0.003938585550099964,
+            0.0034727021712897973,
+            0.004266635851642481,
+            0.0038360214500120404
+          ],
+          "median_seconds": 0.0034727021712897973,
+          "min_seconds": 0.0018086802247448785,
+          "max_seconds": 0.004266635851642481
+        },
+        "speedup": 0.9706219548953269
+      },
+      "product_calls": []
+    },
+    {
+      "case": "complete_log_transitions_40",
+      "comparison": {
+        "exact": true,
+        "shape": [
+          4,
+          41,
+          41
+        ],
+        "dtype": "float64",
+        "max_absolute_difference": 0.0,
+        "negative_infinity_count": 160,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 7,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.031093476140605553,
+            0.050195339285502474,
+            0.04987749399151653,
+            0.04523704172710755,
+            0.03716614285284387,
+            0.03506225585338792,
+            0.03157179757753121
+          ],
+          "median_seconds": 0.03716614285284387,
+          "min_seconds": 0.031093476140605553,
+          "max_seconds": 0.050195339285502474
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.03565405957799937,
+            0.0535501727135852,
+            0.037791410710529556,
+            0.02782672015018761,
+            0.03344458341598511,
+            0.036731851287186146,
+            0.02073869643001152
+          ],
+          "median_seconds": 0.03565405957799937,
+          "min_seconds": 0.02073869643001152,
+          "max_seconds": 0.0535501727135852
+        },
+        "speedup": 1.0424098487729443
+      }
+    }
+  ]
+}

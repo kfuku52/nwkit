@@ -1,12 +1,40 @@
-include CLI_TSV_CONVENTIONS.md
-include ASR.md
 include DEVELOPMENT.md
 include CHANGELOG.md
 include RELEASING.md
-include PHYLOGENETIC_REGRESSION.md
-include RECONCILED_SPECIATION_CONTRAST_MATH.md
 include constraints-dev.txt
 include scripts/make_draw_layout_gallery.py
+graft docs
+
+graft examples/threshold
+graft examples/regression_calibration
+graft examples/asr_figure
+graft examples/radte
+graft examples/reconciliation
 graft tests
 graft tools
+
+graft examples/dtt
+
+graft examples/branch_gaussian
+
+graft examples/regression_selection
+
+graft reviews/native-scale-2026-09-10
+graft reviews/native-optimization-2026-09-11
+graft reviews/native-scale-pilot-2026-09-11
+include reviews/shift-calibration-review.md
+graft examples/shift
+
+graft examples/signal
+
+graft examples/pca
+
+graft examples/individual_asr
+
+graft examples/stochastic_maps
+graft examples/mul-locus
+graft examples/mul-msc
+
+include reviews/shift-calibration-final-protocol.md
+include reviews/shift-implementation-base.json
 global-exclude __pycache__ *.py[cod]

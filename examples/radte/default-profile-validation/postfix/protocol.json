@@ -1,0 +1,15 @@
+{
+  "role": "post-fix-held-out-check",
+  "purpose": "Check default native profile after numerical warm-start repair; no claim of general coverage. These seeds were not used in the baseline or oracle study.",
+  "cases": [
+    {
+      "name": "internal_postfix",
+      "species": 4,
+      "codons": 300,
+      "rate_sd": 0.3,
+      "scenario": "nested",
+      "seed": 1130000,
+      "families": 20
+    }
+  ]
+}

@@ -183,10 +183,15 @@ def effective_likelihood_settings(
     likelihood_observations=None,
     likelihood_logdet_offset=0.0,
 ):
-    """Validate and normalize event-level Gaussian pseudo-likelihood settings."""
+    """Validate the observation count of a normalized Gaussian likelihood."""
     if likelihood_observations is None:
         likelihood_observations = n_observations
     likelihood_observations = float(likelihood_observations)
+    if likelihood_observations != n_observations:
+        raise ValueError(
+            "Gaussian likelihood requires the actual observation count; "
+            "event-average estimation must use separate estimating equations."
+        )
     if (
         not math.isfinite(likelihood_observations)
         or likelihood_observations <= 0.0
@@ -425,24 +430,19 @@ def is_diagonal(matrix: np.ndarray) -> bool:
     matrix = np.asarray(matrix)
     if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
         return False
-    if len(matrix) == 0:
-        return True
-    return not np.any(matrix[0, 1:]) and _diagonal_by_blocks(matrix)
-
-
-def _diagonal_by_blocks(matrix):
-    if matrix.flags.f_contiguous:
-        matrix = matrix.T
-    size = len(matrix)
-    # A row block has only one diagonal position per row. Compare nonzero
-    # counts in compiled NumPy loops while keeping the early exit on dense input.
-    block_size = max(1, 32_768 // size)
-    diagonal = matrix.diagonal()
-    for start in range(0, size, block_size):
-        stop = min(start + block_size, size)
-        if np.count_nonzero(matrix[start:stop]) != np.count_nonzero(
-            diagonal[start:stop]
-        ):
+    if matrix.dtype.kind in "biufc":
+        if len(matrix) == 0:
+            return True
+        # Dense covariances usually fail immediately; retain that cheap exit.
+        if np.any(matrix[0, 1:]):
+            return False
+        return bool(
+            np.count_nonzero(matrix[1:]) == np.count_nonzero(np.diag(matrix)[1:])
+        )
+    # Do not inspect diagonal object truth values: the original contract only
+    # evaluates off-diagonal entries, even for custom objects.
+    for index, row in enumerate(matrix):
+        if np.any(row[:index]) or np.any(row[index + 1 :]):
             return False
     return True
 
@@ -1195,6 +1195,27 @@ def materialize_low_rank_covariance(loading):
     """Return the covariance induced by a dense or sparse loading."""
     covariance = loading @ loading.T
     return covariance.toarray() if sparse.issparse(covariance) else covariance
+
+
+def project_covariance(covariance, operator):
+    """Return L C L' without materializing a structured n-by-n covariance."""
+    operator = np.asarray(operator, dtype=float)
+    if isinstance(covariance, DiagonalLowRankCovariance):
+        projected = np.asarray(operator @ covariance.low_rank)
+        result = (operator * covariance.diagonal) @ operator.T
+        result += projected @ projected.T
+    elif isinstance(covariance, DiagonalSparsePrecisionCovariance):
+        projected = np.asarray(operator @ covariance.loading)
+        solver = _factor_sparse_lu(covariance.precision, "Sparse prior precision")
+        result = (operator * covariance.diagonal) @ operator.T
+        result += projected @ solver.solve(projected.T)
+    else:
+        covariance = np.asarray(covariance, dtype=float)
+        product = (
+            operator * covariance if covariance.ndim == 1 else operator @ covariance
+        )
+        result = product @ operator.T
+    return (result + result.T) / 2.0
 
 
 def sparse_precision_update_diagonal(loading, precision, *, solver=None) -> np.ndarray:

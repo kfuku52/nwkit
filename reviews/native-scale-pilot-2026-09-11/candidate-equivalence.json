@@ -1,0 +1,54 @@
+{
+  "passed": [
+    [
+      "fit10-known-before-0.json",
+      "fit10-known-after-0.json"
+    ],
+    [
+      "fit10-known-before-1.json",
+      "fit10-known-after-1.json"
+    ],
+    [
+      "fit10-known-before-2.json",
+      "fit10-known-after-2.json"
+    ],
+    [
+      "fit10-pectinate-before-0.json",
+      "fit10-pectinate-after-0.json"
+    ],
+    [
+      "fit10-pectinate-before-1.json",
+      "fit10-pectinate-after-1.json"
+    ],
+    [
+      "fit10-pectinate-before-2.json",
+      "fit10-pectinate-after-2.json"
+    ],
+    [
+      "fit100-before-0.json",
+      "fit100-after-0.json"
+    ],
+    [
+      "fit100-before-1.json",
+      "fit100-after-1.json"
+    ],
+    [
+      "fit100-before-2.json",
+      "fit100-after-2.json"
+    ],
+    [
+      "search10-before-0.json",
+      "search10-after-0.json"
+    ],
+    [
+      "search10-before-1.json",
+      "search10-after-1.json"
+    ],
+    [
+      "search10-before-2.json",
+      "search10-after-2.json"
+    ]
+  ],
+  "rtol": 1e-06,
+  "atol": 1e-06
+}

@@ -63,6 +63,7 @@ from nwkit.optimization import (
 from nwkit.phylogenetic_glmm import (
     SCALAR_RESPONSE_FAMILIES,
     fit_phylogenetic_glmm,
+    glmm_inference_metadata,
     summarize_glmm_coefficient,
     summarize_glmm_omnibus,
     summarize_glmm_threshold,
@@ -71,6 +72,7 @@ from nwkit.regress import (
     _profile_covariance_fit,
     validate_dense_gaussian_size,
 )
+from nwkit.regression_observation import read_censoring_models
 from nwkit.replicates import TIP_SUMMARY_COLUMNS
 from nwkit.rooting_state import require_rooted
 from nwkit.sparse_laplace import GmrfPredictorUncertainty
@@ -95,6 +97,18 @@ ORDINARY_RESULT_COLUMNS = [
     "zero_probability",
     "coefficient_penalty",
     "coefficient_prior_sd",
+    "objective_kind",
+    "objective_value",
+    "penalty_value",
+    "covariance_basis",
+    "p_value_method",
+    "interval_method",
+    "bootstrap_attempted",
+    "bootstrap_succeeded",
+    "bootstrap_failed",
+    "monte_carlo_se",
+    "coefficient_profile",
+    "observation_model",
     "separation_warning",
     "term",
     "source_term",
@@ -649,6 +663,7 @@ def _validate_ordinary_fit_settings(
         "parametric-bootstrap",
         "likelihood-ratio",
         "profile-likelihood",
+        "null-bootstrap",
     }:
         raise ValueError("Unsupported inference method: {}.".format(inference))
     if not isinstance(intercept, bool) or not isinstance(reml, bool):
@@ -1500,6 +1515,7 @@ def _categorical_common_row(
         "small_sample_warning": "yes" if n_species < 20 else "no",
         "inference_status": inference_status,
         "model": "ordinary-pglmm",
+        **glmm_inference_metadata(fit),
     }
 
 
@@ -1572,6 +1588,7 @@ def _categorical_coefficient_rows(
             row = common.copy()
             row.update(
                 {
+                    **glmm_inference_metadata(fit, flat_index),
                     "response_level": level,
                     "term": term,
                     "source_term": metadata.source,
@@ -1629,7 +1646,13 @@ def _categorical_coefficient_rows(
                 "confidence_interval_lower": "",
                 "confidence_interval_upper": "",
                 "inference_status": omnibus_status,
-                "inference_method": "wald",
+                "inference_method": "wald" if omnibus_status == "ok" else "none",
+                "p_value_method": "asymptotic-chi-square"
+                if omnibus_status == "ok"
+                else "none",
+                "interval_method": "not-applicable",
+                "coefficient_profile": "",
+                "monte_carlo_se": np.nan,
             }
         )
         rows.append(template_row)
@@ -1977,6 +2000,8 @@ def _fit_ordinary_non_gaussian_response(
     response_zero_probabilities,
     mean_predictor_sampling_variance,
     *,
+    censoring_model,
+    coefficient_profile_grid,
     evolution_model,
     evolution_parameter,
     branch_length,
@@ -2042,6 +2067,8 @@ def _fit_ordinary_non_gaussian_response(
         censor_upper=_ordinary_auxiliary_sequence(
             response_censor_upper, response, leaf_names
         ),
+        censoring_model=censoring_model,
+        coefficient_profile_grid=coefficient_profile_grid,
         dispersion=response_dispersions.get(response),
         zero_probability=response_zero_probabilities.get(response),
         coefficient_penalty=coefficient_penalty,
@@ -2100,7 +2127,7 @@ def _fit_ordinary_gaussian_response(
     matrix_rank,
     allow_large_dense,
 ):
-    if inference in {"likelihood-ratio", "profile-likelihood"}:
+    if inference in {"likelihood-ratio", "profile-likelihood", "null-bootstrap"}:
         raise ValueError(
             "Gaussian PGLS supports Wald or parametric-bootstrap inference."
         )
@@ -2204,10 +2231,12 @@ def fit_ordinary_regression(
     response_trials=None,
     response_censor_lower=None,
     response_censor_upper=None,
+    response_censoring_models=None,
     response_dispersions=None,
     response_zero_probabilities=None,
     coefficient_penalty="student-t",
     coefficient_prior_sd=2.5,
+    coefficient_profile_grid=None,
     multivariate_responses=False,
     allow_missing_responses=False,
     allow_large_dense=False,
@@ -2321,6 +2350,15 @@ def fit_ordinary_regression(
             )
         ),
     )
+    response_censoring_models = response_censoring_models or {}
+    for response in response_censoring_models:
+        if (
+            response not in response_specs
+            or response_specs[response].family != "censored-gaussian"
+        ):
+            raise ValueError(
+                "Observation models apply only to censored-gaussian responses."
+            )
     response_offsets = {} if response_offsets is None else response_offsets
     response_trials = {} if response_trials is None else response_trials
     response_censor_lower = (
@@ -2396,6 +2434,8 @@ def fit_ordinary_regression(
                     response_dispersions,
                     response_zero_probabilities,
                     mean_predictor_sampling_variance,
+                    censoring_model=response_censoring_models.get(response),
+                    coefficient_profile_grid=coefficient_profile_grid,
                     evolution_model=evolution_model,
                     evolution_parameter=evolution_parameter,
                     branch_length=branch_length,
@@ -2411,6 +2451,10 @@ def fit_ordinary_regression(
                 )
             )
             continue
+        if coefficient_profile_grid is not None:
+            raise ValueError(
+                "Coefficient profile grids require non-Gaussian null-bootstrap inference."
+            )
         rows.extend(
             _fit_ordinary_gaussian_response(
                 tree,
@@ -3272,6 +3316,14 @@ def build_ordinary_regression(
     response_censor_upper = _response_auxiliary_mapping(
         response_upper_columns, censor_auxiliary
     )
+    response_censoring_models = read_censoring_models(
+        effective,
+        response_specs,
+        leaf_names,
+        lambda columns: _ordinary_auxiliary_values(
+            effective, tree, columns, duplicate_policy, allow_missing=True
+        ),
+    )
     if comparison_models and any(
         spec.family != "gaussian" for spec in response_specs.values()
     ):
@@ -3315,10 +3367,12 @@ def build_ordinary_regression(
         response_trials=response_trials,
         response_censor_lower=response_censor_lower,
         response_censor_upper=response_censor_upper,
+        response_censoring_models=response_censoring_models,
         response_dispersions=response_dispersions,
         response_zero_probabilities=response_zero_probabilities,
         coefficient_penalty=effective.coefficient_penalty,
         coefficient_prior_sd=effective.coefficient_prior_sd,
+        coefficient_profile_grid=getattr(effective, "coefficient_profile_grid", None),
         multivariate_responses=effective.multivariate_responses,
         allow_missing_responses=effective.allow_missing_responses,
         allow_large_dense=effective.allow_large_dense,
@@ -3472,3 +3526,8 @@ def write_ordinary_regression_outputs(
         _write_dataframes_transactionally(file_outputs)
     if args.outfile == "-":
         print(artifacts.results.to_csv(sep="\t", index=False), end="")
+
+
+# Public trait preparation API; private spellings remain compatible.
+ordinary_predictor_values = _ordinary_predictor_values
+sampling_covariance_table = _sampling_covariance_table

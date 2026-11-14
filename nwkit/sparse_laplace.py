@@ -281,7 +281,7 @@ def combine_sparse_covariance_models(
         raise ValueError("At least one sparse covariance component is required.")
     return SparseLatentModel(
         precision=_combine_sparse_blocks(precisions, sparse.block_diag, format="csc"),
-        loading=_combine_sparse_blocks(loadings, sparse.hstack, format="csr"),
+        loading=_combine_sparse_blocks(loadings, sparse.hstack, format="csr").copy(),
         sampling_precision_factor=_combine_sampling_factors(
             components, identity, include_sampling_factor
         ),

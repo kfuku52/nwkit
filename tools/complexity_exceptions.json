@@ -1,0 +1,7 @@
+{
+  "nwkit/draw.py:draw_main": {
+    "limit": 50,
+    "reason": "Retain the existing ceiling for legacy drawing orchestration while its layout and output responsibilities are progressively separated. Further growth requires explicit review of this exception.",
+    "tests": ["tests/test_draw.py"]
+  }
+}

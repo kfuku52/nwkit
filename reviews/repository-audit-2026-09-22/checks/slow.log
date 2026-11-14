@@ -1,0 +1,16 @@
++ /Users/kf/miniforge3-arm64/bin/python -m pytest -q --durations=20 --durations-min=0.05 -m slow
+............                                                             [100%]
+============================= slowest 20 durations =============================
+23.27s call     tests/test_regress.py::test_pgls_raw_known_se_supports_multiple_responses_and_predictors
+10.03s call     tests/test_ordinary_regression.py::test_ordinary_pgls_parametric_bootstrap_is_reproducible
+7.91s call     tests/test_regress.py::test_pgls_raw_bootstrap_refits_automatic_gene_parameter
+6.19s call     tests/test_full_ou.py::test_free_full_ou_real_optimizer_returns_stable_finite_process
+3.46s call     tests/test_ordinary_regression.py::test_sparse_phylogenetic_glmm_supports_parametric_bootstrap
+3.41s call     tests/test_individual_asr.py::test_simulated_covariances_recover_separate_components
+0.49s call     tests/test_regress.py::test_large_predictor_factor_loading_remains_structured
+0.42s call     tests/test_latent_gaussian.py::test_jump_importance_likelihood_matches_independent_poisson_sum
+0.35s call     tests/test_latent_gaussian.py::test_continuous_observations_reweight_unknown_regimes
+0.09s call     tests/test_root_algorithms.py::TestMidpointRooting::test_deep_ladder_does_not_exceed_python_recursion_limit
+
+(10 durations < 0.05s hidden.)
+12 passed, 4128 deselected in 57.15s

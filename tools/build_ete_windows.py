@@ -37,7 +37,8 @@ def main(argv=None):
     with tempfile.TemporaryDirectory(prefix="nwkit-ete-windows-") as directory:
         root = Path(directory)
         archive = root / "ete4.tar.gz"
-        urllib.request.urlretrieve(SOURCE_URL, archive)
+        # Fixed HTTPS source; the pinned digest below authenticates its bytes.
+        urllib.request.urlretrieve(SOURCE_URL, archive)  # nosec B310
         if hashlib.sha256(archive.read_bytes()).hexdigest() != SOURCE_SHA256:
             raise ValueError("ETE4 source checksum mismatch.")
         with tarfile.open(archive) as source_archive:

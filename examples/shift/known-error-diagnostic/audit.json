@@ -1,0 +1,15 @@
+{
+  "source_hashes": "active_and_frozen_match",
+  "pairs_regenerated_and_refitted": 100,
+  "bootstrap_pairs_replayed": [
+    0,
+    20,
+    40,
+    60,
+    80
+  ],
+  "replay_selection": "First prespecified replicate of each alpha cell; remaining probabilities not independently replayed.",
+  "summary": "reconstructed",
+  "records_sha256": "62b90dd3b9aceb2f8cbc1a272a274e0bb8c063299a2046b21afd2fc78759884f",
+  "verifier_sha256": "17bcf233a7418dacd07e6b8c2b657d16be5385fa195c20afe140050468ec35ce"
+}

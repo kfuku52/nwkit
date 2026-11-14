@@ -1,0 +1,5 @@
+binary4_observed 0.9812268371556658 True
+binary32_observed 1.0129462873949608 True
+binary128_sparse 1.0509606550290815 True
+ordinal24_estimated_ambiguous 1.148364654632523 True
+ordinal24_fixed_ambiguous 1.0536663445026566 True

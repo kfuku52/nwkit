@@ -1,0 +1,37 @@
+{
+  "role": "held-out-validation",
+  "purpose": "Check whether the default native GY94/profile route can be treated as generally calibrated. A failure can refute general coverage; these limited scenarios cannot certify it.",
+  "generator": "External AliSim GY{0.5,2}+FQ+G4{0.7}; omega 0.5, kappa 2, gamma shape 0.7, uniform codon frequencies. Rooted chronology fixtures are independent of native inference. Lognormal edge rates have median 0.01 nucleotide changes per codon per time unit.",
+  "fit": "native GY94, estimated F3x4/kappa/omega/gamma, four gamma categories, auto inference and likelihood, profile level .95, maxiter 1000, max-age 1000. Independent optimizer seeds are recorded. Species ages and correct rooted topology are fixed; LCA supplies reconciliation.",
+  "estimand": "Age of the single named duplication D: root truth 20, internal truth 7.5. Fixed species nodes do not contribute to accuracy or coverage.",
+  "denominators": "One target per independent family. Keep point-only successes, profile failures, timeouts, unavailable intervals and calibration-limited intervals. Report returned-interval coverage AND covered/all trials with Wilson uncertainty. Point bias/RMSE are conditional on returned point estimates, with their denominator shown.",
+  "decision": "No default/method/threshold change based on these data. A 95% Wilson interval for coverage excluding .95 flags a calibration discrepancy. No multiplicity-adjusted superiority claim. No coverage certification from non-rejection. Point success .99 and interval availability .95 are operational targets, not presumed guarantees.",
+  "scope_exclusions": "No species-age ensemble or propagation. No claim about ILS, empirical reconciliation errors, indels, larger families, proteins or total uncertainty. Pilot seeds are excluded.",
+  "cases": [
+    {
+      "name": "root",
+      "species": 2,
+      "codons": 300,
+      "rate_sd": 0.3,
+      "seed": 810000,
+      "families": 200
+    },
+    {
+      "name": "high_sd",
+      "species": 2,
+      "codons": 300,
+      "rate_sd": 0.6,
+      "seed": 820000,
+      "families": 100
+    },
+    {
+      "name": "internal",
+      "species": 4,
+      "codons": 300,
+      "rate_sd": 0.3,
+      "scenario": "nested",
+      "seed": 830000,
+      "families": 100
+    }
+  ]
+}

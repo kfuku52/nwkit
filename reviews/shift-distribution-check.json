@@ -1,0 +1,9 @@
+{
+  "command": "python tools/check.py dist",
+  "exit_code": 0,
+  "result": "Independent wheel/sdist contents, metadata and byte reproducibility passed",
+  "artifacts": {
+    "dist/nwkit-0.43.15-py3-none-any.whl": "5a680fa88aabacf008e05057dc8a14de0709287104c7d7277a3ee11681f7b0a5",
+    "dist/nwkit-0.43.15.tar.gz": "dfc29a4554e4ebd6c134e523ae3d37cfd981e6cfdff495e797c4e472eee68e91"
+  }
+}

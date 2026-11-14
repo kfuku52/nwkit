@@ -1,0 +1,26 @@
+# Independent calibration validation
+
+Seed 20260918; B=199; stagewise nominal level 0.05. Plug-in tests and finite nuisance grids do not guarantee uniform 5% error.
+
+| Family | Truth | Root | Completed | Any shift | True partition |
+|---|---|---|---:|---:|---:|
+| primary | null | OUfixedRoot | 50/50 | 3/50 | 47/50 |
+| primary | null | OUrandomRoot | 50/50 | 0/50 | 50/50 |
+| primary | single | OUfixedRoot | 50/50 | 33/50 | 32/50 |
+| primary | single | OUrandomRoot | 50/50 | 23/50 | 22/50 |
+| primary | distinct | OUfixedRoot | 50/50 | 21/50 | 20/50 |
+| primary | distinct | OUrandomRoot | 50/50 | 26/50 | 24/50 |
+| primary | convergent | OUfixedRoot | 50/50 | 19/50 | 19/50 |
+| primary | convergent | OUrandomRoot | 50/50 | 28/50 | 25/50 |
+| weak_pull | null | OUfixedRoot | 25/25 | 0/25 | 25/25 |
+| weak_pull | null | OUrandomRoot | 25/25 | 3/25 | 22/25 |
+| weak_pull | convergent | OUfixedRoot | 25/25 | 5/25 | 0/25 |
+| weak_pull | convergent | OUrandomRoot | 25/25 | 0/25 | 0/25 |
+| known_error | null | OUfixedRoot | 25/25 | 0/25 | 25/25 |
+| known_error | null | OUrandomRoot | 25/25 | 0/25 | 25/25 |
+| known_error | convergent | OUfixedRoot | 25/25 | 10/25 | 10/25 |
+| known_error | convergent | OUrandomRoot | 25/25 | 11/25 | 11/25 |
+| sixteen_tips | null | OUfixedRoot | 25/25 | 0/25 | 25/25 |
+| sixteen_tips | null | OUrandomRoot | 25/25 | 1/25 | 24/25 |
+| sixteen_tips | convergent | OUfixedRoot | 25/25 | 24/25 | 21/25 |
+| sixteen_tips | convergent | OUrandomRoot | 25/25 | 23/25 | 23/25 |

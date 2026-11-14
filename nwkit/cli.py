@@ -243,6 +243,20 @@ p_download.add_argument(
     help="Force a checksum check and rebuild the ETE4 taxonomy cache when NCBI has a newer archive.",
 )
 
+p_vertlife = NwkitArgumentParser(add_help=False)
+p_vertlife.add_argument(
+    "--vertlife-dataset",
+    "--vertlife_dataset",
+    metavar="ID",
+    help="Use the specified VertLife reference. Supported: amphibians-2018-consensus.",
+)
+p_vertlife.add_argument(
+    "--vertlife-file",
+    "--vertlife_file",
+    metavar="PATH",
+    help="Use a local checksum-verified copy of the selected VertLife reference.",
+)
+
 p_tree_input = NwkitArgumentParser(add_help=False, parents=[p_audit])
 p_tree_input.add_argument(
     "-i",
@@ -347,7 +361,8 @@ p_species.add_argument(
     help="default=%(default)s: Species parser preset. "
     "legacy keeps the historical GENUS_SPECIES[_...] behavior. "
     "taxonomic keeps qualifier-aware species labels such as GENUS_SPECIES_cf or GENUS_sp_LABEL "
-    "for internal identity while simplifying taxonomy queries.",
+    "for internal identity while simplifying taxonomy queries. "
+    "extended-taxonomic additionally preserves cultivar groups, subgroups and hybrid binomials.",
 )
 p_species.add_argument(
     "--species-regex",
@@ -476,16 +491,16 @@ def command_asr(args):
 pasr = subparsers.add_parser(
     "asr",
     help="Infer ancestral traits and impute missing tips under discrete Mk or continuous Gaussian models",
-    parents=[p_tree_input, p_table_output, p_tip_table_policy],
+    parents=[p_tree_input, p_table_output, p_tip_table_policy, p_species],
 )
 pasr.add_argument(
     "--trait",
     metavar="PATH",
     default=None,
     type=str,
-    required=True,
+    required=False,
     action="store",
-    help='TSV containing "leaf_name" and trait columns.',
+    help='TSV containing "leaf_name" and trait columns; --within-species-covariance uses individual-keyed long data instead.',
 )
 pasr.add_argument(
     "--state-column",
@@ -494,7 +509,7 @@ pasr.add_argument(
     metavar="STR",
     default=None,
     type=str,
-    required=True,
+    required=False,
     action="store",
     help="Trait column in --trait. Pagel models require exactly two comma-separated "
     "binary-trait columns; multivariate Gaussian models require two or more columns.",
@@ -532,8 +547,8 @@ pasr.add_argument(
     help="default=ER for discrete, BM for continuous: Discrete ER/SYM/ARD/F81/GTR/"
     "MK-DESIGN/PAGEL-INDEPENDENT/PAGEL-DEPENDENT/MK-REGIME/HRM/COVARION/"
     "MK-MIXTURE/THRESHOLD/CUSTOM or continuous BM/BMS/LAMBDA/KAPPA/DELTA/"
-    "EB/ACDC/BMS-DRIFT/BM-DRIFT/MV-BM/MV-OU/MV-OU-DIAG/OU/OUM/OUMA/"
-    "OUMV/OUMVA.",
+    "JUMP-BM/MM-BM/MM-OU/EB/ACDC/BMS-DRIFT/BM-DRIFT/MV-BM/MV-OU/MV-OU-DIAG/MV-OU-FULL/OU/OUM/OUMA/"
+    "OUMV/OUMVA/BRANCH-GAUSSIAN.",
 )
 pasr.add_argument(
     "--rate",
@@ -652,6 +667,20 @@ pasr.add_argument(
     "zero diagonals are replaced by negative off-diagonal row sums.",
 )
 pasr.add_argument(
+    "--tip-likelihoods",
+    "--tip_likelihoods",
+    metavar="PATH",
+    default=None,
+    help="Discrete single-character CTMC: TSV leaf_name plus ordered state columns with P(data|state); supplied tips replace exact coding.",
+)
+pasr.add_argument(
+    "--misclassification-matrix",
+    "--misclassification_matrix",
+    metavar="PATH",
+    default=None,
+    help="Discrete single-character CTMC: TSV state plus ordered state columns; rows are true states, columns observed states, each row sums to one.",
+)
+pasr.add_argument(
     "--thresholds",
     metavar="T1,T2,...",
     default=None,
@@ -695,6 +724,14 @@ pasr.add_argument(
     help="default=4 for THRESHOLD: Independent MCMC chains used for R-hat and ESS diagnostics.",
 )
 pasr.add_argument(
+    "--liability-diagnostics-out",
+    "--liability_diagnostics_out",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help="THRESHOLD only: Per-node and threshold rank/split R-hat, bulk/tail ESS, MCSE and status TSV.",
+)
+pasr.add_argument(
     "--liability-out",
     "--liability_out",
     dest="liability_out",
@@ -715,7 +752,8 @@ pasr.add_argument(
     choices=["equal", "empirical", "stationary", "flat", "fixed", "gaussian"],
     help="model-specific default: Discrete equal (F81/GTR stationary), flat for BM-family "
     "models, and stationary for OU/OUM. OU also supports fixed or Gaussian roots. "
-    "Stationary uses the fitted/fixed process equilibrium; "
+    "BRANCH-GAUSSIAN requires an explicit prior and explicit proper-root parameters. "
+    "Other stationary models use the fitted/fixed process equilibrium; "
     "independent of --input-rooted.",
 )
 pasr.add_argument(
@@ -725,7 +763,7 @@ pasr.add_argument(
     metavar="FLOAT",
     default=None,
     type=finite_float,
-    help="OU with --root-prior fixed/gaussian: Required fixed root-state mean.",
+    help="Required root-state mean for OU fixed/gaussian roots and BRANCH-GAUSSIAN proper roots.",
 )
 pasr.add_argument(
     "--root-variance",
@@ -734,7 +772,7 @@ pasr.add_argument(
     metavar="FLOAT",
     default=None,
     type=nonnegative_finite_float,
-    help="OU with --root-prior gaussian: Required positive root-state variance.",
+    help="Required positive root-state variance for OU Gaussian roots and BRANCH-GAUSSIAN gaussian/stationary roots.",
 )
 pasr.add_argument(
     "--ambiguous-separator",
@@ -760,14 +798,14 @@ pasr.add_argument(
 )
 pasr.add_argument(
     "--output",
-    metavar="probabilities|map|summary",
+    metavar="probabilities|map|summary|likelihood|prior-samples",
     default=None,
     type=str,
     required=False,
     action="store",
-    choices=["probabilities", "map", "summary"],
+    choices=["probabilities", "map", "summary", "likelihood", "prior-samples"],
     help="default=probabilities for discrete, summary for continuous: "
-    "Report discrete probabilities/MAP states or continuous means, variances, and intervals.",
+    "Report discrete probabilities/MAP states or continuous means, variances, and intervals. BRANCH-GAUSSIAN also supports likelihood and prior-samples.",
 )
 pasr.add_argument(
     "--sigma2",
@@ -776,6 +814,42 @@ pasr.add_argument(
     type=nonnegative_finite_float,
     help="Scalar continuous models: Fixed diffusion variance rate per branch-length unit. "
     "If omitted, estimate it; MV-BM estimates a covariance matrix instead.",
+)
+pasr.add_argument(
+    "--jump-rate",
+    "--jump_rate",
+    type=nonnegative_finite_float,
+    help="JUMP-BM: fixed Poisson jump rate per branch-length unit (required).",
+)
+pasr.add_argument(
+    "--jump-sd",
+    "--jump_sd",
+    type=nonnegative_finite_float,
+    help="JUMP-BM: fixed zero-mean Gaussian jump standard deviation (required).",
+)
+pasr.add_argument(
+    "--latent-regime-config",
+    "--latent_regime_config",
+    metavar="JSON",
+    help="MM-BM/MM-OU: fixed states, q and sigma2 arrays; MM-OU also requires alpha/theta arrays.",
+)
+pasr.add_argument(
+    "--regime-column",
+    "--regime_column",
+    metavar="COLUMN",
+    help="MM-BM/MM-OU: discrete regime column in the trait table; missing values allowed.",
+)
+pasr.add_argument(
+    "--history-samples",
+    "--history_samples",
+    type=int,
+    help="default=1000: independent latent-history importance proposals (at least 2).",
+)
+pasr.add_argument(
+    "--latent-history-out",
+    "--latent_history_out",
+    metavar="PATH",
+    help="Write sampled jump counts or regime histories with normalized posterior importance weights.",
 )
 pasr.add_argument(
     "--evolution-parameter",
@@ -824,6 +898,23 @@ pasr.add_argument(
     "--state-column order. Omit both this and --alpha to estimate one per trait.",
 )
 pasr.add_argument(
+    "--attraction-matrix",
+    "--attraction_matrix",
+    default=None,
+    metavar="MATRIX",
+    help="MV-OU-FULL: Fixed attraction matrix in trait order; comma-separated entries, "
+    "semicolon-separated rows (quote the argument). Requires --diffusion-matrix. "
+    "Omit both to estimate a stable full OU model.",
+)
+pasr.add_argument(
+    "--diffusion-matrix",
+    "--diffusion_matrix",
+    default=None,
+    metavar="MATRIX",
+    help="MV-OU-FULL: Fixed positive-definite diffusion covariance, using the same "
+    "matrix syntax as --attraction-matrix. Supply both matrices together.",
+)
+pasr.add_argument(
     "--theta",
     metavar="FLOAT",
     default=None,
@@ -866,6 +957,38 @@ pasr.add_argument(
     default=None,
     type=str,
     help="Known non-negative measurement SEs. Multivariate models require a comma-separated SE column per trait.",
+)
+pasr.add_argument(
+    "--within-species-covariance",
+    "--within_species_covariance",
+    choices=["full", "diagonal"],
+    default=None,
+    help="MV-BM: jointly estimate evolutionary Sigma and common individual W. --trait becomes long TSV: leaf_name, individual_id, trait, value; --state-column lists traits.",
+)
+pasr.add_argument(
+    "--covariance-method",
+    "--covariance_method",
+    choices=["ML", "REML"],
+    default=None,
+    help="Joint individual covariance estimation method (default REML).",
+)
+pasr.add_argument(
+    "--individual-out",
+    "--individual_out",
+    metavar="PATH",
+    help="Joint individual MV-BM: conditional predictions for every trait of each listed individual, including missing coordinates.",
+)
+pasr.add_argument(
+    "--replicate-observations",
+    "--replicate_observations",
+    metavar="PATH",
+    help="Continuous replicate TSV: leaf_name, trait, value, standard_error. Known positive SEs; replaces supplied tip/trait cells with precision-weighted summaries.",
+)
+pasr.add_argument(
+    "--measurement-covariance",
+    "--measurement_covariance",
+    metavar="PATH",
+    help="Multivariate known error covariance TSV: leaf_name, trait, other_trait, covariance; all ordered matrix entries per observed tip.",
 )
 pasr.add_argument(
     "--ci-level",
@@ -924,7 +1047,7 @@ pasr.add_argument(
     metavar="PATH",
     default=None,
     type=str,
-    help="MV-BM/MV-OU/MV-OU-DIAG only: Optional tidy TSV of conditional trait "
+    help="Multivariate continuous models only: Optional tidy TSV of conditional trait "
     "covariances for selected nodes.",
 )
 pasr.add_argument(
@@ -934,7 +1057,7 @@ pasr.add_argument(
     metavar="PATH",
     default=None,
     type=str,
-    help="Scalar continuous models: Optional long-form TSV of joint all-node posterior draws.",
+    help="Continuous models: Optional long-form TSV of joint all-node posterior draws.",
 )
 pasr.add_argument(
     "--posterior-samples",
@@ -952,7 +1075,7 @@ pasr.add_argument(
     metavar="PATH",
     default=None,
     type=str,
-    help="Scalar continuous models: Optional posterior-predictive check TSV.",
+    help="Continuous models: Optional posterior-predictive check TSV.",
 )
 pasr.add_argument(
     "--posterior-predictive-simulations",
@@ -964,13 +1087,42 @@ pasr.add_argument(
     help="default=1000 with --posterior-predictive-out: Replicated datasets.",
 )
 pasr.add_argument(
+    "--bootstrap-intervals-out",
+    "--bootstrap_intervals_out",
+    default=None,
+    metavar="PATH",
+    help="Scalar continuous ASR: bootstrap prediction-error intervals for latent node values.",
+)
+pasr.add_argument(
+    "--bootstrap-interval-simulations",
+    "--bootstrap_interval_simulations",
+    default=None,
+    type=int,
+    metavar="INT",
+    help="default=100: Refits for --bootstrap-intervals-out (at least two).",
+)
+pasr.add_argument(
+    "--cross-validation-out",
+    "--cross_validation_out",
+    default=None,
+    metavar="PATH",
+    help="Scalar Gaussian or single-character CTMC: refitted held-out predictive scores; Gaussian coverage or discrete probabilities/Brier scores.",
+)
+pasr.add_argument(
+    "--cross-validation-unit",
+    "--cross_validation_unit",
+    default=None,
+    choices=("tip", "clade"),
+    help="default=tip: Hold out individual tips or each root-child clade.",
+)
+pasr.add_argument(
     "--bootstrap-out",
     "--bootstrap_out",
     dest="bootstrap_out",
     metavar="PATH",
     default=None,
     type=str,
-    help="Scalar continuous models: Optional parametric-bootstrap refit TSV.",
+    help="Continuous models: Optional parametric-bootstrap refit TSV.",
 )
 pasr.add_argument(
     "--bootstrap-simulations",
@@ -1029,6 +1181,48 @@ pasr.add_argument(
     action="store",
     help="default=%(default)s: Optional TSV summarizing sampled stochastic-map transition counts per branch.",
 )
+for _map_option, _map_help in (
+    (
+        "map-history-out",
+        "Conditional stochastic-map segments: draw, branch, state, local times and times from the root.",
+    ),
+    (
+        "map-summary-out",
+        "Per-branch/state posterior duration summaries from the same stochastic maps.",
+    ),
+    (
+        "map-time-out",
+        "Time-bin state durations and directed transition counts, with lineage-time exposure.",
+    ),
+    (
+        "map-probabilities-out",
+        "Sampled state probabilities on a regular grid along every branch.",
+    ),
+    (
+        "map-figure-out",
+        "PNG/PDF/SVG tree with stacked state-probability ribbons (at most 20 states and 200 tips).",
+    ),
+):
+    pasr.add_argument(
+        "--" + _map_option,
+        "--" + _map_option.replace("-", "_"),
+        metavar="PATH",
+        help=_map_help,
+    )
+pasr.add_argument(
+    "--map-time-bins",
+    "--map_time_bins",
+    type=int,
+    default=None,
+    help="default=20 with --map-time-out: equal-width bins forward from the input root.",
+)
+pasr.add_argument(
+    "--map-grid-points",
+    "--map_grid_points",
+    type=int,
+    default=None,
+    help="default=51: probability-grid points per branch, including both endpoints.",
+)
 pasr.add_argument(
     "--n-sim",
     "--n_sim",
@@ -1038,7 +1232,7 @@ pasr.add_argument(
     type=int,
     required=False,
     action="store",
-    help="default=100 for discrete: Number of stochastic maps sampled when --stochastic-map-out is specified.",
+    help="default=100 for discrete: Number of stochastic maps for count, history, summary, probability or map-figure output.",
 )
 pasr.add_argument(
     "--threads",
@@ -1057,6 +1251,104 @@ pasr.add_argument(
     required=False,
     action="store",
     help="default=%(default)s: Random seed for stochastic mapping, liability MCMC, or continuous simulation diagnostics.",
+)
+pasr.add_argument(
+    "--tree-ensemble",
+    "--tree_ensemble",
+    metavar="PATH",
+    help="Newick tree sample with the same tips as --infile; refit independently on each tree.",
+)
+pasr.add_argument(
+    "--tree-ensemble-out",
+    "--tree_ensemble_out",
+    metavar="PATH",
+    help="Tree-averaged node summaries, aligned to --infile clades.",
+)
+pasr.add_argument(
+    "--tree-ensemble-weights",
+    "--tree_ensemble_weights",
+    metavar="WEIGHTS",
+    help="Comma-separated nonnegative tree weights (default: equal).",
+)
+pasr.add_argument(
+    "--tree-ensemble-mapping",
+    "--tree_ensemble_mapping",
+    choices=("clade", "mrca"),
+    default=None,
+    help="Match exact descendant clades (default) or their MRCA.",
+)
+pasr.add_argument(
+    "--figure-out",
+    "--figure_out",
+    dest="figure_out",
+    metavar="PATH",
+    default=None,
+    help="Optional PDF, SVG, or PNG showing continuous ancestral traits beside the tree. Includes all nodes regardless of --target.",
+)
+pasr.add_argument(
+    "--figure-trait-tip-labels",
+    "--figure_trait_tip_labels",
+    choices=("yes", "no"),
+    default="no",
+    help="default=no: Add full tip names in detached value-ordered strips below ASR and simulation panels. Labels use posterior tip means or the first sampled history. Requires --figure-out; asrcompare requires --figure-layout panels.",
+)
+pasr.add_argument(
+    "--figure-tip-heatmap",
+    "--figure_tip_heatmap",
+    choices=("yes", "no"),
+    default="no",
+    help="default=no: Add observed tip-trait heatmap rows below the phylogeny, with one color scale per trait and gray missing values. Requires --figure-out; asrcompare requires --figure-layout panels.",
+)
+pasr.add_argument(
+    "--figure-width",
+    "--figure_width",
+    dest="figure_width",
+    metavar="FLOAT",
+    type=finite_float,
+    default=None,
+    help="Figure width in inches; default follows tip and trait counts. Requires --figure-out.",
+)
+pasr.add_argument(
+    "--figure-height",
+    "--figure_height",
+    dest="figure_height",
+    metavar="FLOAT",
+    type=finite_float,
+    default=None,
+    help="Figure height in inches (default: at least 7.5, expanded for long tip labels). Requires --figure-out.",
+)
+pasr.add_argument(
+    "--figure-simulations",
+    "--figure_simulations",
+    dest="figure_simulations",
+    metavar="INT",
+    type=int,
+    default=0,
+    help="default=0: Add a panel with this many sampled BM/OU histories per trait. Requires --figure-out; use --seed for reproducibility.",
+)
+pasr.add_argument(
+    "--species-overlap-node-plot",
+    "--species_overlap_node_plot",
+    choices=("yes", "no", "auto"),
+    default="auto",
+    help="default=auto: Color figure node circles by the shared species-overlap method (blue speciation, red duplication). Auto requires all tip labels to be parseable; yes classifies fully parsed subtrees; no disables event colors. Simulation branching circles are always shown.",
+)
+pasr.add_argument(
+    "--figure-simulation-mode",
+    "--figure_simulation_mode",
+    dest="figure_simulation_mode",
+    choices=("unconditional", "conditional"),
+    default=None,
+    help="default=unconditional: Simulate new histories from fitted parameters, or condition on observed tips. Flat-root unconditional histories start at the inferred root mean.",
+)
+pasr.add_argument(
+    "--figure-simulation-steps",
+    "--figure_simulation_steps",
+    dest="figure_simulation_steps",
+    metavar="INT",
+    type=int,
+    default=None,
+    help="default=200: Grid steps along the longest branch; shorter branches use proportional counts. Exact Gaussian transitions, with linear display between grid points.",
 )
 pasr.set_defaults(handler=command_asr)
 
@@ -1093,7 +1385,7 @@ def _copy_store_options(source, target, destinations):
 pasrcompare = subparsers.add_parser(
     "asrcompare",
     help="Compare the fit of applicable ancestral-trait models",
-    parents=[p_tree_input, p_table_output, p_tip_table_policy],
+    parents=[p_tree_input, p_table_output, p_tip_table_policy, p_species],
 )
 _copy_store_options(
     pasr,
@@ -1115,6 +1407,8 @@ _copy_store_options(
         "rate_mixture",
         "rate_categories",
         "rate_matrix",
+        "tip_likelihoods",
+        "misclassification_matrix",
         "root_prior",
         "root_mean",
         "root_variance",
@@ -1124,12 +1418,25 @@ _copy_store_options(
         "evolution_parameter_bounds",
         "alpha",
         "alpha_by_trait",
+        "attraction_matrix",
+        "diffusion_matrix",
         "alpha_bounds",
         "theta",
         "eb_rate",
         "eb_rate_bounds",
         "drift",
         "standard_error_column",
+        "measurement_covariance",
+        "replicate_observations",
+        "figure_width",
+        "figure_height",
+        "figure_simulations",
+        "figure_simulation_mode",
+        "figure_simulation_steps",
+        "figure_tip_heatmap",
+        "figure_trait_tip_labels",
+        "species_overlap_node_plot",
+        "seed",
     ),
 )
 pasrcompare.add_argument(
@@ -1138,6 +1445,12 @@ pasrcompare.add_argument(
     default="all",
     type=str,
     help="default=%(default)s: Models to evaluate. Automatic comparison records but does not fit non-rankable HRM; name HRM explicitly for a diagnostic fit. OU root variants may be written as OU[stationary], OU[fixed], or OU[gaussian].",
+)
+pasrcompare.add_argument(
+    "--model-average-out",
+    "--model_average_out",
+    metavar="PATH",
+    help="Average rankable ancestral reconstructions within one likelihood/root comparison group; incompatible groups are rejected.",
 )
 pasrcompare.add_argument(
     "--exclude-models",
@@ -1162,8 +1475,14 @@ pasrcompare.add_argument(
     metavar="PATH.pdf",
     default=None,
     type=str,
-    help="Optional single-page, rank-sorted table showing every candidate in "
-    "clearly separated compatible comparison sets.",
+    help="Optional single-page PDF; --figure-layout selects a comparison table or continuous model panels.",
+)
+pasrcompare.add_argument(
+    "--figure-layout",
+    "--figure_layout",
+    choices=("table", "panels"),
+    default="table",
+    help="default=table: Rank-sorted comparison table, or one row per continuous model with phylogeny and ASR panels. Add --figure-simulations for sampled histories. Panel width/height default to fit all candidates on one page.",
 )
 pasrcompare.set_defaults(handler=command_asrcompare)
 
@@ -1177,7 +1496,7 @@ def command_constrain(args):
 pconstrain = subparsers.add_parser(
     "constrain",
     help="Generate a species-tree-like Newick file for topological constraint",
-    parents=[p_parent, p_download, p_species],
+    parents=[p_parent, p_download, p_species, p_vertlife],
 )
 pconstrain.add_argument(
     "--species-list",
@@ -1209,18 +1528,33 @@ pconstrain.add_argument(
 )
 pconstrain.add_argument(
     "--backbone",
-    metavar="ncbi|ncbi_apgiv|ncbi_user|user",
+    metavar="ncbi|ncbi_apgiv|ncbi_apgv|ncbi_user|user|vertlife",
     default="ncbi",
     type=str,
     required=False,
     action="store",
-    choices=["ncbi", "ncbi_apgiv", "ncbi_user", "user"],
+    choices=["ncbi", "ncbi_apgiv", "ncbi_apgv", "ncbi_user", "user", "vertlife"],
     help="default=%(default)s: The backbone for tree constraint. "
-    '--infile is not required except for "user". '
+    '--infile is required for "user" and "ncbi_user". '
     "ncbi: Infer NCBI Taxonomy ID from species name, and generate a tree based on the ranks. "
     "ncbi_apgiv: Infer NCBI Taxonomy ID from species name, and match it with the order-level angiosperm phylogeny in APG IV (https://doi.org/10.1111/boj.12385). "
+    "ncbi_apgv: Infer NCBI Taxonomy ID from species name, and match it with the APG V angiosperm backbone (66 orders plus Huaceae and Columelliaceae; https://doi.org/10.1111/jse.70096). "
     "ncbi_user: Infer NCBI Taxonomy ID from species name, and match the ranks with the labels of the user-provided tree. "
-    "user: User-provided tree in --infile.",
+    "user: User-provided tree in --infile. "
+    "vertlife: Match species against the tree selected by --vertlife-dataset.",
+)
+pconstrain.add_argument(
+    "--branch-length",
+    "--branch_length",
+    choices=["none", "original"],
+    default="none",
+    help="default=none: Output topology only. With --backbone vertlife, "
+    "original preserves the reference's dated branch lengths in millions of years.",
+)
+pconstrain.add_argument(
+    "--report",
+    metavar="PATH",
+    help="Optional TSV of species matches and source provenance for --backbone vertlife.",
 )
 pconstrain.add_argument(
     "--rank",
@@ -1999,6 +2333,36 @@ pdist.set_defaults(handler=command_dist)
 
 
 def command_draw(args):
+    if (
+        getattr(args, "document", None)
+        or getattr(args, "comparison", None)
+        or getattr(args, "view", None)
+    ):
+        from nwkit.draw_document import draw_document_main
+
+        return draw_document_main(args)
+    if any(
+        getattr(args, key, default) != default
+        for key, default in (
+            ("document_out", None),
+            ("view_config", None),
+            ("view_out", None),
+            ("document_clade", None),
+            ("pdf_pages", "auto"),
+            ("pdf_page_size", "A4"),
+        )
+    ):
+        raise ValueError(
+            "Document output/page options require --document or --view embedded."
+        )
+    if getattr(args, "reconciliation", None) or getattr(args, "radte_prefix", None):
+        from nwkit.result_plot import draw_saved_results
+
+        return draw_saved_results(args)
+    if getattr(args, "species_tree", None):
+        raise ValueError(
+            "--species-tree requires --reconciliation or --radte-prefix for draw."
+        )
     from nwkit.draw import draw_main
 
     draw_main(args)
@@ -2718,7 +3082,7 @@ pdraw.add_argument(
     type=str,
     required=False,
     action="store",
-    help='default=None: Display this Newick/NHX property beside matching nodes; use "name" for ordinary Newick node labels.',
+    help='default=None: Display this Newick/NHX property beside matching nodes; use "name" for ordinary Newick labels or "branch_id" for integer IDs matching asr/nwk2table on the input tree, before display reordering.',
 )
 pdraw.add_argument(
     "--node-label-target",
@@ -3276,6 +3640,13 @@ plabel.add_argument(
     action="store",
     help="default=%(default)s: Whether to overwrite existing node names.",
 )
+plabel.add_argument(
+    "--start",
+    type=int,
+    default=0,
+    metavar="INT",
+    help="default=%(default)s: First label number in level order; existing reserved names are skipped.",
+)
 plabel.set_defaults(handler=command_label)
 
 
@@ -3603,6 +3974,30 @@ pregress_response.add_argument(
     default=None,
     type=str,
     help="Upper censor-bound column for censored-Gaussian responses; missing means no upper bound.",
+)
+pregress_response.add_argument(
+    "--response-observation-model",
+    metavar="TRAIT=MODEL,...",
+    default=None,
+    help="Censored-Gaussian bootstrap mechanism: uncensored, detection-limits, or interval-bins. Observed censor bounds alone are insufficient.",
+)
+pregress_response.add_argument(
+    "--response-detection-lower",
+    metavar="TRAIT=COLUMN,...",
+    default=None,
+    help="Lower detection-limit column for every biological observation, including exact rows; values at or below the limit are left-censored.",
+)
+pregress_response.add_argument(
+    "--response-detection-upper",
+    metavar="TRAIT=COLUMN,...",
+    default=None,
+    help="Upper detection-limit column for every biological observation; values at or above the limit are right-censored.",
+)
+pregress_response.add_argument(
+    "--response-observation-bins",
+    metavar="TRAIT=CUT1|CUT2|..., ...",
+    default=None,
+    help="Finite increasing cutpoints for interval-bins observation; exterior intervals extend to infinity. Quote the argument in the shell.",
 )
 pregress_response.add_argument(
     "--response-dispersion",
@@ -4143,6 +4538,12 @@ pregress_predictor_replicates.add_argument(
     help="Optional known-SE sample-size columns corresponding to --predictors.",
 )
 pregress_reconciled.add_argument(
+    "--regression-estimand",
+    default=None,
+    choices=["event-average", "common"],
+    help="default=event-average: Estimate the equally weighted event association; common selects the auxiliary Gaussian hierarchical likelihood.",
+)
+pregress_reconciled.add_argument(
     "--event-weighting",
     dest="event_weighting",
     metavar="event|contrast",
@@ -4151,7 +4552,7 @@ pregress_reconciled.add_argument(
     required=False,
     action="store",
     choices=["event", "contrast"],
-    help="default=event: Give each species event equal total weight, or give each gene contrast equal weight. Event weighting prevents copy-rich events from dominating.",
+    help="Legacy alias: event selects event-average estimating equations; contrast selects the common-coefficient likelihood. Does not scale biological covariance.",
 )
 pregress_reconciled.add_argument(
     "--speciation-coverage",
@@ -4207,18 +4608,20 @@ pregress_precomputed.add_argument(
 )
 pregress_inference.add_argument(
     "--inference",
-    metavar="wald|parametric-bootstrap|likelihood-ratio|profile-likelihood",
+    metavar="wald|parametric-bootstrap|studentized-bootstrap|null-bootstrap|likelihood-ratio|profile-likelihood",
     default="wald",
     type=str,
     required=False,
     action="store",
     choices=[
         "wald",
+        "null-bootstrap",
         "parametric-bootstrap",
+        "studentized-bootstrap",
         "likelihood-ratio",
         "profile-likelihood",
     ],
-    help="default=%(default)s: Wald, family-specific parametric bootstrap, likelihood-ratio, or profile-likelihood inference. Tree-structured bootstrap draws use the sparse backend at large tip counts.",
+    help="default=%(default)s: Wald, coefficient or studentized Gaussian bootstrap, null-calibrated penalized GLMM tests, or unpenalized likelihood inference. Penalized Wald fits report point estimates without frequentist intervals. Tree-structured bootstrap draws use the sparse backend at large tip counts.",
 )
 pregress_inference.add_argument(
     "--allow-large-dense",
@@ -4231,6 +4634,12 @@ pregress_inference.add_argument(
     help="default=%(default)s: Explicitly permit large Gaussian or non-Gaussian fits that require a dense covariance representation; nwkit reports an estimated dense working-memory requirement before attempting them.",
 )
 pregress_inference.add_argument(
+    "--coefficient-profile-grid",
+    metavar="VALUE1|VALUE2|...",
+    default=None,
+    help="Optional ordered coefficient values for null-bootstrap test inversion (GLMM). Quote the argument. Returns accepted grid points, not an interpolated confidence interval.",
+)
+pregress_inference.add_argument(
     "--bootstrap-replicates",
     dest="bootstrap_replicates",
     metavar="INT",
@@ -4238,7 +4647,7 @@ pregress_inference.add_argument(
     type=int,
     required=False,
     action="store",
-    help="default=%(default)s: Number of simulations for parametric-bootstrap inference.",
+    help="default=%(default)s: Number of simulations for bootstrap inference.",
 )
 pregress_inference.add_argument(
     "--seed",
@@ -4467,6 +4876,73 @@ pmark.add_argument(
 pmark.set_defaults(handler=command_mark)
 
 
+def command_convert(args):
+    from nwkit.convert import convert_main
+
+    convert_main(args)
+
+
+pconvert = subparsers.add_parser(
+    "convert",
+    help="Convert Newick, NHX, FigTree and MCMCtree output without silently losing annotations",
+    parents=[p_tree_input, p_text_output],
+)
+pconvert.add_argument(
+    "--from",
+    default="auto",
+    choices=["auto", "newick", "nhx", "figtree", "mcmctree-output"],
+    help="default=%(default)s: Input container. figtree means direct-label NEXUS.",
+)
+pconvert.add_argument(
+    "--to",
+    default="nhx",
+    choices=["newick", "nhx", "figtree"],
+    help="default=%(default)s: Output syntax; plain Newick cannot retain NHX properties.",
+)
+pconvert.add_argument(
+    "--time-factor",
+    "--time_factor",
+    default="1",
+    metavar="NUMBER",
+    help="default=%(default)s: Finite positive multiplier for all branch lengths and recognized ages/age intervals; never labels or supports.",
+)
+pconvert.add_argument(
+    "--age-ci",
+    "--age_ci",
+    default="keep",
+    choices=["keep", "drop"],
+    help="default=%(default)s: Keep or explicitly remove existing node-age intervals, without recomputing their kind or level.",
+)
+pconvert.add_argument(
+    "--tree-index",
+    "--tree_index",
+    type=int,
+    default=None,
+    metavar="INT",
+    help="default=None: Select a 1-based input tree statement. Ambiguous multi-tree inputs require this option.",
+)
+pconvert.add_argument(
+    "--node-label",
+    "--node_label",
+    default="",
+    metavar="PROPERTY",
+    help="Copy an NHX property into internal node labels before property removal; missing properties leave labels unchanged. Tip names are never changed.",
+)
+pconvert.add_argument(
+    "--properties",
+    choices=["keep", "drop"],
+    default="keep",
+    help="default=%(default)s: Explicitly discard normalized NHX/age properties with drop; includes age intervals. Ordinary comments and explicit rooting remain.",
+)
+pconvert.add_argument(
+    "--comments",
+    choices=["keep", "drop"],
+    default="keep",
+    help="Keep or remove ordinary comments in the exported tree.",
+)
+pconvert.set_defaults(handler=command_convert)
+
+
 def command_mcmctree(args):
     from nwkit.mcmctree import mcmctree_main
 
@@ -4476,7 +4952,7 @@ def command_mcmctree(args):
 pmcmctree = subparsers.add_parser(
     "mcmctree",
     help="Prepare MCMCtree calibrations or summarize its posterior node ages",
-    parents=[p_tree_input, p_download, p_species],
+    parents=[p_tree_input, p_download, p_species, p_vertlife],
 )
 pmcmctree.add_argument(
     "-o",
@@ -4486,7 +4962,8 @@ pmcmctree.add_argument(
     type=str,
     required=False,
     action="store",
-    help='default=%(default)s: Output MCMCtree calibration tree or posterior dated NHX tree. Use "-" for STDOUT.',
+    help="default=%(default)s: Output MCMCtree calibration tree or posterior dated NHX tree. "
+    'With --vertlife-dataset, write the input tree alongside the age report. Use "-" for STDOUT.',
 )
 pmcmctree.add_argument(
     "--left-species",
@@ -4606,6 +5083,55 @@ pmcmctree.add_argument(
     action="store",
     help="default=%(default)s: Minimum proportion of the clade size to the total number of species. "
     "If the clade proportion is smaller than this value, time constraints are removed.",
+)
+pmcmctree.add_argument(
+    "--angiocal",
+    choices=["no", "v1.0"],
+    default="no",
+    help="default=%(default)s: Import AngioCal fossil minimum ages. "
+    "Requires a fully bifurcating tree with unique, unquoted ASCII tip identifiers. "
+    "Exclusive with --timetree, --posterior, and manual calibration selection.",
+)
+pmcmctree.add_argument(
+    "--angiocal-file",
+    "--angiocal_file",
+    metavar="PATH",
+    default=None,
+    help="default=None: Local AngioCal v1.0 XLS or normalized TSV; otherwise download the pinned release.",
+)
+pmcmctree.add_argument(
+    "--angiocal-taxonomy",
+    "--angiocal_taxonomy",
+    metavar="yes|no",
+    type=strtobool,
+    default=True,
+    help="default=yes: Resolve unlabeled stem clades with NCBI taxonomy. "
+    "Use no for offline placement from node labels or an explicit map. "
+    "Crown fossils require a biological node label or explicit anchors.",
+)
+pmcmctree.add_argument(
+    "--calibration-map-tsv",
+    "--calibration_map_tsv",
+    metavar="PATH",
+    default=None,
+    help="default=None: Explicit fossil_id/left_species/right_species anchors identifying "
+    "the final calibrated MRCA (also for stem fossils). Supports STDIN.",
+)
+pmcmctree.add_argument(
+    "--time-unit-ma",
+    "--time_unit_ma",
+    metavar="FLOAT",
+    type=finite_float,
+    default=1.0,
+    help="default=%(default)s: Ma per output time unit for AngioCal ages; use 100 for units of 100 Ma. "
+    "Existing tree calibrations must already use the output unit.",
+)
+pmcmctree.add_argument(
+    "--report",
+    metavar="PATH",
+    default=None,
+    help="AngioCal fossil placement TSV, or required VertLife TSV with reference ages "
+    "for matching clades. VertLife ages are reported as estimates without assigning priors.",
 )
 pmcmctree.add_argument(
     "--higher-rank-search",
@@ -4914,7 +5440,7 @@ def command_root(args):
 proot = subparsers.add_parser(
     "root",
     help="Place or transfer the tree root",
-    parents=[p_parent, p_download, p_species],
+    parents=[p_parent, p_download, p_species, p_vertlife],
 )
 proot.add_argument(
     "-i2",
@@ -4999,6 +5525,13 @@ proot.add_argument(
     help="default=%(default)s: ETE tree format for --species-tree.",
 )
 proot.add_argument(
+    "--candidates-out",
+    "--candidates_out",
+    metavar="PATH",
+    default=None,
+    help="Write every equally optimal reconciliation root as a Newick tree collection in deterministic order. Requires --method reconciliation.",
+)
+proot.add_argument(
     "--duplication-cost",
     "--duplication_cost",
     dest="duplication_cost",
@@ -5043,8 +5576,9 @@ proot.add_argument(
     help='default=%(default)s: Comma-separated taxonomy/tree sources used when --method "taxonomy" is selected. '
     "Each source is tried in order until rooting succeeds. When taxids are inferred from leaf labels, "
     "taxonomy queries are controlled by --species-parser/--species-regex/--species-map-tsv. "
-    "Repeated species labels are allowed for timetree/opentree only when their tips are monophyletic. "
-    "Supported sources: ncbi, timetree, opentree.",
+    "For timetree, opentree, and vertlife, repeated species labels require monophyletic tips. "
+    "Supported sources: ncbi, timetree, opentree, vertlife. "
+    "VertLife requires --vertlife-dataset.",
 )
 proot.add_argument(
     "--taxid-tsv",
@@ -5888,6 +6422,14 @@ pvalidate.add_argument(
     help="default=%(default)s: Mark unrooted or unknown-rooting trees as invalid. Declared rooted polytomies are accepted.",
 )
 pvalidate.add_argument(
+    "--require-all-lengths",
+    "--require_all_lengths",
+    default="no",
+    type=strtobool,
+    metavar="yes|no",
+    help="Require a branch length on every non-root node; finite and non-negative lengths are always checked.",
+)
+pvalidate.add_argument(
     "--require-ultrametric",
     "--require_ultrametric",
     dest="require_ultrametric",
@@ -6029,7 +6571,83 @@ def _add_input_rooting_options():
             )
 
 
+def _add_output_rooting_options():
+    for command, command_parser in subparsers.choices.items():
+        outputs = {action.dest for action in command_parser._actions}
+        if not outputs.intersection(
+            {"outformat", "tree_outformat", "tree_out"}
+        ) and command not in {"convert", "radte", "mcmctree"}:
+            continue
+        command_parser.add_argument(
+            "--rooting-token",
+            "--rooting_token",
+            metavar="yes|no",
+            type=strtobool,
+            default=False,
+            help="default=no: Emit a leading [&R]/[&U] for known rooting states. "
+            "Without a token, preserve existing root NHX and use NHX only when "
+            "the state cannot be inferred from the root topology. FigTree/NEXUS "
+            "retains its format-specific rooting declaration.",
+        )
+        command_parser.add_argument(
+            "--rooting-nhx",
+            "--rooting_nhx",
+            metavar="yes|no",
+            type=strtobool,
+            default=False,
+            help="default=no: Convert rooting declarations to root NHX "
+            "nwkit_rooted=yes/no/unknown. Takes priority over --rooting-token; "
+            "existing root NHX is retained without this option.",
+        )
+
+
+from nwkit.radte_cli import register_radte, register_radte_compare  # noqa: E402
+
+register_radte(subparsers, p_audit, p_species, finite_float)
+register_radte_compare(subparsers, p_audit)
+from nwkit.result_plot_cli import register_result_plot_options  # noqa: E402
+
+register_result_plot_options(
+    pdraw, preconcile, subparsers.choices["radte"], finite_float
+)
+from nwkit.reconciliation_cli import register_document_options  # noqa: E402
+
+register_document_options(pdraw)
+from nwkit.shift_cli import register_shift  # noqa: E402
+
+register_shift(subparsers, p_tree_input, p_table_output)
+from nwkit.signal_cli import register_signal  # noqa: E402
+
+register_signal(subparsers, p_tree_input, p_table_output, p_tip_table_policy)
+from nwkit.pca_cli import register_pca  # noqa: E402
+
+register_pca(subparsers, p_tree_input, p_table_output, p_tip_table_policy)
+from nwkit.dtt_cli import register_dtt  # noqa: E402
+
+register_dtt(subparsers, p_tree_input, p_table_output, p_tip_table_policy)
+from nwkit.wgd_count_cli import register_wgd_count  # noqa: E402
+
+register_wgd_count(subparsers, p_tree_input, p_table_output, p_tip_table_policy)
+from nwkit.ksrate_cli import register_ksrate  # noqa: E402
+
+register_ksrate(subparsers, p_tree_input, p_table_output)
+from nwkit.wgd_tree_cli import register_wgd_tree  # noqa: E402
+
+register_wgd_tree(subparsers, p_tree_input, p_table_output, p_species)
+from nwkit.mul_reconcile_cli import register_mul_reconcile  # noqa: E402
+
+register_mul_reconcile(subparsers, p_tree_input, p_table_output, p_species)
+from nwkit.gene_tree_search_cli import register_gene_tree_search  # noqa: E402
+
+register_gene_tree_search(subparsers, p_tree_input, p_table_output, p_species)
+from nwkit.regression_selection_cli import register_regression_selection  # noqa: E402
+
+register_regression_selection(subparsers, p_audit)
+from nwkit.branch_gaussian_options import register_branch_gaussian_options  # noqa: E402
+
+register_branch_gaussian_options(pasr)
 _add_input_rooting_options()
+_add_output_rooting_options()
 
 
 def _validate_stdin_ownership(args):
@@ -6110,8 +6728,21 @@ def main(argv=None):
         try:
             if getattr(args, "audit", None) == "-":
                 raise ValueError("'--audit' requires a file path, not '-'.")
+            from nwkit.provenance import validate_command_path_roles
+
+            validate_command_path_roles(args)
 
             def invoke_handler(parsed_args):
+                if parsed_args.command == "draw":
+                    parsed_args._nwkit_draw_explicit_options = {
+                        option.split("=", 1)[0].replace("_", "-")
+                        for option in raw_argv
+                        if option.startswith("--")
+                    }
+                    parsed_args._nwkit_draw_font_explicit = any(
+                        option.split("=", 1)[0] in {"--font-family", "--font_family"}
+                        for option in raw_argv
+                    )
                 _warn_deprecated_option_aliases(raw_argv, parsed_args.command)
                 _validate_stdin_ownership(parsed_args)
                 return parsed_args.handler(parsed_args)

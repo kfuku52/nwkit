@@ -1,0 +1,40 @@
+[
+  {
+    "schema_version": 1,
+    "nwkit_version": "0.43.14",
+    "python": "3.10.14",
+    "numpy": "1.26.4",
+    "platform": "macOS-26.6.2-x86_64-i386-64bit",
+    "options": {
+      "output": "/tmp/nwkit-shift-validation-16tip-20260909",
+      "rscript": "/tmp/nwkit-shift-r/bin/Rscript",
+      "replicates": 3,
+      "bootstrap": 0,
+      "seed": 20260909,
+      "tips": [
+        16
+      ],
+      "standard_errors": [
+        0.0,
+        0.2
+      ],
+      "effects": [
+        0.5,
+        2.0
+      ],
+      "criterion": "pBIC"
+    },
+    "source_sha256": {
+      "tools/validate_shift_simulations.py": "4649b6a14b4e8a7e8695bcfc47e9e37e1fcb0471fba94f74647571e475dc8400",
+      "tools/shift_simulation_cases.py": "89ecdcee1c3c8ad5b96d42f2dde0c6eac7985ae6c1696cc4f6b28c59232f3ec0",
+      "nwkit/shift.py": "98998711c5bf5b2747bd6702a89a69e817334f1962591c75ea2debe13cec1c90",
+      "nwkit/shift_backend.py": "8946565fda853185329b9e702cbd9d42accb7d14941d81bd5d64efc8eb55613e",
+      "nwkit/shift_bootstrap.py": "537b5131193936c79678cf377ef7e6826765f4f578a4596bb3253a7412744817",
+      "nwkit/shift_cli.py": "77137e1f66b0a3832c3b6829855266a519cd5b104f769b20b9f2f6ba421de28c",
+      "nwkit/shift_convergence.py": "bd98b4ffb8bd9d9eb09fa397f981c6f3bd5afc9fb00b901938a64cecd0bdbff9",
+      "nwkit/shift_math.py": "ab5a5de73e7658077de3a4e3c3db885dbba21cbd2860a4d6cb093744606b7a88",
+      "nwkit/shift_reference.py": "897d0f9746c9b7a51ac32294a1f1ff02477ad4b7dbd50ab297c2d962068ad086",
+      "nwkit/shift_results.py": "b8f9cd772babd447fb757a4d9ff139f3bcc1a804bd23a399219e3560f66c1a4a"
+    }
+  }
+]

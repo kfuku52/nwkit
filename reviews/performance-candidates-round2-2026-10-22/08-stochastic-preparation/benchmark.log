@@ -1,0 +1,16 @@
+small-repeated-count-1
+unique-count-1
+unique-count-20
+repeated-count-20
+unique-history-1
+unique-history-20
+repeated-history-20
+regime-hidden-history-4
+small-repeated-count-1 1.087835072786103 {'baseline': 2, 'candidate': 1}
+unique-count-1 1.2997383852214464 {'baseline': 124, 'candidate': 62}
+unique-count-20 1.042499864265307 {'baseline': 124, 'candidate': 62}
+repeated-count-20 0.9990644044125911 {'baseline': 2, 'candidate': 1}
+unique-history-1 1.578029752258235 {'baseline': 186, 'candidate': 62}
+unique-history-20 1.0713820827386444 {'baseline': 186, 'candidate': 62}
+repeated-history-20 1.0017590821898672 {'baseline': 3, 'candidate': 1}
+regime-hidden-history-4 1.2512965615065752 {'baseline': 90, 'candidate': 30}

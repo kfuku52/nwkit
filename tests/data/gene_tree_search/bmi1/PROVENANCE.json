@@ -1,0 +1,23 @@
+{
+  "source": "Maruyama query2family dataset received 2026-10-06",
+  "family": "PRC1BMI1",
+  "role": "Real-input regression fixture, not a known correct topology",
+  "source_run_utc": "2026-09-15T18:03:12.854705+00:00",
+  "model": "GTR+G4",
+  "reconciliation_model": "UndatedDL",
+  "original_rooting_mode": "mad",
+  "files": {
+    "gene.nwk": {
+      "source_member": "generax_nwk/PRC1BMI1_generax.nwk",
+      "sha256": "1b35aa7a4fb5b338e71a830d119d3689ceace71d98728c89ac1edbd7120b82fb"
+    },
+    "species.nwk": {
+      "source_member": "parameters/undated_species_tree.pruned.nwk",
+      "sha256": "d5c8baa9d2c5d33f9619105630c57af6aa73bd54aaca55228b82cfdc08c0b1ad"
+    },
+    "alignment.fa.gz": {
+      "source_member": "clipkit/PRC1BMI1_cds.clipkit.fa.gz",
+      "sha256": "9a8cdfe8cb46ad4d1844be3ead2cf4cd2f98fe873834ea8e4080260eaed6f3d2"
+    }
+  }
+}

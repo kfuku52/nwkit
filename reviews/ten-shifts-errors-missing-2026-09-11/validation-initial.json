@@ -1,0 +1,17 @@
+{
+  "native_archive_source_files_verified": 226,
+  "manifest_benchmark_scripts_verified": 4,
+  "input_datasets_exported_and_hash_verified": 10,
+  "observability_checked_replicates": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ]
+}

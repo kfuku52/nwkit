@@ -1,0 +1,116 @@
+"""Brownian and stable full-attraction Ornstein-Uhlenbeck vector processes."""
+
+import numpy as np
+from scipy.linalg import expm, solve_continuous_lyapunov
+
+from nwkit.compiled_tree import CompiledTree
+from nwkit.vector_gaussian import (
+    VectorProcess,
+    VectorTransition,
+    _array,
+    _cholesky,
+    _symmetric_part,
+)
+
+
+def _short_ou_displacement(exponent):
+    """Compute I - exp(-exponent) before adding any unit diagonal."""
+    # At ||exponent||_1 <= 1e-4, the omitted terms are below roundoff.
+    identity = np.eye(len(exponent))
+    series = identity / 6 - exponent / 24
+    series = identity / 2 - exponent @ series
+    return exponent @ (identity - exponent @ series)
+
+
+def _scale_similarity(matrix, numerator, denominator):
+    """Rescale rows and columns without an out-of-range intermediate."""
+    try:
+        with np.errstate(over="raise", under="raise"):
+            return matrix * numerator / denominator
+    except FloatingPointError:
+        mantissa, power = np.frexp(matrix)
+        num, num_power = np.frexp(numerator)
+        den, den_power = np.frexp(denominator)
+        return np.ldexp(mantissa * num / den, power + num_power - den_power)
+
+
+def vector_brownian_process(tree, sigma):
+    """Build flat-root correlated Brownian motion, including zero-length edges."""
+    sigma = np.asarray(sigma, dtype=float)
+    if sigma.ndim != 2 or sigma.shape[0] != sigma.shape[1] or not len(sigma):
+        raise ValueError("Diffusion covariance must be a nonempty square matrix.")
+    d = len(sigma)
+    sigma = _array(sigma, (d, d), "Diffusion covariance")
+    _cholesky(sigma, "Diffusion covariance")
+    transitions = {}
+    for node in CompiledTree.from_tree(tree).nodes[1:]:
+        time = float(node.dist)
+        if not np.isfinite(time) or time < 0:
+            raise ValueError("Vector branch lengths must be finite and nonnegative.")
+        transitions[node] = VectorTransition(np.eye(d), np.zeros(d), sigma * time)
+    return VectorProcess(tree, d, transitions)
+
+
+def vector_ou_process(tree, attraction, diffusion, theta):
+    """Build stationary OU with a general (possibly nonsymmetric) stable drift.
+
+    SDE: dX = -A(X-theta)dt + LdW, LL' = diffusion. Positive real
+    eigenvalues of A are required. No diagonal/eigenvector approximation is
+    made. A block exponential avoids subtractive cancellation on short edges.
+    """
+    theta = np.asarray(theta, dtype=float)
+    if theta.ndim != 1 or not len(theta):
+        raise ValueError("OU theta must be a nonempty vector.")
+    d = len(theta)
+    theta = _array(theta, (d,), "OU theta")
+    attraction = _array(attraction, (d, d), "OU attraction")
+    diffusion = _array(diffusion, (d, d), "OU diffusion")
+    _cholesky(diffusion, "OU diffusion")
+    # Solve in diffusion-standardized trait units: a valid similarity-scaled
+    # attraction can otherwise defeat the Lyapunov solver's absolute tolerance.
+    scales = np.sqrt(np.diag(diffusion))
+    rows, columns = scales[:, None], scales[None, :]
+    attraction = _scale_similarity(attraction, columns, rows)
+    diffusion = diffusion / np.outer(scales, scales)
+    if np.min(np.linalg.eigvals(attraction).real) <= 0:
+        raise ValueError("OU attraction must have strictly positive real eigenvalues.")
+    stationary = solve_continuous_lyapunov(attraction, diffusion)
+    stationary = _symmetric_part(stationary)
+    _array(stationary, (d, d), "OU stationary covariance")
+    _cholesky(stationary, "OU stationary covariance")
+    transitions = {}
+    transition_by_time: dict[float, VectorTransition] = {}
+    attraction_norm = np.linalg.norm(attraction, ord=1)
+    scale_product = np.outer(scales, scales)
+    block = np.block([[-attraction, diffusion], [np.zeros((d, d)), attraction.T]])
+    for node in CompiledTree.from_tree(tree).nodes[1:]:
+        time = float(node.dist)
+        if not np.isfinite(time) or time < 0:
+            raise ValueError("Vector branch lengths must be finite and nonnegative.")
+        cached = transition_by_time.get(time)
+        if cached is not None:
+            transitions[node] = VectorTransition(
+                cached.slope.copy(order="K"),
+                cached.intercept.copy(order="K"),
+                cached.covariance.copy(order="K"),
+            )
+            continue
+        exponent_norm = time * attraction_norm
+        if exponent_norm < 0.5:
+            exponential = expm(block * time)
+            slope = exponential[:d, :d]
+            covariance = exponential[:d, d:] @ slope.T
+        else:
+            slope = expm(-attraction * time)
+            covariance = stationary - slope @ stationary @ slope.T
+        slope = _scale_similarity(slope, rows, columns)
+        covariance = covariance * scale_product
+        if exponent_norm <= 1e-4:
+            displacement = _short_ou_displacement(attraction * time)
+            intercept = _scale_similarity(displacement, rows, columns) @ theta
+        else:
+            intercept = theta - slope @ theta
+        transition = VectorTransition(slope, intercept, _symmetric_part(covariance))
+        transitions[node] = transition
+        transition_by_time[time] = transition
+    return VectorProcess(tree, d, transitions, theta, stationary * scale_product)

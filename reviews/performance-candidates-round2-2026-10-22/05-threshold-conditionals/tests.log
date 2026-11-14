@@ -1,0 +1,18 @@
+COMMAND: /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python tools/check.py test -- -p candidate05_plugin tests/test_threshold_asr.py tests/test_threshold_reference.py -rs
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m pytest -q --durations=20 --durations-min=0.05 -p candidate05_plugin tests/test_threshold_asr.py tests/test_threshold_reference.py -rs
+.....................                                                    [100%]
+============================= slowest 20 durations =============================
+11.61s call     tests/test_threshold_reference.py::test_estimated_ordinal_posterior_matches_independent_integration[True]
+11.56s call     tests/test_threshold_reference.py::test_estimated_ordinal_posterior_matches_independent_integration[False]
+6.69s call     tests/test_threshold_reference.py::test_fixed_ordinal_reference
+5.32s call     tests/test_threshold_reference.py::test_binary_posterior_matches_independent_quadrature[True]
+3.57s call     tests/test_threshold_reference.py::test_binary_posterior_matches_independent_quadrature[False]
+0.53s call     tests/test_threshold_asr.py::test_estimated_thresholds_preserve_noncontiguous_ambiguous_tip_states
+0.39s call     tests/test_threshold_asr.py::test_ordinal_thresholds_are_sampled_in_identified_order
+0.27s call     tests/test_threshold_asr.py::test_threshold_cli_writes_category_and_liability_outputs
+0.16s call     tests/test_threshold_asr.py::test_binary_threshold_samples_probabilities_and_liabilities
+0.08s call     tests/test_threshold_asr.py::test_disjoint_tail_intervals_keep_their_probability_mass
+0.07s call     tests/test_threshold_asr.py::test_disk_backed_sampler_matches_memory
+
+(9 durations < 0.05s hidden.)
+21 passed in 40.55s

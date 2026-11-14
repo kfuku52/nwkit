@@ -622,7 +622,6 @@ def fit_multivariate_pgls(
         )
     response_vector = responses.reshape(-1, order="F")
     observed_indices = np.flatnonzero(observed.reshape(-1, order="F"))
-    observed_covariance_index = np.ix_(observed_indices, observed_indices)
     observed_response = response_vector[observed_indices]
     observed_design = _observed_trait_design(design, observed_indices, n_traits)
     observed_rhs = np.column_stack([observed_design, observed_response])
@@ -647,7 +646,20 @@ def fit_multivariate_pgls(
         )
         return component_covariances, decoded
 
-    def state(parameters: np.ndarray, *, compute_covariance: bool):
+    # Restrict direct indexing to the measured high-missing dense regime.
+    # The final fit still publishes the complete trait-by-tip covariance.
+    observed_pairs = None
+    if (
+        not use_sparse
+        and n_tips * n_traits >= 512
+        and 3 * len(observed_indices) <= n_tips * n_traits
+    ):
+        traits = observed_indices // n_tips
+        tips = observed_indices % n_tips
+        observed_pairs = (np.ix_(traits, traits), np.ix_(tips, tips))
+
+    def state(parameters: np.ndarray, *, full_output=False):
+        compute_covariance = full_output
         trait_covariances, decoded = unpack(parameters)
         if use_sparse:
             return _sparse_multivariate_state(
@@ -663,17 +675,33 @@ def fit_multivariate_pgls(
                 reml,
                 compute_covariance=compute_covariance,
             )
-        full_covariance = np.zeros((n_tips * n_traits,) * 2, dtype=float)
-        for name, component in covariance_components.items():
-            tip_covariance = dense_component(
-                name, decoded if callable(component) else None
-            )
-            full_covariance += np.kron(trait_covariances[name], tip_covariance)
-        if fixed_dense is not None:
-            full_covariance += fixed_dense
-        observed_covariance = full_covariance
-        if len(observed_indices) < responses.size:
-            observed_covariance = full_covariance[observed_covariance_index]
+        if observed_pairs is None or full_output:
+            full_covariance = np.zeros((n_tips * n_traits,) * 2, dtype=float)
+            for name, component in covariance_components.items():
+                tip_covariance = dense_component(
+                    name, decoded if callable(component) else None
+                )
+                full_covariance += np.kron(trait_covariances[name], tip_covariance)
+            if fixed_dense is not None:
+                full_covariance += fixed_dense
+            observed_covariance = full_covariance[
+                np.ix_(observed_indices, observed_indices)
+            ]
+        else:
+            full_covariance = None
+            trait_pairs, tip_pairs = observed_pairs
+            observed_covariance = np.zeros((len(observed_indices),) * 2, dtype=float)
+            for name, component in covariance_components.items():
+                tip_covariance = dense_component(
+                    name, decoded if callable(component) else None
+                )
+                observed_covariance += (
+                    trait_covariances[name][trait_pairs] * tip_covariance[tip_pairs]
+                )
+            if fixed_dense is not None:
+                observed_covariance += fixed_dense[
+                    np.ix_(observed_indices, observed_indices)
+                ]
         cholesky = _positive_cholesky(observed_covariance)
         whitened = solve_triangular(
             cholesky, observed_rhs, lower=True, check_finite=False
@@ -708,7 +736,7 @@ def fit_multivariate_pgls(
 
     def objective(parameters: np.ndarray) -> float:
         try:
-            value = float(state(parameters, compute_covariance=False)[0])
+            value = float(state(parameters, full_output=False)[0])
         except (ValueError, np.linalg.LinAlgError, FloatingPointError, OverflowError):
             return 1e100
         return value if np.isfinite(value) else 1e100
@@ -736,7 +764,7 @@ def fit_multivariate_pgls(
             "Multivariate PGLS optimization failed: {}".format(result.message)
         )
     fitted_objective, coefficients, coefficient_covariance, fitted_covariance = state(
-        result.x, compute_covariance=True
+        result.x, full_output=True
     )
     component_trait_covariances, decoded = unpack(result.x)
     shape_boundary = False

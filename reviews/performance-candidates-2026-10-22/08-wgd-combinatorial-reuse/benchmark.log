@@ -1,0 +1,6 @@
+kernel (0.2, 0.3, 0.9, 20) 1.1486035255732587
+kernel (0.2, 0.3, 0.9, 60) 1.384180058510786
+kernel (0.2, 0.3, 0.9, 120) 1.6526982070742686
+ordinary_probability_control 0.9849384744537671
+rare_yule_missing 1.5161724075414285
+rare_yule_pulse_detection 1.3862160767424476

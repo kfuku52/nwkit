@@ -1,0 +1,885 @@
+{
+  "source": "/Users/kf/repos/nwkit",
+  "head": "8d3a4a487bc57b1363c957e1e2bc1e2bb7fab5d6",
+  "purpose": "Read-only snapshot of existing OU implementation, imported as a dependency for this task; source checkout unchanged. Changes in this task are measured against these hashes.",
+  "files": [
+    {
+      "path": "SHIFT.md",
+      "sha256": "edcbc4e60a42e531c3de0936fa88cc2df56a5ba1791872949ffaad234e9483a2",
+      "size": 19868
+    },
+    {
+      "path": "SHIFT_ALPHA.md",
+      "sha256": "afd16aed46c061a93f3ed9cbda14323a44b7480a84508d31c61f860021f49b4e",
+      "size": 7366
+    },
+    {
+      "path": "SHIFT_CALIBRATION.md",
+      "sha256": "a71a7e537241b009036d047f5a5917fb0cd4b8b6e66d3562de9cfb7646def34e",
+      "size": 9181
+    },
+    {
+      "path": "SHIFT_JOINT.md",
+      "sha256": "83c7d39ad2090574ac881b7a0a3c0aaa298b1cc2289f7f211ab668b2759198ac",
+      "size": 7743
+    },
+    {
+      "path": "SHIFT_PBIC.md",
+      "sha256": "206a70612af68b4d7b2c258b8d2ddb82fe95902e49df48350e7feb64eec7c0f7",
+      "size": 6740
+    },
+    {
+      "path": "SHIFT_VALIDATION.md",
+      "sha256": "5401783b971a5f075225ccb87f7ba0c795a67310f0dd764788f6b7603c6ebc0b",
+      "size": 15473
+    },
+    {
+      "path": "examples/shift/README.md",
+      "sha256": "b784b30be5d28cea0399be4294021c84fe2ea9fb6a972d1342f605efa9d79795",
+      "size": 2810
+    },
+    {
+      "path": "examples/shift/alpha-validation/README.md",
+      "sha256": "00b414ae6e2d91484bc71c1c0480a9ee0656553388b37a8a65b2d7e40926fb49",
+      "size": 4042
+    },
+    {
+      "path": "examples/shift/alpha-validation/SHA256SUMS.json",
+      "sha256": "4e138ad32f5dbe79f11a99a90c0d5caba3703a4454a1eb3129806660b749305e",
+      "size": 2932
+    },
+    {
+      "path": "examples/shift/alpha-validation/analysis-source/check-bic-routes.R",
+      "sha256": "c86f316d81eaa55f3d99acdc276347fa1c3b9daf47c97c9f7451eef9e72ccdc4",
+      "size": 996
+    },
+    {
+      "path": "examples/shift/alpha-validation/analysis-source/report_shift_alpha.py",
+      "sha256": "79cc6c9f7f3ba2f53358b1020ce72617271cc0fe49d6225188fbefcabf10f707",
+      "size": 24784
+    },
+    {
+      "path": "examples/shift/alpha-validation/analysis-source/shift_alpha_audit.py",
+      "sha256": "a3119a3c298c1670ecddd06ce5994a01df926b454110eb91e964bbd77c8a2b5d",
+      "size": 8028
+    },
+    {
+      "path": "examples/shift/alpha-validation/analysis-source/shift_alpha_null_diagnostic.py",
+      "sha256": "6f9cee3ec327f5dc87026e88dc5e3fb86de9d4bd1e2a4597716e7d479e29ee42",
+      "size": 4573
+    },
+    {
+      "path": "examples/shift/alpha-validation/analysis-source/summarize_shift_alpha.py",
+      "sha256": "d59aa5148c3da4c3d955bedfe24fb8ca502e183c3a972c4678c8f1a56ae26b87",
+      "size": 7963
+    },
+    {
+      "path": "examples/shift/alpha-validation/analysis-source/verify_shift_alpha_evidence.py",
+      "sha256": "acf28c4bdbbb52259567382d64cc5430b87fee086b2bdfb9983aa9878f3ca5ff",
+      "size": 8558
+    },
+    {
+      "path": "examples/shift/alpha-validation/artifact.json",
+      "sha256": "69dea830ce8228c2652a55619db38665cb1734b75064c1067ff8f3771d806b51",
+      "size": 119703
+    },
+    {
+      "path": "examples/shift/alpha-validation/audit.json",
+      "sha256": "1cb13c0c07bb12c6aa96e9b9c4c704961a61edd6f58aff5fc239c89a6cc315e8",
+      "size": 450
+    },
+    {
+      "path": "examples/shift/alpha-validation/backend-correction-provenance.json",
+      "sha256": "144088bc3b24e585d77afea4332b5e4c1b1f49507d589c1def04696768f70d89",
+      "size": 1843
+    },
+    {
+      "path": "examples/shift/alpha-validation/backend-probe.tsv",
+      "sha256": "8ca07b022f2bdbc94bf9790922d185c7b8475368026885e7c26bafadeaea73f3",
+      "size": 114
+    },
+    {
+      "path": "examples/shift/alpha-validation/candidate-ledger.jsonl.gz",
+      "sha256": "dff7875de92b3b8e91ae88c8c772e65d829ea05a1976257dca1a7ca1ba8829b1",
+      "size": 12772459
+    },
+    {
+      "path": "examples/shift/alpha-validation/environment.json",
+      "sha256": "fb01866ee309692c57f60dcc2ae0eb6b9442d8995e3c9f44b82859797cb285b9",
+      "size": 421
+    },
+    {
+      "path": "examples/shift/alpha-validation/inputs.jsonl.gz",
+      "sha256": "1764a7ddd5ac28b23a7178d7440d0526e48da5c7bbe9c3566da1e80cc7847368",
+      "size": 71703
+    },
+    {
+      "path": "examples/shift/alpha-validation/installed-backend-sha256.json",
+      "sha256": "136b7dbc8e2e6e11b519b1fed2095ccf0aaca1b0ec7495748a71733e152a72c9",
+      "size": 2441
+    },
+    {
+      "path": "examples/shift/alpha-validation/jobs.jsonl",
+      "sha256": "8d2a947a0841b867fba2c7d1dea04ce7e7c2914351daabf19ea487b16241ea33",
+      "size": 21320
+    },
+    {
+      "path": "examples/shift/alpha-validation/null-profile-diagnostic.json",
+      "sha256": "49ae5760653f2c72b2cec5fb57cd7fe2d6f5fd48466ebbe0d594d3e9b266fd61",
+      "size": 79590
+    },
+    {
+      "path": "examples/shift/alpha-validation/paired.json",
+      "sha256": "549a8debf556f577c8c3bc90c6264e5a6371d03a7c187ce2b24442b8a7b51d55",
+      "size": 182191
+    },
+    {
+      "path": "examples/shift/alpha-validation/protocol.json",
+      "sha256": "ce8ef7148de147b3851dfe1c5c493b23f8641e7570a3034d5fdd41b364c9ad03",
+      "size": 6101
+    },
+    {
+      "path": "examples/shift/alpha-validation/records.jsonl.gz",
+      "sha256": "59637ecda5f085fbac7116bedcc3b8c87eb32c833f907e0fbb0190b8bb948032",
+      "size": 424350
+    },
+    {
+      "path": "examples/shift/alpha-validation/report-data.json",
+      "sha256": "7167edab9318b987b0a3b69c5a17d68cf914321eae138b91a1e21888623232b7",
+      "size": 66100
+    },
+    {
+      "path": "examples/shift/alpha-validation/report-delivery.json",
+      "sha256": "c75c0a57a8b10e08124a6d4a8f7ab8aa1bfab693fd8dd820d4697737f42d9a9b",
+      "size": 556
+    },
+    {
+      "path": "examples/shift/alpha-validation/report.html",
+      "sha256": "d11c4d6292b0145a548e6e73c6049743fe844a15c65f69d830716c8c18b7b7aa",
+      "size": 824252
+    },
+    {
+      "path": "examples/shift/alpha-validation/source/shift_alpha_backend.R",
+      "sha256": "2d3577347ea6e808855d10ec0230a6b14b66e70e555c6bd0a578ed8e8358223a",
+      "size": 8533
+    },
+    {
+      "path": "examples/shift/alpha-validation/source/shift_alpha_design.py",
+      "sha256": "04c1ee74b5242e84d544dcdc960e59f338962d92fd71ec615ce55d02c8b77833",
+      "size": 3054
+    },
+    {
+      "path": "examples/shift/alpha-validation/source/shift_joint_candidates.py",
+      "sha256": "9fefe0e64f95d09a911f23985e7a81ca776755ba94fcaf0175a55dcd709da27c",
+      "size": 4136
+    },
+    {
+      "path": "examples/shift/alpha-validation/source/shift_simulation_cases.py",
+      "sha256": "c3712bb6c4c71d4f6446a589e44662d9dbe6304edb9603d505fb238dbe003e88",
+      "size": 7630
+    },
+    {
+      "path": "examples/shift/alpha-validation/source/validate_shift_alpha.py",
+      "sha256": "b7b7300fe5f4f6ca7d2c22407dacc436833f76e6cf8e6604b6a9c97333d062cf",
+      "size": 5028
+    },
+    {
+      "path": "examples/shift/alpha-validation/summary.json",
+      "sha256": "030d8bc055dd29bd4a28cb1e31bcbfba7cf122f3058981917c6dddcf499edd7e",
+      "size": 235846
+    },
+    {
+      "path": "examples/shift/alpha-validation/validation.json",
+      "sha256": "4d1a27044a78f79e882ee57cd9166d620316946c6c1534f39661665b306cb94c",
+      "size": 1103
+    },
+    {
+      "path": "examples/shift/calibrated/effects.tsv",
+      "sha256": "217f73c4441426fe0aa8d645eb29f01d58791e72df00980dc82937786e45b21c",
+      "size": 127
+    },
+    {
+      "path": "examples/shift/calibrated/model.json",
+      "sha256": "b821225f65e9953ca27d638c432dbd9f46456f1d3db4d16d4f32a5a9f8b5562b",
+      "size": 10993
+    },
+    {
+      "path": "examples/shift/calibrated/optima.tsv",
+      "sha256": "d13aae0c10701d8e94a87809fb869ee6d33677bf77633e4ff903776ea871daaf",
+      "size": 85
+    },
+    {
+      "path": "examples/shift/calibrated/predictions.tsv",
+      "sha256": "4b93444407c7a99e0c18d265f295d235a67ec564d87dbccda0d78302cf33bb0f",
+      "size": 642
+    },
+    {
+      "path": "examples/shift/calibrated/regimes.tsv",
+      "sha256": "ed27e3b7c643db737d312f132dcd416eda1fdb98ea63bb8e9bbbe0ed11fc0b02",
+      "size": 180
+    },
+    {
+      "path": "examples/shift/calibration-review/README.md",
+      "sha256": "3f018fbd3fff8d6002c9fc5e99f4fde7a33eea8a27e804bb2488cbc7e571bc66",
+      "size": 1500
+    },
+    {
+      "path": "examples/shift/calibration-review/protocol.json",
+      "sha256": "5493f55893015ae4a144c91518790951670fe090c00f97875aff3addeda15b82",
+      "size": 6596
+    },
+    {
+      "path": "examples/shift/calibration-review/records.jsonl.gz",
+      "sha256": "9d1b87d155d4fe23a8445ba000481f5ba61680cc98e23b06bc215187ada976cc",
+      "size": 420242
+    },
+    {
+      "path": "examples/shift/calibration-review/source-snapshot/shift_alpha_design.py",
+      "sha256": "04c1ee74b5242e84d544dcdc960e59f338962d92fd71ec615ce55d02c8b77833",
+      "size": 3054
+    },
+    {
+      "path": "examples/shift/calibration-review/source-snapshot/shift_calibration.py",
+      "sha256": "e30e9aab8c4886811c315817e0b730e7d3966bfddb743899ec18c6cded6809cf",
+      "size": 15147
+    },
+    {
+      "path": "examples/shift/calibration-review/source-snapshot/shift_calibration_audit.py",
+      "sha256": "fc8675b50feb9a13e68146b4022f8cec54423b60c86800ae065dd3f94ce21b5d",
+      "size": 5840
+    },
+    {
+      "path": "examples/shift/calibration-review/source-snapshot/shift_candidates.py",
+      "sha256": "bdf10b084ea6d9b8cda0ffe0a7758b617a41e694ad481aed01ff7c65f4e510a0",
+      "size": 4494
+    },
+    {
+      "path": "examples/shift/calibration-review/source-snapshot/shift_simulation_cases.py",
+      "sha256": "c3712bb6c4c71d4f6446a589e44662d9dbe6304edb9603d505fb238dbe003e88",
+      "size": 7630
+    },
+    {
+      "path": "examples/shift/calibration-review/source-snapshot/validate_shift_calibration.py",
+      "sha256": "a7fa4fdba42d9ba91e619ad8012ac0b1d343a6f5f51c1f1a9aa58349ec055d81",
+      "size": 6327
+    },
+    {
+      "path": "examples/shift/calibration-review/source-snapshot/verify_shift_calibration.py",
+      "sha256": "138dee4779299e95ee796330d45df24473daf91080340450a7ca0fc970557ca4",
+      "size": 4381
+    },
+    {
+      "path": "examples/shift/calibration-review/summary.json",
+      "sha256": "e5e87402baffa37aebc27da7f2dc45b37369e21717debfbb1153524f09e2d310",
+      "size": 13231
+    },
+    {
+      "path": "examples/shift/calibration-stress/protocol.json",
+      "sha256": "5cc976d0be11f7d123e26cc00ec4080b231ca7fa44824caebf55f24bf6c66c36",
+      "size": 16167
+    },
+    {
+      "path": "examples/shift/calibration-stress/records.jsonl.gz",
+      "sha256": "be54b131856f5629530a2aa40c75308ce22b9d9a0021274412945cfccc22822a",
+      "size": 106698
+    },
+    {
+      "path": "examples/shift/calibration-stress/summary.json",
+      "sha256": "5e0c7bc88908b22ab675a5176196471e4c60aaf1564f2f0c6bca642124bfc56e",
+      "size": 1406
+    },
+    {
+      "path": "examples/shift/calibration-validation/README.md",
+      "sha256": "3b3500812aca7e564bbbd0f661a390ac1a8d4a91390ac1913108a048f806f9b4",
+      "size": 1876
+    },
+    {
+      "path": "examples/shift/calibration-validation/audit.json",
+      "sha256": "eb5747b3d01a9c25970967535fce44688cf58f3fb91f70c8ce5179bd78d2c4a1",
+      "size": 2763
+    },
+    {
+      "path": "examples/shift/calibration-validation/default-null-records.jsonl.gz",
+      "sha256": "f3c1fab19a8fe32214d18877b1a7e6cb00493e5d911f144e2c999a04be2d7f35",
+      "size": 93681
+    },
+    {
+      "path": "examples/shift/calibration-validation/protocol.json",
+      "sha256": "441d58876cfa120f494c7f96c53bb28997d5b9bfe11036c32b2e5424975a429c",
+      "size": 6379
+    },
+    {
+      "path": "examples/shift/calibration-validation/records.jsonl.gz",
+      "sha256": "b4ed1b100b9e1a0cc020d177541fdae4ce3a70ad12763014221d1c91fc535f0e",
+      "size": 421825
+    },
+    {
+      "path": "examples/shift/calibration-validation/source-snapshot/shift_alpha_design.py",
+      "sha256": "04c1ee74b5242e84d544dcdc960e59f338962d92fd71ec615ce55d02c8b77833",
+      "size": 3054
+    },
+    {
+      "path": "examples/shift/calibration-validation/source-snapshot/shift_calibration.py",
+      "sha256": "05651f9975884c9cbdadf360497fc6a1fa09e52b9130e83932d76348bb965fdc",
+      "size": 13770
+    },
+    {
+      "path": "examples/shift/calibration-validation/source-snapshot/shift_candidates.py",
+      "sha256": "87f2f98cc05deaa848b0d573d95cbcea41c6d466b77a8783a78c3449f36094ef",
+      "size": 4223
+    },
+    {
+      "path": "examples/shift/calibration-validation/source-snapshot/shift_simulation_cases.py",
+      "sha256": "c3712bb6c4c71d4f6446a589e44662d9dbe6304edb9603d505fb238dbe003e88",
+      "size": 7630
+    },
+    {
+      "path": "examples/shift/calibration-validation/source-snapshot/validate_shift_calibration.py",
+      "sha256": "492f3191f4c47c3cb3ea914d7645fc145681f1364834138f4ff346eae63bb4ea",
+      "size": 5966
+    },
+    {
+      "path": "examples/shift/calibration-validation/summary.json",
+      "sha256": "d6dc7a7aff5394dce9cfcb7954637f9b4a9d571f87818f81a95ffde907f14253",
+      "size": 13122
+    },
+    {
+      "path": "examples/shift/joint-validation/candidates.json",
+      "sha256": "13ce9cc61be9d43a5a716b2a738be9009172c560bcf678a3d6d0a0f929f3f958",
+      "size": 2207084
+    },
+    {
+      "path": "examples/shift/joint-validation/export.json",
+      "sha256": "8ca3ae3e14595b00e7a54a7d571f0aed47e9d65d4d28598d58ffd50fd9712f35",
+      "size": 7989
+    },
+    {
+      "path": "examples/shift/joint-validation/fit-manifests.json",
+      "sha256": "d45d510e305d924214b50faf3f774198999590b7b4ac135ff062ab2234998957",
+      "size": 11372
+    },
+    {
+      "path": "examples/shift/joint-validation/inputs.json",
+      "sha256": "199883b50a5ac62602c0bad3fc89dfb0e84548861b71d012cae7a2b27ba5d77a",
+      "size": 60381
+    },
+    {
+      "path": "examples/shift/joint-validation/manifest.json",
+      "sha256": "fdab11b20d8d63ef589f44f0eba3be09ab97105e1a8524ea45b0f941481b79bd",
+      "size": 2333
+    },
+    {
+      "path": "examples/shift/joint-validation/models.json",
+      "sha256": "f0af81921e9e80daf86ab4b0d43eb9b4565e46cb5c3b8317f3c22240dd932564",
+      "size": 433416
+    },
+    {
+      "path": "examples/shift/joint-validation/records.json",
+      "sha256": "4b9918d42634f17380f4f855c1f170de3fccd19e778dc62fc82367e922dcc9b6",
+      "size": 32788
+    },
+    {
+      "path": "examples/shift/joint-validation/source-snapshot.json",
+      "sha256": "3a8b4b0decbe424f1441e4f98221e5ad06385447f238e225130c2c8f27d99fc0",
+      "size": 93685
+    },
+    {
+      "path": "examples/shift/joint-validation-pbic-fixed/backend-provenance.json",
+      "sha256": "144088bc3b24e585d77afea4332b5e4c1b1f49507d589c1def04696768f70d89",
+      "size": 1843
+    },
+    {
+      "path": "examples/shift/joint-validation-pbic-fixed/candidates.json",
+      "sha256": "b6ee50eb8a1786ebc2c26cbb83d38ec66414779ac5f402f9c9acde3f6350c389",
+      "size": 2207578
+    },
+    {
+      "path": "examples/shift/joint-validation-pbic-fixed/export.json",
+      "sha256": "8ca3ae3e14595b00e7a54a7d571f0aed47e9d65d4d28598d58ffd50fd9712f35",
+      "size": 7989
+    },
+    {
+      "path": "examples/shift/joint-validation-pbic-fixed/fit-manifests.json",
+      "sha256": "c16eb64f74c5553c2286f9d4d6892ea9178948c4c4dab617f6e4388362db23ea",
+      "size": 11512
+    },
+    {
+      "path": "examples/shift/joint-validation-pbic-fixed/inputs.json",
+      "sha256": "199883b50a5ac62602c0bad3fc89dfb0e84548861b71d012cae7a2b27ba5d77a",
+      "size": 60381
+    },
+    {
+      "path": "examples/shift/joint-validation-pbic-fixed/manifest.json",
+      "sha256": "fdab11b20d8d63ef589f44f0eba3be09ab97105e1a8524ea45b0f941481b79bd",
+      "size": 2333
+    },
+    {
+      "path": "examples/shift/joint-validation-pbic-fixed/models.json",
+      "sha256": "1d3933619fdf11b00642837917b405b4af7ec0d01111658f2b99d28a18eca18a",
+      "size": 433997
+    },
+    {
+      "path": "examples/shift/joint-validation-pbic-fixed/records.json",
+      "sha256": "826de1556c95ec92f604c833e722203e130e88964964b17968c5e87a782432b7",
+      "size": 32833
+    },
+    {
+      "path": "examples/shift/joint-validation-pbic-fixed/source-snapshot.json",
+      "sha256": "3a8b4b0decbe424f1441e4f98221e5ad06385447f238e225130c2c8f27d99fc0",
+      "size": 93685
+    },
+    {
+      "path": "examples/shift/pbic-correction/after.csv",
+      "sha256": "7133d97156576de2b865721b3f81122aa19fb8954f64e3f4ae29b7147386f074",
+      "size": 517
+    },
+    {
+      "path": "examples/shift/pbic-correction/backend-provenance.json",
+      "sha256": "144088bc3b24e585d77afea4332b5e4c1b1f49507d589c1def04696768f70d89",
+      "size": 1843
+    },
+    {
+      "path": "examples/shift/pbic-correction/before.csv",
+      "sha256": "8b4c1d6463414ae848b9fe6f569ebee216d6ecda0c5297f8b16e463672044986",
+      "size": 526
+    },
+    {
+      "path": "examples/shift/traits-with-se.tsv",
+      "sha256": "041148c19fb85c1582302f69a0d19327204261baf4dbced7bc88c19f3968d0a0",
+      "size": 105
+    },
+    {
+      "path": "examples/shift/traits.tsv",
+      "sha256": "7010e8056b08cec00ec43b48f06e15ce8ca304cd0bf3a84b31c6e18bf15bc269",
+      "size": 60
+    },
+    {
+      "path": "examples/shift/tree.nwk",
+      "sha256": "7cced636994251c0031149ce15f57df35ab2ed0045e18ca9b13d8dd7b6bfb09d",
+      "size": 59
+    },
+    {
+      "path": "examples/shift/validation/cell-summary.json",
+      "sha256": "8891d699cf224c062ff511dfa0228054cf2c8ca8c4c6c0e0eaf77844ac9d37b1",
+      "size": 204675
+    },
+    {
+      "path": "examples/shift/validation/export.json",
+      "sha256": "757297b067edaa8ef8c946ac4321e3e927263048bb40acea455c022147922ab7",
+      "size": 376
+    },
+    {
+      "path": "examples/shift/validation/inputs.json",
+      "sha256": "ae3c477ff56e0a90750d5ec92174cc6efafa4876bdc0c1797915b68f666cd05d",
+      "size": 288029
+    },
+    {
+      "path": "examples/shift/validation/manifests.json",
+      "sha256": "fb1132716a925d17ed59f8dac33b0ab7181f1e7d19af0ad6e552cbf954123ab3",
+      "size": 3151
+    },
+    {
+      "path": "examples/shift/validation/records.csv",
+      "sha256": "84d3ff436463ec72983b669c52b617291175b21f0d2251c64a52aaa05342ffc9",
+      "size": 77854
+    },
+    {
+      "path": "examples/shift/validation/records.json",
+      "sha256": "b9ab7e5f1dffffa56214dcb26f68726140353220fa79d1320b8ef714d629160f",
+      "size": 283378
+    },
+    {
+      "path": "examples/shift/validation/scenario-summary.json",
+      "sha256": "f77b2b217d59c14cb461b23d95b4f23e4a49f994a818c814aa438f66f95e4fa6",
+      "size": 53072
+    },
+    {
+      "path": "examples/shift/validation/source-snapshot.json",
+      "sha256": "47c50179ae3bbd336959821cf6913cc67968a010df6cc6a8bded7447a0a66ec9",
+      "size": 97253
+    },
+    {
+      "path": "examples/shift/validation/table.md",
+      "sha256": "852889f21381857f75f6947d62374e2b0abc4c12b30f1aa536f47eee597fb622",
+      "size": 1592
+    },
+    {
+      "path": "examples/shift/validation-16tip/cell-summary.json",
+      "sha256": "2a023d12b7ab9304ea314f3e1a451a2c399336a19a62c351304fb2bd6de9c028",
+      "size": 136192
+    },
+    {
+      "path": "examples/shift/validation-16tip/export.json",
+      "sha256": "757297b067edaa8ef8c946ac4321e3e927263048bb40acea455c022147922ab7",
+      "size": 376
+    },
+    {
+      "path": "examples/shift/validation-16tip/inputs.json",
+      "sha256": "5bcea4f408a1a824db8d51633b2ab9c52af37c3b219989cdf01001285de59366",
+      "size": 979875
+    },
+    {
+      "path": "examples/shift/validation-16tip/manifests.json",
+      "sha256": "e3c7c8af1c0b2e5ccaef02fe048bf350ae603e698e113a42fd76bf7f789f2442",
+      "size": 1592
+    },
+    {
+      "path": "examples/shift/validation-16tip/records.csv",
+      "sha256": "6cd586db78a0542b3cc64aaf96fc66521df1aa80d8113ea00f1563525cbc21d2",
+      "size": 29232
+    },
+    {
+      "path": "examples/shift/validation-16tip/records.json",
+      "sha256": "0efdfbadd111b4ef4cdb13d90328cc53045dc18a068d31f8ab1f1064bc962de0",
+      "size": 100652
+    },
+    {
+      "path": "examples/shift/validation-16tip/scenario-summary.json",
+      "sha256": "f6588924b92412153ab10cf2af5669ff8bcbe9743343bfc06f38c1748714f743",
+      "size": 35895
+    },
+    {
+      "path": "examples/shift/validation-16tip/source-snapshot.json",
+      "sha256": "47c50179ae3bbd336959821cf6913cc67968a010df6cc6a8bded7447a0a66ec9",
+      "size": 97253
+    },
+    {
+      "path": "examples/shift/validation-16tip/table.md",
+      "sha256": "9640bdbcc24af35c3e83c9d50eedf8835ae318fa2faf1f2a5ad00f0eb5838ed1",
+      "size": 1599
+    },
+    {
+      "path": "nwkit/shift.py",
+      "sha256": "858cc44c12cbc5b859ae79ea354d73bebe72db41cc24b5d830ac166205ec7a1d",
+      "size": 16688
+    },
+    {
+      "path": "nwkit/shift_backend.py",
+      "sha256": "8946565fda853185329b9e702cbd9d42accb7d14941d81bd5d64efc8eb55613e",
+      "size": 6052
+    },
+    {
+      "path": "nwkit/shift_bootstrap.py",
+      "sha256": "537b5131193936c79678cf377ef7e6826765f4f578a4596bb3253a7412744817",
+      "size": 5104
+    },
+    {
+      "path": "nwkit/shift_calibrated_output.py",
+      "sha256": "8ce7d65f4d8cdee7ad3d1383fec66e285341f01a8f02aeab2fdb801aa79f16e5",
+      "size": 8703
+    },
+    {
+      "path": "nwkit/shift_calibration.py",
+      "sha256": "5a26bf6eea4bb1db490479e4e9fd52282575ef533e687e568b6fd35b10dbc3ca",
+      "size": 17261
+    },
+    {
+      "path": "nwkit/shift_candidates.py",
+      "sha256": "bdf10b084ea6d9b8cda0ffe0a7758b617a41e694ad481aed01ff7c65f4e510a0",
+      "size": 4494
+    },
+    {
+      "path": "nwkit/shift_cli.py",
+      "sha256": "aed23bff31baa4f939191046574182dfe7d63765e0ecdc6a7ed2e17f625bab50",
+      "size": 4454
+    },
+    {
+      "path": "nwkit/shift_convergence.py",
+      "sha256": "bd98b4ffb8bd9d9eb09fa397f981c6f3bd5afc9fb00b901938a64cecd0bdbff9",
+      "size": 7011
+    },
+    {
+      "path": "nwkit/shift_math.py",
+      "sha256": "ab5a5de73e7658077de3a4e3c3db885dbba21cbd2860a4d6cb093744606b7a88",
+      "size": 2088
+    },
+    {
+      "path": "nwkit/shift_reference.py",
+      "sha256": "897d0f9746c9b7a51ac32294a1f1ff02477ad4b7dbd50ab297c2d962068ad086",
+      "size": 4192
+    },
+    {
+      "path": "nwkit/shift_results.py",
+      "sha256": "b8f9cd772babd447fb757a4d9ff139f3bcc1a804bd23a399219e3560f66c1a4a",
+      "size": 9901
+    },
+    {
+      "path": "tests/test_shift.py",
+      "sha256": "9c9261b1ba685caca39d51a815002a2158c18e061002dba66444239c7fc77d12",
+      "size": 13152
+    },
+    {
+      "path": "tests/test_shift_alpha.py",
+      "sha256": "5b0ea68402341745d465e6127f465b744a1a8fe6d0cb5170e696ffc2b239756f",
+      "size": 6069
+    },
+    {
+      "path": "tests/test_shift_audit.py",
+      "sha256": "4222ed020b0e1b145f30aeb9fffb530ac67b16b48c130195e9b309824a8d5238",
+      "size": 6157
+    },
+    {
+      "path": "tests/test_shift_bootstrap.py",
+      "sha256": "8803f11b9d059769cb637ba413ff81cfac173ef06918b1ffe092e662b54173e9",
+      "size": 11229
+    },
+    {
+      "path": "tests/test_shift_calibration.py",
+      "sha256": "85f28af2028f212991fc207012dd04b3a57908fc5540956a94aae877829e29cf",
+      "size": 10191
+    },
+    {
+      "path": "tests/test_shift_calibration_audit.py",
+      "sha256": "9e1092dc712cd19709c538f1cf2d6bf3dc8e0e80db604410f6d2542a01304292",
+      "size": 4031
+    },
+    {
+      "path": "tests/test_shift_convergence.py",
+      "sha256": "31fed9bc66a924f23dc2b41cff64e6ad32c7681a8d02e41984db9a1adefdd458",
+      "size": 11788
+    },
+    {
+      "path": "tests/test_shift_joint.py",
+      "sha256": "b17511e925396ad2d443a1dd61cb1df6783436098477e55fd284d0e3a89cb06e",
+      "size": 8212
+    },
+    {
+      "path": "tests/test_shift_numerics.py",
+      "sha256": "11f684d1ed59645c97e057ed7e389908a6776c737f90d6f4a726bd1969df743d",
+      "size": 7343
+    },
+    {
+      "path": "tests/test_shift_reference.py",
+      "sha256": "83320654b00b40cd81109c65bd7e73ead53287a8fc7ca60a08494c25697cd5a7",
+      "size": 6667
+    },
+    {
+      "path": "tests/test_shift_simulations.py",
+      "sha256": "f141817d784f3d0978f6c81688393d79f442f48fe16726692ee0b8b6c7d3042b",
+      "size": 14329
+    },
+    {
+      "path": "tools/report_shift_alpha.py",
+      "sha256": "79cc6c9f7f3ba2f53358b1020ce72617271cc0fe49d6225188fbefcabf10f707",
+      "size": 24784
+    },
+    {
+      "path": "tools/shift_alpha_audit.py",
+      "sha256": "a3119a3c298c1670ecddd06ce5994a01df926b454110eb91e964bbd77c8a2b5d",
+      "size": 8028
+    },
+    {
+      "path": "tools/shift_alpha_backend.R",
+      "sha256": "2d3577347ea6e808855d10ec0230a6b14b66e70e555c6bd0a578ed8e8358223a",
+      "size": 8533
+    },
+    {
+      "path": "tools/shift_alpha_design.py",
+      "sha256": "04c1ee74b5242e84d544dcdc960e59f338962d92fd71ec615ce55d02c8b77833",
+      "size": 3054
+    },
+    {
+      "path": "tools/shift_alpha_null_diagnostic.py",
+      "sha256": "6f9cee3ec327f5dc87026e88dc5e3fb86de9d4bd1e2a4597716e7d479e29ee42",
+      "size": 4573
+    },
+    {
+      "path": "tools/shift_calibration_audit.py",
+      "sha256": "51f56fe5d33a4f38585080cac5366a6731c3b1a31a4e3a42932df8de03cd4458",
+      "size": 8249
+    },
+    {
+      "path": "tools/shift_joint_backend.py",
+      "sha256": "78d57289395c19184348824efa1d137f89d933089c11f045456c2958fc9977e9",
+      "size": 4772
+    },
+    {
+      "path": "tools/shift_joint_candidates.py",
+      "sha256": "e779b9464c4861ef89a3b8e730c7ddc533d312a00ab5b72a61367f39aa0d03cd",
+      "size": 235
+    },
+    {
+      "path": "tools/shift_simulation_audit.py",
+      "sha256": "92b049341d30961edfca1a277f7b716cb559c29c6101f30edac28098d835a3b6",
+      "size": 7623
+    },
+    {
+      "path": "tools/shift_simulation_cases.py",
+      "sha256": "c3712bb6c4c71d4f6446a589e44662d9dbe6304edb9603d505fb238dbe003e88",
+      "size": 7630
+    },
+    {
+      "path": "tools/stress_shift_calibration.py",
+      "sha256": "132f2abc4115f967d70a9dbe6bc70129079e49731ce5aa9379acef38466e3757",
+      "size": 6275
+    },
+    {
+      "path": "tools/summarize_shift_alpha.py",
+      "sha256": "d59aa5148c3da4c3d955bedfe24fb8ca502e183c3a972c4678c8f1a56ae26b87",
+      "size": 7963
+    },
+    {
+      "path": "tools/summarize_shift_joint.py",
+      "sha256": "394fa96859fc12f7040eb0eb34620d70852d3ce5947b44d8b55cf65d2df2b14e",
+      "size": 7370
+    },
+    {
+      "path": "tools/summarize_shift_validation.py",
+      "sha256": "7d5d069c31f9ac11b2ce00efeee0577c26572c4740108bc76ea98a81ac7364f5",
+      "size": 6804
+    },
+    {
+      "path": "tools/validate_shift_alpha.py",
+      "sha256": "1c59d1be5fee9102fc23825bd1751177e5ef099a4774bc6db945660b843065cd",
+      "size": 5568
+    },
+    {
+      "path": "tools/validate_shift_calibration.py",
+      "sha256": "798f020a3d97ef81dfacf1f21d59f93351e6ec4b0e0fc54dc054043ad50f6a5b",
+      "size": 6431
+    },
+    {
+      "path": "tools/validate_shift_joint.py",
+      "sha256": "97862e4f123536d398065c4bcff528f4028bbba31cad73a289e813af186c3d14",
+      "size": 13178
+    },
+    {
+      "path": "tools/validate_shift_joint_pilot.py",
+      "sha256": "2482507f0cb7218c47eb993ee887bd7411042bb4130b3d553d27d37d5121cc1d",
+      "size": 4949
+    },
+    {
+      "path": "tools/validate_shift_simulations.py",
+      "sha256": "bb90a989056c5e15431971ed2ebc6e18d91bebd296eb9824929b7e58c1901230",
+      "size": 7754
+    },
+    {
+      "path": "tools/verify_shift_alpha_evidence.py",
+      "sha256": "acf28c4bdbbb52259567382d64cc5430b87fee086b2bdfb9983aa9878f3ca5ff",
+      "size": 8558
+    },
+    {
+      "path": "tools/verify_shift_calibration.py",
+      "sha256": "c9f2118251e1b5b3ab71b0160a55c24e89140729927497b06a6809c31e86b610",
+      "size": 5241
+    },
+    {
+      "path": "examples/shift/calibration-envelope/README.md",
+      "sha256": "04c190824c8861adc55703c87c4492e15c3c5124d46fd4d85494d4496bbe8627",
+      "size": 1504
+    },
+    {
+      "path": "examples/shift/calibration-envelope/audit.json",
+      "sha256": "1509dc60a3e95af45336ae8b0e6dcda1c8a981c1c356c52e722a3294a629328c",
+      "size": 3261
+    },
+    {
+      "path": "examples/shift/calibration-envelope/default-null-records.jsonl.gz",
+      "sha256": "b9dcb328558c852da1907360d5a44713b24fbedcc40de94a9ad5d1b93fa44d9c",
+      "size": 96757
+    },
+    {
+      "path": "examples/shift/calibration-envelope/protocol.json",
+      "sha256": "4ec8fe931cde64a63fdd02a2711abd4d314302150ce52c7d7aa6d628735166c3",
+      "size": 6694
+    },
+    {
+      "path": "examples/shift/calibration-envelope/records.jsonl.gz",
+      "sha256": "332a61193e806c92ecf809ceb24d274f08361f1ff519858afe9c2edececf989d",
+      "size": 442160
+    },
+    {
+      "path": "examples/shift/calibration-envelope/source-snapshot/shift_alpha_design.py",
+      "sha256": "04c1ee74b5242e84d544dcdc960e59f338962d92fd71ec615ce55d02c8b77833",
+      "size": 3054
+    },
+    {
+      "path": "examples/shift/calibration-envelope/source-snapshot/shift_calibration.py",
+      "sha256": "5a26bf6eea4bb1db490479e4e9fd52282575ef533e687e568b6fd35b10dbc3ca",
+      "size": 17261
+    },
+    {
+      "path": "examples/shift/calibration-envelope/source-snapshot/shift_calibration_audit.py",
+      "sha256": "51f56fe5d33a4f38585080cac5366a6731c3b1a31a4e3a42932df8de03cd4458",
+      "size": 8249
+    },
+    {
+      "path": "examples/shift/calibration-envelope/source-snapshot/shift_candidates.py",
+      "sha256": "bdf10b084ea6d9b8cda0ffe0a7758b617a41e694ad481aed01ff7c65f4e510a0",
+      "size": 4494
+    },
+    {
+      "path": "examples/shift/calibration-envelope/source-snapshot/shift_simulation_cases.py",
+      "sha256": "c3712bb6c4c71d4f6446a589e44662d9dbe6304edb9603d505fb238dbe003e88",
+      "size": 7630
+    },
+    {
+      "path": "examples/shift/calibration-envelope/source-snapshot/validate_shift_calibration.py",
+      "sha256": "798f020a3d97ef81dfacf1f21d59f93351e6ec4b0e0fc54dc054043ad50f6a5b",
+      "size": 6431
+    },
+    {
+      "path": "examples/shift/calibration-envelope/source-snapshot/verify_shift_calibration.py",
+      "sha256": "c9f2118251e1b5b3ab71b0160a55c24e89140729927497b06a6809c31e86b610",
+      "size": 5241
+    },
+    {
+      "path": "examples/shift/calibration-envelope/summary.json",
+      "sha256": "bb42376ef754426e923b5e352675922582c9e36ddb8cf4789b796ccded337c0f",
+      "size": 13117
+    }
+  ],
+  "imports": [
+    {
+      "reason": "Refresh completed 700-dataset evidence from existing task; original remains read-only",
+      "previous_files": [
+        {
+          "path": "examples/shift/calibration-envelope/protocol.json",
+          "sha256": "4ec8fe931cde64a63fdd02a2711abd4d314302150ce52c7d7aa6d628735166c3",
+          "size": 6694
+        },
+        {
+          "path": "examples/shift/calibration-envelope/records.jsonl.gz",
+          "sha256": "d138eb0e431c10adde651163eaa3294839a8311ff64a14d92e2d179d532dd115",
+          "size": 82472
+        },
+        {
+          "path": "examples/shift/calibration-envelope/source-snapshot/shift_alpha_design.py",
+          "sha256": "04c1ee74b5242e84d544dcdc960e59f338962d92fd71ec615ce55d02c8b77833",
+          "size": 3054
+        },
+        {
+          "path": "examples/shift/calibration-envelope/source-snapshot/shift_calibration.py",
+          "sha256": "5a26bf6eea4bb1db490479e4e9fd52282575ef533e687e568b6fd35b10dbc3ca",
+          "size": 17261
+        },
+        {
+          "path": "examples/shift/calibration-envelope/source-snapshot/shift_calibration_audit.py",
+          "sha256": "51f56fe5d33a4f38585080cac5366a6731c3b1a31a4e3a42932df8de03cd4458",
+          "size": 8249
+        },
+        {
+          "path": "examples/shift/calibration-envelope/source-snapshot/shift_candidates.py",
+          "sha256": "bdf10b084ea6d9b8cda0ffe0a7758b617a41e694ad481aed01ff7c65f4e510a0",
+          "size": 4494
+        },
+        {
+          "path": "examples/shift/calibration-envelope/source-snapshot/shift_simulation_cases.py",
+          "sha256": "c3712bb6c4c71d4f6446a589e44662d9dbe6304edb9603d505fb238dbe003e88",
+          "size": 7630
+        },
+        {
+          "path": "examples/shift/calibration-envelope/source-snapshot/validate_shift_calibration.py",
+          "sha256": "798f020a3d97ef81dfacf1f21d59f93351e6ec4b0e0fc54dc054043ad50f6a5b",
+          "size": 6431
+        },
+        {
+          "path": "examples/shift/calibration-envelope/source-snapshot/verify_shift_calibration.py",
+          "sha256": "c9f2118251e1b5b3ab71b0160a55c24e89140729927497b06a6809c31e86b610",
+          "size": 5241
+        }
+      ],
+      "source": "/Users/kf/repos/nwkit/examples/shift/calibration-envelope"
+    }
+  ]
+}

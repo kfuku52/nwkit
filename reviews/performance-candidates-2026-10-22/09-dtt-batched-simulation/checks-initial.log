@@ -1,0 +1,33 @@
+Traceback (most recent call last):
+  File "/Users/kf/repos/nwkit/reviews/performance-candidates-2026-10-22/09-dtt-batched-simulation/benchmark.py", line 395, in <module>
+    main()
+  File "/Users/kf/repos/nwkit/reviews/performance-candidates-2026-10-22/09-dtt-batched-simulation/benchmark.py", line 355, in main
+    checks = direct_checks(not args.no_parallel)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kf/repos/nwkit/reviews/performance-candidates-2026-10-22/09-dtt-batched-simulation/benchmark.py", line 290, in direct_checks
+    "equivalence": compare(first, second, design.times),
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kf/repos/nwkit/reviews/performance-candidates-2026-10-22/09-dtt-batched-simulation/benchmark.py", line 189, in compare
+    np.testing.assert_array_equal(first, second)
+  File "/tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/numpy/testing/_private/utils.py", line 1128, in assert_array_equal
+    assert_array_compare(operator.__eq__, actual, desired, err_msg=err_msg,
+  File "/tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/numpy/testing/_private/utils.py", line 988, in assert_array_compare
+    raise AssertionError(msg)
+AssertionError: 
+Arrays are not equal
+
+Mismatched elements: 13 / 165 (7.88%)
+First 5 mismatches are at indices:
+ [3, 2]: 0.2513655776122696 (ACTUAL), 0.2513655776122695 (DESIRED)
+ [7, 2]: 0.43859214548078695 (ACTUAL), 0.4385921454807869 (DESIRED)
+ [9, 1]: 0.4776663629749132 (ACTUAL), 0.47766636297491316 (DESIRED)
+ [13, 1]: 0.6738821854942847 (ACTUAL), 0.6738821854942848 (DESIRED)
+ [15, 1]: 0.6660849921255629 (ACTUAL), 0.6660849921255628 (DESIRED)
+Max absolute difference among violations: 2.22044605e-16
+Max relative difference among violations: 3.1545848e-16
+ ACTUAL: array([[1.      , 0.811839, 0.531097, 0.      , 0.      ],
+       [1.      , 0.541879, 0.312102, 0.      , 0.      ],
+       [1.      , 0.709775, 0.307135, 0.      , 0.      ],...
+ DESIRED: array([[1.      , 0.811839, 0.531097, 0.      , 0.      ],
+       [1.      , 0.541879, 0.312102, 0.      , 0.      ],
+       [1.      , 0.709775, 0.307135, 0.      , 0.      ],...

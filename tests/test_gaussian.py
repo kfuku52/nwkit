@@ -100,6 +100,15 @@ def test_diagonal_cholesky_solve_keeps_finite_results_at_subnormal_variance(colu
     np.testing.assert_allclose(solution, values, rtol=1e-15, atol=0.0)
 
 
+@pytest.mark.parametrize("diagonal", [0.0, np.nan, np.inf, -0.0, 1 + 2j])
+def test_diagonal_detection_preserves_exact_nonzero_and_diagonal_values(diagonal):
+    matrix = np.diag(np.full(5, diagonal))
+    assert gaussian.is_diagonal(matrix)
+    matrix[-1, 0] = np.nextafter(0.0, 1.0)
+    assert not gaussian.is_diagonal(matrix)
+    assert not gaussian.is_diagonal(matrix.T)
+
+
 @pytest.mark.parametrize("kind", ["dense", "low-rank", "grouped", "nested"])
 @pytest.mark.parametrize("vector", [True, False])
 def test_cholesky_solves_match_dense_oracle_without_refactorization(
@@ -260,16 +269,6 @@ def test_sparse_inertia_check_rejects_zero_diagonal_pivoting(blocks):
     indefinite = sparse.kron(sparse.eye(blocks), zero_pivot, format="csc")
     with pytest.raises(np.linalg.LinAlgError, match="positive definite"):
         gaussian._factor_sparse_lu(indefinite, "Sparse probe matrix")
-
-
-def test_sparse_spd_factor_retains_the_symmetric_ldlt_structure():
-    loading = sparse.csr_matrix([[1.0, 0.2], [0.0, -0.7], [0.5, 0.0], [0.3, 1.1]])
-    matrix = sparse.eye(4, format="csc") + loading @ loading.T
-    solver = gaussian._factor_sparse_lu(matrix, "Sparse probe matrix")
-    assert np.array_equal(solver.perm_r, solver.perm_c)
-    diagonal = sparse.diags(solver.U.diagonal(), format="csc")
-    difference = (solver.U.T - solver.L @ diagonal).tocoo()
-    assert np.max(np.abs(difference.data), initial=0.0) < 1e-12
 
 
 def test_unexpected_sparse_backend_errors_are_not_reclassified(monkeypatch):

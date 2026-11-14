@@ -1,0 +1,90 @@
+Fri Sep 11 10:21:46 2026    reviews/native-scale-pilot-2026-09-11/results/search10-profile.prof
+
+         90350265 function calls (90348064 primitive calls) in 58.827 seconds
+
+   Ordered by: cumulative time
+   List reduced from 630 to 80 due to restriction <80>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000   58.945   58.945 benchmark_scale_pilot.py:92(execute)
+        1    0.001    0.001   58.890   58.890 benchmark_scale_pilot.py:113(search)
+        1    0.000    0.000   58.889   58.889 shift_native_heuristic.py:239(heuristic_native_search)
+       61    0.001    0.000   35.880    0.588 shift_native_search.py:134(evaluate)
+       61    0.001    0.000   35.879    0.588 shift_native_fit.py:419(fit_native_layout)
+       61    0.002    0.000   35.680    0.585 shift_native_fit.py:273(fit_native_trait)
+      183    0.001    0.000   35.538    0.194 shift_native_fit.py:235(_profile_alpha)
+     8290    0.009    0.000   35.400    0.004 shift_native_fit.py:162(at_alpha)
+     8290    0.082    0.000   35.392    0.004 shift_native_fit.py:106(analytic_scale)
+       21    0.003    0.000   35.323    1.682 shift_native_heuristic.py:152(refit)
+     8290    0.071    0.000   35.091    0.004 shift_native_fit.py:93(evaluate)
+     8290    0.947    0.000   35.020    0.004 shift_native_model.py:298(evaluate_trait)
+       61    0.003    0.000   34.749    0.570 optimization.py:77(global_bounded_scalar_minimize)
+     8107    0.015    0.000   34.630    0.004 shift_native_fit.py:243(objective)
+      244    0.001    0.000   30.316    0.124 optimization.py:61(_bounded_scalar_minimize)
+      244    0.003    0.000   30.308    0.124 _minimize.py:785(minimize_scalar)
+      244    0.094    0.000   30.303    0.124 _optimize.py:2251(_minimize_scalar_bounded)
+        1    0.000    0.000   29.793   29.793 shift_native_heuristic.py:180(forward)
+        1    0.001    0.001   28.227   28.227 shift_native_heuristic.py:223(refine)
+     8294   16.532    0.002   24.663    0.003 gaussian_whitening.py:83(build)
+       21    0.044    0.002   22.696    1.081 shift_native_heuristic.py:132(rank)
+     9052    0.024    0.000   15.466    0.002 shift_native_heuristic.py:50(_build)
+     6721    0.013    0.000   11.631    0.002 shift_native_heuristic.py:75(neighboring_layouts)
+    25076   10.613    0.000   10.676    0.000 shift_native_model.py:130(node_groups)
+     9052    0.442    0.000    9.065    0.001 shift_native_search.py:20(observable_layout)
+     8290    0.456    0.000    8.079    0.001 gaussian_whitening.py:196(tree_gls)
+     6786    0.735    0.000    7.103    0.001 shift_native_quick.py:101(score)
+     9054    1.852    0.000    6.379    0.001 shift_native_model.py:95(build)
+    38005    5.518    0.000    5.676    0.000 linalg.py:1499(svd)
+    61921    1.453    0.000    5.216    0.000 {built-in method builtins.any}
+    17647    0.163    0.000    4.615    0.000 linalg.py:1825(matrix_rank)
+    28651    3.913    0.000    4.524    0.000 linalg.py:789(qr)
+       61    0.001    0.000    4.425    0.073 optimization.py:86(<listcomp>)
+    17465    0.473    0.000    4.422    0.000 shift_native_model.py:143(design)
+     2361    0.006    0.000    3.881    0.002 shift_native_heuristic.py:58(added_layouts)
+     8297    3.527    0.000    3.640    0.000 gaussian_whitening.py:158(apply)
+     6786    0.060    0.000    2.969    0.000 shift_native_quick.py:88(_transform)
+ 16588000    1.880    0.000    2.499    0.000 gaussian_whitening.py:95(<genexpr>)
+ 16571412    1.598    0.000    1.598    0.000 {built-in method math.hypot}
+        1    0.000    0.000    0.869    0.869 shift_native_heuristic.py:114(__init__)
+  8302353    0.764    0.000    0.764    0.000 {built-in method math.log}
+  8302294    0.717    0.000    0.717    0.000 gaussian_whitening.py:103(<genexpr>)
+  8298290    0.713    0.000    0.713    0.000 shift_native_model.py:319(<genexpr>)
+16992333/16992274    0.659    0.000    0.659    0.000 {built-in method builtins.len}
+    39871    0.335    0.000    0.656    0.000 linalg.py:2383(norm)
+   206272    0.638    0.000    0.638    0.000 {method 'reduce' of 'numpy.ufunc' objects}
+  8285706    0.484    0.000    0.484    0.000 {built-in method math.sqrt}
+    68941    0.471    0.000    0.471    0.000 shift_native_model.py:102(<genexpr>)
+    28651    0.095    0.000    0.380    0.000 twodim_base.py:485(triu)
+     8295    0.147    0.000    0.374    0.000 shift_native_model.py:200(covariance_geometry)
+    63264    0.050    0.000    0.272    0.000 fromnumeric.py:2322(any)
+    28651    0.051    0.000    0.267    0.000 twodim_base.py:366(tri)
+    73211    0.093    0.000    0.263    0.000 fromnumeric.py:71(_wrapreduction)
+    24882    0.122    0.000    0.259    0.000 gaussian_whitening.py:17(_vector)
+        1    0.001    0.001    0.252    0.252 shift_native_screen.py:191(group_lasso_screen)
+    91234    0.166    0.000    0.242    0.000 gaussian_whitening.py:144(<genexpr>)
+     8295    0.223    0.000    0.225    0.000 shift_native_model.py:187(mean_geometry)
+       61    0.002    0.000    0.197    0.003 shift_native_identifiability.py:56(covariance_identifiability)
+    16580    0.106    0.000    0.196    0.000 linalg.py:329(solve)
+       61    0.094    0.002    0.182    0.003 shift_native_identifiability.py:8(_observed_pair_heights)
+    38005    0.042    0.000    0.171    0.000 numeric.py:415(count_nonzero)
+      488    0.009    0.000    0.159    0.000 shift_native_screen.py:157(_proximal_step)
+    83236    0.089    0.000    0.158    0.000 linalg.py:159(_commonType)
+   111352    0.153    0.000    0.153    0.000 {built-in method numpy.zeros}
+     1000    0.003    0.000    0.141    0.000 shift_native_screen.py:145(_loss_gradient)
+    49777    0.020    0.000    0.136    0.000 {method 'all' of 'numpy.ndarray' objects}
+     9356    0.123    0.000    0.134    0.000 shape_base.py:612(column_stack)
+     8290    0.014    0.000    0.123    0.000 nanfunctions.py:623(nansum)
+    49777    0.016    0.000    0.116    0.000 _methods.py:61(_all)
+      183    0.005    0.000    0.112    0.001 shift_native_fit.py:262(_require_observed_mean_rank)
+    28651    0.095    0.000    0.095    0.000 {method 'outer' of 'numpy.ufunc' objects}
+    25941    0.015    0.000    0.089    0.000 {method 'sum' of 'numpy.ndarray' objects}
+     9052    0.005    0.000    0.087    0.000 stride_tricks.py:367(broadcast_to)
+     9052    0.063    0.000    0.082    0.000 stride_tricks.py:340(_broadcast_to)
+   186900    0.080    0.000    0.080    0.000 {method 'astype' of 'numpy.ndarray' objects}
+     8290    0.053    0.000    0.076    0.000 dataclasses.py:1405(replace)
+    25941    0.008    0.000    0.074    0.000 _methods.py:47(_sum)
+    99816    0.049    0.000    0.073    0.000 linalg.py:135(_makearray)
+    17464    0.014    0.000    0.070    0.000 {method 'max' of 'numpy.ndarray' objects}
+        1    0.018    0.018    0.070    0.070 shift_native_screen.py:72(_whitened_matrices)
+
+

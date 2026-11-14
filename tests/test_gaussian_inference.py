@@ -149,6 +149,14 @@ def test_parameter_rank_keeps_mean_and_covariance_information_across_units(scale
     )
 
 
+def test_combining_with_unit_factor_preserves_positive_zero_weight():
+    from nwkit.gaussian_inference import _UNIT_FACTOR, _combine, _Factor
+
+    factor = _Factor(0.0, 1.0, log_weight=-0.0)
+    assert math.copysign(1.0, _combine(_UNIT_FACTOR, factor).log_weight) == 1.0
+    assert math.copysign(1.0, _combine(factor, _UNIT_FACTOR).log_weight) == 1.0
+
+
 def dense_condition(process, values, errors):
     nodes = list(process.tree.traverse(strategy="preorder"))
     index = {node: position for position, node in enumerate(nodes)}

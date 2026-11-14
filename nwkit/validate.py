@@ -179,6 +179,7 @@ def _build_parse_error_row(tree_id, inspection, issues):
 
 def _validation_options(args):
     return {
+        "require_all_lengths": getattr(args, "require_all_lengths", False),
         "require_rooted": getattr(args, "require_rooted", False),
         "require_ultrametric": getattr(args, "require_ultrametric", False),
         "require_same_leaf_set": getattr(args, "require_same_leaf_set", True),
@@ -278,6 +279,14 @@ def _species_values(tree, args, enabled, issues):
     return parseable, monophyletic
 
 
+def _length_issues(tree, options):
+    if options["require_all_lengths"] and any(
+        node.dist is None for node in tree.traverse() if not node.is_root
+    ):
+        return ["missing_branch_length"]
+    return []
+
+
 def _build_valid_tree_row(tree_id, tree, inspection, issues, references, options, args):
     metrics = _collect_tree_metrics(tree)
     duplicate_leaf_names = _get_duplicate_leaf_names(tree)
@@ -291,6 +300,7 @@ def _build_valid_tree_row(tree_id, tree, inspection, issues, references, options
     species_parseable, species_groups_monophyletic = _species_values(
         tree, args, options["check_species"], issues
     )
+    issues.extend(_length_issues(tree, options))
     status = "ok" if not issues else "invalid"
     return {
         "tree_id": tree_id,

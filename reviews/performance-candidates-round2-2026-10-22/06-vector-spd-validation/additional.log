@@ -1,0 +1,3 @@
+16tips-128traits-noisy-proper 1.061243284938426 {'baseline': 17173320, 'candidate': 17171460}
+16tips-256traits-noisy-proper 1.0672477371374964 {'baseline': 68390744, 'candidate': 68387892}
+8tips-2traits-partial-noisy-complete-BM-fit 0.9702809223249341 {'baseline': 452524, 'candidate': 449337}

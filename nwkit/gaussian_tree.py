@@ -10,6 +10,7 @@ transitions and innovation variances.
 import math
 from dataclasses import dataclass, replace
 from fractions import Fraction
+from sys import float_info
 from typing import Any, Mapping, Sequence
 
 import numpy as np
@@ -40,6 +41,98 @@ def _recover_affine_mean(slope, mean, intercept, result):
         return result
 
 
+_COVARIANCE_WORKSPACE_BYTES = 4 * 1024**2
+
+
+def _propagated_variance(slope, variance, innovation):
+    squared = slope * slope
+    if squared < float_info.min or not math.isfinite(squared):
+        # Applying the slope to the variance first keeps the intermediate
+        # between the starting and ending magnitudes.
+        if variance == 0.0:
+            return innovation
+        return slope * (slope * variance) + innovation
+    return squared * variance + innovation
+
+
+def _fill_covariance_blocks(
+    covariance, lca, requested, variances, loading, factors, stable
+):
+    """Every requested pair is written at its LCA, with bounded product tiles."""
+    local: list[list[int]] = [[] for _ in lca.nodes]
+    for output, index in enumerate(requested):
+        local[index].append(output)
+    descendants: dict[int, np.ndarray] = {}
+    output_loading = loading[np.asarray(requested, dtype=int)]
+    for ancestor in range(len(lca.nodes) - 1, -1, -1):
+        own = np.asarray(local[ancestor], dtype=int)
+        groups = [own] if len(own) else []
+        for child in lca.nodes[ancestor].children:
+            group = descendants.pop(lca.index_by_node[child])
+            if len(group):
+                groups.append(group)
+        merged = np.empty(sum(map(len, groups)), dtype=int)
+        if len(own):
+            own_value = variances[ancestor]
+            if factors is not None:
+                # Repeated requests for one node are off-diagonal pairs in
+                # the original API: retain its loading-product arithmetic.
+                with np.errstate(over="ignore", under="ignore", invalid="ignore"):
+                    own_value = (
+                        loading[ancestor] * loading[ancestor] * factors[ancestor]
+                    )
+                if not np.isfinite(own_value) or (
+                    own_value == 0 and variances[ancestor] > 0
+                ):
+                    own_value = stable(ancestor, ancestor, ancestor)
+            covariance[own[:, None], own] = own_value
+            covariance[own, own] = variances[ancestor]
+        # Unit-loading blocks start in a zero-filled matrix. Still assign
+        # negative zero explicitly so the pairwise and block paths agree.
+        skip_cross_blocks = (
+            factors is None
+            and variances[ancestor] == 0.0
+            and not np.signbit(variances[ancestor])
+        )
+        start = 0
+        for group in groups:
+            if start and not skip_cross_blocks:
+                # Tile both axes, allowing for the product and finite/zero masks.
+                max_entries = max(1, _COVARIANCE_WORKSPACE_BYTES // 24)
+                columns = min(len(group), max_entries)
+                rows = max(1, min(start, max_entries // columns))
+                for second in range(0, len(group), columns):
+                    right = group[second : second + columns]
+                    for first in range(0, start, rows):
+                        left = merged[first : min(start, first + rows)]
+                        if factors is None:
+                            covariance[left[:, None], right] = variances[ancestor]
+                            covariance[right[:, None], left] = variances[ancestor]
+                            continue
+                        with np.errstate(
+                            over="ignore", under="ignore", invalid="ignore"
+                        ):
+                            block = (
+                                output_loading[left, None]
+                                * output_loading[right][None, :]
+                            )
+                            block *= factors[ancestor]
+                        bad = ~np.isfinite(block) | (
+                            (block == 0) & (variances[ancestor] > 0)
+                        )
+                        for row, column in zip(*np.nonzero(bad), strict=True):
+                            one, two = sorted((int(left[row]), int(right[column])))
+                            block[row, column] = stable(
+                                requested[one], requested[two], ancestor
+                            )
+                        covariance[left[:, None], right] = block
+                        covariance[right[:, None], left] = block.T
+                        del block, bad
+            merged[start : start + len(group)] = group
+            start += len(group)
+        descendants[ancestor] = merged
+
+
 @dataclass(frozen=True, slots=True)
 class GaussianTransition:
     """One branch transition ``child = slope * parent + intercept + error``."""
@@ -49,14 +142,20 @@ class GaussianTransition:
     variance: float
 
     def __post_init__(self) -> None:
-        values = (float(self.slope), float(self.intercept), float(self.variance))
-        if not all(math.isfinite(value) for value in values):
+        slope = float(self.slope)
+        intercept = float(self.intercept)
+        variance = float(self.variance)
+        if not (
+            math.isfinite(slope)
+            and math.isfinite(intercept)
+            and math.isfinite(variance)
+        ):
             raise ValueError("Gaussian branch transitions must be finite.")
-        if values[2] < 0.0:
+        if variance < 0.0:
             raise ValueError("Gaussian branch variances must be non-negative.")
-        object.__setattr__(self, "slope", values[0])
-        object.__setattr__(self, "intercept", values[1])
-        object.__setattr__(self, "variance", values[2])
+        object.__setattr__(self, "slope", slope)
+        object.__setattr__(self, "intercept", intercept)
+        object.__setattr__(self, "variance", variance)
 
     def scaled_variance(self, scale: float) -> "GaussianTransition":
         """Return the same affine transition with its innovation variance scaled."""
@@ -160,11 +259,8 @@ def _initial_sparse_state(process, required):
         transition = process.transitions[node]
         parent_state = state.state_by_node[node.up]
         parent_scale = state.state_scale_by_node[node.up]
-        state.marginal_variance[node] = (
-            _scaled_gaussian_variance(
-                transition.slope, state.marginal_variance[node.up]
-            )
-            + transition.variance
+        state.marginal_variance[node] = _propagated_variance(
+            transition.slope, state.marginal_variance[node.up], transition.variance
         )
         if transition.variance == 0.0:
             state.state_by_node[node] = parent_state
@@ -496,9 +592,7 @@ class GaussianTreeProcess:
     def __post_init__(self) -> None:
         expected = {node for node in self.tree.traverse() if not node.is_root}
         transitions = dict(self.transitions)
-        missing = expected - set(transitions)
-        extra = set(transitions) - expected
-        if missing or extra:
+        if transitions.keys() != expected:
             raise ValueError(
                 "Gaussian tree transitions must cover every non-root node exactly."
             )
@@ -691,6 +785,38 @@ def brownian_transition(variance: float) -> GaussianTransition:
     return GaussianTransition(1.0, 0.0, variance)
 
 
+def _product_ratio(*factors: float, denominator: float = 1.0) -> float:
+    """Multiply finite nonnegative factors without intermediate range loss."""
+    if any(value == 0.0 for value in factors):
+        return 0.0
+    mantissa, exponent = 1.0, 0
+    for value in factors:
+        part, power = math.frexp(value)
+        mantissa *= part
+        exponent += power
+    divisor, power = math.frexp(denominator)
+    try:
+        return math.ldexp(mantissa / divisor, exponent - power)
+    except OverflowError as exc:
+        raise ValueError("Gaussian transition overflows floating-point range.") from exc
+
+
+def _mean_at_tiny_variance_ratio(mean1, mean2, variance1, variance2):
+    """Retain a mean contribution even when its weight is subnormal."""
+    # The precise weight rounds to one throughout this range.
+    if variance2 < variance1:
+        mean1, mean2, variance1, variance2 = mean2, mean1, variance2, variance1
+    contribution = _product_ratio(abs(mean2), variance1, denominator=variance2)
+    return mean1 + math.copysign(contribution, mean2)
+
+
+def _stationary_ou_variance(alpha, variance_rate):
+    divisor = 2.0 * alpha
+    if math.isfinite(divisor):
+        return variance_rate / divisor
+    return (variance_rate / alpha) / 2
+
+
 def ou_stationary_variance(alpha: float, variance_rate: float) -> float:
     """Convert OU diffusion to stationary variance for positive alpha."""
 
@@ -718,7 +844,9 @@ def ou_transition(
     if not math.isfinite(root_variance):
         raise ValueError("The stationary OU variance exceeds floating-point range.")
     return (
-        ou_transition_from_root_variance(length, alpha, root_variance, optimum),
+        _ou_transition_from_root_variance(
+            length, alpha, root_variance, optimum, variance_rate
+        ),
         root_variance,
     )
 
@@ -769,7 +897,12 @@ def ou_transition_from_root_variance(
     optimum: float = 0.0,
 ) -> GaussianTransition:
     """Return an OU transition parameterized by stationary state variance."""
+    return _ou_transition_from_root_variance(length, alpha, root_variance, optimum)
 
+
+def _ou_transition_from_root_variance(
+    length, alpha, root_variance, optimum, variance_rate=None
+):
     length = float(length)
     alpha = float(alpha)
     root_variance = float(root_variance)
@@ -786,15 +919,23 @@ def ou_transition_from_root_variance(
     # An overflowing positive exponent is already past the stationary limit
     # in floating point. exp and expm1 give the limiting transition at infinity.
     decay = math.exp(-exponent)
-    if exponent < 2.0**-1022:
-        # A subnormal alpha*length can lose information before multiplication
-        # by a large variance or optimum. Combine binary exponents first.
-        innovation = _small_ou_increment(root_variance, alpha, length, 1)
-        intercept = _small_ou_increment(optimum, alpha, length, 0)
-    else:
-        innovation = root_variance * (-math.expm1(-2.0 * exponent))
-        intercept = (-math.expm1(-exponent)) * optimum
-    if root_variance > 0.0 and length > 0.0 and innovation <= 0.0:
+    fraction = -math.expm1(-2.0 * exponent)
+    attenuation = -math.expm1(-exponent)
+    innovation = root_variance * fraction
+    intercept = attenuation * optimum
+    if 0.0 < length and exponent < float_info.min:
+        innovation = (
+            _product_ratio(2.0, alpha, length, root_variance)
+            if variance_rate is None
+            else _product_ratio(length, variance_rate)
+        )
+        intercept = math.copysign(_product_ratio(alpha, length, abs(optimum)), optimum)
+    elif root_variance < float_info.min and variance_rate is not None:
+        innovation = _product_ratio(variance_rate, 0.5, fraction, denominator=alpha)
+    has_diffusion = (
+        root_variance > 0.0 if variance_rate is None else variance_rate > 0.0
+    )
+    if has_diffusion and length > 0.0 and innovation <= 0.0:
         raise ValueError("A positive OU branch variance underflowed.")
     return GaussianTransition(decay, intercept, innovation)
 
@@ -861,3 +1002,22 @@ def exponential_rate_edge_variance(start: float, length: float, rate: float) -> 
     if not math.isfinite(variance) or variance <= 0.0:
         raise ValueError("A positive rate-change branch variance is not finite.")
     return variance
+
+
+def _rate_edge_variance_from_logs(start_exponent, edge_exponent, rate):
+    if edge_exponent > 1:
+        log_variance = (start_exponent + edge_exponent) + math.log1p(
+            -math.exp(-edge_exponent)
+        )
+    else:
+        log_variance = start_exponent + math.log(abs(math.expm1(edge_exponent)))
+    return _checked_rate_exp(log_variance - math.log(abs(rate)))
+
+
+def _checked_rate_exp(log_variance):
+    try:
+        return math.exp(log_variance)
+    except OverflowError as exc:
+        raise ValueError(
+            "A rate-change branch variance exceeds floating-point range."
+        ) from exc

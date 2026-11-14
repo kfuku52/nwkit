@@ -241,6 +241,28 @@ def gaussian_posterior_predictive(
                 "num_simulations": num_simulations,
             }
         )
+    from nwkit.phylogenetic_predictive import predictive_summary, sister_clade_contrast
+
+    names = [str(compiled.nodes[index].name) for index, _, _ in records]
+    sister_summary = predictive_summary(
+        "sister_clade_mean_squared_difference",
+        sister_clade_contrast(process.tree, dict(zip(names, observed, strict=True))),
+        [
+            sister_clade_contrast(process.tree, dict(zip(names, row, strict=True)))
+            for row in replicated
+        ],
+    )
+    for key in (
+        "observed",
+        "replicate_mean",
+        "replicate_sd",
+        "replicate_q025",
+        "replicate_q975",
+    ):
+        sister_summary[key] = _restore_predictive_statistic(
+            sister_summary[key], 2 * exponent
+        )
+    rows.append(sister_summary)
     return pd.DataFrame(rows)
 
 

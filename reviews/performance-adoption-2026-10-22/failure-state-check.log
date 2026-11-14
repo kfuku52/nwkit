@@ -1,0 +1,22 @@
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m ruff check nwkit tests setup.py tools
+All checks passed!
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m ruff format --check nwkit tests setup.py tools
+589 files already formatted
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m mypy
+Success: no issues found in 260 source files
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m pytest -q --durations=20 --durations-min=0.05 -m not slow tests/test_signal.py tests/test_signal_calibration.py tests/test_regress.py::test_cluster_hc1_keeps_cancelling_score_reduction_order -rs
+..................................................                       [100%]
+============================= slowest 20 durations =============================
+20.47s call     tests/test_signal.py::test_lambda_bootstrap_cli_metadata_and_order
+8.37s call     tests/test_signal.py::test_lambda_bootstrap_missing_and_zero_rate
+3.98s call     tests/test_signal.py::test_cli_se_and_reproducible_permutations
+2.36s call     tests/test_signal.py::test_interior_lambda_with_errors_independent_optimization
+1.31s call     tests/test_signal.py::test_zero_rate_and_singular_zero_rate
+0.40s call     tests/test_signal.py::test_k_permutations_preserve_refits_rng_and_covariance_lifetime[errors1]
+0.27s call     tests/test_signal.py::test_lambda_bootstrap_matches_independent_null_draws
+0.11s call     tests/test_signal_calibration.py::test_signal_study_replays_independently_of_scenario_order
+0.07s call     tests/test_signal_calibration.py::test_no_se_lambda_ratio_is_location_scale_invariant
+0.07s call     tests/test_signal.py::test_k_permutations_preserve_refits_rng_and_covariance_lifetime[errors2]
+
+(10 durations < 0.05s hidden.)
+50 passed in 38.38s

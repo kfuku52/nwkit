@@ -1,0 +1,8 @@
+{
+  "sdist_local_report_links_resolve": true,
+  "sdist_contains_no_python_cache": true,
+  "artifacts": {
+    "nwkit-0.43.15-py3-none-any.whl": "ffaad03aaf049c912b39abd8dc2bbb3b231fb4956275ec483a4ec9e85f0592b7",
+    "nwkit-0.43.15.tar.gz": "3f8a860d939b7496894ebcffb64ab509f81764a62f86f298afa2b4c56026bdba"
+  }
+}

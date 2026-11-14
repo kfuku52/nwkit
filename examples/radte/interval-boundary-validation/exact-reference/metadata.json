@@ -1,0 +1,61 @@
+{
+  "protocol": {
+    "scope": "Independent validation of branch-only single-root-age exact Gaussian contrast intervals; not validation of sequence or general calibrated-profile intervals",
+    "level": 0.95,
+    "truth_age": 20,
+    "species_age": 10,
+    "max_age": 100,
+    "reference_endpoint_tolerance_normalized": 1e-06,
+    "simultaneous_correct_return_lower_required": 0.93,
+    "availability_required": 0.99,
+    "stopping": "Exactly the prespecified family count in every cell; no optional extension",
+    "cells": [
+      {
+        "name": "low-sd-independent",
+        "rho": 0.0,
+        "sd": 0.1,
+        "seed": 92440000,
+        "families": 1000
+      },
+      {
+        "name": "medium-sd-correlated",
+        "rho": 0.5,
+        "sd": 0.3,
+        "seed": 92450000,
+        "families": 1000
+      },
+      {
+        "name": "high-sd-correlated",
+        "rho": 0.9,
+        "sd": 0.6,
+        "seed": 92460000,
+        "families": 1000
+      }
+    ]
+  },
+  "protocol_sha256": "72a7ca73277c06c333030440c13fc70756da11ba0c61b1a349a20cdeea6e87de",
+  "source_sha256": {
+    "nwkit/radte_sequence_fit.py": "7082ed35c94ffd84b428d59aab871cb2a66984b0e463ac58d30192205d795310",
+    "nwkit/radte_components.py": "46cb67477cb9402acc46cd954419b497bb89ae25297224990700d55c562d31f7",
+    "nwkit/radte_species.py": "23d8f0b2a7e05bdc622efb00963bd5e05a3d447f9a7dd3cd068e0bb567672f5b",
+    "nwkit/radte.py": "a69ef518d6a154c99f67051758e8a4116c36df521b480e8067cad42fe6c50b1d",
+    "nwkit/radte_marginal.py": "4e3d50f3c9ab48236940d5c2cad1c105fdef52382593810bd5ad4d149d1a3ac4",
+    "nwkit/radte_iqtree.py": "36e47323e9e6a352ff52aa32c2adbd8f56a43ccf9665d71816f66876c50c4426",
+    "nwkit/radte_uncertainty.py": "9cc8392e49e6e921cee83c3a4507fc34ae921965a5294c58efc4e240dc47ab40",
+    "nwkit/radte_exact_interval.py": "c75befd5eda70e9946139debf28ee1372c089274ac49cd9d54dcbe6bed0a97a3",
+    "nwkit/radte_paml.py": "735167a3094123c493b552e228be78353456be5e7f0fd91cdfdf6f8dd73d6d56",
+    "nwkit/radte_ensemble.py": "0f5857e1decba5049e5f3c63cc6fbf30ac20b4b54ecb1f87decf2de943578356",
+    "nwkit/radte_sequence.py": "99dabde91d856bbf3dc171e2f9e57e16d02340d18dbc433468b63b4ce01a022c",
+    "nwkit/radte_studentized.py": "9540c3b29844184ecf25fb80981cf37550b43c204407e28a0c6cc89dfd435982",
+    "nwkit/radte_inputs.py": "067a45f06b179bc678b7531a2d4ed002b319007edd5544c83319673b390b9a05",
+    "nwkit/radte_cli.py": "88a99c8997e92888b85193e2ce05c54c035ae209a631384e176d33428c4302fd",
+    "nwkit/radte_compare_plot.py": "81478dbc81e9b34ca8415628485a3f3828a3c5f255e0f21cea552c79e1062c56",
+    "nwkit/radte_codon.py": "a5ba0d518a838efb2dd92a5fb259df7c013e8bf268fafe480d799f8ecf196d15",
+    "nwkit/radte_simulation.py": "7e986c6ce44eb03868737f92caadd568be40b1738a2497e1e5843a5ac65507b2",
+    "nwkit/radte_calibrated.py": "6e9f010cf212c52fdcae424bbce9f75e578d7f443ecba7737400cda648085773",
+    "nwkit/radte_compare.py": "3ef76fe16538364597663993c37d747151301925c29254226895d649b7c7c260",
+    "nwkit/radte_model.py": "2d56666587c21e21b9637a1586dbc137620ebcf4ba400de2a6324eaf3db8af7d",
+    "tools/validate_radte_exact_intervals.py": "ca72546adc8cde7352f83a120cb18fc8cb7f2f965ec5ec48a7fb8673be93135a",
+    "tools/radte_interval_reference.py": "9888cedd8ad9d08a6135c822dabd6e491c49296cbaf9955c6f5ee2d3d4aea74a"
+  }
+}

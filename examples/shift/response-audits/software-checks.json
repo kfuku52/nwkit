@@ -1,0 +1,19 @@
+{
+  "command": "python tools/check.py full",
+  "exit_code": 0,
+  "passed": 3326,
+  "skipped": 27,
+  "warnings": 6,
+  "seconds": 1144.91,
+  "branch_coverage_percent": 85,
+  "lint": "passed",
+  "format": "passed",
+  "mypy": "passed: 173 source files",
+  "pip_check": "passed",
+  "bandit": "passed",
+  "pip_audit": "no known vulnerabilities",
+  "complexity": "all hard limits respected",
+  "real_R_tests": "corrected and original isolated kfl1ou libraries enabled",
+  "scope": "Local macOS Python 3.10; other CI Python/platform combinations not run",
+  "post_full_static_check": "passed on all 368 files after adding the paired verifier and distribution assertions"
+}

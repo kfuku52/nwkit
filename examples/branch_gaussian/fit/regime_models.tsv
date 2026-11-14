@@ -1,0 +1,5 @@
+regime	model	sigma2	alpha	theta	jump_mean	jump_variance
+Background	BM	0.3				
+Low optimum	OU	0.3	1.8	-1.2		
+High optimum	OU	0.3	1.8	2.5		
+High optimum + event	OU	0.3	1.8	2.5	0.9	0.06

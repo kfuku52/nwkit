@@ -66,6 +66,7 @@ from nwkit.image_metadata import (
 from nwkit.image_metadata import (
     tokenize_search_terms as tokenize_search_terms,
 )
+from nwkit.output_transaction import output_transaction
 from nwkit.species_parser import DEFAULT_SPECIES_REGEX
 from nwkit.util import (
     acquire_exclusive_lock,
@@ -74,6 +75,7 @@ from nwkit.util import (
     read_tree,
     resolve_download_dir,
     validate_distinct_output_paths,
+    validate_outputs_do_not_replace_inputs,
     validate_unique_named_leaves,
     warn_cleanup_failure,
 )
@@ -689,11 +691,17 @@ def parse_sources(style, source_arg):
 
 
 def read_name_tsv(path):
-    handle = sys.stdin if path == "-" else open(path, newline="")
+    handle = sys.stdin if path == "-" else open(path, encoding="utf-8-sig", newline="")
     try:
         reader = csv.DictReader(handle, delimiter="\t")
         if reader.fieldnames is None:
             raise ValueError("--species-name-tsv is empty.")
+        if any(not name.strip() for name in reader.fieldnames) or len(
+            reader.fieldnames
+        ) != len(set(reader.fieldnames)):
+            raise ValueError(
+                "--species-name-tsv requires unique, nonempty column headers."
+            )
         required = {"leaf_name", "species_name"}
         missing = required.difference(reader.fieldnames)
         if missing:
@@ -702,6 +710,12 @@ def read_name_tsv(path):
             )
         mapping = dict()
         for row in reader:
+            if None in row or any(value is None for value in row.values()):
+                raise ValueError(
+                    "--species-name-tsv row {} has a different number of fields than its header.".format(
+                        reader.line_num
+                    )
+                )
             raw_leaf_name = row.get("leaf_name")
             leaf_name = "" if raw_leaf_name is None else str(raw_leaf_name)
             species_name = normalize_species_name(row.get("species_name"))
@@ -4489,6 +4503,20 @@ def image_main(args):
             ("unmatched output", unmatched_path),
         ]
     )
+    validate_outputs_do_not_replace_inputs(
+        [
+            ("--infile", args.infile),
+            ("--species-name-tsv", getattr(args, "species_name_tsv", None)),
+            ("--name-tsv", getattr(args, "name_tsv", None)),
+            ("--species-map-tsv", getattr(args, "species_map_tsv", None)),
+            ("--taxid-tsv", getattr(args, "taxid_tsv", None)),
+        ],
+        [
+            ("--manifest-out", manifest_path),
+            ("--attribution-out", attribution_path),
+            ("unmatched output", unmatched_path),
+        ],
+    )
     shared_cache_dir = resolve_image_cache_dir(args)
     ensure_directory(out_dir)
     ensure_directory(images_dir)
@@ -4609,9 +4637,12 @@ def image_main(args):
         out_dir=out_dir,
         output_path=attribution_path,
     )
-    write_tsv(manifest_path, manifest_output_rows, manifest_fieldnames)
-    write_tsv(unmatched_path, unmatched_rows, unmatched_fieldnames)
-    write_attribution_markdown(attribution_path, attribution_output_assets)
+    with output_transaction(
+        [manifest_path, unmatched_path, attribution_path], create_parents=True
+    ) as staged:
+        write_tsv(staged[manifest_path], manifest_output_rows, manifest_fieldnames)
+        write_tsv(staged[unmatched_path], unmatched_rows, unmatched_fieldnames)
+        write_attribution_markdown(staged[attribution_path], attribution_output_assets)
 
     if unmatched_rows and args.fail_on_missing:
         raise ValueError(

@@ -1,0 +1,959 @@
+{
+  "candidate": "01 zero-error lambda spectral profile",
+  "environment": {
+    "python": "3.12.14 (main, Aug 25 2026, 13:50:33) [Clang 22.1.3 ]",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "numpy": "2.5.4",
+    "scipy": "1.17.1",
+    "pandas": "3.0.6",
+    "nwkit": "0.43.55",
+    "nwkit_source": "/private/tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/signal_stats.py",
+    "baseline_commit": "86c8f2c537769d852c17e2c789340f6c9de4ef54",
+    "timing_limit": "Exploratory host-local measurements; unrelated CPU jobs are active.",
+    "memory_limit": "tracemalloc peak is not complete RSS or all native allocations.",
+    "nwkit_package": "/private/tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/__init__.py"
+  },
+  "workloads": [
+    {
+      "case": "balanced_8",
+      "n_tips": 8,
+      "ci_level": 0.95,
+      "scope": "complete lambda_fit, including preparation, search and optional intervals",
+      "comparison": {
+        "status": "boundary",
+        "fields": {
+          "estimate": {
+            "baseline": 0.0,
+            "candidate": 0.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "sigma2": {
+            "baseline": 0.3099246724919906,
+            "candidate": 0.3099246724919906,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "root_mean": {
+            "baseline": 1.8206568132171426,
+            "candidate": 1.8206568132171426,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "log_likelihood": {
+            "baseline": -8.287664686103655,
+            "candidate": -8.287664686103655,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "null_log_likelihood": {
+            "baseline": -8.287664686103655,
+            "candidate": -8.287664686103655,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "likelihood_ratio": {
+            "baseline": 0.0,
+            "candidate": 0.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "p_value": {
+            "baseline": 1.0,
+            "candidate": 1.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "ci_lower": {
+            "baseline": 0.0,
+            "candidate": 0.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "ci_upper": {
+            "baseline": 1.0,
+            "candidate": 1.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          }
+        },
+        "exact": true
+      },
+      "timing": {
+        "loops_per_sample": 3,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.01790215300085644,
+            0.01870569431533416,
+            0.021548097332318623,
+            0.021886625016729038,
+            0.021764958316149812,
+            0.020294305325175326,
+            0.019585458328947425
+          ],
+          "median_seconds": 0.020294305325175326,
+          "min_seconds": 0.01790215300085644,
+          "max_seconds": 0.021886625016729038
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.0063260276801884174,
+            0.005898208357393742,
+            0.006838375004008412,
+            0.0071961249923333526,
+            0.003632583344976107,
+            0.007545805652625859,
+            0.006592722027562559
+          ],
+          "median_seconds": 0.006592722027562559,
+          "min_seconds": 0.003632583344976107,
+          "max_seconds": 0.007545805652625859
+        },
+        "speedup": 3.0782892468891907
+      },
+      "peak_traced_bytes": {
+        "baseline": 110503,
+        "candidate": 102489
+      }
+    },
+    {
+      "case": "balanced_64",
+      "n_tips": 64,
+      "ci_level": 0.95,
+      "scope": "complete lambda_fit, including preparation, search and optional intervals",
+      "comparison": {
+        "status": "ok",
+        "fields": {
+          "estimate": {
+            "baseline": 0.5543127157396964,
+            "candidate": 0.5543126664045094,
+            "absolute_difference": 4.933518704675066e-08,
+            "scaled_difference": 4.933518704675066e-08
+          },
+          "sigma2": {
+            "baseline": 0.602023587473021,
+            "candidate": 0.602023576416682,
+            "absolute_difference": 1.105633895548408e-08,
+            "scaled_difference": 1.105633895548408e-08
+          },
+          "root_mean": {
+            "baseline": 1.603157022665148,
+            "candidate": 1.6031570226651468,
+            "absolute_difference": 1.1102230246251565e-15,
+            "scaled_difference": 6.925229462423341e-16
+          },
+          "log_likelihood": {
+            "baseline": -96.55892774463098,
+            "candidate": -96.55892774463099,
+            "absolute_difference": 1.4210854715202004e-14,
+            "scaled_difference": 1.4717287201847764e-16
+          },
+          "null_log_likelihood": {
+            "baseline": -99.64514908450539,
+            "candidate": -99.64514908450539,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "likelihood_ratio": {
+            "baseline": 6.172442679748826,
+            "candidate": 6.172442679748798,
+            "absolute_difference": 2.842170943040401e-14,
+            "scaled_difference": 4.604612939323491e-15
+          },
+          "p_value": {
+            "baseline": 0.0129755330671595,
+            "candidate": 0.012975533067159714,
+            "absolute_difference": 2.1510571102112408e-16,
+            "scaled_difference": 2.1510571102112408e-16
+          },
+          "ci_lower": {
+            "baseline": 0.08889411193824101,
+            "candidate": 0.0888941119382386,
+            "absolute_difference": 2.4147350785597155e-15,
+            "scaled_difference": 2.4147350785597155e-15
+          },
+          "ci_upper": {
+            "baseline": 1.0,
+            "candidate": 1.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          }
+        },
+        "exact": false
+      },
+      "timing": {
+        "loops_per_sample": 2,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.032568146008998156,
+            0.03970860451227054,
+            0.04767624998930842,
+            0.03094879147829488,
+            0.028314354014582932,
+            0.027337124978657812,
+            0.026153291459195316
+          ],
+          "median_seconds": 0.03094879147829488,
+          "min_seconds": 0.026153291459195316,
+          "max_seconds": 0.04767624998930842
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.004704937455244362,
+            0.00421195849776268,
+            0.004780396004207432,
+            0.005023520498070866,
+            0.004206457990221679,
+            0.0042189795058220625,
+            0.007091937470249832
+          ],
+          "median_seconds": 0.004704937455244362,
+          "min_seconds": 0.004206457990221679,
+          "max_seconds": 0.007091937470249832
+        },
+        "speedup": 6.5779389785081595
+      },
+      "peak_traced_bytes": {
+        "baseline": 276770,
+        "candidate": 236230
+      }
+    },
+    {
+      "case": "balanced_256",
+      "n_tips": 256,
+      "ci_level": 0.95,
+      "scope": "complete lambda_fit, including preparation, search and optional intervals",
+      "comparison": {
+        "status": "ok",
+        "fields": {
+          "estimate": {
+            "baseline": 0.5350517682519952,
+            "candidate": 0.5350517596453304,
+            "absolute_difference": 8.606664825272503e-09,
+            "scaled_difference": 8.606664825272503e-09
+          },
+          "sigma2": {
+            "baseline": 0.7109636371815796,
+            "candidate": 0.7109636338965636,
+            "absolute_difference": 3.2850160369690684e-09,
+            "scaled_difference": 3.2850160369690684e-09
+          },
+          "root_mean": {
+            "baseline": 1.1904449210223833,
+            "candidate": 1.190444921022383,
+            "absolute_difference": 2.220446049250313e-16,
+            "scaled_difference": 1.865223673971694e-16
+          },
+          "log_likelihood": {
+            "baseline": -425.14476381290064,
+            "candidate": -425.14476381290064,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "null_log_likelihood": {
+            "baseline": -445.41701945230284,
+            "candidate": -445.41701945230284,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "likelihood_ratio": {
+            "baseline": 40.54451127880441,
+            "candidate": 40.54451127880441,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "p_value": {
+            "baseline": 1.921876451547489e-10,
+            "candidate": 1.921876451547489e-10,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "ci_lower": {
+            "baseline": 0.24405525205581402,
+            "candidate": 0.24405525205581557,
+            "absolute_difference": 1.5543122344752192e-15,
+            "scaled_difference": 1.5543122344752192e-15
+          },
+          "ci_upper": {
+            "baseline": 0.858195444960859,
+            "candidate": 0.858195444960859,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          }
+        },
+        "exact": false
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.2815980000887066,
+            0.2947203340008855,
+            0.36411079193931073,
+            0.2856299999402836,
+            0.2512935840059072,
+            0.27608529094140977,
+            0.32092595798894763
+          ],
+          "median_seconds": 0.2856299999402836,
+          "min_seconds": 0.2512935840059072,
+          "max_seconds": 0.36411079193931073
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.016861542011611164,
+            0.008532708045095205,
+            0.013566166977398098,
+            0.01748766703531146,
+            0.008762417011894286,
+            0.008746291045099497,
+            0.00876566709484905
+          ],
+          "median_seconds": 0.00876566709484905,
+          "min_seconds": 0.008532708045095205,
+          "max_seconds": 0.01748766703531146
+        },
+        "speedup": 32.58508415270844
+      },
+      "peak_traced_bytes": {
+        "baseline": 2734382,
+        "candidate": 3172594
+      }
+    },
+    {
+      "case": "balanced_512_no_interval",
+      "n_tips": 512,
+      "ci_level": null,
+      "scope": "complete lambda_fit, including preparation, search and optional intervals",
+      "comparison": {
+        "status": "ok",
+        "fields": {
+          "estimate": {
+            "baseline": 0.5549804804094318,
+            "candidate": 0.5549804732956766,
+            "absolute_difference": 7.113755251531018e-09,
+            "scaled_difference": 7.113755251531018e-09
+          },
+          "sigma2": {
+            "baseline": 0.7624986872197229,
+            "candidate": 0.7624986838188638,
+            "absolute_difference": 3.4008591498491114e-09,
+            "scaled_difference": 3.4008591498491114e-09
+          },
+          "root_mean": {
+            "baseline": 1.6834877269989181,
+            "candidate": 1.6834877269989177,
+            "absolute_difference": 4.440892098500626e-16,
+            "scaled_difference": 2.6379117752270256e-16
+          },
+          "log_likelihood": {
+            "baseline": -879.2549090127541,
+            "candidate": -879.254909012754,
+            "absolute_difference": 1.1368683772161603e-13,
+            "scaled_difference": 1.2929906510191227e-16
+          },
+          "null_log_likelihood": {
+            "baseline": -952.6113949062424,
+            "candidate": -952.6113949062424,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "likelihood_ratio": {
+            "baseline": 146.7129717869766,
+            "candidate": 146.71297178697682,
+            "absolute_difference": 2.2737367544323206e-13,
+            "scaled_difference": 1.5497857665467557e-15
+          },
+          "p_value": {
+            "baseline": 9.067288371759901e-34,
+            "candidate": 9.067288371758988e-34,
+            "absolute_difference": 9.134440673211088e-47,
+            "scaled_difference": 9.134440673211088e-47
+          }
+        },
+        "exact": false
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.9604855420766398,
+            1.4852509589400142,
+            1.7138598329620436,
+            1.5452051669126377,
+            1.8217520419275388,
+            1.0977667910046875,
+            0.9610144579783082
+          ],
+          "median_seconds": 1.4852509589400142,
+          "min_seconds": 0.9604855420766398,
+          "max_seconds": 1.8217520419275388
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.031394458026625216,
+            0.029618249973282218,
+            0.052775624906644225,
+            0.04475229198578745,
+            0.03150608402211219,
+            0.043766875052824616,
+            0.029629125026986003
+          ],
+          "median_seconds": 0.03150608402211219,
+          "min_seconds": 0.029618249973282218,
+          "max_seconds": 0.052775624906644225
+        },
+        "speedup": 47.14171897394826
+      },
+      "peak_traced_bytes": {
+        "baseline": 10580872,
+        "candidate": 12631424
+      }
+    },
+    {
+      "case": "pectinate_128_nonultrametric",
+      "n_tips": 128,
+      "ci_level": 0.95,
+      "scope": "complete lambda_fit, including preparation, search and optional intervals",
+      "comparison": {
+        "status": "boundary",
+        "fields": {
+          "estimate": {
+            "baseline": 0.0,
+            "candidate": 0.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "sigma2": {
+            "baseline": 0.6619882637472174,
+            "candidate": 0.6619882637472174,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "root_mean": {
+            "baseline": 1.1237960877309963,
+            "candidate": 1.1237960877309963,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "log_likelihood": {
+            "baseline": -181.00397949278175,
+            "candidate": -181.00397949278175,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "null_log_likelihood": {
+            "baseline": -181.00397949278175,
+            "candidate": -181.00397949278175,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "likelihood_ratio": {
+            "baseline": 0.0,
+            "candidate": 0.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "p_value": {
+            "baseline": 1.0,
+            "candidate": 1.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "ci_lower": {
+            "baseline": 0.0,
+            "candidate": 0.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "ci_upper": {
+            "baseline": 0.533073750654272,
+            "candidate": 0.5330737506542531,
+            "absolute_difference": 1.887379141862766e-14,
+            "scaled_difference": 1.887379141862766e-14
+          }
+        },
+        "exact": false
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.04742966592311859,
+            0.06451520801056176,
+            0.055837957886978984,
+            0.05213670898228884,
+            0.052132457960397005,
+            0.05370416596997529,
+            0.04835862503387034
+          ],
+          "median_seconds": 0.05213670898228884,
+          "min_seconds": 0.04742966592311859,
+          "max_seconds": 0.06451520801056176
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.005487624905072153,
+            0.00574554200284183,
+            0.00543062505312264,
+            0.007442457950673997,
+            0.005422083078883588,
+            0.00535137508995831,
+            0.005118625005707145
+          ],
+          "median_seconds": 0.00543062505312264,
+          "min_seconds": 0.005118625005707145,
+          "max_seconds": 0.007442457950673997
+        },
+        "speedup": 9.600498740436874
+      },
+      "peak_traced_bytes": {
+        "baseline": 761243,
+        "candidate": 802592
+      }
+    }
+  ],
+  "edge_cases": [
+    {
+      "case": "positive_errors_unchanged",
+      "comparison": {
+        "status": "boundary",
+        "fields": {
+          "estimate": {
+            "baseline": 0.0,
+            "candidate": 0.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "sigma2": {
+            "baseline": 0.26825800590937976,
+            "candidate": 0.26825800590937976,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "root_mean": {
+            "baseline": 1.8206568132171426,
+            "candidate": 1.8206568132171426,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "log_likelihood": {
+            "baseline": -8.287664686103655,
+            "candidate": -8.287664686103655,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "null_log_likelihood": {
+            "baseline": -8.287664686103655,
+            "candidate": -8.287664686103655,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "likelihood_ratio": {
+            "baseline": 0.0,
+            "candidate": 0.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "p_value": {
+            "baseline": 1.0,
+            "candidate": 1.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "ci_lower": {
+            "baseline": 0.0,
+            "candidate": 0.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "ci_upper": {
+            "baseline": 1.0,
+            "candidate": 1.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          }
+        },
+        "exact": true
+      }
+    },
+    {
+      "case": "mixed_errors_unchanged",
+      "comparison": {
+        "status": "boundary",
+        "fields": {
+          "estimate": {
+            "baseline": 0.0,
+            "candidate": 0.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "sigma2": {
+            "baseline": 0.30156200605942973,
+            "candidate": 0.30156200605942973,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "root_mean": {
+            "baseline": 1.8224610856700558,
+            "candidate": 1.8224610856700558,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "log_likelihood": {
+            "baseline": -8.254987581840096,
+            "candidate": -8.254987581840096,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "null_log_likelihood": {
+            "baseline": -8.254987581840096,
+            "candidate": -8.254987581840096,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "likelihood_ratio": {
+            "baseline": 0.0,
+            "candidate": 0.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "p_value": {
+            "baseline": 1.0,
+            "candidate": 1.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "ci_lower": {
+            "baseline": 0.0,
+            "candidate": 0.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "ci_upper": {
+            "baseline": 1.0,
+            "candidate": 1.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          }
+        },
+        "exact": true
+      }
+    },
+    {
+      "case": "constant_unchanged",
+      "comparison": {
+        "same_exception": true,
+        "outcomes": [
+          {
+            "exception": "ValueError",
+            "message": "Zero residual variance has no finite Gaussian density."
+          },
+          {
+            "exception": "ValueError",
+            "message": "Zero residual variance has no finite Gaussian density."
+          }
+        ]
+      }
+    },
+    {
+      "case": "star",
+      "comparison": {
+        "status": "unidentifiable_lambda",
+        "fields": {},
+        "exact": true
+      }
+    },
+    {
+      "case": "singular",
+      "comparison": {
+        "same_exception": true,
+        "outcomes": [
+          {
+            "exception": "LinAlgError",
+            "message": "Matrix is not positive definite"
+          },
+          {
+            "exception": "LinAlgError",
+            "message": "Matrix is not positive definite"
+          }
+        ]
+      }
+    },
+    {
+      "case": "nonpositive_diagonal",
+      "comparison": {
+        "same_exception": true,
+        "outcomes": [
+          {
+            "exception": "LinAlgError",
+            "message": "Matrix is not positive definite"
+          },
+          {
+            "exception": "LinAlgError",
+            "message": "Matrix is not positive definite"
+          }
+        ]
+      }
+    },
+    {
+      "case": "near_singular_1e-12_control",
+      "comparison": {
+        "status": "boundary",
+        "fields": {
+          "estimate": {
+            "baseline": 0.0,
+            "candidate": 0.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "sigma2": {
+            "baseline": 0.4648870087375208,
+            "candidate": 0.4648870087375208,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "root_mean": {
+            "baseline": 1.8206568132171426,
+            "candidate": 1.8206568132171426,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "log_likelihood": {
+            "baseline": -8.287664686103655,
+            "candidate": -8.287664686103655,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "null_log_likelihood": {
+            "baseline": -8.287664686103655,
+            "candidate": -8.287664686103655,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "likelihood_ratio": {
+            "baseline": 0.0,
+            "candidate": 0.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "p_value": {
+            "baseline": 1.0,
+            "candidate": 1.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "ci_lower": {
+            "baseline": 0.0,
+            "candidate": 0.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "ci_upper": {
+            "baseline": 0.8507278778184745,
+            "candidate": 0.8507278778184771,
+            "absolute_difference": 2.6645352591003757e-15,
+            "scaled_difference": 2.6645352591003757e-15
+          }
+        },
+        "exact": false
+      }
+    },
+    {
+      "case": "large_trait_offset",
+      "comparison": {
+        "status": "boundary",
+        "fields": {
+          "estimate": {
+            "baseline": 0.0,
+            "candidate": 0.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "sigma2": {
+            "baseline": 0.30992468590071226,
+            "candidate": 0.30992468590071226,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "root_mean": {
+            "baseline": 1000000001.8206569,
+            "candidate": 1000000001.8206569,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "log_likelihood": {
+            "baseline": -8.287664859161467,
+            "candidate": -8.287664859161467,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "null_log_likelihood": {
+            "baseline": -8.287664859161467,
+            "candidate": -8.287664859161467,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "likelihood_ratio": {
+            "baseline": 0.0,
+            "candidate": 0.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "p_value": {
+            "baseline": 1.0,
+            "candidate": 1.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "ci_lower": {
+            "baseline": 0.0,
+            "candidate": 0.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "ci_upper": {
+            "baseline": 1.0,
+            "candidate": 1.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          }
+        },
+        "exact": true
+      }
+    },
+    {
+      "case": "small_time_units",
+      "comparison": {
+        "status": "boundary",
+        "fields": {
+          "estimate": {
+            "baseline": 0.0,
+            "candidate": 0.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "sigma2": {
+            "baseline": 1.0145045120905699e+150,
+            "candidate": 1.0145045120905699e+150,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "root_mean": {
+            "baseline": 2.307956702084326e+30,
+            "candidate": 2.307956702084326e+30,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "log_likelihood": {
+            "baseline": -562.80540913406,
+            "candidate": -562.80540913406,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "null_log_likelihood": {
+            "baseline": -562.80540913406,
+            "candidate": -562.80540913406,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "likelihood_ratio": {
+            "baseline": 0.0,
+            "candidate": 0.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "p_value": {
+            "baseline": 1.0,
+            "candidate": 1.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "ci_lower": {
+            "baseline": 0.0,
+            "candidate": 0.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          },
+          "ci_upper": {
+            "baseline": 1.0,
+            "candidate": 1.0,
+            "absolute_difference": 0.0,
+            "scaled_difference": 0.0
+          }
+        },
+        "exact": true
+      }
+    }
+  ],
+  "bootstrap": {
+    "case": "seeded_19_draw_lambda_bootstrap_32tips",
+    "observed_lr": 0.0,
+    "baseline": {
+      "p_value": 1.0,
+      "rng_state": {
+        "bit_generator": "PCG64",
+        "state": {
+          "state": 157886773575866357551076760108660708785,
+          "inc": 286760746993248063440485767429536523585
+        },
+        "has_uint32": 0,
+        "uinteger": 0
+      }
+    },
+    "candidate": {
+      "p_value": 1.0,
+      "rng_state": {
+        "bit_generator": "PCG64",
+        "state": {
+          "state": 157886773575866357551076760108660708785,
+          "inc": 286760746993248063440485767429536523585
+        },
+        "has_uint32": 0,
+        "uinteger": 0
+      }
+    },
+    "exact": true,
+    "scope": "zero-LR early-exit control; no simulation is performed",
+    "timing": {
+      "loops_per_sample": 499,
+      "repeats": 7,
+      "baseline": {
+        "raw_seconds": [
+          9.503323451348977e-05,
+          5.974023059786919e-05,
+          6.270524439120102e-05,
+          5.193687378165717e-05,
+          5.1796258537319e-05,
+          5.1506262604811626e-05,
+          5.259886565982161e-05
+        ],
+        "median_seconds": 5.259886565982161e-05,
+        "min_seconds": 5.1506262604811626e-05,
+        "max_seconds": 9.503323451348977e-05
+      },
+      "candidate": {
+        "raw_seconds": [
+          6.150567945175037e-05,
+          5.7379675484103765e-05,
+          5.207197597896109e-05,
+          5.1255511000513554e-05,
+          5.157748895150447e-05,
+          5.11807774964399e-05,
+          5.3141783560833376e-05
+        ],
+        "median_seconds": 5.207197597896109e-05,
+        "min_seconds": 5.11807774964399e-05,
+        "max_seconds": 6.150567945175037e-05
+      },
+      "speedup": 1.0101184883222676
+    },
+    "performed_draws": 0
+  }
+}

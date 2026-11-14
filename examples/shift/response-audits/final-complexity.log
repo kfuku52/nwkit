@@ -1,0 +1,9 @@
+Warning: nwkit/cli.py:command_draw: complexity increased from 1 to 4; review the added branching.
+Warning: nwkit/conventions.py:get_stdin_input_options: complexity increased from 6 to 8; review the added branching.
+Warning: nwkit/convert.py:convert_tree_text: complexity increased from 10 to 12; review the added branching.
+Warning: nwkit/draw.py:_draw_tree: complexity increased from 8 to 9; review the added branching.
+Warning: nwkit/provenance.py:_input_path_candidates: complexity increased from 23 to 28; review the added branching.
+Warning: nwkit/reconcile.py:reconcile_main: complexity increased from 2 to 8; review the added branching.
+Warning: nwkit/tree_formats.py:_node_suffix: complexity increased from 17 to 23; review the added branching.
+Warning: nwkit/tree_formats.py:transform_annotations: complexity increased from 4 to 5; review the added branching.
+Radon: 2929 functions, 6.69 average (informational), 50 maximum; all hard limits respected.

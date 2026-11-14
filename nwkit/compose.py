@@ -5,7 +5,7 @@ from typing import Any
 
 import pandas as pd
 
-from nwkit.clade_mapping import build_clade_mapping, projected_root_split
+from nwkit.clade_mapping import projected_root_split, validate_mapping_taxa
 from nwkit.root import transfer_root_with_taxon_mode
 from nwkit.rooting_state import require_rooted
 from nwkit.transfer import (
@@ -79,9 +79,10 @@ def _parse_property_source(raw):
     }
 
 
-def _root_report_row(source_path, target, source, mapping, status, reason, taxon_mode):
-    root_match = next(match for match in mapping.matches if match.target.is_root)
-    split = projected_root_split(source, mapping.shared_taxa)
+def _root_report_row(source_path, source, taxa, status, reason, taxon_mode):
+    target_taxa, source_taxa, shared_taxa = taxa
+    projected = target_taxa != source_taxa
+    split = projected_root_split(source, shared_taxa)
     split_text = ""
     if split is not None:
         split_text = "{}|{}".format(
@@ -94,22 +95,22 @@ def _root_report_row(source_path, target, source, mapping, status, reason, taxon
             "source_file": source_path,
             "target_branch_id": 0,
             "target_node_class": "root",
-            "target_taxa": ",".join(sorted(str(name) for name in target.leaf_names())),
-            "shared_descendant_taxa": ",".join(sorted(mapping.shared_taxa)),
+            "target_taxa": ",".join(sorted(target_taxa)),
+            "shared_descendant_taxa": ",".join(sorted(shared_taxa)),
             "shared_split": split_text,
-            "source_taxa": ",".join(sorted(str(name) for name in source.leaf_names())),
-            "match_status": root_match.status,
+            "source_taxa": ",".join(sorted(source_taxa)),
+            "match_status": "projected_match" if projected else "exact_match",
             "match_basis": "split",
-            "projection_only": root_match.status == "projected_match",
+            "projection_only": projected,
             "source_property": "root",
             "target_property": "root",
             "status": status,
             "reason": reason,
             "projected_value_allowed": "",
             "taxon_mode": taxon_mode,
-            "num_shared_taxa": len(mapping.shared_taxa),
-            "num_target_only_taxa": len(mapping.target_only_taxa),
-            "num_source_only_taxa": len(mapping.source_only_taxa),
+            "num_shared_taxa": len(shared_taxa),
+            "num_target_only_taxa": len(target_taxa) - len(shared_taxa),
+            "num_source_only_taxa": len(source_taxa) - len(shared_taxa),
         }
     )
     return row
@@ -186,26 +187,11 @@ def compose_main(args):
             args.quoted_node_names,
             rooted=getattr(args, "root_source_rooted", "auto"),
         )
-        mapping = build_clade_mapping(
-            target=target, source=root_source, taxon_mode=taxon_mode
-        )
-        root_match = next(match for match in mapping.matches if match.target.is_root)
-        if policy == "strict" and root_match.status == "projected_match":
+        taxa = validate_mapping_taxa(target, root_source, taxon_mode)
+        target_taxa, source_taxa, _ = taxa
+        if policy == "strict" and target_taxa != source_taxa:
             reason = "strict_policy_requires_exact_root_match"
             root_status = "projected_match_rejected"
-            if collect_report:
-                report_rows.append(
-                    _root_report_row(
-                        source_path=root_source_path,
-                        target=target,
-                        source=root_source,
-                        mapping=mapping,
-                        status=root_status,
-                        reason=reason,
-                        taxon_mode=taxon_mode,
-                    )
-                )
-            status_counts[root_status] = status_counts.get(root_status, 0) + 1
             failures.append(reason)
         else:
             try:
@@ -220,36 +206,18 @@ def compose_main(args):
                     taxon_mode=taxon_mode,
                     verbose=True,
                 )
-                root_status = "transferred"
-                if collect_report:
-                    report_rows.append(
-                        _root_report_row(
-                            source_path=root_source_path,
-                            target=target,
-                            source=root_source,
-                            mapping=mapping,
-                            status=root_status,
-                            reason="matching_root_split",
-                            taxon_mode=taxon_mode,
-                        )
-                    )
-                status_counts[root_status] = status_counts.get(root_status, 0) + 1
             except ValueError as exc:
-                root_status = "unmatched"
-                if collect_report:
-                    report_rows.append(
-                        _root_report_row(
-                            source_path=root_source_path,
-                            target=target,
-                            source=root_source,
-                            mapping=mapping,
-                            status=root_status,
-                            reason=str(exc),
-                            taxon_mode=taxon_mode,
-                        )
-                    )
-                status_counts[root_status] = status_counts.get(root_status, 0) + 1
-                failures.append(str(exc))
+                root_status, reason = "unmatched", str(exc)
+                failures.append(reason)
+            else:
+                root_status, reason = "transferred", "matching_root_split"
+        if collect_report:
+            report_rows.append(
+                _root_report_row(
+                    root_source_path, root_source, taxa, root_status, reason, taxon_mode
+                )
+            )
+        status_counts[root_status] = status_counts.get(root_status, 0) + 1
 
     built_in_sources = (
         ("name", sources["name"], ("name", "name"), "all", False),

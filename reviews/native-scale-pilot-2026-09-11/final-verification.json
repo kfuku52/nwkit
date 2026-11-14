@@ -1,0 +1,106 @@
+{
+  "checks": [
+    {
+      "before": "final-comparisons/fit10-known-before-0.json",
+      "after": "final-comparisons/fit10-known-after-0.json",
+      "exact": true,
+      "workflow": null
+    },
+    {
+      "before": "final-comparisons/fit10-known-before-1.json",
+      "after": "final-comparisons/fit10-known-after-1.json",
+      "exact": true,
+      "workflow": null
+    },
+    {
+      "before": "final-comparisons/fit10-known-before-2.json",
+      "after": "final-comparisons/fit10-known-after-2.json",
+      "exact": true,
+      "workflow": null
+    },
+    {
+      "before": "final-comparisons/fit10-pectinate-before-0.json",
+      "after": "final-comparisons/fit10-pectinate-after-0.json",
+      "exact": true,
+      "workflow": null
+    },
+    {
+      "before": "final-comparisons/fit10-pectinate-before-1.json",
+      "after": "final-comparisons/fit10-pectinate-after-1.json",
+      "exact": true,
+      "workflow": null
+    },
+    {
+      "before": "final-comparisons/fit10-pectinate-before-2.json",
+      "after": "final-comparisons/fit10-pectinate-after-2.json",
+      "exact": true,
+      "workflow": null
+    },
+    {
+      "before": "final-comparisons/fit100-before-0.json",
+      "after": "final-comparisons/fit100-after-0.json",
+      "exact": true,
+      "workflow": null
+    },
+    {
+      "before": "final-comparisons/fit100-before-1.json",
+      "after": "final-comparisons/fit100-after-1.json",
+      "exact": true,
+      "workflow": null
+    },
+    {
+      "before": "final-comparisons/fit100-before-2.json",
+      "after": "final-comparisons/fit100-after-2.json",
+      "exact": true,
+      "workflow": null
+    },
+    {
+      "before": "final-comparisons/search10-before-0.json",
+      "after": "final-comparisons/search10-after-0.json",
+      "exact": true,
+      "workflow": null
+    },
+    {
+      "before": "final-comparisons/search10-before-1.json",
+      "after": "final-comparisons/search10-after-1.json",
+      "exact": true,
+      "workflow": null
+    },
+    {
+      "before": "final-comparisons/search10-before-2.json",
+      "after": "final-comparisons/search10-after-2.json",
+      "exact": true,
+      "workflow": null
+    },
+    {
+      "before": "final-followups/workflow512-before.json",
+      "after": "final-followups/workflow512-after.json",
+      "exact": true,
+      "workflow": {
+        "expected_search_calls": 60,
+        "all_completed": true
+      }
+    },
+    {
+      "before": "results/workflow.json",
+      "after": "final-followups/workflow32-after.json",
+      "exact": true,
+      "workflow": {
+        "expected_search_calls": 60,
+        "all_completed": true
+      }
+    },
+    {
+      "before": "results/fit100-estimated.json",
+      "after": "final-followups/fit100-estimated-after.json",
+      "exact": true,
+      "workflow": null
+    },
+    {
+      "before": "results/search100.json",
+      "after": "final-followups/search100-after.json",
+      "exact": true,
+      "workflow": null
+    }
+  ]
+}

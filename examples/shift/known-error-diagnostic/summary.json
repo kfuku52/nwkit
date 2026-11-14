@@ -1,0 +1,266 @@
+{
+  "attempted_pairs": 100,
+  "completed_pairs": 100,
+  "cells": [
+    {
+      "alpha_height": 0,
+      "stage": "null",
+      "attempted": 20,
+      "completed": 20,
+      "plugin": {
+        "count": 0,
+        "denominator": 20,
+        "rate": 0.0,
+        "wilson_95": [
+          0.0,
+          0.16112515805281935
+        ]
+      },
+      "oracle": {
+        "count": 0,
+        "denominator": 20,
+        "rate": 0.0,
+        "wilson_95": [
+          0.0,
+          0.16112515805281935
+        ]
+      },
+      "plugin_only": 0,
+      "oracle_only": 0
+    },
+    {
+      "alpha_height": 0,
+      "stage": "one_shift",
+      "attempted": 20,
+      "completed": 20,
+      "plugin": {
+        "count": 0,
+        "denominator": 20,
+        "rate": 0.0,
+        "wilson_95": [
+          0.0,
+          0.16112515805281935
+        ]
+      },
+      "oracle": {
+        "count": 0,
+        "denominator": 20,
+        "rate": 0.0,
+        "wilson_95": [
+          0.0,
+          0.16112515805281935
+        ]
+      },
+      "plugin_only": 0,
+      "oracle_only": 0
+    },
+    {
+      "alpha_height": 0.01,
+      "stage": "null",
+      "attempted": 20,
+      "completed": 20,
+      "plugin": {
+        "count": 3,
+        "denominator": 20,
+        "rate": 0.15,
+        "wilson_95": [
+          0.05236874589621662,
+          0.3604188647407569
+        ]
+      },
+      "oracle": {
+        "count": 3,
+        "denominator": 20,
+        "rate": 0.15,
+        "wilson_95": [
+          0.05236874589621662,
+          0.3604188647407569
+        ]
+      },
+      "plugin_only": 0,
+      "oracle_only": 0
+    },
+    {
+      "alpha_height": 0.01,
+      "stage": "one_shift",
+      "attempted": 20,
+      "completed": 20,
+      "plugin": {
+        "count": 2,
+        "denominator": 20,
+        "rate": 0.1,
+        "wilson_95": [
+          0.027866481213768224,
+          0.30103364522848725
+        ]
+      },
+      "oracle": {
+        "count": 2,
+        "denominator": 20,
+        "rate": 0.1,
+        "wilson_95": [
+          0.027866481213768224,
+          0.30103364522848725
+        ]
+      },
+      "plugin_only": 0,
+      "oracle_only": 0
+    },
+    {
+      "alpha_height": 2.0,
+      "stage": "null",
+      "attempted": 20,
+      "completed": 20,
+      "plugin": {
+        "count": 0,
+        "denominator": 20,
+        "rate": 0.0,
+        "wilson_95": [
+          0.0,
+          0.16112515805281935
+        ]
+      },
+      "oracle": {
+        "count": 0,
+        "denominator": 20,
+        "rate": 0.0,
+        "wilson_95": [
+          0.0,
+          0.16112515805281935
+        ]
+      },
+      "plugin_only": 0,
+      "oracle_only": 0
+    },
+    {
+      "alpha_height": 2.0,
+      "stage": "one_shift",
+      "attempted": 20,
+      "completed": 20,
+      "plugin": {
+        "count": 0,
+        "denominator": 20,
+        "rate": 0.0,
+        "wilson_95": [
+          0.0,
+          0.16112515805281935
+        ]
+      },
+      "oracle": {
+        "count": 0,
+        "denominator": 20,
+        "rate": 0.0,
+        "wilson_95": [
+          0.0,
+          0.16112515805281935
+        ]
+      },
+      "plugin_only": 0,
+      "oracle_only": 0
+    },
+    {
+      "alpha_height": 100.0,
+      "stage": "null",
+      "attempted": 20,
+      "completed": 20,
+      "plugin": {
+        "count": 0,
+        "denominator": 20,
+        "rate": 0.0,
+        "wilson_95": [
+          0.0,
+          0.16112515805281935
+        ]
+      },
+      "oracle": {
+        "count": 0,
+        "denominator": 20,
+        "rate": 0.0,
+        "wilson_95": [
+          0.0,
+          0.16112515805281935
+        ]
+      },
+      "plugin_only": 0,
+      "oracle_only": 0
+    },
+    {
+      "alpha_height": 100.0,
+      "stage": "one_shift",
+      "attempted": 20,
+      "completed": 20,
+      "plugin": {
+        "count": 0,
+        "denominator": 20,
+        "rate": 0.0,
+        "wilson_95": [
+          0.0,
+          0.16112515805281935
+        ]
+      },
+      "oracle": {
+        "count": 0,
+        "denominator": 20,
+        "rate": 0.0,
+        "wilson_95": [
+          0.0,
+          0.16112515805281935
+        ]
+      },
+      "plugin_only": 0,
+      "oracle_only": 0
+    },
+    {
+      "alpha_height": null,
+      "stage": "null",
+      "attempted": 20,
+      "completed": 20,
+      "plugin": {
+        "count": 1,
+        "denominator": 20,
+        "rate": 0.05,
+        "wilson_95": [
+          0.008881448800795402,
+          0.23613119344674205
+        ]
+      },
+      "oracle": {
+        "count": 1,
+        "denominator": 20,
+        "rate": 0.05,
+        "wilson_95": [
+          0.008881448800795402,
+          0.23613119344674205
+        ]
+      },
+      "plugin_only": 0,
+      "oracle_only": 0
+    },
+    {
+      "alpha_height": null,
+      "stage": "one_shift",
+      "attempted": 20,
+      "completed": 20,
+      "plugin": {
+        "count": 1,
+        "denominator": 20,
+        "rate": 0.05,
+        "wilson_95": [
+          0.008881448800795402,
+          0.23613119344674205
+        ]
+      },
+      "oracle": {
+        "count": 2,
+        "denominator": 20,
+        "rate": 0.1,
+        "wilson_95": [
+          0.027866481213768224,
+          0.30103364522848725
+        ]
+      },
+      "plugin_only": 0,
+      "oracle_only": 1
+    }
+  ]
+}

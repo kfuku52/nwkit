@@ -1,0 +1,854 @@
+{
+  "baseline_commit": "d7116f80b9979739c69a5431a5e34b822795408b",
+  "environment": {
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "python": "3.12.14",
+    "numpy": "2.5.4",
+    "scipy": "1.17.1",
+    "nwkit": "0.43.54",
+    "threads": {
+      "OPENBLAS_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1"
+    },
+    "host_contention": "Unrelated user CPU jobs were active; raw spreads retained."
+  },
+  "edge_checks": [
+    {
+      "case": [
+        "local",
+        1,
+        2,
+        1,
+        0.0
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "local",
+        1,
+        2,
+        1,
+        1e-200
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "local",
+        1,
+        2,
+        1,
+        1e+200
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "local",
+        7,
+        3,
+        2,
+        0.0
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "local",
+        7,
+        3,
+        2,
+        1e-200
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "local",
+        7,
+        3,
+        2,
+        1e+200
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "local",
+        65,
+        2,
+        3,
+        0.0
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "local",
+        65,
+        2,
+        3,
+        1e-200
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "local",
+        65,
+        2,
+        3,
+        1e+200
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "joint",
+        1,
+        2,
+        1,
+        0.0
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "joint",
+        1,
+        2,
+        1,
+        1e-200
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "joint",
+        1,
+        2,
+        1,
+        1e+200
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "joint",
+        7,
+        3,
+        2,
+        0.0
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "joint",
+        7,
+        3,
+        2,
+        1e-200
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "joint",
+        7,
+        3,
+        2,
+        1e+200
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "joint",
+        65,
+        2,
+        3,
+        0.0
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "joint",
+        65,
+        2,
+        3,
+        1e-200
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "joint",
+        65,
+        2,
+        3,
+        1e+200
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": "reversed_noncontiguous",
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": "duplicate_selected_columns",
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": "multiple_terms",
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": "continuous",
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": "empty",
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": "joint_structured",
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": "local_structured",
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": "term_count",
+      "matching_errors": [
+        "ValueError",
+        "Predictor uncertainty and coefficient-column counts differ."
+      ]
+    },
+    {
+      "case": "wrong_group_shape",
+      "matching_errors": [
+        "ValueError",
+        "Grouped predictor uncertainty has wrong dimensions."
+      ]
+    },
+    {
+      "case": "wrong_continuous_shape",
+      "matching_errors": [
+        "ValueError",
+        "Continuous predictor uncertainty has wrong dimensions."
+      ]
+    },
+    {
+      "case": "nan_propagation",
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    }
+  ],
+  "helper_cases": [
+    {
+      "batch_calls": 1000,
+      "timings": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.0008036474590189755,
+            0.0005792226659832523,
+            0.0009013223330257461,
+            0.0006185284579405562,
+            0.0005849860830930993,
+            0.0005794924580259248,
+            0.0007431085829157383
+          ],
+          "median_seconds": 0.0006185284579405562,
+          "min_seconds": 0.0005792226659832523,
+          "max_seconds": 0.0009013223330257461,
+          "relative_range": 0.5207515723932128,
+          "speedup": 1.0
+        },
+        "batched": {
+          "samples_seconds_per_call": [
+            9.621792007237673e-06,
+            8.250916958786547e-06,
+            9.325541090220213e-06,
+            8.477582945488393e-06,
+            8.694209042005242e-06,
+            9.057958028279246e-06,
+            8.254624903202056e-06
+          ],
+          "median_seconds": 8.694209042005242e-06,
+          "min_seconds": 8.250916958786547e-06,
+          "max_seconds": 9.621792007237673e-06,
+          "relative_range": 0.15767679864009176,
+          "speedup": 71.14257949770875
+        },
+        "chunked": {
+          "samples_seconds_per_call": [
+            1.6674041980877518e-05,
+            1.172795903403312e-05,
+            8.889375021681189e-06,
+            8.797083981335164e-06,
+            9.401999996043742e-06,
+            8.91199999023229e-06,
+            8.610292105004192e-06
+          ],
+          "median_seconds": 8.91199999023229e-06,
+          "min_seconds": 8.610292105004192e-06,
+          "max_seconds": 1.6674041980877518e-05,
+          "relative_range": 0.9048193317674303,
+          "speedup": 69.40400119148052
+        }
+      },
+      "observations": 16,
+      "predictor_columns": 2,
+      "response_linear_predictors": 1,
+      "kind": "joint",
+      "output_shape": [
+        16,
+        16
+      ],
+      "equivalence": {
+        "baseline": {
+          "maximum_absolute_difference": 0.0,
+          "maximum_scaled_difference": 0.0,
+          "bitwise_equal": true
+        },
+        "batched": {
+          "maximum_absolute_difference": 0.0,
+          "maximum_scaled_difference": 0.0,
+          "bitwise_equal": true
+        },
+        "chunked": {
+          "maximum_absolute_difference": 0.0,
+          "maximum_scaled_difference": 0.0,
+          "bitwise_equal": true
+        }
+      },
+      "peak_python_bytes": {
+        "baseline": 7808,
+        "batched": 9792,
+        "chunked": 9944
+      }
+    },
+    {
+      "batch_calls": 99,
+      "timings": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.00992521506056867,
+            0.010837620373514264,
+            0.010556510100470423,
+            0.00979621338333483,
+            0.011332838384509838,
+            0.012362008837917162,
+            0.01218538215228667
+          ],
+          "median_seconds": 0.010837620373514264,
+          "min_seconds": 0.00979621338333483,
+          "max_seconds": 0.012362008837917162,
+          "relative_range": 0.23674896943731316,
+          "speedup": 1.0
+        },
+        "batched": {
+          "samples_seconds_per_call": [
+            0.000438825333152305,
+            0.0005161393036350909,
+            0.0003558333335218556,
+            0.0003499852627459349,
+            0.00044721843336116183,
+            0.0003758366960524158,
+            0.00051330050542913
+          ],
+          "median_seconds": 0.000438825333152305,
+          "min_seconds": 0.0003499852627459349,
+          "max_seconds": 0.0005161393036350909,
+          "relative_range": 0.3786336574864246,
+          "speedup": 24.696888613203203
+        },
+        "chunked": {
+          "samples_seconds_per_call": [
+            0.0006160959589643159,
+            0.00042692465693548775,
+            0.0003680580805968305,
+            0.00036158374830553625,
+            0.0004958830000080093,
+            0.00037948147398466714,
+            0.0006106590906233348
+          ],
+          "median_seconds": 0.00042692465693548775,
+          "min_seconds": 0.00036158374830553625,
+          "max_seconds": 0.0006160959589643159,
+          "relative_range": 0.5961525213504799,
+          "speedup": 25.385323141811245
+        }
+      },
+      "observations": 64,
+      "predictor_columns": 2,
+      "response_linear_predictors": 2,
+      "kind": "joint",
+      "output_shape": [
+        128,
+        128
+      ],
+      "equivalence": {
+        "baseline": {
+          "maximum_absolute_difference": 0.0,
+          "maximum_scaled_difference": 0.0,
+          "bitwise_equal": true
+        },
+        "batched": {
+          "maximum_absolute_difference": 0.0,
+          "maximum_scaled_difference": 0.0,
+          "bitwise_equal": true
+        },
+        "chunked": {
+          "maximum_absolute_difference": 0.0,
+          "maximum_scaled_difference": 0.0,
+          "bitwise_equal": true
+        }
+      },
+      "peak_python_bytes": {
+        "baseline": 393920,
+        "batched": 524904,
+        "chunked": 525056
+      }
+    },
+    {
+      "batch_calls": 13,
+      "timings": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.050935137775153495,
+            0.04848100000526756,
+            0.05014291346574632,
+            0.04798811215620775,
+            0.04738569230091973,
+            0.04327855446340086,
+            0.05196250000825295
+          ],
+          "median_seconds": 0.04848100000526756,
+          "min_seconds": 0.04327855446340086,
+          "max_seconds": 0.05196250000825295,
+          "relative_range": 0.17912059454030563,
+          "speedup": 1.0
+        },
+        "batched": {
+          "samples_seconds_per_call": [
+            0.00579262176492753,
+            0.002820830075786664,
+            0.0026766153840491404,
+            0.002814535230684739,
+            0.005648810926896448,
+            0.0027475000018827044,
+            0.010412387845392983
+          ],
+          "median_seconds": 0.002820830075786664,
+          "min_seconds": 0.0026766153840491404,
+          "max_seconds": 0.010412387845392983,
+          "relative_range": 2.7423744974026896,
+          "speedup": 17.186784989786148
+        },
+        "chunked": {
+          "samples_seconds_per_call": [
+            0.0035220769305641833,
+            0.003338355768042115,
+            0.002662750005793686,
+            0.0027672275363539276,
+            0.008106390999343533,
+            0.0036360929236532403,
+            0.0036549230840486977
+          ],
+          "median_seconds": 0.0035220769305641833,
+          "min_seconds": 0.002662750005793686,
+          "max_seconds": 0.008106390999343533,
+          "relative_range": 1.5455769708806044,
+          "speedup": 13.76488956971807
+        }
+      },
+      "observations": 128,
+      "predictor_columns": 4,
+      "response_linear_predictors": 3,
+      "kind": "joint",
+      "output_shape": [
+        384,
+        384
+      ],
+      "equivalence": {
+        "baseline": {
+          "maximum_absolute_difference": 0.0,
+          "maximum_scaled_difference": 0.0,
+          "bitwise_equal": true
+        },
+        "batched": {
+          "maximum_absolute_difference": 0.0,
+          "maximum_scaled_difference": 0.0,
+          "bitwise_equal": true
+        },
+        "chunked": {
+          "maximum_absolute_difference": 0.0,
+          "maximum_scaled_difference": 0.0,
+          "bitwise_equal": true
+        }
+      },
+      "peak_python_bytes": {
+        "baseline": 2425680,
+        "batched": 3933360,
+        "chunked": 3147216
+      }
+    },
+    {
+      "batch_calls": 6,
+      "timings": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.20354371533418694,
+            0.16639269449903318,
+            0.16379984016142166,
+            0.16134184717278308,
+            0.19780334715809053,
+            0.2072987361655881,
+            0.21789620832229653
+          ],
+          "median_seconds": 0.19780334715809053,
+          "min_seconds": 0.16134184717278308,
+          "max_seconds": 0.21789620832229653,
+          "relative_range": 0.2859120533704289,
+          "speedup": 1.0
+        },
+        "batched": {
+          "samples_seconds_per_call": [
+            0.009062361166191598,
+            0.006286236166488379,
+            0.006740257008156429,
+            0.006207180500496179,
+            0.009228763830227157,
+            0.008726006839424372,
+            0.010446757000560561
+          ],
+          "median_seconds": 0.008726006839424372,
+          "min_seconds": 0.006207180500496179,
+          "max_seconds": 0.010446757000560561,
+          "relative_range": 0.48585528043707726,
+          "speedup": 22.66825488428554
+        },
+        "chunked": {
+          "samples_seconds_per_call": [
+            0.008311486162710935,
+            0.011263597174547613,
+            0.007057770815057059,
+            0.006755541660822928,
+            0.00823936116648838,
+            0.008376124994053194,
+            0.00820616667624563
+          ],
+          "median_seconds": 0.00823936116648838,
+          "min_seconds": 0.006755541660822928,
+          "max_seconds": 0.011263597174547613,
+          "relative_range": 0.5471365343298843,
+          "speedup": 24.007121809711183
+        }
+      },
+      "observations": 256,
+      "predictor_columns": 3,
+      "response_linear_predictors": 2,
+      "kind": "joint",
+      "output_shape": [
+        512,
+        512
+      ],
+      "equivalence": {
+        "baseline": {
+          "maximum_absolute_difference": 0.0,
+          "maximum_scaled_difference": 0.0,
+          "bitwise_equal": true
+        },
+        "batched": {
+          "maximum_absolute_difference": 0.0,
+          "maximum_scaled_difference": 0.0,
+          "bitwise_equal": true
+        },
+        "chunked": {
+          "maximum_absolute_difference": 0.0,
+          "maximum_scaled_difference": 0.0,
+          "bitwise_equal": true
+        }
+      },
+      "peak_python_bytes": {
+        "baseline": 4261624,
+        "batched": 7341184,
+        "chunked": 4785912
+      }
+    },
+    {
+      "batch_calls": 1000,
+      "timings": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.00016623891703784467,
+            0.00016413045895751564,
+            0.00018165874993428588,
+            0.00018917316698934883,
+            0.000190194790950045,
+            0.00016639520809985696,
+            0.00016451437503565102
+          ],
+          "median_seconds": 0.00016639520809985696,
+          "min_seconds": 0.00016413045895751564,
+          "max_seconds": 0.000190194790950045,
+          "relative_range": 0.1566411214010901,
+          "speedup": 1.0
+        },
+        "batched": {
+          "samples_seconds_per_call": [
+            3.2686749938875436e-05,
+            3.2656375085934995e-05,
+            3.339262492954731e-05,
+            4.084387491457164e-05,
+            3.235570807009936e-05,
+            3.331620793323964e-05,
+            3.2391041982918974e-05
+          ],
+          "median_seconds": 3.2686749938875436e-05,
+          "min_seconds": 3.235570807009936e-05,
+          "max_seconds": 4.084387491457164e-05,
+          "relative_range": 0.25968219111246127,
+          "speedup": 5.090601188892066
+        },
+        "chunked": {
+          "samples_seconds_per_call": [
+            3.2501499983482065e-05,
+            3.212554100900888e-05,
+            3.7536040996201335e-05,
+            5.016091698780656e-05,
+            3.2774334074929356e-05,
+            3.4290957963094116e-05,
+            4.81683750404045e-05
+          ],
+          "median_seconds": 3.4290957963094116e-05,
+          "min_seconds": 3.212554100900888e-05,
+          "max_seconds": 5.016091698780656e-05,
+          "relative_range": 0.5259513600701495,
+          "speedup": 4.852451432792894
+        }
+      },
+      "observations": 64,
+      "predictor_columns": 2,
+      "response_linear_predictors": 2,
+      "kind": "local",
+      "output_shape": [
+        128,
+        128
+      ],
+      "equivalence": {
+        "baseline": {
+          "maximum_absolute_difference": 0.0,
+          "maximum_scaled_difference": 0.0,
+          "bitwise_equal": true
+        },
+        "batched": {
+          "maximum_absolute_difference": 0.0,
+          "maximum_scaled_difference": 0.0,
+          "bitwise_equal": true
+        },
+        "chunked": {
+          "maximum_absolute_difference": 0.0,
+          "maximum_scaled_difference": 0.0,
+          "bitwise_equal": true
+        }
+      },
+      "peak_python_bytes": {
+        "baseline": 393920,
+        "batched": 396640,
+        "chunked": 396640
+      }
+    },
+    {
+      "batch_calls": 47,
+      "timings": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.0021091365116707823,
+            0.0014554414888249432,
+            0.0014589955742926673,
+            0.0013699166580757244,
+            0.0013124964477375467,
+            0.0012734210851820225,
+            0.001268270383390816
+          ],
+          "median_seconds": 0.0013699166580757244,
+          "min_seconds": 0.001268270383390816,
+          "max_seconds": 0.0021091365116707823,
+          "relative_range": 0.613808236671202,
+          "speedup": 1.0
+        },
+        "batched": {
+          "samples_seconds_per_call": [
+            0.0007652331495340517,
+            0.0007538546169018175,
+            0.0008257393616231833,
+            0.0007755842129204501,
+            0.000710089532460304,
+            0.0007415815761828042,
+            0.000747155147961321
+          ],
+          "median_seconds": 0.0007538546169018175,
+          "min_seconds": 0.000710089532460304,
+          "max_seconds": 0.0008257393616231833,
+          "relative_range": 0.15341131641293843,
+          "speedup": 1.8172159821820701
+        },
+        "chunked": {
+          "samples_seconds_per_call": [
+            0.0007213421904065825,
+            0.0007497473406863022,
+            0.0007687349372761363,
+            0.000788691488312597,
+            0.0008891746377017586,
+            0.0008045452141619109,
+            0.0009588856383801458
+          ],
+          "median_seconds": 0.000788691488312597,
+          "min_seconds": 0.0007213421904065825,
+          "max_seconds": 0.0009588856383801458,
+          "relative_range": 0.30118677771176,
+          "speedup": 1.736948703486907
+        }
+      },
+      "observations": 256,
+      "predictor_columns": 4,
+      "response_linear_predictors": 3,
+      "kind": "local",
+      "output_shape": [
+        768,
+        768
+      ],
+      "equivalence": {
+        "baseline": {
+          "maximum_absolute_difference": 0.0,
+          "maximum_scaled_difference": 0.0,
+          "bitwise_equal": true
+        },
+        "batched": {
+          "maximum_absolute_difference": 0.0,
+          "maximum_scaled_difference": 0.0,
+          "bitwise_equal": true
+        },
+        "chunked": {
+          "maximum_absolute_difference": 0.0,
+          "maximum_scaled_difference": 0.0,
+          "bitwise_equal": true
+        }
+      },
+      "peak_python_bytes": {
+        "baseline": 9500464,
+        "batched": 9521032,
+        "chunked": 9521032
+      }
+    }
+  ],
+  "fit_case": {
+    "observations": 12,
+    "family": "poisson",
+    "predictor_columns": 2,
+    "equivalence_max_abs": {
+      "coefficients": 0.0,
+      "coefficient_covariance": 0.0,
+      "thresholds": 0.0,
+      "threshold_covariance": 0.0,
+      "random_modes": 0.0,
+      "log_likelihood": 0.0,
+      "coefficient_prior_sd": 0.0
+    },
+    "baseline_log_likelihood": -18.60612979014106,
+    "batch_calls": 1,
+    "timings": {
+      "baseline": {
+        "samples_seconds_per_call": [
+          0.15549920802004635,
+          0.1335588750662282,
+          0.22065625002142042,
+          0.12121699994895607,
+          0.12678954098373652,
+          0.11033862503245473,
+          0.11065375001635402
+        ],
+        "median_seconds": 0.12678954098373652,
+        "min_seconds": 0.11033862503245473,
+        "max_seconds": 0.22065625002142042,
+        "relative_range": 0.8700845837364164,
+        "speedup": 1.0
+      },
+      "chunked": {
+        "samples_seconds_per_call": [
+          0.140371041954495,
+          0.12044183304533362,
+          0.055916083976626396,
+          0.06329249998088926,
+          0.05461220897268504,
+          0.05266149993985891,
+          0.0537667500320822
+        ],
+        "median_seconds": 0.055916083976626396,
+        "min_seconds": 0.05266149993985891,
+        "max_seconds": 0.140371041954495,
+        "relative_range": 1.5685923579930912,
+        "speedup": 2.267496791025925
+      }
+    }
+  }
+}

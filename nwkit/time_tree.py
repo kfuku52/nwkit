@@ -238,7 +238,7 @@ def _validate_mcmctree_header(table_source):
         table_source.seek(0)
 
 
-def _read_mcmctree_dataframe(source):
+def read_mcmctree_table(source):
     is_file = source != "-" and os.path.isfile(source)
     if is_file:
         if os.path.getsize(source) == 0:
@@ -259,33 +259,15 @@ def _read_mcmctree_dataframe(source):
     return dataframe
 
 
-def _validate_age_order(tree, values, mapping, internal_ids, burnin, thin):
-    id_to_column = {node_id: index for index, node_id in enumerate(internal_ids)}
-    node_to_id = {node: node_id for node_id, node in mapping.items()}
-    for child in tree.traverse():
-        if child.is_root or child.is_leaf:
-            continue
-        parent = child.up
-        parent_ages = values[:, id_to_column[node_to_id[parent]]]
-        child_ages = values[:, id_to_column[node_to_id[child]]]
-        excess = child_ages - parent_ages
-        roundoff = np.maximum(
-            np.maximum(parent_ages, child_ages) * 1e-12, math.ulp(0.0)
-        )
-        invalid = np.flatnonzero(excess > roundoff)
-        if invalid.size:
-            raise ValueError(
-                "MCMCtree sample {} makes child node {} older than its parent {}.".format(
-                    burnin + (int(invalid[0]) * thin) + 1,
-                    node_to_id[child],
-                    node_to_id[parent],
-                )
-            )
-
-
 def read_mcmctree_posterior(source, tree, burnin=0, thin=1):
     """Read and validate MCMCtree ``mcmc.txt`` node-age samples."""
+    return mcmctree_posterior_from_table(
+        read_mcmctree_table(source), tree, burnin, thin
+    )
 
+
+def mcmctree_posterior_from_table(dataframe, tree, burnin=0, thin=1):
+    """Validate node ages from a table produced by read_mcmctree_table."""
     if any(
         len(node.get_children()) != 2 for node in tree.traverse() if not node.is_leaf
     ):
@@ -297,7 +279,6 @@ def read_mcmctree_posterior(source, tree, burnin=0, thin=1):
         raise ValueError("'--posterior-burnin' must be zero or greater.")
     if thin < 1:
         raise ValueError("'--posterior-thin' must be at least 1.")
-    dataframe = _read_mcmctree_dataframe(source)
     mapping = paml_node_mapping(tree)
     internal_ids = tuple(
         node_id for node_id, node in mapping.items() if not node.is_leaf
@@ -321,9 +302,10 @@ def read_mcmctree_posterior(source, tree, burnin=0, thin=1):
         raise ValueError(
             "MCMCtree node-age columns must contain numeric values."
         ) from exc
-    if not np.isfinite(values).all():
+    minimum = values.min(initial=0.0)
+    if not math.isfinite(minimum) or not math.isfinite(values.max(initial=0.0)):
         raise ValueError("MCMCtree node-age samples must be finite.")
-    if (values < 0.0).any():
+    if minimum < 0.0:
         raise ValueError("MCMCtree node-age samples must be non-negative.")
     _validate_age_order(tree, values, mapping, internal_ids, burnin, thin)
     generations = None
@@ -339,7 +321,8 @@ def read_mcmctree_posterior(source, tree, burnin=0, thin=1):
     )
 
 
-def _hpd_interval(ordered, level):
+def _hpd_interval(values, level, *, presorted=False):
+    ordered = values if presorted else np.sort(np.asarray(values, dtype=float))
     count = len(ordered)
     alpha = 1.0 - float(level)
     initial_low = int(count * alpha / 2.0 + 1e-12)
@@ -352,39 +335,23 @@ def _hpd_interval(ordered, level):
     return float(ordered[start]), float(ordered[start + index_width])
 
 
-def _age_order_statistics(values, level, kind):
-    count = len(values)
-    middle_low = (count - 1) // 2
-    middle_high = count // 2
-    if kind == "hpd":
-        ordered = np.sort(values)
-        low, high = _hpd_interval(ordered, level)
-    else:
-        tail = (1.0 - level) / 2.0
-        low_index = min(count - 1, int(count * tail + 1e-12))
-        high_index = min(count - 1, int(count * (1.0 - tail) + 1e-12))
-        ordered = np.partition(
-            values, sorted({low_index, middle_low, middle_high, high_index})
-        )
-        low, high = float(ordered[low_index]), float(ordered[high_index])
-    lower_middle = float(ordered[middle_low])
-    upper_middle = float(ordered[middle_high])
-    total = lower_middle + upper_middle
-    median = (
-        total * 0.5
-        if math.isfinite(total)
-        else lower_middle + (upper_middle - lower_middle) * 0.5
+def _equal_tail_indices(count, level):
+    tail = (1.0 - float(level)) / 2.0
+    return (
+        min(count - 1, int(count * tail + 1e-12)),
+        min(count - 1, int(count * (1.0 - tail) + 1e-12)),
     )
-    return median, low, high
 
 
-def _mean_age(values):
-    with np.errstate(over="ignore"):
-        mean = float(np.mean(values))
-    if math.isinf(mean):
-        max_age = float(np.max(values))
-        return max_age * float(np.mean(values / max_age))
-    return mean
+def _credible_interval(values, level, kind, *, presorted=False):
+    kind = str(kind).strip().lower()
+    if kind == "hpd":
+        return _hpd_interval(values, level, presorted=presorted)
+    if kind == "equal-tail":
+        ordered = values if presorted else np.sort(np.asarray(values, dtype=float))
+        low_index, high_index = _equal_tail_indices(len(ordered), level)
+        return float(ordered[low_index]), float(ordered[high_index])
+    raise ValueError("'--posterior-ci' must be hpd or equal-tail.")
 
 
 def summarize_mcmctree_posterior(tree, posterior, point="mean", ci="hpd", level=0.95):
@@ -460,34 +427,61 @@ def posterior_sample_tree(tree, posterior, sample_index):
     return copied
 
 
-def _dated_age_from_child_paths(child_ages, tolerance):
-    largest = max(child_ages)
-    if not math.isfinite(largest) or largest - min(child_ages) > max(
-        math.ulp(0.0), tolerance * largest
-    ):
-        raise ValueError(
-            "Dated-tree branch lengths are not ultrametric at an internal node."
-        )
-    return _mean_age(np.asarray(child_ages))
-
-
-def infer_node_ages_from_branch_lengths(tree, tolerance=1e-5):
-    """Annotate an ultrametric dated tree with ages measured back from tips."""
-
+def node_age_estimates_and_ranges(tree):
+    """Compute ages from child means and the range of paths to extant tips."""
     age_by_node = {}
+    ranges = {}
     for node in tree.traverse(strategy="postorder"):
         if node.is_leaf:
             age_by_node[node] = 0.0
-            node.props.setdefault("age", 0.0)
+            ranges[node] = (0.0, 0.0)
             continue
-        child_ages = [
-            age_by_node[child] + (0.0 if child.dist is None else float(child.dist))
-            for child in node.get_children()
-        ]
-        age = _dated_age_from_child_paths(child_ages, tolerance)
+        child_ages, minima, maxima = [], [], []
+        for child in node.children:
+            distance = 0.0 if child.dist is None else float(child.dist)
+            if not math.isfinite(distance) or distance < 0.0:
+                raise ValueError(
+                    "Dated-tree branch lengths must be finite and nonnegative."
+                )
+            child_ages.append(age_by_node[child] + distance)
+            low, high = ranges[child]
+            minima.append(low + distance)
+            maxima.append(high + distance)
+        age = _mean_age(np.asarray(child_ages))
+        if not math.isfinite(age) or not math.isfinite(max(maxima)):
+            raise ValueError("Dated-tree path lengths must be finite.")
         age_by_node[node] = age
+        ranges[node] = (min(minima), max(maxima))
+    return age_by_node, ranges
+
+
+def infer_node_ages_from_branch_lengths(tree, tolerance=1e-5):
+    """Annotate ages, allowing rounding within one whole-tree error budget.
+
+    The root-to-tip spread must not exceed ``max(tolerance, tolerance *
+    height)``. Scaling by the tree height keeps rounded short terminal branches
+    from failing a much tighter local test. Tracking the extreme paths, rather
+    than just child means, prevents errors accumulating unnoticed in deep trees.
+    Existing point estimates, intervals and branch lengths are preserved.
+    """
+
+    tolerance = float(tolerance)
+    if not math.isfinite(tolerance) or tolerance < 0.0:
+        raise ValueError("Dated-tree tolerance must be finite and nonnegative.")
+    age_by_node, ranges = node_age_estimates_and_ranges(tree)
+    low, high = ranges[tree]
+    if high - low > max(tolerance, tolerance * high):
+        raise ValueError(
+            "Dated-tree branch lengths are not ultrametric at an internal node."
+        )
+    # Publish only after the complete tree passes validation.
+    for node, age in age_by_node.items():
         node.props.setdefault("age", age)
-        if "age_ci_low" in node.props and "age_mean" not in node.props:
+        if (
+            not node.is_leaf
+            and "age_ci_low" in node.props
+            and "age_mean" not in node.props
+        ):
             node.props["age_mean"] = age
     return tree
 
@@ -503,3 +497,62 @@ def prepare_time_tree_annotations(tree):
         "calibration_count": calibration_count,
         "credible_interval_count": ci_count,
     }
+
+
+def _validate_age_order(tree, values, mapping, internal_ids, burnin, thin):
+    id_to_column = {node_id: index for index, node_id in enumerate(internal_ids)}
+    node_to_id = {node: node_id for node_id, node in mapping.items()}
+    for child in tree.traverse():
+        if child.is_root or child.is_leaf:
+            continue
+        parent = child.up
+        parent_ages = values[:, id_to_column[node_to_id[parent]]]
+        child_ages = values[:, id_to_column[node_to_id[child]]]
+        excess = child_ages - parent_ages
+        roundoff = np.maximum(
+            np.maximum(parent_ages, child_ages) * 1e-12, math.ulp(0.0)
+        )
+        invalid = np.flatnonzero(excess > roundoff)
+        if invalid.size:
+            raise ValueError(
+                "MCMCtree sample {} makes child node {} older than its parent {}.".format(
+                    burnin + (int(invalid[0]) * thin) + 1,
+                    node_to_id[child],
+                    node_to_id[parent],
+                )
+            )
+
+
+def _mean_age(values):
+    with np.errstate(over="ignore"):
+        mean = float(np.mean(values))
+    if math.isinf(mean):
+        max_age = float(np.max(values))
+        return max_age * float(np.mean(values / max_age))
+    return mean
+
+
+def _age_order_statistics(values, level, kind):
+    count = len(values)
+    middle_low = (count - 1) // 2
+    middle_high = count // 2
+    if kind == "hpd":
+        ordered = np.sort(values)
+        low, high = _hpd_interval(ordered, level, presorted=True)
+    else:
+        tail = (1.0 - level) / 2.0
+        low_index = min(count - 1, int(count * tail + 1e-12))
+        high_index = min(count - 1, int(count * (1.0 - tail) + 1e-12))
+        ordered = np.partition(
+            values, sorted({low_index, middle_low, middle_high, high_index})
+        )
+        low, high = float(ordered[low_index]), float(ordered[high_index])
+    lower_middle = float(ordered[middle_low])
+    upper_middle = float(ordered[middle_high])
+    total = lower_middle + upper_middle
+    median = (
+        total * 0.5
+        if math.isfinite(total)
+        else lower_middle + (upper_middle - lower_middle) * 0.5
+    )
+    return median, low, high

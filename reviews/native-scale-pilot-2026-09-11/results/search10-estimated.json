@@ -1,0 +1,3728 @@
+{
+  "configuration": {
+    "mode": "search",
+    "tips": 1000,
+    "traits": 1,
+    "shifts": 10,
+    "shape": "balanced",
+    "error": "estimated",
+    "shared": false,
+    "pool": 128,
+    "refits": 256,
+    "screening": 100000,
+    "draws": 19,
+    "support": 2,
+    "seed": 2026091107,
+    "profile": false,
+    "output": "/Users/kf/repos/nwkit/reviews/native-scale-pilot-2026-09-11/results/search10-estimated.json"
+  },
+  "python": "3.10.14",
+  "numpy": "1.26.4",
+  "scipy": "1.15.2",
+  "platform": "macOS-26.6.2-x86_64-i386-64bit",
+  "threads": {
+    "OPENBLAS_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1",
+    "OMP_NUM_THREADS": "1",
+    "VECLIB_MAXIMUM_THREADS": "1"
+  },
+  "input_sha256": "d5ed39b0d903de7f446e443af8409a77450cb3175becc34f0f5d478f3c1bfd56",
+  "truth": {
+    "shifts": [
+      511,
+      1131,
+      1239,
+      1347,
+      1455,
+      1564,
+      1672,
+      1781,
+      1889,
+      1998
+    ],
+    "groups": [
+      [
+        0
+      ],
+      [
+        511
+      ],
+      [
+        1131
+      ],
+      [
+        1239
+      ],
+      [
+        1347
+      ],
+      [
+        1455
+      ],
+      [
+        1564
+      ],
+      [
+        1672
+      ],
+      [
+        1781
+      ],
+      [
+        1889
+      ],
+      [
+        1998
+      ]
+    ]
+  },
+  "fit_options": {
+    "root_model": "OUfixedRoot",
+    "estimate_measurement_error": true,
+    "alpha_height_bounds": [
+      1e-06,
+      1000.0
+    ],
+    "variance_bounds": [
+      1e-10,
+      10000.0
+    ],
+    "optimizer_starts": 3,
+    "maxiter": 300
+  },
+  "search_options": {
+    "max_shifts": 10,
+    "convergence": false,
+    "candidate_pool": 128,
+    "refit_budget": 256,
+    "screening_budget": 100000,
+    "beam_width": 2,
+    "lasso_iterations": 150,
+    "memory_limit": 536870912
+  },
+  "search_calls": [
+    {
+      "status": "ok",
+      "metadata": {
+        "strategy": "group_lasso_beam",
+        "complete_discrete_enumeration": false,
+        "continuous_global_optimum_certified": false,
+        "screening": {
+          "method": "null_whitened_group_lasso",
+          "total_branches": 1998,
+          "preliminary_branches": 512,
+          "pool_size": 128,
+          "pool": [
+            1998,
+            1672,
+            1889,
+            1455,
+            1781,
+            1131,
+            1347,
+            1239,
+            1564,
+            511,
+            264,
+            887,
+            570,
+            910,
+            687,
+            1240,
+            496,
+            400,
+            1046,
+            1903,
+            1994,
+            957,
+            1468,
+            1569,
+            1571,
+            1074,
+            1746,
+            266,
+            1348,
+            1431,
+            1285,
+            683,
+            379,
+            1004,
+            1356,
+            1206,
+            1175,
+            1535,
+            895,
+            817,
+            63,
+            247,
+            50,
+            714,
+            591,
+            1025,
+            245,
+            366,
+            28,
+            1634,
+            775,
+            1534,
+            1181,
+            693,
+            105,
+            1518,
+            1840,
+            1816,
+            1612,
+            657,
+            629,
+            1029,
+            1436,
+            459,
+            1080,
+            1032,
+            651,
+            1586,
+            939,
+            1868,
+            1313,
+            701,
+            1055,
+            1197,
+            1178,
+            1933,
+            364,
+            1607,
+            188,
+            723,
+            1225,
+            1483,
+            490,
+            1979,
+            575,
+            1139,
+            1411,
+            1196,
+            904,
+            1238,
+            1010,
+            1855,
+            1311,
+            442,
+            692,
+            12,
+            1981,
+            914,
+            894,
+            999,
+            1266,
+            462,
+            1085,
+            1895,
+            902,
+            118,
+            1616,
+            1490,
+            372,
+            1063,
+            1563,
+            1253,
+            589,
+            1568,
+            674,
+            1907,
+            1219,
+            1401,
+            439,
+            143,
+            1677,
+            1408,
+            1454,
+            1419,
+            1838,
+            1503,
+            1449,
+            524
+          ],
+          "path": [
+            {
+              "relative_strength": 0.95,
+              "strength": 6.820955499412592,
+              "iterations": 109,
+              "kkt_residual": 5.0085399677435305e-05,
+              "converged": true
+            },
+            {
+              "relative_strength": 0.43891950764785354,
+              "strength": 3.1514215047264145,
+              "iterations": 15,
+              "kkt_residual": 3.329563799914226e-05,
+              "converged": true
+            },
+            {
+              "relative_strength": 0.20278982546719382,
+              "strength": 1.4560214476267108,
+              "iterations": 30,
+              "kkt_residual": 7.105402795293259e-05,
+              "converged": true
+            },
+            {
+              "relative_strength": 0.09369306352637355,
+              "strength": 0.6727118072810853,
+              "iterations": 76,
+              "kkt_residual": 6.221888849655688e-05,
+              "converged": true
+            },
+            {
+              "relative_strength": 0.04328811927685784,
+              "strength": 0.3108066686744334,
+              "iterations": 73,
+              "kkt_residual": 6.070932669971496e-05,
+              "converged": true
+            },
+            {
+              "relative_strength": 0.02,
+              "strength": 0.14359906314552826,
+              "iterations": 99,
+              "kkt_residual": 6.935425567181075e-05,
+              "converged": true
+            }
+          ],
+          "all_paths_converged": true,
+          "candidate_generation_only": true
+        },
+        "quick_evaluations": 6783,
+        "refitted_candidates": 61,
+        "refit_budget": 256,
+        "screening_budget": 100000,
+        "budget_exhausted": false,
+        "refinement": "one_pass_drop_move_merge_split",
+        "candidate_ranking": "fixed_null_covariance_profiles; final candidates refitted without penalties"
+      },
+      "largest_fitted_shift_count": 10,
+      "evaluations": 55407,
+      "seconds": 205.09630450000986
+    }
+  ],
+  "search_seconds": 205.0963068329729,
+  "candidates": [
+    {
+      "shift_branch_ids": [],
+      "groups": [
+        [
+          0
+        ]
+      ],
+      "complexity": 0,
+      "log_likelihood": -1409.9961852385188,
+      "evaluations": 856,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 2,
+      "log_likelihood": -1383.5851569729616,
+      "evaluations": 872,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1672
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1672
+        ]
+      ],
+      "complexity": 2,
+      "log_likelihood": -1384.7968921580668,
+      "evaluations": 886,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1889
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1889
+        ]
+      ],
+      "complexity": 2,
+      "log_likelihood": -1386.9566660793787,
+      "evaluations": 884,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1781
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1781
+        ]
+      ],
+      "complexity": 2,
+      "log_likelihood": -1389.0109931411118,
+      "evaluations": 880,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1672,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1672
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 4,
+      "log_likelihood": -1357.0328566531439,
+      "evaluations": 882,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 4,
+      "log_likelihood": -1359.3247504601977,
+      "evaluations": 948,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1672,
+        1889
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1672
+        ],
+        [
+          1889
+        ]
+      ],
+      "complexity": 4,
+      "log_likelihood": -1360.380410631845,
+      "evaluations": 907,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1781,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1781
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 4,
+      "log_likelihood": -1361.4405132478764,
+      "evaluations": 897,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1672,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1672
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 6,
+      "log_likelihood": -1331.25351490617,
+      "evaluations": 888,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1672,
+        1781,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 6,
+      "log_likelihood": -1333.5160027596482,
+      "evaluations": 983,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1347,
+        1672,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1347
+        ],
+        [
+          1672
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 6,
+      "log_likelihood": -1334.3920581183238,
+      "evaluations": 925,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1455,
+        1672,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1455
+        ],
+        [
+          1672
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 6,
+      "log_likelihood": -1335.6930904883218,
+      "evaluations": 923,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 8,
+      "log_likelihood": -1306.2619922813394,
+      "evaluations": 896,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1347,
+        1672,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1347
+        ],
+        [
+          1672
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 8,
+      "log_likelihood": -1307.0082997718343,
+      "evaluations": 907,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1455,
+        1672,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1455
+        ],
+        [
+          1672
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 8,
+      "log_likelihood": -1308.6041960144198,
+      "evaluations": 921,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1347,
+        1672,
+        1781,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1347
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 8,
+      "log_likelihood": -1309.4385536780467,
+      "evaluations": 908,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1347,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1347
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 10,
+      "log_likelihood": -1280.376503070705,
+      "evaluations": 966,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1455,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1455
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 10,
+      "log_likelihood": -1282.249009982537,
+      "evaluations": 926,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1347,
+        1455,
+        1672,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1347
+        ],
+        [
+          1455
+        ],
+        [
+          1672
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 10,
+      "log_likelihood": -1282.882325218349,
+      "evaluations": 884,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1131,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1131
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 10,
+      "log_likelihood": -1284.279869343505,
+      "evaluations": 882,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1347,
+        1455,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1347
+        ],
+        [
+          1455
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 12,
+      "log_likelihood": -1254.6750344641082,
+      "evaluations": 889,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1131,
+        1347,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1131
+        ],
+        [
+          1347
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 12,
+      "log_likelihood": -1256.665729288791,
+      "evaluations": 854,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        511,
+        1347,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          511
+        ],
+        [
+          1347
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 12,
+      "log_likelihood": -1259.0996423638658,
+      "evaluations": 970,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1239,
+        1347,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1239
+        ],
+        [
+          1347
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 12,
+      "log_likelihood": -1254.9352226702795,
+      "evaluations": 917,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1131,
+        1347,
+        1455,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1131
+        ],
+        [
+          1347
+        ],
+        [
+          1455
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 14,
+      "log_likelihood": -1229.2857903927977,
+      "evaluations": 1003,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        511,
+        1347,
+        1455,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          511
+        ],
+        [
+          1347
+        ],
+        [
+          1455
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 14,
+      "log_likelihood": -1232.3568659517346,
+      "evaluations": 893,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1239,
+        1347,
+        1455,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1239
+        ],
+        [
+          1347
+        ],
+        [
+          1455
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 14,
+      "log_likelihood": -1227.1032134393936,
+      "evaluations": 903,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1347,
+        1455,
+        1564,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1347
+        ],
+        [
+          1455
+        ],
+        [
+          1564
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 14,
+      "log_likelihood": -1232.4956017774057,
+      "evaluations": 859,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        511,
+        1131,
+        1347,
+        1455,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          511
+        ],
+        [
+          1131
+        ],
+        [
+          1347
+        ],
+        [
+          1455
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 16,
+      "log_likelihood": -1205.884826962981,
+      "evaluations": 880,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1131,
+        1239,
+        1347,
+        1455,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1131
+        ],
+        [
+          1239
+        ],
+        [
+          1347
+        ],
+        [
+          1455
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 16,
+      "log_likelihood": -1199.0181245138679,
+      "evaluations": 913,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        511,
+        1239,
+        1347,
+        1455,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          511
+        ],
+        [
+          1239
+        ],
+        [
+          1347
+        ],
+        [
+          1455
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 16,
+      "log_likelihood": -1204.0671842909364,
+      "evaluations": 877,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1131,
+        1347,
+        1455,
+        1564,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1131
+        ],
+        [
+          1347
+        ],
+        [
+          1455
+        ],
+        [
+          1564
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 16,
+      "log_likelihood": -1205.3947845417906,
+      "evaluations": 902,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        511,
+        1131,
+        1239,
+        1347,
+        1455,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          511
+        ],
+        [
+          1131
+        ],
+        [
+          1239
+        ],
+        [
+          1347
+        ],
+        [
+          1455
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 18,
+      "log_likelihood": -1174.8175045056057,
+      "evaluations": 851,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1131,
+        1239,
+        1347,
+        1455,
+        1564,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1131
+        ],
+        [
+          1239
+        ],
+        [
+          1347
+        ],
+        [
+          1455
+        ],
+        [
+          1564
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 18,
+      "log_likelihood": -1172.196629789886,
+      "evaluations": 919,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        511,
+        1239,
+        1347,
+        1455,
+        1564,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          511
+        ],
+        [
+          1239
+        ],
+        [
+          1347
+        ],
+        [
+          1455
+        ],
+        [
+          1564
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 18,
+      "log_likelihood": -1178.6915489920816,
+      "evaluations": 922,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        264,
+        511,
+        1239,
+        1347,
+        1455,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          264
+        ],
+        [
+          511
+        ],
+        [
+          1239
+        ],
+        [
+          1347
+        ],
+        [
+          1455
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 18,
+      "log_likelihood": -1197.5170565188814,
+      "evaluations": 1047,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        511,
+        1131,
+        1239,
+        1347,
+        1455,
+        1564,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          511
+        ],
+        [
+          1131
+        ],
+        [
+          1239
+        ],
+        [
+          1347
+        ],
+        [
+          1455
+        ],
+        [
+          1564
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 20,
+      "log_likelihood": -1147.0916338137874,
+      "evaluations": 931,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        264,
+        511,
+        1131,
+        1239,
+        1347,
+        1455,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          264
+        ],
+        [
+          511
+        ],
+        [
+          1131
+        ],
+        [
+          1239
+        ],
+        [
+          1347
+        ],
+        [
+          1455
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 20,
+      "log_likelihood": -1168.1865024340211,
+      "evaluations": 866,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        496,
+        511,
+        1131,
+        1239,
+        1347,
+        1455,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          496
+        ],
+        [
+          511
+        ],
+        [
+          1131
+        ],
+        [
+          1239
+        ],
+        [
+          1347
+        ],
+        [
+          1455
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 20,
+      "log_likelihood": -1169.6015889696514,
+      "evaluations": 874,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        511,
+        687,
+        1131,
+        1239,
+        1347,
+        1455,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          511
+        ],
+        [
+          687
+        ],
+        [
+          1131
+        ],
+        [
+          1239
+        ],
+        [
+          1347
+        ],
+        [
+          1455
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 20,
+      "log_likelihood": -1170.1402415497078,
+      "evaluations": 886,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        511,
+        1131,
+        1240,
+        1347,
+        1455,
+        1564,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          511
+        ],
+        [
+          1131
+        ],
+        [
+          1240
+        ],
+        [
+          1347
+        ],
+        [
+          1455
+        ],
+        [
+          1564
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 20,
+      "log_likelihood": -1161.5658871586013,
+      "evaluations": 847,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        511,
+        1131,
+        1347,
+        1455,
+        1564,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          511
+        ],
+        [
+          1131
+        ],
+        [
+          1347
+        ],
+        [
+          1455
+        ],
+        [
+          1564
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 18,
+      "log_likelihood": -1181.1519234371285,
+      "evaluations": 923,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        511,
+        1131,
+        1239,
+        1347,
+        1564,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          511
+        ],
+        [
+          1131
+        ],
+        [
+          1239
+        ],
+        [
+          1347
+        ],
+        [
+          1564
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 18,
+      "log_likelihood": -1180.5219053796404,
+      "evaluations": 898,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1239,
+        1347,
+        1455,
+        1564,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1239
+        ],
+        [
+          1347
+        ],
+        [
+          1455
+        ],
+        [
+          1564
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 16,
+      "log_likelihood": -1202.532318911483,
+      "evaluations": 1090,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        511,
+        1131,
+        1239,
+        1347,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          511
+        ],
+        [
+          1131
+        ],
+        [
+          1239
+        ],
+        [
+          1347
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 16,
+      "log_likelihood": -1206.0112838690281,
+      "evaluations": 919,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1131,
+        1239,
+        1347,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1131
+        ],
+        [
+          1239
+        ],
+        [
+          1347
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 14,
+      "log_likelihood": -1228.9825268781046,
+      "evaluations": 1057,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        511,
+        1239,
+        1347,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          511
+        ],
+        [
+          1239
+        ],
+        [
+          1347
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 14,
+      "log_likelihood": -1233.005215583395,
+      "evaluations": 883,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1239,
+        1455,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1239
+        ],
+        [
+          1455
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 12,
+      "log_likelihood": -1257.521237263675,
+      "evaluations": 895,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1131,
+        1455,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1131
+        ],
+        [
+          1455
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 12,
+      "log_likelihood": -1258.868656115133,
+      "evaluations": 885,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1347,
+        1455,
+        1672,
+        1781,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1347
+        ],
+        [
+          1455
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 10,
+      "log_likelihood": -1285.4362476201068,
+      "evaluations": 893,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        511,
+        1672,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          511
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 10,
+      "log_likelihood": -1285.85137458308,
+      "evaluations": 849,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1347,
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1347
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 8,
+      "log_likelihood": -1311.9357860626922,
+      "evaluations": 856,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1455,
+        1672,
+        1781,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1455
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 8,
+      "log_likelihood": -1310.9661202955976,
+      "evaluations": 902,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1781,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 6,
+      "log_likelihood": -1335.8723618646166,
+      "evaluations": 915,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1347,
+        1889,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1347
+        ],
+        [
+          1889
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 6,
+      "log_likelihood": -1336.8006825692019,
+      "evaluations": 837,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1672,
+        1781,
+        1889
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ],
+        [
+          1889
+        ]
+      ],
+      "complexity": 6,
+      "log_likelihood": -1336.8184278478361,
+      "evaluations": 909,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1347,
+        1998
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1347
+        ],
+        [
+          1998
+        ]
+      ],
+      "complexity": 4,
+      "log_likelihood": -1362.4451073365935,
+      "evaluations": 921,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1672,
+        1781
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1672
+        ],
+        [
+          1781
+        ]
+      ],
+      "complexity": 4,
+      "log_likelihood": -1362.569980241712,
+      "evaluations": 923,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1347
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1347
+        ]
+      ],
+      "complexity": 2,
+      "log_likelihood": -1390.007143181735,
+      "evaluations": 913,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1455
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1455
+        ]
+      ],
+      "complexity": 2,
+      "log_likelihood": -1390.9528059466825,
+      "evaluations": 915,
+      "complete_covariance_modes": true
+    }
+  ],
+  "best_unpenalized": {
+    "shifts": [
+      511,
+      1131,
+      1239,
+      1347,
+      1455,
+      1564,
+      1672,
+      1781,
+      1889,
+      1998
+    ],
+    "groups": [
+      [
+        0
+      ],
+      [
+        511
+      ],
+      [
+        1131
+      ],
+      [
+        1239
+      ],
+      [
+        1347
+      ],
+      [
+        1455
+      ],
+      [
+        1564
+      ],
+      [
+        1672
+      ],
+      [
+        1781
+      ],
+      [
+        1889
+      ],
+      [
+        1998
+      ]
+    ],
+    "log_likelihood": -1147.0916338137874,
+    "traits": [
+      {
+        "trait": "trait0",
+        "alpha": 0.08607660156150146,
+        "alpha_height": 0.8607660156150146,
+        "alpha_status": "finite",
+        "sigma2": 0.22776427698253113,
+        "process_tip_variance": 1.086484815480906,
+        "measurement_variance": 0.026721082275137444,
+        "scaled_regime_coefficients": [
+          -0.48559798114044367,
+          19.852248251543912,
+          -35.9467693343116,
+          38.46050283000284,
+          -40.29152239496093,
+          38.43176024689382,
+          -35.42938156135996,
+          45.08206613848615,
+          -41.690343388237714,
+          44.12576575853297,
+          -45.88370877046938
+        ],
+        "coefficient_covariance": [
+          [
+            0.05450804883317507,
+            -0.003177077877148798,
+            -0.0027215003640879,
+            -0.0028011896481443953,
+            -0.0028848336340158947,
+            -0.0029811497900111674,
+            -0.003046177103709896,
+            -0.0031416706659424826,
+            -0.0032050750282074064,
+            -0.003301717959593686,
+            -0.0033497235160062123
+          ],
+          [
+            -0.003177077877148798,
+            7.55545957559883,
+            0.003647712349805989,
+            0.001150860367563835,
+            0.00039961440937286684,
+            0.0004129563655041648,
+            0.00017755069376439782,
+            0.0001831166696243635,
+            0.00018681228157486898,
+            0.00019244525002380168,
+            0.00019524332103392256
+          ],
+          [
+            -0.0027215003640879,
+            0.003647712349805989,
+            19.452423485039088,
+            0.000985832589080249,
+            0.00034231164694615456,
+            0.00035374043146860283,
+            0.00015209078795308265,
+            0.0001568586299497652,
+            0.00016002430912343842,
+            0.00016484953729770747,
+            0.00016724637853397038
+          ],
+          [
+            -0.0028011896481443953,
+            0.001150860367563835,
+            0.000985832589080249,
+            20.03327954328277,
+            0.00035233500407272735,
+            0.0003640984391681641,
+            0.00015654421598252602,
+            0.00016145166696850867,
+            0.00016471004159437875,
+            0.00016967655910437278,
+            0.0001721435831596232
+          ],
+          [
+            -0.0028848336340158947,
+            0.00039961440937286684,
+            0.00034231164694615456,
+            0.00035233500407272735,
+            20.610195066876777,
+            0.0011118956845247514,
+            0.00016121865214524045,
+            0.0001662726404287632,
+            0.0001696283106595027,
+            0.0001747431292032064,
+            0.00017728381900448855
+          ],
+          [
+            -0.0029811497900111674,
+            0.0004129563655041648,
+            0.00035374043146860283,
+            0.0003640984391681641,
+            0.0011118956845247514,
+            21.185781446651763,
+            0.000166601271325173,
+            0.0001718239974929794,
+            0.00017529170373633383,
+            0.000180577291108761,
+            0.00018320280711019672
+          ],
+          [
+            -0.003046177103709896,
+            0.00017755069376439782,
+            0.00015209078795308265,
+            0.00015654421598252602,
+            0.00016121865214524045,
+            0.000166601271325173,
+            21.753488670792102,
+            0.0012360191813885412,
+            0.00042556133548804335,
+            0.0004383933268093863,
+            0.00044476737687613966
+          ],
+          [
+            -0.0031416706659424826,
+            0.0001831166696243635,
+            0.0001568586299497652,
+            0.00016145166696850867,
+            0.0001662726404287632,
+            0.0001718239974929794,
+            0.0012360191813885412,
+            22.322468693831055,
+            0.00043890211197300554,
+            0.00045213636899331914,
+            0.0004587102369715846
+          ],
+          [
+            -0.0032050750282074064,
+            0.00018681228157486898,
+            0.00016002430912343842,
+            0.00016471004159437875,
+            0.0001696283106595027,
+            0.00017529170373633383,
+            0.00042556133548804335,
+            0.00043890211197300554,
+            22.889228370464814,
+            0.0013663157019138605,
+            0.0013861813434702243
+          ],
+          [
+            -0.003301717959593686,
+            0.00019244525002380168,
+            0.00016484953729770747,
+            0.00016967655910437278,
+            0.0001747431292032064,
+            0.000180577291108761,
+            0.0004383933268093863,
+            0.00045213636899331914,
+            0.0013663157019138605,
+            23.45286361776309,
+            0.004644955296214302
+          ],
+          [
+            -0.0033497235160062123,
+            0.00019524332103392256,
+            0.00016724637853397038,
+            0.0001721435831596232,
+            0.00017728381900448855,
+            0.00018320280711019672,
+            0.00044476737687613966,
+            0.0004587102369715846,
+            0.0013861813434702243,
+            0.004644955296214302,
+            24.009435156594407
+          ]
+        ],
+        "predicted": [
+          4.954173900012277,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -5.622367258280375,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          5.010382129982814,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -6.243229562515332,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          5.006274834095194,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -5.548432891835683,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          5.956599094665309,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -6.443120146162968,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          5.819944410463359,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -0.48559798114044367,
+          -7.042349252482387
+        ],
+        "log_likelihood": -1147.0916338137874,
+        "num_observations": 1000,
+        "num_mean_parameters": 11,
+        "optimizer": {
+          "evaluations": 931,
+          "invalid_evaluations": 0,
+          "alpha_candidates": [
+            {
+              "alpha_mode": "finite",
+              "success": true,
+              "log_likelihood": 912.5883791421854,
+              "optimizer": {
+                "success": true,
+                "starts": 3,
+                "converged_starts": 3,
+                "failed_starts": 0,
+                "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL; checked projected gradient=4.60115e-06"
+              }
+            },
+            {
+              "alpha_mode": "0.0",
+              "success": true,
+              "log_likelihood": 909.9545271574136,
+              "optimizer": {
+                "success": true,
+                "starts": 3,
+                "converged_starts": 3,
+                "failed_starts": 0,
+                "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL; checked projected gradient=2.33471e-06"
+              }
+            },
+            {
+              "alpha_mode": "inf",
+              "success": true,
+              "log_likelihood": 580.3482199928163,
+              "optimizer": {
+                "success": true,
+                "starts": 3,
+                "converged_starts": 3,
+                "failed_starts": 0,
+                "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL; checked projected gradient=2.58628e-06"
+              }
+            },
+            {
+              "alpha_mode": "finite",
+              "measurement_variance": 0.0,
+              "process_variance": 0.0,
+              "success": true,
+              "log_likelihood": -12101.603868219712,
+              "optimizer": {
+                "success": true,
+                "message": "global grid search (17 points; 4 successful local refinement(s))"
+              }
+            },
+            {
+              "alpha_mode": "0.0",
+              "measurement_variance": 0.0,
+              "process_variance": 0.0,
+              "success": true,
+              "log_likelihood": -12101.603868219716,
+              "optimizer": {
+                "success": true,
+                "message": "alpha fixed"
+              }
+            },
+            {
+              "alpha_mode": "inf",
+              "measurement_variance": 0.0,
+              "process_variance": 0.0,
+              "success": true,
+              "log_likelihood": -12101.603868219716,
+              "optimizer": {
+                "success": true,
+                "message": "alpha fixed"
+              }
+            }
+          ],
+          "continuous_globally_optimal": false,
+          "complete_alpha_modes": true,
+          "alpha_height_bounds": [
+            1e-06,
+            1000.0
+          ],
+          "normalized_variance_bounds": [
+            1e-10,
+            10000.0
+          ],
+          "alpha_estimated": true,
+          "process_variance_estimated": true,
+          "measurement_variance_estimated": true,
+          "nuisance_variance_at_numerical_bound": false,
+          "equivalent_modes_disagree_on_variance_decomposition": false
+        },
+        "identifiability_diagnostic": {
+          "method": "local_covariance_jacobian_rank; mean_information_not_assumed; not_a_global_identifiability_proof",
+          "rank_tolerance": 1e-08,
+          "rank": 3,
+          "free_covariance_parameters": [
+            "process_variance",
+            "measurement_variance",
+            "alpha"
+          ],
+          "parameter_supported": {
+            "process_variance": true,
+            "measurement_variance": true,
+            "alpha": true
+          },
+          "variance_decomposition_supported": true,
+          "finite_alpha_supported": true,
+          "between_mode_variance_ambiguity": false
+        },
+        "covariance_components_identifiable": true
+      }
+    ]
+  },
+  "status": "ok",
+  "total_seconds": 205.13118570804363,
+  "peak_rss_bytes": 285200384
+}

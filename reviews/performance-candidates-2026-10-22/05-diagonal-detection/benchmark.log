@@ -1,0 +1,15 @@
+diagonal_64
+dense_early_exit_64
+late_offdiagonal_64
+factor_diagonal_64
+factor_dense_64
+factor_late_offdiagonal_64
+diagonal_512
+dense_early_exit_512
+late_offdiagonal_512
+factor_diagonal_512
+factor_dense_512
+factor_late_offdiagonal_512
+diagonal_2048
+dense_early_exit_2048
+late_offdiagonal_2048

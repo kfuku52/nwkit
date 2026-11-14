@@ -1,0 +1,4 @@
+/opt/conda/lib/python3.12/site-packages/scipy/optimize/_numdiff.py:686: RuntimeWarning: invalid value encountered in subtract
+  df = [f_eval - f0 for f_eval in f_evals]
+/opt/conda/lib/python3.12/site-packages/scipy/optimize/_numdiff.py:721: RuntimeWarning: invalid value encountered in subtract
+  df.append(f2 - f1)

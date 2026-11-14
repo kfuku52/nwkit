@@ -1,0 +1,271 @@
+{
+  "schema_version": 1,
+  "master_seed": 20260911,
+  "cells": [
+    {
+      "cell_id": 0,
+      "family": "primary",
+      "tips": 8,
+      "scenario": "null",
+      "root_model": "OUfixedRoot",
+      "alpha_height": 2.1,
+      "sigma2_height": 0.25,
+      "standard_error": 0.0,
+      "effect": 2.0,
+      "replicates": 50
+    },
+    {
+      "cell_id": 1,
+      "family": "primary",
+      "tips": 8,
+      "scenario": "null",
+      "root_model": "OUrandomRoot",
+      "alpha_height": 2.1,
+      "sigma2_height": 0.25,
+      "standard_error": 0.0,
+      "effect": 2.0,
+      "replicates": 50
+    },
+    {
+      "cell_id": 2,
+      "family": "primary",
+      "tips": 8,
+      "scenario": "single",
+      "root_model": "OUfixedRoot",
+      "alpha_height": 2.1,
+      "sigma2_height": 0.25,
+      "standard_error": 0.0,
+      "effect": 2.0,
+      "replicates": 50
+    },
+    {
+      "cell_id": 3,
+      "family": "primary",
+      "tips": 8,
+      "scenario": "single",
+      "root_model": "OUrandomRoot",
+      "alpha_height": 2.1,
+      "sigma2_height": 0.25,
+      "standard_error": 0.0,
+      "effect": 2.0,
+      "replicates": 50
+    },
+    {
+      "cell_id": 4,
+      "family": "primary",
+      "tips": 8,
+      "scenario": "distinct",
+      "root_model": "OUfixedRoot",
+      "alpha_height": 2.1,
+      "sigma2_height": 0.25,
+      "standard_error": 0.0,
+      "effect": 2.0,
+      "replicates": 50
+    },
+    {
+      "cell_id": 5,
+      "family": "primary",
+      "tips": 8,
+      "scenario": "distinct",
+      "root_model": "OUrandomRoot",
+      "alpha_height": 2.1,
+      "sigma2_height": 0.25,
+      "standard_error": 0.0,
+      "effect": 2.0,
+      "replicates": 50
+    },
+    {
+      "cell_id": 6,
+      "family": "primary",
+      "tips": 8,
+      "scenario": "convergent",
+      "root_model": "OUfixedRoot",
+      "alpha_height": 2.1,
+      "sigma2_height": 0.25,
+      "standard_error": 0.0,
+      "effect": 2.0,
+      "replicates": 50
+    },
+    {
+      "cell_id": 7,
+      "family": "primary",
+      "tips": 8,
+      "scenario": "convergent",
+      "root_model": "OUrandomRoot",
+      "alpha_height": 2.1,
+      "sigma2_height": 0.25,
+      "standard_error": 0.0,
+      "effect": 2.0,
+      "replicates": 50
+    },
+    {
+      "cell_id": 8,
+      "family": "weak_pull",
+      "tips": 8,
+      "scenario": "null",
+      "root_model": "OUfixedRoot",
+      "alpha_height": 0.2,
+      "sigma2_height": 0.25,
+      "standard_error": 0.0,
+      "effect": 2.0,
+      "replicates": 10
+    },
+    {
+      "cell_id": 9,
+      "family": "weak_pull",
+      "tips": 8,
+      "scenario": "null",
+      "root_model": "OUrandomRoot",
+      "alpha_height": 0.2,
+      "sigma2_height": 0.25,
+      "standard_error": 0.0,
+      "effect": 2.0,
+      "replicates": 10
+    },
+    {
+      "cell_id": 10,
+      "family": "weak_pull",
+      "tips": 8,
+      "scenario": "convergent",
+      "root_model": "OUfixedRoot",
+      "alpha_height": 0.2,
+      "sigma2_height": 0.25,
+      "standard_error": 0.0,
+      "effect": 2.0,
+      "replicates": 10
+    },
+    {
+      "cell_id": 11,
+      "family": "weak_pull",
+      "tips": 8,
+      "scenario": "convergent",
+      "root_model": "OUrandomRoot",
+      "alpha_height": 0.2,
+      "sigma2_height": 0.25,
+      "standard_error": 0.0,
+      "effect": 2.0,
+      "replicates": 10
+    },
+    {
+      "cell_id": 12,
+      "family": "known_error",
+      "tips": 8,
+      "scenario": "null",
+      "root_model": "OUfixedRoot",
+      "alpha_height": 2.1,
+      "sigma2_height": 0.25,
+      "standard_error": 0.2,
+      "effect": 2.0,
+      "replicates": 10
+    },
+    {
+      "cell_id": 13,
+      "family": "known_error",
+      "tips": 8,
+      "scenario": "null",
+      "root_model": "OUrandomRoot",
+      "alpha_height": 2.1,
+      "sigma2_height": 0.25,
+      "standard_error": 0.2,
+      "effect": 2.0,
+      "replicates": 10
+    },
+    {
+      "cell_id": 14,
+      "family": "known_error",
+      "tips": 8,
+      "scenario": "convergent",
+      "root_model": "OUfixedRoot",
+      "alpha_height": 2.1,
+      "sigma2_height": 0.25,
+      "standard_error": 0.2,
+      "effect": 2.0,
+      "replicates": 10
+    },
+    {
+      "cell_id": 15,
+      "family": "known_error",
+      "tips": 8,
+      "scenario": "convergent",
+      "root_model": "OUrandomRoot",
+      "alpha_height": 2.1,
+      "sigma2_height": 0.25,
+      "standard_error": 0.2,
+      "effect": 2.0,
+      "replicates": 10
+    },
+    {
+      "cell_id": 16,
+      "family": "sixteen_tips",
+      "tips": 16,
+      "scenario": "null",
+      "root_model": "OUfixedRoot",
+      "alpha_height": 2.1,
+      "sigma2_height": 0.25,
+      "standard_error": 0.0,
+      "effect": 2.0,
+      "replicates": 10
+    },
+    {
+      "cell_id": 17,
+      "family": "sixteen_tips",
+      "tips": 16,
+      "scenario": "null",
+      "root_model": "OUrandomRoot",
+      "alpha_height": 2.1,
+      "sigma2_height": 0.25,
+      "standard_error": 0.0,
+      "effect": 2.0,
+      "replicates": 10
+    },
+    {
+      "cell_id": 18,
+      "family": "sixteen_tips",
+      "tips": 16,
+      "scenario": "convergent",
+      "root_model": "OUfixedRoot",
+      "alpha_height": 2.1,
+      "sigma2_height": 0.25,
+      "standard_error": 0.0,
+      "effect": 2.0,
+      "replicates": 10
+    },
+    {
+      "cell_id": 19,
+      "family": "sixteen_tips",
+      "tips": 16,
+      "scenario": "convergent",
+      "root_model": "OUrandomRoot",
+      "alpha_height": 2.1,
+      "sigma2_height": 0.25,
+      "standard_error": 0.0,
+      "effect": 2.0,
+      "replicates": 10
+    }
+  ],
+  "floors": [
+    {
+      "floor_id": "small",
+      "alpha_height": 1e-07
+    },
+    {
+      "floor_id": "raised",
+      "alpha_height": 0.1
+    }
+  ],
+  "alpha_upper_height": 10.0,
+  "alpha_start_height": 1.0,
+  "criteria": [
+    "BIC",
+    "pBIC"
+  ],
+  "methods": [
+    "two_stage",
+    "joint"
+  ],
+  "max_shifts": 2,
+  "workers": 4,
+  "boundary_relative_tolerance": 0.0001,
+  "comparison_score_tolerance": 0.0001,
+  "interpretation": "Independent paired simulation; rates are conditional on these finite balanced-tree cells, not nominal error guarantees."
+}

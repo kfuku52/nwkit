@@ -140,6 +140,49 @@ def test_contrast_sign_is_invariant_to_newick_child_order():
     pd.testing.assert_series_equal(observed1.sort_index(), observed2.sort_index())
 
 
+@pytest.mark.parametrize("reconciled", [False, True])
+@pytest.mark.parametrize("sampling", [False, True])
+def test_multi_trait_contrasts_preserve_single_trait_tables(reconciled, sampling):
+    tree = Tree("((A:1,B:1):1,C:2);", parser=1)
+    tree["A"].name = "A,one"
+    values = {
+        "z_trait": {"A,one": 1.0, "B": 3.0, "C": 4.0},
+        "a_trait": {"A,one": -2.0, "B": 5.0, "C": 1.0},
+        "constant": {"A,one": 2.0, "B": 2.0, "C": 2.0},
+    }
+    options = {"tree_id": "family1", "return_sampling_covariance": True}
+    if reconciled:
+        reconciliation = build_reconciliation_table(
+            tree, tree.copy(), {name: name for name in tree.leaf_names()}
+        )
+        options["reconciliation_by_id"] = {
+            record["gene_clade_id"]: record
+            for record in reconciliation.to_dict("records")
+        }
+    if sampling:
+        options["sampling_covariance_by_trait"] = {
+            trait: [0.1, 0.2, 0.3] for trait in values
+        }
+        options["replicate_model_by_trait"] = {trait: "pooled" for trait in values}
+    observed, observed_covariance = build_contrast_table(tree, values, **options)
+    individual = [
+        build_contrast_table(tree, {trait: tip_values}, **options)
+        for trait, tip_values in values.items()
+    ]
+    expected = pd.concat([table for table, _ in individual], ignore_index=True)
+    pd.testing.assert_frame_equal(observed, expected, check_exact=True)
+    assert observed.to_csv(sep="\t", index=False) == expected.to_csv(
+        sep="\t", index=False
+    )
+    if sampling:
+        expected_covariance = pd.concat(
+            [covariance for _, covariance in individual], ignore_index=True
+        )
+        pd.testing.assert_frame_equal(
+            observed_covariance, expected_covariance, check_exact=True
+        )
+
+
 def test_reconciled_contrasts_keep_species_branch_and_lineage_clusters():
     species_tree = Tree("((A_a:1,B_b:1):1,C_c:2);", parser=1)
     gene_tree = Tree(
@@ -448,6 +491,23 @@ def test_stable_variance_formula_avoids_overflow_and_underflow():
     result = calculate_contrasts(tiny, {"A": 1, "B": 2, "C": 3})
     assert result[tiny]["contrast_variance"] == pytest.approx(
         2.5e-300, rel=1e-12, abs=0
+    )
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_ancestral_estimate_retains_representable_weighted_tip(reverse):
+    from fractions import Fraction
+
+    lengths = (1e-100, 1e300)
+    values = (0.0, 1e300)
+    if reverse:
+        lengths, values = lengths[::-1], values[::-1]
+    tree = Tree(f"(A:{lengths[0]},B:{lengths[1]});", parser=1)
+    result = calculate_contrasts(tree, dict(zip("AB", values, strict=True)))
+    a, b = map(Fraction, lengths)
+    expected = (b * Fraction(values[0]) + a * Fraction(values[1])) / (a + b)
+    assert result[tree]["ancestral_estimate"] == pytest.approx(
+        float(expected), rel=2e-15, abs=0
     )
 
 

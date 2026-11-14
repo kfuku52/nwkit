@@ -1,0 +1,2502 @@
+{
+  "date": "2026-09-09",
+  "status": "preliminary-not-a-general-accuracy-validation",
+  "scipy": "1.15.2",
+  "cpu": "Apple M2 Max",
+  "runs": {
+    "native": {
+      "environment": {
+        "python": "3.10.14 | packaged by conda-forge | (main, Mar 20 2024, 12:53:34) [Clang 16.0.6 ]",
+        "platform": "macOS-26.6.2-x86_64-i386-64bit",
+        "numpy": "1.26.4"
+      },
+      "settings": {
+        "outdir": "/private/tmp/nwkit-radte-validation-native-v2",
+        "species": [
+          2
+        ],
+        "families": 10,
+        "sites": 2000,
+        "rate_sd": 0.3,
+        "scenario": "root",
+        "calibration_width": 0.0,
+        "copy_rate_ratio": 1.0,
+        "mapping_errors": 0,
+        "methods": [
+          "branch",
+          "sequence"
+        ],
+        "repeats": 3,
+        "warmups": 1,
+        "paml_samples": 20000
+      },
+      "rows": [
+        {
+          "seconds": 1.2091847090050578,
+          "peak_process_rss_mib": 133.28515625,
+          "exit_code": 0,
+          "age": 22.155711195849705,
+          "true_age": 20.0,
+          "error": 2.1557111958497046,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1701,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 1.2344193330209237,
+          "peak_process_rss_mib": 133.0546875,
+          "exit_code": 0,
+          "age": 22.155711195849705,
+          "true_age": 20.0,
+          "error": 2.1557111958497046,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 1,
+          "seed": 1701,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 1.188638333027484,
+          "peak_process_rss_mib": 133.078125,
+          "exit_code": 0,
+          "age": 22.155711195849705,
+          "true_age": 20.0,
+          "error": 2.1557111958497046,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 2,
+          "seed": 1701,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 3.080705832981039,
+          "peak_process_rss_mib": 149.61328125,
+          "exit_code": 0,
+          "age": 22.610251243228983,
+          "true_age": 20.0,
+          "error": 2.6102512432289835,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1701,
+          "requested_method": "sequence",
+          "species": 2
+        },
+        {
+          "seconds": 3.129179417010164,
+          "peak_process_rss_mib": 150.26953125,
+          "exit_code": 0,
+          "age": 22.610251243228983,
+          "true_age": 20.0,
+          "error": 2.6102512432289835,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 1,
+          "seed": 1701,
+          "requested_method": "sequence",
+          "species": 2
+        },
+        {
+          "seconds": 3.0921242499898653,
+          "peak_process_rss_mib": 149.96484375,
+          "exit_code": 0,
+          "age": 22.610251243228983,
+          "true_age": 20.0,
+          "error": 2.6102512432289835,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 2,
+          "seed": 1701,
+          "requested_method": "sequence",
+          "species": 2
+        },
+        {
+          "seconds": 1.2684969159890898,
+          "peak_process_rss_mib": 132.46875,
+          "exit_code": 0,
+          "age": 20.174089318800373,
+          "true_age": 20.0,
+          "error": 0.17408931880037315,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1702,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 1.1763807910028845,
+          "peak_process_rss_mib": 132.53515625,
+          "exit_code": 0,
+          "age": 20.174089318800373,
+          "true_age": 20.0,
+          "error": 0.17408931880037315,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 1,
+          "seed": 1702,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 1.2542890830081888,
+          "peak_process_rss_mib": 132.0859375,
+          "exit_code": 0,
+          "age": 20.174089318800373,
+          "true_age": 20.0,
+          "error": 0.17408931880037315,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 2,
+          "seed": 1702,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 3.1797958329843823,
+          "peak_process_rss_mib": 150.734375,
+          "exit_code": 0,
+          "age": 20.00142611412885,
+          "true_age": 20.0,
+          "error": 0.0014261141288507417,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1702,
+          "requested_method": "sequence",
+          "species": 2
+        },
+        {
+          "seconds": 3.075011209002696,
+          "peak_process_rss_mib": 149.109375,
+          "exit_code": 0,
+          "age": 20.00142611412885,
+          "true_age": 20.0,
+          "error": 0.0014261141288507417,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 1,
+          "seed": 1702,
+          "requested_method": "sequence",
+          "species": 2
+        },
+        {
+          "seconds": 3.0847498330113012,
+          "peak_process_rss_mib": 149.171875,
+          "exit_code": 0,
+          "age": 20.00142611412885,
+          "true_age": 20.0,
+          "error": 0.0014261141288507417,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 2,
+          "seed": 1702,
+          "requested_method": "sequence",
+          "species": 2
+        },
+        {
+          "seconds": 1.2275621659937315,
+          "peak_process_rss_mib": 131.53125,
+          "exit_code": 0,
+          "age": 18.703124748503157,
+          "true_age": 20.0,
+          "error": -1.296875251496843,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1703,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 1.1936358750099316,
+          "peak_process_rss_mib": 131.94140625,
+          "exit_code": 0,
+          "age": 18.703124748503157,
+          "true_age": 20.0,
+          "error": -1.296875251496843,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 1,
+          "seed": 1703,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 1.2404652500117663,
+          "peak_process_rss_mib": 132.33984375,
+          "exit_code": 0,
+          "age": 18.703124748503157,
+          "true_age": 20.0,
+          "error": -1.296875251496843,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 2,
+          "seed": 1703,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 3.127800332993502,
+          "peak_process_rss_mib": 150.6875,
+          "exit_code": 0,
+          "age": 19.055175040378543,
+          "true_age": 20.0,
+          "error": -0.9448249596214566,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1703,
+          "requested_method": "sequence",
+          "species": 2
+        },
+        {
+          "seconds": 3.1473459169792477,
+          "peak_process_rss_mib": 150.55078125,
+          "exit_code": 0,
+          "age": 19.055175040378543,
+          "true_age": 20.0,
+          "error": -0.9448249596214566,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 1,
+          "seed": 1703,
+          "requested_method": "sequence",
+          "species": 2
+        },
+        {
+          "seconds": 3.364786666992586,
+          "peak_process_rss_mib": 151.33984375,
+          "exit_code": 0,
+          "age": 19.055175040378543,
+          "true_age": 20.0,
+          "error": -0.9448249596214566,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 2,
+          "seed": 1703,
+          "requested_method": "sequence",
+          "species": 2
+        },
+        {
+          "seconds": 1.243855042004725,
+          "peak_process_rss_mib": 132.94140625,
+          "exit_code": 0,
+          "age": 24.18105573841592,
+          "true_age": 20.0,
+          "error": 4.181055738415921,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1704,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 1.248824708018219,
+          "peak_process_rss_mib": 133.2734375,
+          "exit_code": 0,
+          "age": 24.18105573841592,
+          "true_age": 20.0,
+          "error": 4.181055738415921,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 1,
+          "seed": 1704,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 1.2592104999930598,
+          "peak_process_rss_mib": 132.75,
+          "exit_code": 0,
+          "age": 24.18105573841592,
+          "true_age": 20.0,
+          "error": 4.181055738415921,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 2,
+          "seed": 1704,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 3.1353599159920122,
+          "peak_process_rss_mib": 150.41015625,
+          "exit_code": 0,
+          "age": 25.14952019739358,
+          "true_age": 20.0,
+          "error": 5.149520197393581,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1704,
+          "requested_method": "sequence",
+          "species": 2
+        },
+        {
+          "seconds": 3.161572165990947,
+          "peak_process_rss_mib": 150.91796875,
+          "exit_code": 0,
+          "age": 25.14952019739358,
+          "true_age": 20.0,
+          "error": 5.149520197393581,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 1,
+          "seed": 1704,
+          "requested_method": "sequence",
+          "species": 2
+        },
+        {
+          "seconds": 3.2120133329881355,
+          "peak_process_rss_mib": 151.05078125,
+          "exit_code": 0,
+          "age": 25.14952019739358,
+          "true_age": 20.0,
+          "error": 5.149520197393581,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 2,
+          "seed": 1704,
+          "requested_method": "sequence",
+          "species": 2
+        },
+        {
+          "seconds": 1.2609691669931635,
+          "peak_process_rss_mib": 132.71484375,
+          "exit_code": 0,
+          "age": 23.27410863068947,
+          "true_age": 20.0,
+          "error": 3.2741086306894687,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1705,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 1.2749344170151744,
+          "peak_process_rss_mib": 133.08203125,
+          "exit_code": 0,
+          "age": 23.27410863068947,
+          "true_age": 20.0,
+          "error": 3.2741086306894687,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 1,
+          "seed": 1705,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 1.2505308340187185,
+          "peak_process_rss_mib": 132.9921875,
+          "exit_code": 0,
+          "age": 23.27410863068947,
+          "true_age": 20.0,
+          "error": 3.2741086306894687,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 2,
+          "seed": 1705,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 3.186901042005047,
+          "peak_process_rss_mib": 150.70703125,
+          "exit_code": 0,
+          "age": 21.246858995203137,
+          "true_age": 20.0,
+          "error": 1.2468589952031373,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1705,
+          "requested_method": "sequence",
+          "species": 2
+        },
+        {
+          "seconds": 3.139876458008075,
+          "peak_process_rss_mib": 150.47265625,
+          "exit_code": 0,
+          "age": 21.246858995203137,
+          "true_age": 20.0,
+          "error": 1.2468589952031373,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 1,
+          "seed": 1705,
+          "requested_method": "sequence",
+          "species": 2
+        },
+        {
+          "seconds": 3.4693890000053216,
+          "peak_process_rss_mib": 151.54296875,
+          "exit_code": 0,
+          "age": 21.246858995203137,
+          "true_age": 20.0,
+          "error": 1.2468589952031373,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 2,
+          "seed": 1705,
+          "requested_method": "sequence",
+          "species": 2
+        },
+        {
+          "seconds": 1.2780447909899522,
+          "peak_process_rss_mib": 132.328125,
+          "exit_code": 0,
+          "age": 20.90195798930576,
+          "true_age": 20.0,
+          "error": 0.9019579893057603,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1706,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 1.2898727919964585,
+          "peak_process_rss_mib": 132.875,
+          "exit_code": 0,
+          "age": 20.90195798930576,
+          "true_age": 20.0,
+          "error": 0.9019579893057603,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 1,
+          "seed": 1706,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 1.2599657079845201,
+          "peak_process_rss_mib": 133.01171875,
+          "exit_code": 0,
+          "age": 20.90195798930576,
+          "true_age": 20.0,
+          "error": 0.9019579893057603,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 2,
+          "seed": 1706,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 3.066352708992781,
+          "peak_process_rss_mib": 150.875,
+          "exit_code": 0,
+          "age": 21.17206606044208,
+          "true_age": 20.0,
+          "error": 1.1720660604420807,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1706,
+          "requested_method": "sequence",
+          "species": 2
+        },
+        {
+          "seconds": 3.1284557089966256,
+          "peak_process_rss_mib": 150.65234375,
+          "exit_code": 0,
+          "age": 21.17206606044208,
+          "true_age": 20.0,
+          "error": 1.1720660604420807,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 1,
+          "seed": 1706,
+          "requested_method": "sequence",
+          "species": 2
+        },
+        {
+          "seconds": 3.303137124981731,
+          "peak_process_rss_mib": 151.01953125,
+          "exit_code": 0,
+          "age": 21.17206606044208,
+          "true_age": 20.0,
+          "error": 1.1720660604420807,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 2,
+          "seed": 1706,
+          "requested_method": "sequence",
+          "species": 2
+        },
+        {
+          "seconds": 1.292379417020129,
+          "peak_process_rss_mib": 132.703125,
+          "exit_code": 0,
+          "age": 28.917368869878437,
+          "true_age": 20.0,
+          "error": 8.917368869878437,
+          "interval_available": true,
+          "covered": false,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1707,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 1.260171583009651,
+          "peak_process_rss_mib": 132.84375,
+          "exit_code": 0,
+          "age": 28.917368869878437,
+          "true_age": 20.0,
+          "error": 8.917368869878437,
+          "interval_available": true,
+          "covered": false,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 1,
+          "seed": 1707,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 1.2883847919874825,
+          "peak_process_rss_mib": 132.92578125,
+          "exit_code": 0,
+          "age": 28.917368869878437,
+          "true_age": 20.0,
+          "error": 8.917368869878437,
+          "interval_available": true,
+          "covered": false,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 2,
+          "seed": 1707,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 3.097368084010668,
+          "peak_process_rss_mib": 150.79296875,
+          "exit_code": 0,
+          "age": 26.829648644590087,
+          "true_age": 20.0,
+          "error": 6.829648644590087,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1707,
+          "requested_method": "sequence",
+          "species": 2
+        },
+        {
+          "seconds": 3.237282459012931,
+          "peak_process_rss_mib": 151.23828125,
+          "exit_code": 0,
+          "age": 26.829648644590087,
+          "true_age": 20.0,
+          "error": 6.829648644590087,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 1,
+          "seed": 1707,
+          "requested_method": "sequence",
+          "species": 2
+        },
+        {
+          "seconds": 3.1060797089885455,
+          "peak_process_rss_mib": 150.171875,
+          "exit_code": 0,
+          "age": 26.829648644590087,
+          "true_age": 20.0,
+          "error": 6.829648644590087,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 2,
+          "seed": 1707,
+          "requested_method": "sequence",
+          "species": 2
+        },
+        {
+          "seconds": 1.2609390420257114,
+          "peak_process_rss_mib": 132.953125,
+          "exit_code": 0,
+          "age": 18.74445176710225,
+          "true_age": 20.0,
+          "error": -1.2555482328977483,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1708,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 1.2198915000190027,
+          "peak_process_rss_mib": 133.26953125,
+          "exit_code": 0,
+          "age": 18.74445176710225,
+          "true_age": 20.0,
+          "error": -1.2555482328977483,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 1,
+          "seed": 1708,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 1.262861041992437,
+          "peak_process_rss_mib": 133.7109375,
+          "exit_code": 0,
+          "age": 18.74445176710225,
+          "true_age": 20.0,
+          "error": -1.2555482328977483,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 2,
+          "seed": 1708,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 2.989528792008059,
+          "peak_process_rss_mib": 150.4375,
+          "exit_code": 0,
+          "age": 19.48692250297248,
+          "true_age": 20.0,
+          "error": -0.5130774970275205,
+          "interval_available": false,
+          "covered": false,
+          "method": "sequence-marginal-quadratic",
+          "diagnostics": [
+            "sequence_rates_marginalized",
+            "nuisance_parameter_at_numerical_bound"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1708,
+          "requested_method": "sequence",
+          "species": 2
+        },
+        {
+          "seconds": 3.350296958000399,
+          "peak_process_rss_mib": 151.07421875,
+          "exit_code": 0,
+          "age": 19.48692250297248,
+          "true_age": 20.0,
+          "error": -0.5130774970275205,
+          "interval_available": false,
+          "covered": false,
+          "method": "sequence-marginal-quadratic",
+          "diagnostics": [
+            "sequence_rates_marginalized",
+            "nuisance_parameter_at_numerical_bound"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 1,
+          "seed": 1708,
+          "requested_method": "sequence",
+          "species": 2
+        },
+        {
+          "seconds": 3.1122751249931753,
+          "peak_process_rss_mib": 150.7109375,
+          "exit_code": 0,
+          "age": 19.48692250297248,
+          "true_age": 20.0,
+          "error": -0.5130774970275205,
+          "interval_available": false,
+          "covered": false,
+          "method": "sequence-marginal-quadratic",
+          "diagnostics": [
+            "sequence_rates_marginalized",
+            "nuisance_parameter_at_numerical_bound"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 2,
+          "seed": 1708,
+          "requested_method": "sequence",
+          "species": 2
+        },
+        {
+          "seconds": 1.2205711669812445,
+          "peak_process_rss_mib": 133.38671875,
+          "exit_code": 0,
+          "age": 22.86112843999024,
+          "true_age": 20.0,
+          "error": 2.861128439990239,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1709,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 1.2358113329974003,
+          "peak_process_rss_mib": 133.33984375,
+          "exit_code": 0,
+          "age": 22.86112843999024,
+          "true_age": 20.0,
+          "error": 2.861128439990239,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 1,
+          "seed": 1709,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 1.259176416991977,
+          "peak_process_rss_mib": 133.0390625,
+          "exit_code": 0,
+          "age": 22.86112843999024,
+          "true_age": 20.0,
+          "error": 2.861128439990239,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 2,
+          "seed": 1709,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 3.10060729199904,
+          "peak_process_rss_mib": 150.7890625,
+          "exit_code": 0,
+          "age": 23.018473777941644,
+          "true_age": 20.0,
+          "error": 3.0184737779416437,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1709,
+          "requested_method": "sequence",
+          "species": 2
+        },
+        {
+          "seconds": 3.1085596249904484,
+          "peak_process_rss_mib": 150.84765625,
+          "exit_code": 0,
+          "age": 23.018473777941644,
+          "true_age": 20.0,
+          "error": 3.0184737779416437,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 1,
+          "seed": 1709,
+          "requested_method": "sequence",
+          "species": 2
+        },
+        {
+          "seconds": 3.0767500840011053,
+          "peak_process_rss_mib": 151.37109375,
+          "exit_code": 0,
+          "age": 23.018473777941644,
+          "true_age": 20.0,
+          "error": 3.0184737779416437,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 2,
+          "seed": 1709,
+          "requested_method": "sequence",
+          "species": 2
+        },
+        {
+          "seconds": 1.2432509580103215,
+          "peak_process_rss_mib": 133.3515625,
+          "exit_code": 0,
+          "age": 19.21121053693947,
+          "true_age": 20.0,
+          "error": -0.7887894630605317,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1710,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 1.2798224999860395,
+          "peak_process_rss_mib": 133.26171875,
+          "exit_code": 0,
+          "age": 19.21121053693947,
+          "true_age": 20.0,
+          "error": -0.7887894630605317,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 1,
+          "seed": 1710,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 1.2289902080083266,
+          "peak_process_rss_mib": 132.71484375,
+          "exit_code": 0,
+          "age": 19.21121053693947,
+          "true_age": 20.0,
+          "error": -0.7887894630605317,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 2,
+          "seed": 1710,
+          "requested_method": "branch",
+          "species": 2
+        },
+        {
+          "seconds": 3.1030593749892432,
+          "peak_process_rss_mib": 151.31640625,
+          "exit_code": 0,
+          "age": 18.592330485565217,
+          "true_age": 20.0,
+          "error": -1.407669514434783,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1710,
+          "requested_method": "sequence",
+          "species": 2
+        },
+        {
+          "seconds": 3.116983332991367,
+          "peak_process_rss_mib": 150.19921875,
+          "exit_code": 0,
+          "age": 18.592330485565217,
+          "true_age": 20.0,
+          "error": -1.407669514434783,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 1,
+          "seed": 1710,
+          "requested_method": "sequence",
+          "species": 2
+        },
+        {
+          "seconds": 3.073760792001849,
+          "peak_process_rss_mib": 150.66015625,
+          "exit_code": 0,
+          "age": 18.592330485565217,
+          "true_age": 20.0,
+          "error": -1.407669514434783,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 2,
+          "seed": 1710,
+          "requested_method": "sequence",
+          "species": 2
+        }
+      ]
+    },
+    "paml": {
+      "environment": {
+        "python": "3.10.14 | packaged by conda-forge | (main, Mar 20 2024, 12:53:34) [Clang 16.0.6 ]",
+        "platform": "macOS-26.6.2-x86_64-i386-64bit",
+        "numpy": "1.26.4"
+      },
+      "settings": {
+        "outdir": "/private/tmp/nwkit-radte-validation-paml-v2",
+        "species": [
+          2
+        ],
+        "families": 10,
+        "sites": 2000,
+        "rate_sd": 0.3,
+        "scenario": "root",
+        "calibration_width": 0.0,
+        "copy_rate_ratio": 1.0,
+        "mapping_errors": 0,
+        "methods": [
+          "paml",
+          "paml-approximate"
+        ],
+        "repeats": 1,
+        "warmups": 0,
+        "paml_samples": 20000
+      },
+      "rows": [
+        {
+          "seconds": 19.949670041998615,
+          "peak_process_rss_mib": 240.01953125,
+          "exit_code": 0,
+          "age": 23.925216812300004,
+          "true_age": 20.0,
+          "error": 3.925216812300004,
+          "interval_available": true,
+          "covered": true,
+          "method": "mcmctree-posterior-mean",
+          "diagnostics": [
+            "passed-basic-diagnostics",
+            "PAML-soft-priors-not-native-hard-bounds"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1701,
+          "requested_method": "paml",
+          "species": 2
+        },
+        {
+          "seconds": 3.8848261249950156,
+          "peak_process_rss_mib": 236.3515625,
+          "exit_code": 0,
+          "age": 23.759315891650004,
+          "true_age": 20.0,
+          "error": 3.7593158916500045,
+          "interval_available": true,
+          "covered": true,
+          "method": "mcmctree-posterior-mean",
+          "diagnostics": [
+            "passed-basic-diagnostics",
+            "PAML-soft-priors-not-native-hard-bounds"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1701,
+          "requested_method": "paml-approximate",
+          "species": 2
+        },
+        {
+          "seconds": 20.01685970899416,
+          "peak_process_rss_mib": 236.53125,
+          "exit_code": 0,
+          "age": 21.038121093175,
+          "true_age": 20.0,
+          "error": 1.0381210931750005,
+          "interval_available": true,
+          "covered": true,
+          "method": "mcmctree-posterior-mean",
+          "diagnostics": [
+            "passed-basic-diagnostics",
+            "PAML-soft-priors-not-native-hard-bounds"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1702,
+          "requested_method": "paml",
+          "species": 2
+        },
+        {
+          "seconds": 3.971813750016736,
+          "peak_process_rss_mib": 210.9453125,
+          "exit_code": 0,
+          "age": 21.1505400704,
+          "true_age": 20.0,
+          "error": 1.1505400704000017,
+          "interval_available": true,
+          "covered": true,
+          "method": "mcmctree-posterior-mean",
+          "diagnostics": [
+            "passed-basic-diagnostics",
+            "PAML-soft-priors-not-native-hard-bounds"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1702,
+          "requested_method": "paml-approximate",
+          "species": 2
+        },
+        {
+          "seconds": 20.747309792001033,
+          "peak_process_rss_mib": 237.859375,
+          "exit_code": 0,
+          "age": 20.6034249447,
+          "true_age": 20.0,
+          "error": 0.6034249446999986,
+          "interval_available": true,
+          "covered": true,
+          "method": "mcmctree-posterior-mean",
+          "diagnostics": [
+            "passed-basic-diagnostics",
+            "PAML-soft-priors-not-native-hard-bounds"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1703,
+          "requested_method": "paml",
+          "species": 2
+        },
+        {
+          "seconds": 3.968138166994322,
+          "peak_process_rss_mib": 239.875,
+          "exit_code": 0,
+          "age": 20.664171021525,
+          "true_age": 20.0,
+          "error": 0.6641710215250001,
+          "interval_available": true,
+          "covered": true,
+          "method": "mcmctree-posterior-mean",
+          "diagnostics": [
+            "passed-basic-diagnostics",
+            "PAML-soft-priors-not-native-hard-bounds"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1703,
+          "requested_method": "paml-approximate",
+          "species": 2
+        },
+        {
+          "seconds": 18.92136679199757,
+          "peak_process_rss_mib": 226.765625,
+          "exit_code": 0,
+          "age": 26.61823450595,
+          "true_age": 20.0,
+          "error": 6.618234505949999,
+          "interval_available": true,
+          "covered": true,
+          "method": "mcmctree-posterior-mean",
+          "diagnostics": [
+            "passed-basic-diagnostics",
+            "PAML-soft-priors-not-native-hard-bounds"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1704,
+          "requested_method": "paml",
+          "species": 2
+        },
+        {
+          "seconds": 4.052028916979907,
+          "peak_process_rss_mib": 229.0,
+          "exit_code": 0,
+          "age": 26.4468372412,
+          "true_age": 20.0,
+          "error": 6.446837241200001,
+          "interval_available": true,
+          "covered": true,
+          "method": "mcmctree-posterior-mean",
+          "diagnostics": [
+            "passed-basic-diagnostics",
+            "PAML-soft-priors-not-native-hard-bounds"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1704,
+          "requested_method": "paml-approximate",
+          "species": 2
+        },
+        {
+          "seconds": 20.284981875011,
+          "peak_process_rss_mib": 228.78515625,
+          "exit_code": 0,
+          "age": 22.6106052155,
+          "true_age": 20.0,
+          "error": 2.6106052155000015,
+          "interval_available": true,
+          "covered": true,
+          "method": "mcmctree-posterior-mean",
+          "diagnostics": [
+            "passed-basic-diagnostics",
+            "PAML-soft-priors-not-native-hard-bounds"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1705,
+          "requested_method": "paml",
+          "species": 2
+        },
+        {
+          "seconds": 5.789260290999664,
+          "peak_process_rss_mib": 234.49609375,
+          "exit_code": 0,
+          "age": 22.535142505125,
+          "true_age": 20.0,
+          "error": 2.5351425051249983,
+          "interval_available": true,
+          "covered": true,
+          "method": "mcmctree-posterior-mean",
+          "diagnostics": [
+            "passed-basic-diagnostics",
+            "PAML-soft-priors-not-native-hard-bounds"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1705,
+          "requested_method": "paml-approximate",
+          "species": 2
+        },
+        {
+          "seconds": 18.035136084014084,
+          "peak_process_rss_mib": 207.96875,
+          "exit_code": 0,
+          "age": 21.833312627599994,
+          "true_age": 20.0,
+          "error": 1.8333126275999945,
+          "interval_available": true,
+          "covered": true,
+          "method": "mcmctree-posterior-mean",
+          "diagnostics": [
+            "passed-basic-diagnostics",
+            "PAML-soft-priors-not-native-hard-bounds"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1706,
+          "requested_method": "paml",
+          "species": 2
+        },
+        {
+          "seconds": 4.240052541019395,
+          "peak_process_rss_mib": 230.59765625,
+          "exit_code": 0,
+          "age": 21.791626020499997,
+          "true_age": 20.0,
+          "error": 1.7916260204999972,
+          "interval_available": true,
+          "covered": true,
+          "method": "mcmctree-posterior-mean",
+          "diagnostics": [
+            "passed-basic-diagnostics",
+            "PAML-soft-priors-not-native-hard-bounds"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1706,
+          "requested_method": "paml-approximate",
+          "species": 2
+        },
+        {
+          "seconds": 19.553179207985522,
+          "peak_process_rss_mib": 235.41796875,
+          "exit_code": 0,
+          "age": 28.309390130025,
+          "true_age": 20.0,
+          "error": 8.309390130025001,
+          "interval_available": true,
+          "covered": false,
+          "method": "mcmctree-posterior-mean",
+          "diagnostics": [
+            "passed-basic-diagnostics",
+            "PAML-soft-priors-not-native-hard-bounds"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1707,
+          "requested_method": "paml",
+          "species": 2
+        },
+        {
+          "seconds": 4.130300749995513,
+          "peak_process_rss_mib": 227.09375,
+          "exit_code": 0,
+          "age": 28.485370350075,
+          "true_age": 20.0,
+          "error": 8.485370350075002,
+          "interval_available": true,
+          "covered": false,
+          "method": "mcmctree-posterior-mean",
+          "diagnostics": [
+            "passed-basic-diagnostics",
+            "PAML-soft-priors-not-native-hard-bounds"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1707,
+          "requested_method": "paml-approximate",
+          "species": 2
+        },
+        {
+          "seconds": 19.105788040993502,
+          "peak_process_rss_mib": 252.046875,
+          "exit_code": 0,
+          "age": 19.8063208508,
+          "true_age": 20.0,
+          "error": -0.19367914920000118,
+          "interval_available": true,
+          "covered": true,
+          "method": "mcmctree-posterior-mean",
+          "diagnostics": [
+            "passed-basic-diagnostics",
+            "PAML-soft-priors-not-native-hard-bounds"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1708,
+          "requested_method": "paml",
+          "species": 2
+        },
+        {
+          "seconds": 3.987409041990759,
+          "peak_process_rss_mib": 238.0390625,
+          "exit_code": 0,
+          "age": 19.854241206775,
+          "true_age": 20.0,
+          "error": -0.1457587932249993,
+          "interval_available": true,
+          "covered": true,
+          "method": "mcmctree-posterior-mean",
+          "diagnostics": [
+            "passed-basic-diagnostics",
+            "PAML-soft-priors-not-native-hard-bounds"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1708,
+          "requested_method": "paml-approximate",
+          "species": 2
+        },
+        {
+          "seconds": 21.38751116700587,
+          "peak_process_rss_mib": 235.97265625,
+          "exit_code": 0,
+          "age": 24.29771643275,
+          "true_age": 20.0,
+          "error": 4.297716432750001,
+          "interval_available": true,
+          "covered": true,
+          "method": "mcmctree-posterior-mean",
+          "diagnostics": [
+            "passed-basic-diagnostics",
+            "PAML-soft-priors-not-native-hard-bounds"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1709,
+          "requested_method": "paml",
+          "species": 2
+        },
+        {
+          "seconds": 4.9618941670050845,
+          "peak_process_rss_mib": 230.68359375,
+          "exit_code": 0,
+          "age": 24.353145111425004,
+          "true_age": 20.0,
+          "error": 4.353145111425004,
+          "interval_available": true,
+          "covered": true,
+          "method": "mcmctree-posterior-mean",
+          "diagnostics": [
+            "passed-basic-diagnostics",
+            "PAML-soft-priors-not-native-hard-bounds"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1709,
+          "requested_method": "paml-approximate",
+          "species": 2
+        },
+        {
+          "seconds": 22.544151250011055,
+          "peak_process_rss_mib": 227.25390625,
+          "exit_code": 0,
+          "age": 20.6320915265,
+          "true_age": 20.0,
+          "error": 0.6320915264999982,
+          "interval_available": true,
+          "covered": true,
+          "method": "mcmctree-posterior-mean",
+          "diagnostics": [
+            "passed-basic-diagnostics",
+            "PAML-soft-priors-not-native-hard-bounds"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1710,
+          "requested_method": "paml",
+          "species": 2
+        },
+        {
+          "seconds": 4.109462458000053,
+          "peak_process_rss_mib": 232.47265625,
+          "exit_code": 0,
+          "age": 20.495674270450003,
+          "true_age": 20.0,
+          "error": 0.495674270450003,
+          "interval_available": true,
+          "covered": true,
+          "method": "mcmctree-posterior-mean",
+          "diagnostics": [
+            "passed-basic-diagnostics",
+            "PAML-soft-priors-not-native-hard-bounds"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1710,
+          "requested_method": "paml-approximate",
+          "species": 2
+        }
+      ]
+    },
+    "scaling": {
+      "environment": {
+        "python": "3.10.14 | packaged by conda-forge | (main, Mar 20 2024, 12:53:34) [Clang 16.0.6 ]",
+        "platform": "macOS-26.6.2-x86_64-i386-64bit",
+        "numpy": "1.26.4"
+      },
+      "settings": {
+        "outdir": "/private/tmp/nwkit-radte-validation-scale",
+        "species": [
+          8,
+          32
+        ],
+        "families": 1,
+        "sites": 1000,
+        "rate_sd": 0.3,
+        "scenario": "root",
+        "calibration_width": 0.0,
+        "copy_rate_ratio": 1.0,
+        "mapping_errors": 0,
+        "methods": [
+          "branch",
+          "sequence"
+        ],
+        "repeats": 3,
+        "warmups": 1,
+        "paml_samples": 20000
+      },
+      "rows": [
+        {
+          "seconds": 1.2513522499939427,
+          "peak_process_rss_mib": 133.16796875,
+          "exit_code": 0,
+          "age": 20.75180356249877,
+          "true_age": 20.0,
+          "error": 0.7518035624987682,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1701,
+          "requested_method": "branch",
+          "species": 8
+        },
+        {
+          "seconds": 1.278980416012928,
+          "peak_process_rss_mib": 133.20703125,
+          "exit_code": 0,
+          "age": 20.75180356249877,
+          "true_age": 20.0,
+          "error": 0.7518035624987682,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 1,
+          "seed": 1701,
+          "requested_method": "branch",
+          "species": 8
+        },
+        {
+          "seconds": 1.2774085830023978,
+          "peak_process_rss_mib": 133.2890625,
+          "exit_code": 0,
+          "age": 20.75180356249877,
+          "true_age": 20.0,
+          "error": 0.7518035624987682,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 2,
+          "seed": 1701,
+          "requested_method": "branch",
+          "species": 8
+        },
+        {
+          "seconds": 4.26146554198931,
+          "peak_process_rss_mib": 159.28125,
+          "exit_code": 0,
+          "age": 20.306808860077336,
+          "true_age": 20.0,
+          "error": 0.30680886007733577,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1701,
+          "requested_method": "sequence",
+          "species": 8
+        },
+        {
+          "seconds": 4.322624249994988,
+          "peak_process_rss_mib": 162.6953125,
+          "exit_code": 0,
+          "age": 20.306808860077336,
+          "true_age": 20.0,
+          "error": 0.30680886007733577,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 1,
+          "seed": 1701,
+          "requested_method": "sequence",
+          "species": 8
+        },
+        {
+          "seconds": 4.206937124981778,
+          "peak_process_rss_mib": 162.1640625,
+          "exit_code": 0,
+          "age": 20.306808860077336,
+          "true_age": 20.0,
+          "error": 0.30680886007733577,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 2,
+          "seed": 1701,
+          "requested_method": "sequence",
+          "species": 8
+        },
+        {
+          "seconds": 1.2723264590022154,
+          "peak_process_rss_mib": 133.4921875,
+          "exit_code": 0,
+          "age": 20.60645713491102,
+          "true_age": 20.0,
+          "error": 0.6064571349110217,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1701,
+          "requested_method": "branch",
+          "species": 32
+        },
+        {
+          "seconds": 1.2738055840018205,
+          "peak_process_rss_mib": 133.79296875,
+          "exit_code": 0,
+          "age": 20.60645713491102,
+          "true_age": 20.0,
+          "error": 0.6064571349110217,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 1,
+          "seed": 1701,
+          "requested_method": "branch",
+          "species": 32
+        },
+        {
+          "seconds": 1.3306077920133248,
+          "peak_process_rss_mib": 133.74609375,
+          "exit_code": 0,
+          "age": 20.60645713491102,
+          "true_age": 20.0,
+          "error": 0.6064571349110217,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 2,
+          "seed": 1701,
+          "requested_method": "branch",
+          "species": 32
+        },
+        {
+          "seconds": 13.492292208014987,
+          "peak_process_rss_mib": 236.21875,
+          "exit_code": 0,
+          "age": 21.577553154810904,
+          "true_age": 20.0,
+          "error": 1.5775531548109036,
+          "interval_available": false,
+          "covered": false,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_unavailable_using_exact: Branch likelihood lies on a numerical bound; use exact likelihood."
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1701,
+          "requested_method": "sequence",
+          "species": 32
+        },
+        {
+          "seconds": 14.038965749990894,
+          "peak_process_rss_mib": 245.22265625,
+          "exit_code": 0,
+          "age": 21.577553154810904,
+          "true_age": 20.0,
+          "error": 1.5775531548109036,
+          "interval_available": false,
+          "covered": false,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_unavailable_using_exact: Branch likelihood lies on a numerical bound; use exact likelihood."
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 1,
+          "seed": 1701,
+          "requested_method": "sequence",
+          "species": 32
+        },
+        {
+          "seconds": 14.299821249995148,
+          "peak_process_rss_mib": 237.0234375,
+          "exit_code": 0,
+          "age": 21.577553154810904,
+          "true_age": 20.0,
+          "error": 1.5775531548109036,
+          "interval_available": false,
+          "covered": false,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_unavailable_using_exact: Branch likelihood lies on a numerical bound; use exact likelihood."
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 2,
+          "seed": 1701,
+          "requested_method": "sequence",
+          "species": 32
+        }
+      ]
+    },
+    "nested": {
+      "environment": {
+        "python": "3.10.14 | packaged by conda-forge | (main, Mar 20 2024, 12:53:34) [Clang 16.0.6 ]",
+        "platform": "macOS-26.6.2-x86_64-i386-64bit",
+        "numpy": "1.26.4"
+      },
+      "settings": {
+        "outdir": "/private/tmp/nwkit-radte-validation-nested",
+        "species": [
+          4
+        ],
+        "families": 3,
+        "sites": 2000,
+        "rate_sd": 0.3,
+        "scenario": "nested",
+        "calibration_width": 0.2,
+        "copy_rate_ratio": 1.0,
+        "mapping_errors": 0,
+        "methods": [
+          "branch",
+          "sequence"
+        ],
+        "repeats": 1,
+        "warmups": 0,
+        "paml_samples": 20000
+      },
+      "rows": [
+        {
+          "seconds": 1.28779004199896,
+          "peak_process_rss_mib": 132.52734375,
+          "exit_code": 0,
+          "age": 7.308495877602597,
+          "true_age": 7.5,
+          "error": -0.19150412239740344,
+          "interval_available": false,
+          "covered": false,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1701,
+          "requested_method": "branch",
+          "species": 4
+        },
+        {
+          "seconds": 3.2488305830047466,
+          "peak_process_rss_mib": 150.546875,
+          "exit_code": 0,
+          "age": 7.735960495390172,
+          "true_age": 7.5,
+          "error": 0.23596049539017194,
+          "interval_available": false,
+          "covered": false,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1701,
+          "requested_method": "sequence",
+          "species": 4
+        },
+        {
+          "seconds": 1.2913776249915827,
+          "peak_process_rss_mib": 132.125,
+          "exit_code": 0,
+          "age": 7.93098054351161,
+          "true_age": 7.5,
+          "error": 0.43098054351160986,
+          "interval_available": false,
+          "covered": false,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1702,
+          "requested_method": "branch",
+          "species": 4
+        },
+        {
+          "seconds": 3.2040709590073675,
+          "peak_process_rss_mib": 150.83984375,
+          "exit_code": 0,
+          "age": 7.569865748356602,
+          "true_age": 7.5,
+          "error": 0.06986574835660164,
+          "interval_available": false,
+          "covered": false,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1702,
+          "requested_method": "sequence",
+          "species": 4
+        },
+        {
+          "seconds": 1.2997777920099907,
+          "peak_process_rss_mib": 132.32421875,
+          "exit_code": 0,
+          "age": 7.845845863114237,
+          "true_age": 7.5,
+          "error": 0.3458458631142367,
+          "interval_available": false,
+          "covered": false,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1703,
+          "requested_method": "branch",
+          "species": 4
+        },
+        {
+          "seconds": 3.635725415981142,
+          "peak_process_rss_mib": 150.51953125,
+          "exit_code": 0,
+          "age": 8.109917706635148,
+          "true_age": 7.5,
+          "error": 0.609917706635148,
+          "interval_available": false,
+          "covered": false,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1703,
+          "requested_method": "sequence",
+          "species": 4
+        }
+      ]
+    },
+    "loss": {
+      "environment": {
+        "python": "3.10.14 | packaged by conda-forge | (main, Mar 20 2024, 12:53:34) [Clang 16.0.6 ]",
+        "platform": "macOS-26.6.2-x86_64-i386-64bit",
+        "numpy": "1.26.4"
+      },
+      "settings": {
+        "outdir": "/private/tmp/nwkit-radte-validation-loss",
+        "species": [
+          8
+        ],
+        "families": 3,
+        "sites": 1000,
+        "rate_sd": 0.3,
+        "scenario": "loss",
+        "calibration_width": 0.0,
+        "copy_rate_ratio": 3.0,
+        "mapping_errors": 0,
+        "methods": [
+          "branch",
+          "sequence"
+        ],
+        "repeats": 1,
+        "warmups": 0,
+        "paml_samples": 20000
+      },
+      "rows": [
+        {
+          "seconds": 1.3328295419923961,
+          "peak_process_rss_mib": 132.796875,
+          "exit_code": 0,
+          "age": 20.839178836480023,
+          "true_age": 20.0,
+          "error": 0.8391788364800234,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1701,
+          "requested_method": "branch",
+          "species": 8
+        },
+        {
+          "seconds": 4.240875207993668,
+          "peak_process_rss_mib": 162.8828125,
+          "exit_code": 0,
+          "age": 20.94500213771889,
+          "true_age": 20.0,
+          "error": 0.9450021377188911,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1701,
+          "requested_method": "sequence",
+          "species": 8
+        },
+        {
+          "seconds": 1.3709975840174593,
+          "peak_process_rss_mib": 133.41015625,
+          "exit_code": 0,
+          "age": 19.68437468073929,
+          "true_age": 20.0,
+          "error": -0.315625319260711,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1702,
+          "requested_method": "branch",
+          "species": 8
+        },
+        {
+          "seconds": 4.2119602499878965,
+          "peak_process_rss_mib": 162.4296875,
+          "exit_code": 0,
+          "age": 23.62789548503113,
+          "true_age": 20.0,
+          "error": 3.6278954850311287,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1702,
+          "requested_method": "sequence",
+          "species": 8
+        },
+        {
+          "seconds": 1.372136791003868,
+          "peak_process_rss_mib": 133.25,
+          "exit_code": 0,
+          "age": 19.34376568533721,
+          "true_age": 20.0,
+          "error": -0.6562343146627896,
+          "interval_available": true,
+          "covered": true,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1703,
+          "requested_method": "branch",
+          "species": 8
+        },
+        {
+          "seconds": 4.260713083000155,
+          "peak_process_rss_mib": 163.46484375,
+          "exit_code": 0,
+          "age": 19.22846817028234,
+          "true_age": 20.0,
+          "error": -0.7715318297176594,
+          "interval_available": true,
+          "covered": true,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1703,
+          "requested_method": "sequence",
+          "species": 8
+        }
+      ]
+    },
+    "mapping_error": {
+      "environment": {
+        "python": "3.10.14 | packaged by conda-forge | (main, Mar 20 2024, 12:53:34) [Clang 16.0.6 ]",
+        "platform": "macOS-26.6.2-x86_64-i386-64bit",
+        "numpy": "1.26.4"
+      },
+      "settings": {
+        "outdir": "/private/tmp/nwkit-radte-validation-maperror",
+        "species": [
+          4
+        ],
+        "families": 3,
+        "sites": 500,
+        "rate_sd": 0.3,
+        "scenario": "root",
+        "calibration_width": 0.0,
+        "copy_rate_ratio": 1.0,
+        "mapping_errors": 1,
+        "methods": [
+          "branch",
+          "sequence"
+        ],
+        "repeats": 1,
+        "warmups": 0,
+        "paml_samples": 20000
+      },
+      "rows": [
+        {
+          "seconds": 1.4329554579744581,
+          "peak_process_rss_mib": 134.94140625,
+          "exit_code": 0,
+          "age": 21.05223123778383,
+          "true_age": 20.0,
+          "error": 1.052231237783829,
+          "interval_available": false,
+          "covered": false,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1701,
+          "requested_method": "branch",
+          "species": 4
+        },
+        {
+          "seconds": 3.601843665994238,
+          "peak_process_rss_mib": 153.234375,
+          "exit_code": 0,
+          "age": 20.330825715048263,
+          "true_age": 20.0,
+          "error": 0.3308257150482632,
+          "interval_available": false,
+          "covered": false,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1701,
+          "requested_method": "sequence",
+          "species": 4
+        },
+        {
+          "seconds": 1.3430613329983316,
+          "peak_process_rss_mib": 132.8984375,
+          "exit_code": 0,
+          "age": 20.245895406502328,
+          "true_age": 20.0,
+          "error": 0.24589540650232777,
+          "interval_available": false,
+          "covered": false,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1702,
+          "requested_method": "branch",
+          "species": 4
+        },
+        {
+          "seconds": 3.6712845420115627,
+          "peak_process_rss_mib": 153.515625,
+          "exit_code": 0,
+          "age": 21.23796521705042,
+          "true_age": 20.0,
+          "error": 1.2379652170504194,
+          "interval_available": false,
+          "covered": false,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1702,
+          "requested_method": "sequence",
+          "species": 4
+        },
+        {
+          "seconds": 1.4481675410061143,
+          "peak_process_rss_mib": 132.76953125,
+          "exit_code": 0,
+          "age": 18.96012954634976,
+          "true_age": 20.0,
+          "error": -1.0398704536502414,
+          "interval_available": false,
+          "covered": false,
+          "method": "marginal-lognormal",
+          "diagnostics": [
+            "conditional_on_input_branch_lengths_and_root_split"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1703,
+          "requested_method": "branch",
+          "species": 4
+        },
+        {
+          "seconds": 4.037702291010646,
+          "peak_process_rss_mib": 153.4921875,
+          "exit_code": 0,
+          "age": 19.544826456413883,
+          "true_age": 20.0,
+          "error": -0.45517354358611684,
+          "interval_available": false,
+          "covered": false,
+          "method": "sequence-empirical-bayes-map",
+          "diagnostics": [
+            "sequence_map_conditional_on_rate_variance_and_substitution_model",
+            "quadratic_failed_validation_refitted_exact"
+          ],
+          "shared_max_difference": 0.0,
+          "bounds_satisfied": true,
+          "repeat": 0,
+          "seed": 1703,
+          "requested_method": "sequence",
+          "species": 4
+        }
+      ]
+    },
+    "original_R": {
+      "platform": "macOS-26.6.2-x86_64-i386-64bit",
+      "rows": [
+        {
+          "seconds": 5.5351789590204135,
+          "peak_process_rss_mib": 144.421875,
+          "exit_code": 0,
+          "method": "R-RADTE",
+          "repeat": 0
+        },
+        {
+          "seconds": 1.3544752500019968,
+          "peak_process_rss_mib": 132.359375,
+          "exit_code": 0,
+          "method": "native",
+          "repeat": 0
+        },
+        {
+          "seconds": 6.083297459001187,
+          "peak_process_rss_mib": 147.52734375,
+          "exit_code": 0,
+          "method": "R-RADTE",
+          "repeat": 1
+        },
+        {
+          "seconds": 1.408083041984355,
+          "peak_process_rss_mib": 132.6796875,
+          "exit_code": 0,
+          "method": "native",
+          "repeat": 1
+        },
+        {
+          "seconds": 6.0899969580059405,
+          "peak_process_rss_mib": 139.890625,
+          "exit_code": 0,
+          "method": "R-RADTE",
+          "repeat": 2
+        },
+        {
+          "seconds": 1.49775654199766,
+          "peak_process_rss_mib": 132.671875,
+          "exit_code": 0,
+          "method": "native",
+          "repeat": 2
+        }
+      ]
+    }
+  },
+  "paml": {
+    "executable_sha256": "608210e908810960ab4c4f7880caa6a783d7f301ba133e1d015fb4a75df89e1a",
+    "time_scale": 10.0,
+    "clock": 2,
+    "model": "jc69"
+  },
+  "original_RADTE_commit": "b5594ce8da9e22834510a3b48b27251ccb2b488b"
+}

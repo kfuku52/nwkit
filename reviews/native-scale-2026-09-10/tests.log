@@ -1,0 +1,31 @@
++ /Users/kf/miniforge3/bin/python -m pytest -q --durations=20 --durations-min=0.05 tests/test_shift_native_bootstrap.py tests/test_shift_native_cli.py tests/test_shift_native_fit.py tests/test_shift_native_heuristic.py tests/test_shift_native_identifiability.py tests/test_shift_native_model.py tests/test_shift_native_quick.py tests/test_shift_native_rank.py tests/test_shift_native_search.py tests/test_gaussian_whitening.py
+........................................................................ [ 60%]
+...............................................                          [100%]
+=============================== warnings summary ===============================
+../../../../../../../../Users/kf/miniforge3/lib/python3.10/site-packages/requests/__init__.py:113
+  /Users/kf/miniforge3/lib/python3.10/site-packages/requests/__init__.py:113: RequestsDependencyWarning: urllib3 (2.6.3) or chardet (7.5.1)/charset_normalizer (3.4.4) doesn't match a supported version!
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+============================= slowest 20 durations =============================
+1.84s call     tests/test_shift_native_fit.py::test_estimated_noise_with_fixed_process_matches_dense_scalar_fit[False]
+0.59s call     tests/test_shift_native_bootstrap.py::test_calibration_replays_search_deterministically_and_does_not_discard_failures
+0.55s call     tests/test_shift_native_bootstrap.py::test_simulator_matches_independent_dense_covariance_and_original_units[OUfixedRoot-1]
+0.54s call     tests/test_shift_native_bootstrap.py::test_simulator_matches_independent_dense_covariance_and_original_units[OUrandomRoot-1]
+0.51s call     tests/test_shift_native_bootstrap.py::test_simulator_matches_independent_dense_covariance_and_original_units[OUrandomRoot-inf]
+0.51s call     tests/test_shift_native_bootstrap.py::test_simulator_matches_independent_dense_covariance_and_original_units[OUfixedRoot-0]
+0.47s call     tests/test_shift_native_fit.py::test_joint_process_and_noise_fit_matches_independent_dense_optimization[False]
+0.45s call     tests/test_shift_native_fit.py::test_joint_process_and_noise_fit_matches_independent_dense_optimization[True]
+0.40s call     tests/test_shift_native_cli.py::test_native_search_cli_and_resume_reject_changed_input
+0.19s call     tests/test_shift_native_heuristic.py::test_cached_candidate_likelihood_matches_refit_for_nested_shared_regimes[0.7]
+0.18s call     tests/test_shift_native_heuristic.py::test_cached_candidate_likelihood_matches_refit_for_nested_shared_regimes[0]
+0.17s call     tests/test_shift_native_search.py::test_exact_independent_limit_excludes_only_rank_deficient_layouts
+0.17s call     tests/test_shift_native_quick.py::test_thousand_tip_hundred_shift_compression_matches_full_fit[False-0.7]
+0.17s call     tests/test_shift_native_heuristic.py::test_cached_candidate_likelihood_matches_refit_for_nested_shared_regimes[inf]
+0.17s call     tests/test_shift_native_fit.py::test_equivalent_alpha_modes_do_not_invent_a_variance_decomposition
+0.16s call     tests/test_shift_native_search.py::test_three_shift_native_candidates_include_nested_return_and_shared_groups
+0.16s call     tests/test_shift_native_quick.py::test_thousand_tip_hundred_shift_compression_matches_full_fit[False-0]
+0.14s call     tests/test_shift_native_quick.py::test_thousand_tip_hundred_shift_compression_matches_full_fit[False-inf]
+0.13s call     tests/test_shift_native_cli.py::test_native_cli_never_calls_r_and_exports_original_regime_names
+0.12s call     tests/test_shift_native_quick.py::test_thousand_tip_hundred_shift_compression_matches_full_fit[True-0.7]
+119 passed, 1 warning in 9.39s

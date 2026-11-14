@@ -1,0 +1,5134 @@
+[
+  {
+    "job": {
+      "kind": "pilot",
+      "traits": 2,
+      "truth": "shared",
+      "scenario": "null",
+      "replicate": 0,
+      "mode": "shared",
+      "repeats": 3,
+      "timeout": 180
+    },
+    "implementation_sha256": "7f8431b6dda064e71863fbe2a3ef286afe1d6bbda2fa3973c01d836c635edd46",
+    "generating": {
+      "parameters": {
+        "trait_names": [
+          "x0",
+          "x1"
+        ],
+        "alpha": [
+          1.0,
+          1.0
+        ],
+        "process_tip_covariance": [
+          [
+            1.0,
+            0.8
+          ],
+          [
+            0.8,
+            1.0
+          ]
+        ],
+        "regime_optima": [
+          [
+            0.0,
+            0.0
+          ]
+        ],
+        "shift_branch_ids": []
+      },
+      "seed": 712000,
+      "data_sha256": "46b890ba34a6aa31b662e366cdab257d3897a04e33cc80c36473d8ac34334f22",
+      "tip_names": [
+        "t0",
+        "t1",
+        "t2",
+        "t3",
+        "t4",
+        "t5",
+        "t6",
+        "t7",
+        "t8",
+        "t9",
+        "t10",
+        "t11",
+        "t12",
+        "t13",
+        "t14",
+        "t15",
+        "t16",
+        "t17",
+        "t18",
+        "t19",
+        "t20",
+        "t21",
+        "t22",
+        "t23",
+        "t24",
+        "t25",
+        "t26",
+        "t27",
+        "t28",
+        "t29",
+        "t30",
+        "t31",
+        "t32",
+        "t33",
+        "t34",
+        "t35",
+        "t36",
+        "t37",
+        "t38",
+        "t39",
+        "t40",
+        "t41",
+        "t42",
+        "t43",
+        "t44",
+        "t45",
+        "t46",
+        "t47",
+        "t48",
+        "t49",
+        "t50",
+        "t51",
+        "t52",
+        "t53",
+        "t54",
+        "t55",
+        "t56",
+        "t57",
+        "t58",
+        "t59",
+        "t60",
+        "t61",
+        "t62",
+        "t63",
+        "t64",
+        "t65",
+        "t66",
+        "t67",
+        "t68",
+        "t69",
+        "t70",
+        "t71",
+        "t72",
+        "t73",
+        "t74",
+        "t75",
+        "t76",
+        "t77",
+        "t78",
+        "t79",
+        "t80",
+        "t81",
+        "t82",
+        "t83",
+        "t84",
+        "t85",
+        "t86",
+        "t87",
+        "t88",
+        "t89",
+        "t90",
+        "t91",
+        "t92",
+        "t93",
+        "t94",
+        "t95",
+        "t96",
+        "t97",
+        "t98",
+        "t99"
+      ],
+      "true_alpha": [
+        1.0,
+        1.0
+      ]
+    },
+    "selected": {
+      "AIC": {
+        "branches": [
+          73
+        ],
+        "any_shift": true,
+        "exact_branch": false,
+        "false_branch": true,
+        "fit": {
+          "log_likelihood": -200.883555661225,
+          "shift_branch_ids": [
+            73
+          ],
+          "alpha": [
+            1.6041855187441831,
+            1.6041855187441831
+          ],
+          "alpha_status": [
+            "finite",
+            "finite"
+          ],
+          "process_tip_covariance": [
+            [
+              0.9724614937093595,
+              0.8555438878035622
+            ],
+            [
+              0.8555438878035622,
+              1.0086590418758326
+            ]
+          ],
+          "optimizer": {
+            "evaluations": 139,
+            "invalid_evaluations": 0,
+            "alpha_candidates": [
+              {
+                "alpha_mode": "finite",
+                "success": true,
+                "log_likelihood": -11.605594557921506,
+                "optimizer": {
+                  "evaluations": 137,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "global grid search (17 points; 4 successful local refinement(s))"
+                }
+              },
+              {
+                "alpha_mode": "0.0",
+                "success": true,
+                "log_likelihood": -17.7395887046966,
+                "optimizer": {
+                  "evaluations": 1,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "Exact covariance profile at fixed alpha"
+                }
+              },
+              {
+                "alpha_mode": "inf",
+                "success": true,
+                "log_likelihood": -22.096498672944563,
+                "optimizer": {
+                  "evaluations": 1,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "Exact covariance profile at fixed alpha"
+                }
+              }
+            ],
+            "continuous_globally_optimal": false,
+            "complete_alpha_modes": true,
+            "evaluated_alpha_modes_succeeded": true,
+            "alpha_boundary_scope": "shared_limits_only; mixed_trait_specific_boundary_faces_not_enumerated",
+            "alpha_height_bounds": [
+              1e-06,
+              1000.0
+            ],
+            "normalized_variance_bounds": [
+              0.0,
+              10000.0
+            ],
+            "alpha_estimated": true,
+            "process_variance_estimated": true,
+            "measurement_variance_estimated": false,
+            "nuisance_variance_at_numerical_bound": false,
+            "equivalent_modes_disagree_on_variance_decomposition": false,
+            "likelihood_scope": "joint_across_traits"
+          },
+          "engine": "separable_profile",
+          "criteria": {
+            "AIC": {
+              "criterion": "AIC",
+              "score": 419.76711132245,
+              "penalty": 18.0,
+              "parameter_count": 9,
+              "sample_size": 100,
+              "small_sample_correction": null,
+              "status": "ok",
+              "sample_size_convention": "observed_tip_vectors",
+              "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+            },
+            "BIC": {
+              "criterion": "BIC",
+              "score": 443.2136429963428,
+              "penalty": 41.44653167389283,
+              "parameter_count": 9,
+              "sample_size": 100,
+              "small_sample_correction": null,
+              "status": "ok",
+              "sample_size_convention": "observed_tip_vectors",
+              "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+            }
+          }
+        }
+      },
+      "BIC": {
+        "branches": [],
+        "any_shift": false,
+        "exact_branch": false,
+        "false_branch": false,
+        "fit": {
+          "log_likelihood": -207.63190987230297,
+          "shift_branch_ids": [],
+          "alpha": [
+            1.6700527337822633,
+            1.6700527337822633
+          ],
+          "alpha_status": [
+            "finite",
+            "finite"
+          ],
+          "process_tip_covariance": [
+            [
+              0.9873445154008973,
+              0.8425660332176037
+            ],
+            [
+              0.8425660332176037,
+              1.0022352077525623
+            ]
+          ],
+          "optimizer": {
+            "evaluations": 139,
+            "invalid_evaluations": 0,
+            "alpha_candidates": [
+              {
+                "alpha_mode": "finite",
+                "success": true,
+                "log_likelihood": -18.353948768999498,
+                "optimizer": {
+                  "evaluations": 137,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "global grid search (17 points; 4 successful local refinement(s))"
+                }
+              },
+              {
+                "alpha_mode": "0.0",
+                "success": true,
+                "log_likelihood": -24.461697041965124,
+                "optimizer": {
+                  "evaluations": 1,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "Exact covariance profile at fixed alpha"
+                }
+              },
+              {
+                "alpha_mode": "inf",
+                "success": true,
+                "log_likelihood": -27.780970885036858,
+                "optimizer": {
+                  "evaluations": 1,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "Exact covariance profile at fixed alpha"
+                }
+              }
+            ],
+            "continuous_globally_optimal": false,
+            "complete_alpha_modes": true,
+            "evaluated_alpha_modes_succeeded": true,
+            "alpha_boundary_scope": "shared_limits_only; mixed_trait_specific_boundary_faces_not_enumerated",
+            "alpha_height_bounds": [
+              1e-06,
+              1000.0
+            ],
+            "normalized_variance_bounds": [
+              0.0,
+              10000.0
+            ],
+            "alpha_estimated": true,
+            "process_variance_estimated": true,
+            "measurement_variance_estimated": false,
+            "nuisance_variance_at_numerical_bound": false,
+            "equivalent_modes_disagree_on_variance_decomposition": false,
+            "likelihood_scope": "joint_across_traits"
+          },
+          "engine": "separable_profile",
+          "criteria": {
+            "AIC": {
+              "criterion": "AIC",
+              "score": 427.26381974460594,
+              "penalty": 12.0,
+              "parameter_count": 6,
+              "sample_size": 100,
+              "small_sample_correction": null,
+              "status": "ok",
+              "sample_size_convention": "observed_tip_vectors",
+              "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+            },
+            "BIC": {
+              "criterion": "BIC",
+              "score": 442.8948408605345,
+              "penalty": 27.63102111592855,
+              "parameter_count": 6,
+              "sample_size": 100,
+              "small_sample_correction": null,
+              "status": "ok",
+              "sample_size_convention": "observed_tip_vectors",
+              "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+            }
+          }
+        }
+      }
+    },
+    "retained": [
+      {
+        "log_likelihood": -207.63190987230297,
+        "shift_branch_ids": [],
+        "alpha": [
+          1.6700527337822633,
+          1.6700527337822633
+        ],
+        "alpha_status": [
+          "finite",
+          "finite"
+        ],
+        "process_tip_covariance": [
+          [
+            0.9873445154008973,
+            0.8425660332176037
+          ],
+          [
+            0.8425660332176037,
+            1.0022352077525623
+          ]
+        ],
+        "optimizer": {
+          "evaluations": 139,
+          "invalid_evaluations": 0,
+          "alpha_candidates": [
+            {
+              "alpha_mode": "finite",
+              "success": true,
+              "log_likelihood": -18.353948768999498,
+              "optimizer": {
+                "evaluations": 137,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "global grid search (17 points; 4 successful local refinement(s))"
+              }
+            },
+            {
+              "alpha_mode": "0.0",
+              "success": true,
+              "log_likelihood": -24.461697041965124,
+              "optimizer": {
+                "evaluations": 1,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "Exact covariance profile at fixed alpha"
+              }
+            },
+            {
+              "alpha_mode": "inf",
+              "success": true,
+              "log_likelihood": -27.780970885036858,
+              "optimizer": {
+                "evaluations": 1,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "Exact covariance profile at fixed alpha"
+              }
+            }
+          ],
+          "continuous_globally_optimal": false,
+          "complete_alpha_modes": true,
+          "evaluated_alpha_modes_succeeded": true,
+          "alpha_boundary_scope": "shared_limits_only; mixed_trait_specific_boundary_faces_not_enumerated",
+          "alpha_height_bounds": [
+            1e-06,
+            1000.0
+          ],
+          "normalized_variance_bounds": [
+            0.0,
+            10000.0
+          ],
+          "alpha_estimated": true,
+          "process_variance_estimated": true,
+          "measurement_variance_estimated": false,
+          "nuisance_variance_at_numerical_bound": false,
+          "equivalent_modes_disagree_on_variance_decomposition": false,
+          "likelihood_scope": "joint_across_traits"
+        },
+        "engine": "separable_profile",
+        "criteria": {
+          "AIC": {
+            "criterion": "AIC",
+            "score": 427.26381974460594,
+            "penalty": 12.0,
+            "parameter_count": 6,
+            "sample_size": 100,
+            "small_sample_correction": null,
+            "status": "ok",
+            "sample_size_convention": "observed_tip_vectors",
+            "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+          },
+          "BIC": {
+            "criterion": "BIC",
+            "score": 442.8948408605345,
+            "penalty": 27.63102111592855,
+            "parameter_count": 6,
+            "sample_size": 100,
+            "small_sample_correction": null,
+            "status": "ok",
+            "sample_size_convention": "observed_tip_vectors",
+            "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+          }
+        }
+      },
+      {
+        "log_likelihood": -200.883555661225,
+        "shift_branch_ids": [
+          73
+        ],
+        "alpha": [
+          1.6041855187441831,
+          1.6041855187441831
+        ],
+        "alpha_status": [
+          "finite",
+          "finite"
+        ],
+        "process_tip_covariance": [
+          [
+            0.9724614937093595,
+            0.8555438878035622
+          ],
+          [
+            0.8555438878035622,
+            1.0086590418758326
+          ]
+        ],
+        "optimizer": {
+          "evaluations": 139,
+          "invalid_evaluations": 0,
+          "alpha_candidates": [
+            {
+              "alpha_mode": "finite",
+              "success": true,
+              "log_likelihood": -11.605594557921506,
+              "optimizer": {
+                "evaluations": 137,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "global grid search (17 points; 4 successful local refinement(s))"
+              }
+            },
+            {
+              "alpha_mode": "0.0",
+              "success": true,
+              "log_likelihood": -17.7395887046966,
+              "optimizer": {
+                "evaluations": 1,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "Exact covariance profile at fixed alpha"
+              }
+            },
+            {
+              "alpha_mode": "inf",
+              "success": true,
+              "log_likelihood": -22.096498672944563,
+              "optimizer": {
+                "evaluations": 1,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "Exact covariance profile at fixed alpha"
+              }
+            }
+          ],
+          "continuous_globally_optimal": false,
+          "complete_alpha_modes": true,
+          "evaluated_alpha_modes_succeeded": true,
+          "alpha_boundary_scope": "shared_limits_only; mixed_trait_specific_boundary_faces_not_enumerated",
+          "alpha_height_bounds": [
+            1e-06,
+            1000.0
+          ],
+          "normalized_variance_bounds": [
+            0.0,
+            10000.0
+          ],
+          "alpha_estimated": true,
+          "process_variance_estimated": true,
+          "measurement_variance_estimated": false,
+          "nuisance_variance_at_numerical_bound": false,
+          "equivalent_modes_disagree_on_variance_decomposition": false,
+          "likelihood_scope": "joint_across_traits"
+        },
+        "engine": "separable_profile",
+        "criteria": {
+          "AIC": {
+            "criterion": "AIC",
+            "score": 419.76711132245,
+            "penalty": 18.0,
+            "parameter_count": 9,
+            "sample_size": 100,
+            "small_sample_correction": null,
+            "status": "ok",
+            "sample_size_convention": "observed_tip_vectors",
+            "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+          },
+          "BIC": {
+            "criterion": "BIC",
+            "score": 443.2136429963428,
+            "penalty": 41.44653167389283,
+            "parameter_count": 9,
+            "sample_size": 100,
+            "small_sample_correction": null,
+            "status": "ok",
+            "sample_size_convention": "observed_tip_vectors",
+            "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+          }
+        }
+      }
+    ],
+    "records": [
+      {
+        "shift_branch_ids": [],
+        "groups": [
+          [
+            0
+          ]
+        ],
+        "complexity": 0,
+        "log_likelihood": -207.63190987230297,
+        "evaluations": 139,
+        "complete_covariance_modes": true,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 427.26381974460594,
+          "penalty": 12.0,
+          "parameter_count": 6,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      },
+      {
+        "shift_branch_ids": [
+          73
+        ],
+        "groups": [
+          [
+            0
+          ],
+          [
+            73
+          ]
+        ],
+        "complexity": 2,
+        "log_likelihood": -200.883555661225,
+        "evaluations": 139,
+        "complete_covariance_modes": true,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 419.76711132245,
+          "penalty": 18.0,
+          "parameter_count": 9,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      },
+      {
+        "shift_branch_ids": [
+          188
+        ],
+        "groups": [
+          [
+            0
+          ],
+          [
+            188
+          ]
+        ],
+        "complexity": 2,
+        "log_likelihood": -204.17343859760933,
+        "evaluations": 141,
+        "complete_covariance_modes": true,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 426.34687719521867,
+          "penalty": 18.0,
+          "parameter_count": 9,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      },
+      {
+        "shift_branch_ids": [
+          157
+        ],
+        "groups": [
+          [
+            0
+          ],
+          [
+            157
+          ]
+        ],
+        "complexity": 2,
+        "log_likelihood": -204.65179078382596,
+        "evaluations": 125,
+        "complete_covariance_modes": true,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 427.3035815676519,
+          "penalty": 18.0,
+          "parameter_count": 9,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      },
+      {
+        "shift_branch_ids": [
+          148
+        ],
+        "groups": [
+          [
+            0
+          ],
+          [
+            148
+          ]
+        ],
+        "complexity": 2,
+        "log_likelihood": -205.10936746115934,
+        "evaluations": 141,
+        "complete_covariance_modes": true,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 428.2187349223187,
+          "penalty": 18.0,
+          "parameter_count": 9,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      }
+    ],
+    "search_metadata": {
+      "strategy": "group_lasso_beam",
+      "complete_discrete_enumeration": false,
+      "continuous_global_optimum_certified": false,
+      "screening": {
+        "method": "joint_covariance_whitened_group_lasso",
+        "total_branches": 198,
+        "preliminary_branches": 64,
+        "pool_size": 4,
+        "pool": [
+          73,
+          157,
+          188,
+          148
+        ],
+        "path": [
+          {
+            "relative_strength": 0.95,
+            "strength": 3.373557458798495,
+            "iterations": 81,
+            "kkt_residual": 2.2672086506035417e-05,
+            "converged": true
+          },
+          {
+            "relative_strength": 0.43891950764785354,
+            "strength": 1.558652819829031,
+            "iterations": 22,
+            "kkt_residual": 2.999861095318928e-05,
+            "converged": true
+          },
+          {
+            "relative_strength": 0.20278982546719382,
+            "strength": 0.7201296087087334,
+            "iterations": 39,
+            "kkt_residual": 3.181984761296417e-05,
+            "converged": true
+          },
+          {
+            "relative_strength": 0.09369306352637355,
+            "strength": 0.3327146666285039,
+            "iterations": 93,
+            "kkt_residual": 3.4715989055880425e-05,
+            "converged": true
+          },
+          {
+            "relative_strength": 0.04328811927685784,
+            "strength": 0.15372100806716074,
+            "iterations": 142,
+            "kkt_residual": 3.423939564567764e-05,
+            "converged": true
+          },
+          {
+            "relative_strength": 0.02,
+            "strength": 0.07102226229049464,
+            "iterations": 200,
+            "kkt_residual": 7.27321340628512e-05,
+            "converged": false
+          }
+        ],
+        "all_paths_converged": false,
+        "candidate_generation_only": true
+      },
+      "quick_evaluations": 4,
+      "refitted_candidates": 5,
+      "refit_budget": 5,
+      "screening_budget": 10000,
+      "budget_exhausted": true,
+      "refinement": "one_pass_drop_move_merge_split",
+      "candidate_ranking": "fixed_joint_null_covariance_profile; final candidates refitted without penalties"
+    },
+    "status": "complete",
+    "elapsed_seconds_not_benchmark": 0.42506604199297726,
+    "worker_peak_rss_kib": 145728
+  },
+  {
+    "job": {
+      "kind": "pilot",
+      "traits": 2,
+      "truth": "shared",
+      "scenario": "aligned",
+      "replicate": 0,
+      "mode": "shared",
+      "repeats": 3,
+      "timeout": 180
+    },
+    "implementation_sha256": "7f8431b6dda064e71863fbe2a3ef286afe1d6bbda2fa3973c01d836c635edd46",
+    "generating": {
+      "parameters": {
+        "trait_names": [
+          "x0",
+          "x1"
+        ],
+        "alpha": [
+          1.0,
+          1.0
+        ],
+        "process_tip_covariance": [
+          [
+            1.0,
+            0.8
+          ],
+          [
+            0.8,
+            1.0
+          ]
+        ],
+        "regime_optima": [
+          [
+            0.0,
+            0.0
+          ],
+          [
+            2.4251782770064483,
+            2.4251782770064483
+          ]
+        ],
+        "shift_branch_ids": [
+          5
+        ]
+      },
+      "seed": 712100,
+      "data_sha256": "7ddf592120647107800bc61e7cbeaa5c3051063162fdfd9a6fdc5126343ebe74",
+      "tip_names": [
+        "t0",
+        "t1",
+        "t2",
+        "t3",
+        "t4",
+        "t5",
+        "t6",
+        "t7",
+        "t8",
+        "t9",
+        "t10",
+        "t11",
+        "t12",
+        "t13",
+        "t14",
+        "t15",
+        "t16",
+        "t17",
+        "t18",
+        "t19",
+        "t20",
+        "t21",
+        "t22",
+        "t23",
+        "t24",
+        "t25",
+        "t26",
+        "t27",
+        "t28",
+        "t29",
+        "t30",
+        "t31",
+        "t32",
+        "t33",
+        "t34",
+        "t35",
+        "t36",
+        "t37",
+        "t38",
+        "t39",
+        "t40",
+        "t41",
+        "t42",
+        "t43",
+        "t44",
+        "t45",
+        "t46",
+        "t47",
+        "t48",
+        "t49",
+        "t50",
+        "t51",
+        "t52",
+        "t53",
+        "t54",
+        "t55",
+        "t56",
+        "t57",
+        "t58",
+        "t59",
+        "t60",
+        "t61",
+        "t62",
+        "t63",
+        "t64",
+        "t65",
+        "t66",
+        "t67",
+        "t68",
+        "t69",
+        "t70",
+        "t71",
+        "t72",
+        "t73",
+        "t74",
+        "t75",
+        "t76",
+        "t77",
+        "t78",
+        "t79",
+        "t80",
+        "t81",
+        "t82",
+        "t83",
+        "t84",
+        "t85",
+        "t86",
+        "t87",
+        "t88",
+        "t89",
+        "t90",
+        "t91",
+        "t92",
+        "t93",
+        "t94",
+        "t95",
+        "t96",
+        "t97",
+        "t98",
+        "t99"
+      ],
+      "true_alpha": [
+        1.0,
+        1.0
+      ]
+    },
+    "selected": {
+      "AIC": {
+        "branches": [
+          132
+        ],
+        "any_shift": true,
+        "exact_branch": false,
+        "false_branch": true,
+        "fit": {
+          "log_likelihood": -197.23153362078756,
+          "shift_branch_ids": [
+            132
+          ],
+          "alpha": [
+            0.7213506334479854,
+            0.7213506334479854
+          ],
+          "alpha_status": [
+            "finite",
+            "finite"
+          ],
+          "process_tip_covariance": [
+            [
+              1.0800828556356612,
+              0.8671087778230916
+            ],
+            [
+              0.8671087778230916,
+              1.0143275301390096
+            ]
+          ],
+          "optimizer": {
+            "evaluations": 132,
+            "invalid_evaluations": 0,
+            "alpha_candidates": [
+              {
+                "alpha_mode": "finite",
+                "success": true,
+                "log_likelihood": -15.59166127707347,
+                "optimizer": {
+                  "evaluations": 130,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "global grid search (17 points; 4 successful local refinement(s))"
+                }
+              },
+              {
+                "alpha_mode": "0.0",
+                "success": true,
+                "log_likelihood": -17.74882170225986,
+                "optimizer": {
+                  "evaluations": 1,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "Exact covariance profile at fixed alpha"
+                }
+              },
+              {
+                "alpha_mode": "inf",
+                "success": true,
+                "log_likelihood": -46.349994038886955,
+                "optimizer": {
+                  "evaluations": 1,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "Exact covariance profile at fixed alpha"
+                }
+              }
+            ],
+            "continuous_globally_optimal": false,
+            "complete_alpha_modes": true,
+            "evaluated_alpha_modes_succeeded": true,
+            "alpha_boundary_scope": "shared_limits_only; mixed_trait_specific_boundary_faces_not_enumerated",
+            "alpha_height_bounds": [
+              1e-06,
+              1000.0
+            ],
+            "normalized_variance_bounds": [
+              0.0,
+              10000.0
+            ],
+            "alpha_estimated": true,
+            "process_variance_estimated": true,
+            "measurement_variance_estimated": false,
+            "nuisance_variance_at_numerical_bound": false,
+            "equivalent_modes_disagree_on_variance_decomposition": false,
+            "likelihood_scope": "joint_across_traits"
+          },
+          "engine": "separable_profile",
+          "criteria": {
+            "AIC": {
+              "criterion": "AIC",
+              "score": 412.4630672415751,
+              "penalty": 18.0,
+              "parameter_count": 9,
+              "sample_size": 100,
+              "small_sample_correction": null,
+              "status": "ok",
+              "sample_size_convention": "observed_tip_vectors",
+              "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+            },
+            "BIC": {
+              "criterion": "BIC",
+              "score": 435.90959891546794,
+              "penalty": 41.44653167389283,
+              "parameter_count": 9,
+              "sample_size": 100,
+              "small_sample_correction": null,
+              "status": "ok",
+              "sample_size_convention": "observed_tip_vectors",
+              "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+            }
+          }
+        }
+      },
+      "BIC": {
+        "branches": [],
+        "any_shift": false,
+        "exact_branch": false,
+        "false_branch": false,
+        "fit": {
+          "log_likelihood": -202.37224980340036,
+          "shift_branch_ids": [],
+          "alpha": [
+            0.790787765865618,
+            0.790787765865618
+          ],
+          "alpha_status": [
+            "finite",
+            "finite"
+          ],
+          "process_tip_covariance": [
+            [
+              1.062884409565467,
+              0.8477708554203539
+            ],
+            [
+              0.8477708554203539,
+              1.0195514560929975
+            ]
+          ],
+          "optimizer": {
+            "evaluations": 128,
+            "invalid_evaluations": 0,
+            "alpha_candidates": [
+              {
+                "alpha_mode": "finite",
+                "success": true,
+                "log_likelihood": -20.732377459686262,
+                "optimizer": {
+                  "evaluations": 126,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "global grid search (17 points; 4 successful local refinement(s))"
+                }
+              },
+              {
+                "alpha_mode": "0.0",
+                "success": true,
+                "log_likelihood": -23.318252329397836,
+                "optimizer": {
+                  "evaluations": 1,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "Exact covariance profile at fixed alpha"
+                }
+              },
+              {
+                "alpha_mode": "inf",
+                "success": true,
+                "log_likelihood": -49.68337556776636,
+                "optimizer": {
+                  "evaluations": 1,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "Exact covariance profile at fixed alpha"
+                }
+              }
+            ],
+            "continuous_globally_optimal": false,
+            "complete_alpha_modes": true,
+            "evaluated_alpha_modes_succeeded": true,
+            "alpha_boundary_scope": "shared_limits_only; mixed_trait_specific_boundary_faces_not_enumerated",
+            "alpha_height_bounds": [
+              1e-06,
+              1000.0
+            ],
+            "normalized_variance_bounds": [
+              0.0,
+              10000.0
+            ],
+            "alpha_estimated": true,
+            "process_variance_estimated": true,
+            "measurement_variance_estimated": false,
+            "nuisance_variance_at_numerical_bound": false,
+            "equivalent_modes_disagree_on_variance_decomposition": false,
+            "likelihood_scope": "joint_across_traits"
+          },
+          "engine": "separable_profile",
+          "criteria": {
+            "AIC": {
+              "criterion": "AIC",
+              "score": 416.74449960680073,
+              "penalty": 12.0,
+              "parameter_count": 6,
+              "sample_size": 100,
+              "small_sample_correction": null,
+              "status": "ok",
+              "sample_size_convention": "observed_tip_vectors",
+              "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+            },
+            "BIC": {
+              "criterion": "BIC",
+              "score": 432.3755207227293,
+              "penalty": 27.63102111592855,
+              "parameter_count": 6,
+              "sample_size": 100,
+              "small_sample_correction": null,
+              "status": "ok",
+              "sample_size_convention": "observed_tip_vectors",
+              "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+            }
+          }
+        }
+      }
+    },
+    "retained": [
+      {
+        "log_likelihood": -202.37224980340036,
+        "shift_branch_ids": [],
+        "alpha": [
+          0.790787765865618,
+          0.790787765865618
+        ],
+        "alpha_status": [
+          "finite",
+          "finite"
+        ],
+        "process_tip_covariance": [
+          [
+            1.062884409565467,
+            0.8477708554203539
+          ],
+          [
+            0.8477708554203539,
+            1.0195514560929975
+          ]
+        ],
+        "optimizer": {
+          "evaluations": 128,
+          "invalid_evaluations": 0,
+          "alpha_candidates": [
+            {
+              "alpha_mode": "finite",
+              "success": true,
+              "log_likelihood": -20.732377459686262,
+              "optimizer": {
+                "evaluations": 126,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "global grid search (17 points; 4 successful local refinement(s))"
+              }
+            },
+            {
+              "alpha_mode": "0.0",
+              "success": true,
+              "log_likelihood": -23.318252329397836,
+              "optimizer": {
+                "evaluations": 1,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "Exact covariance profile at fixed alpha"
+              }
+            },
+            {
+              "alpha_mode": "inf",
+              "success": true,
+              "log_likelihood": -49.68337556776636,
+              "optimizer": {
+                "evaluations": 1,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "Exact covariance profile at fixed alpha"
+              }
+            }
+          ],
+          "continuous_globally_optimal": false,
+          "complete_alpha_modes": true,
+          "evaluated_alpha_modes_succeeded": true,
+          "alpha_boundary_scope": "shared_limits_only; mixed_trait_specific_boundary_faces_not_enumerated",
+          "alpha_height_bounds": [
+            1e-06,
+            1000.0
+          ],
+          "normalized_variance_bounds": [
+            0.0,
+            10000.0
+          ],
+          "alpha_estimated": true,
+          "process_variance_estimated": true,
+          "measurement_variance_estimated": false,
+          "nuisance_variance_at_numerical_bound": false,
+          "equivalent_modes_disagree_on_variance_decomposition": false,
+          "likelihood_scope": "joint_across_traits"
+        },
+        "engine": "separable_profile",
+        "criteria": {
+          "AIC": {
+            "criterion": "AIC",
+            "score": 416.74449960680073,
+            "penalty": 12.0,
+            "parameter_count": 6,
+            "sample_size": 100,
+            "small_sample_correction": null,
+            "status": "ok",
+            "sample_size_convention": "observed_tip_vectors",
+            "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+          },
+          "BIC": {
+            "criterion": "BIC",
+            "score": 432.3755207227293,
+            "penalty": 27.63102111592855,
+            "parameter_count": 6,
+            "sample_size": 100,
+            "small_sample_correction": null,
+            "status": "ok",
+            "sample_size_convention": "observed_tip_vectors",
+            "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+          }
+        }
+      },
+      {
+        "log_likelihood": -197.23153362078756,
+        "shift_branch_ids": [
+          132
+        ],
+        "alpha": [
+          0.7213506334479854,
+          0.7213506334479854
+        ],
+        "alpha_status": [
+          "finite",
+          "finite"
+        ],
+        "process_tip_covariance": [
+          [
+            1.0800828556356612,
+            0.8671087778230916
+          ],
+          [
+            0.8671087778230916,
+            1.0143275301390096
+          ]
+        ],
+        "optimizer": {
+          "evaluations": 132,
+          "invalid_evaluations": 0,
+          "alpha_candidates": [
+            {
+              "alpha_mode": "finite",
+              "success": true,
+              "log_likelihood": -15.59166127707347,
+              "optimizer": {
+                "evaluations": 130,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "global grid search (17 points; 4 successful local refinement(s))"
+              }
+            },
+            {
+              "alpha_mode": "0.0",
+              "success": true,
+              "log_likelihood": -17.74882170225986,
+              "optimizer": {
+                "evaluations": 1,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "Exact covariance profile at fixed alpha"
+              }
+            },
+            {
+              "alpha_mode": "inf",
+              "success": true,
+              "log_likelihood": -46.349994038886955,
+              "optimizer": {
+                "evaluations": 1,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "Exact covariance profile at fixed alpha"
+              }
+            }
+          ],
+          "continuous_globally_optimal": false,
+          "complete_alpha_modes": true,
+          "evaluated_alpha_modes_succeeded": true,
+          "alpha_boundary_scope": "shared_limits_only; mixed_trait_specific_boundary_faces_not_enumerated",
+          "alpha_height_bounds": [
+            1e-06,
+            1000.0
+          ],
+          "normalized_variance_bounds": [
+            0.0,
+            10000.0
+          ],
+          "alpha_estimated": true,
+          "process_variance_estimated": true,
+          "measurement_variance_estimated": false,
+          "nuisance_variance_at_numerical_bound": false,
+          "equivalent_modes_disagree_on_variance_decomposition": false,
+          "likelihood_scope": "joint_across_traits"
+        },
+        "engine": "separable_profile",
+        "criteria": {
+          "AIC": {
+            "criterion": "AIC",
+            "score": 412.4630672415751,
+            "penalty": 18.0,
+            "parameter_count": 9,
+            "sample_size": 100,
+            "small_sample_correction": null,
+            "status": "ok",
+            "sample_size_convention": "observed_tip_vectors",
+            "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+          },
+          "BIC": {
+            "criterion": "BIC",
+            "score": 435.90959891546794,
+            "penalty": 41.44653167389283,
+            "parameter_count": 9,
+            "sample_size": 100,
+            "small_sample_correction": null,
+            "status": "ok",
+            "sample_size_convention": "observed_tip_vectors",
+            "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+          }
+        }
+      }
+    ],
+    "records": [
+      {
+        "shift_branch_ids": [],
+        "groups": [
+          [
+            0
+          ]
+        ],
+        "complexity": 0,
+        "log_likelihood": -202.37224980340036,
+        "evaluations": 128,
+        "complete_covariance_modes": true,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 416.74449960680073,
+          "penalty": 12.0,
+          "parameter_count": 6,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      },
+      {
+        "shift_branch_ids": [
+          132
+        ],
+        "groups": [
+          [
+            0
+          ],
+          [
+            132
+          ]
+        ],
+        "complexity": 2,
+        "log_likelihood": -197.23153362078756,
+        "evaluations": 132,
+        "complete_covariance_modes": true,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 412.4630672415751,
+          "penalty": 18.0,
+          "parameter_count": 9,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      },
+      {
+        "shift_branch_ids": [
+          156
+        ],
+        "groups": [
+          [
+            0
+          ],
+          [
+            156
+          ]
+        ],
+        "complexity": 2,
+        "log_likelihood": -197.37220984021047,
+        "evaluations": 142,
+        "complete_covariance_modes": true,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 412.74441968042095,
+          "penalty": 18.0,
+          "parameter_count": 9,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      },
+      {
+        "shift_branch_ids": [
+          151
+        ],
+        "groups": [
+          [
+            0
+          ],
+          [
+            151
+          ]
+        ],
+        "complexity": 2,
+        "log_likelihood": -199.1411851191092,
+        "evaluations": 114,
+        "complete_covariance_modes": true,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 416.2823702382184,
+          "penalty": 18.0,
+          "parameter_count": 9,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      },
+      {
+        "shift_branch_ids": [
+          114
+        ],
+        "groups": [
+          [
+            0
+          ],
+          [
+            114
+          ]
+        ],
+        "complexity": 2,
+        "log_likelihood": -199.35749930451587,
+        "evaluations": 120,
+        "complete_covariance_modes": true,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 416.71499860903174,
+          "penalty": 18.0,
+          "parameter_count": 9,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      }
+    ],
+    "search_metadata": {
+      "strategy": "group_lasso_beam",
+      "complete_discrete_enumeration": false,
+      "continuous_global_optimum_certified": false,
+      "screening": {
+        "method": "joint_covariance_whitened_group_lasso",
+        "total_branches": 198,
+        "preliminary_branches": 64,
+        "pool_size": 4,
+        "pool": [
+          156,
+          132,
+          114,
+          151
+        ],
+        "path": [
+          {
+            "relative_strength": 0.95,
+            "strength": 3.3056429672139527,
+            "iterations": 92,
+            "kkt_residual": 2.4077910159380107e-05,
+            "converged": true
+          },
+          {
+            "relative_strength": 0.43891950764785354,
+            "strength": 1.5272749301359345,
+            "iterations": 35,
+            "kkt_residual": 3.361443736641655e-05,
+            "converged": true
+          },
+          {
+            "relative_strength": 0.20278982546719382,
+            "strength": 0.7056323793454465,
+            "iterations": 59,
+            "kkt_residual": 3.0627215552166106e-05,
+            "converged": true
+          },
+          {
+            "relative_strength": 0.09369306352637355,
+            "strength": 0.32601664897124927,
+            "iterations": 46,
+            "kkt_residual": 3.4147473143175095e-05,
+            "converged": true
+          },
+          {
+            "relative_strength": 0.04328811927685784,
+            "strength": 0.15062638636996195,
+            "iterations": 71,
+            "kkt_residual": 2.9432860633041882e-05,
+            "converged": true
+          },
+          {
+            "relative_strength": 0.02,
+            "strength": 0.06959248352029375,
+            "iterations": 200,
+            "kkt_residual": 0.0001807956602855547,
+            "converged": false
+          }
+        ],
+        "all_paths_converged": false,
+        "candidate_generation_only": true
+      },
+      "quick_evaluations": 4,
+      "refitted_candidates": 5,
+      "refit_budget": 5,
+      "screening_budget": 10000,
+      "budget_exhausted": true,
+      "refinement": "one_pass_drop_move_merge_split",
+      "candidate_ranking": "fixed_joint_null_covariance_profile; final candidates refitted without penalties"
+    },
+    "status": "complete",
+    "elapsed_seconds_not_benchmark": 0.4135207499493845,
+    "worker_peak_rss_kib": 145920
+  },
+  {
+    "job": {
+      "kind": "pilot",
+      "traits": 2,
+      "truth": "shared",
+      "scenario": "opposed",
+      "replicate": 0,
+      "mode": "shared",
+      "repeats": 3,
+      "timeout": 180
+    },
+    "implementation_sha256": "7f8431b6dda064e71863fbe2a3ef286afe1d6bbda2fa3973c01d836c635edd46",
+    "generating": {
+      "parameters": {
+        "trait_names": [
+          "x0",
+          "x1"
+        ],
+        "alpha": [
+          1.0,
+          1.0
+        ],
+        "process_tip_covariance": [
+          [
+            1.0,
+            0.8
+          ],
+          [
+            0.8,
+            1.0
+          ]
+        ],
+        "regime_optima": [
+          [
+            0.0,
+            0.0
+          ],
+          [
+            2.4251782770064483,
+            -2.4251782770064483
+          ]
+        ],
+        "shift_branch_ids": [
+          5
+        ]
+      },
+      "seed": 712200,
+      "data_sha256": "88f1284c8e6174464585ad721adc1afc1381748fe9032f2aa85a212a5333b448",
+      "tip_names": [
+        "t0",
+        "t1",
+        "t2",
+        "t3",
+        "t4",
+        "t5",
+        "t6",
+        "t7",
+        "t8",
+        "t9",
+        "t10",
+        "t11",
+        "t12",
+        "t13",
+        "t14",
+        "t15",
+        "t16",
+        "t17",
+        "t18",
+        "t19",
+        "t20",
+        "t21",
+        "t22",
+        "t23",
+        "t24",
+        "t25",
+        "t26",
+        "t27",
+        "t28",
+        "t29",
+        "t30",
+        "t31",
+        "t32",
+        "t33",
+        "t34",
+        "t35",
+        "t36",
+        "t37",
+        "t38",
+        "t39",
+        "t40",
+        "t41",
+        "t42",
+        "t43",
+        "t44",
+        "t45",
+        "t46",
+        "t47",
+        "t48",
+        "t49",
+        "t50",
+        "t51",
+        "t52",
+        "t53",
+        "t54",
+        "t55",
+        "t56",
+        "t57",
+        "t58",
+        "t59",
+        "t60",
+        "t61",
+        "t62",
+        "t63",
+        "t64",
+        "t65",
+        "t66",
+        "t67",
+        "t68",
+        "t69",
+        "t70",
+        "t71",
+        "t72",
+        "t73",
+        "t74",
+        "t75",
+        "t76",
+        "t77",
+        "t78",
+        "t79",
+        "t80",
+        "t81",
+        "t82",
+        "t83",
+        "t84",
+        "t85",
+        "t86",
+        "t87",
+        "t88",
+        "t89",
+        "t90",
+        "t91",
+        "t92",
+        "t93",
+        "t94",
+        "t95",
+        "t96",
+        "t97",
+        "t98",
+        "t99"
+      ],
+      "true_alpha": [
+        1.0,
+        1.0
+      ]
+    },
+    "selected": {
+      "AIC": {
+        "branches": [
+          5
+        ],
+        "any_shift": true,
+        "exact_branch": true,
+        "false_branch": false,
+        "fit": {
+          "log_likelihood": -198.00013515200533,
+          "shift_branch_ids": [
+            5
+          ],
+          "alpha": [
+            1.6617399602488092,
+            1.6617399602488092
+          ],
+          "alpha_status": [
+            "finite",
+            "finite"
+          ],
+          "process_tip_covariance": [
+            [
+              0.8498432085362545,
+              0.7249018990148703
+            ],
+            [
+              0.7249018990148703,
+              0.8903382023279288
+            ]
+          ],
+          "optimizer": {
+            "evaluations": 140,
+            "invalid_evaluations": 0,
+            "alpha_candidates": [
+              {
+                "alpha_mode": "finite",
+                "success": true,
+                "log_likelihood": 51.22605381275696,
+                "optimizer": {
+                  "evaluations": 138,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "global grid search (17 points; 4 successful local refinement(s))"
+                }
+              },
+              {
+                "alpha_mode": "0.0",
+                "success": true,
+                "log_likelihood": 43.152921116499485,
+                "optimizer": {
+                  "evaluations": 1,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "Exact covariance profile at fixed alpha"
+                }
+              },
+              {
+                "alpha_mode": "inf",
+                "success": true,
+                "log_likelihood": 39.54835739630753,
+                "optimizer": {
+                  "evaluations": 1,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "Exact covariance profile at fixed alpha"
+                }
+              }
+            ],
+            "continuous_globally_optimal": false,
+            "complete_alpha_modes": true,
+            "evaluated_alpha_modes_succeeded": true,
+            "alpha_boundary_scope": "shared_limits_only; mixed_trait_specific_boundary_faces_not_enumerated",
+            "alpha_height_bounds": [
+              1e-06,
+              1000.0
+            ],
+            "normalized_variance_bounds": [
+              0.0,
+              10000.0
+            ],
+            "alpha_estimated": true,
+            "process_variance_estimated": true,
+            "measurement_variance_estimated": false,
+            "nuisance_variance_at_numerical_bound": false,
+            "equivalent_modes_disagree_on_variance_decomposition": false,
+            "likelihood_scope": "joint_across_traits"
+          },
+          "engine": "separable_profile",
+          "criteria": {
+            "AIC": {
+              "criterion": "AIC",
+              "score": 414.00027030401066,
+              "penalty": 18.0,
+              "parameter_count": 9,
+              "sample_size": 100,
+              "small_sample_correction": null,
+              "status": "ok",
+              "sample_size_convention": "observed_tip_vectors",
+              "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+            },
+            "BIC": {
+              "criterion": "BIC",
+              "score": 437.4468019779035,
+              "penalty": 41.44653167389283,
+              "parameter_count": 9,
+              "sample_size": 100,
+              "small_sample_correction": null,
+              "status": "ok",
+              "sample_size_convention": "observed_tip_vectors",
+              "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+            }
+          }
+        }
+      },
+      "BIC": {
+        "branches": [
+          5
+        ],
+        "any_shift": true,
+        "exact_branch": true,
+        "false_branch": false,
+        "fit": {
+          "log_likelihood": -198.00013515200533,
+          "shift_branch_ids": [
+            5
+          ],
+          "alpha": [
+            1.6617399602488092,
+            1.6617399602488092
+          ],
+          "alpha_status": [
+            "finite",
+            "finite"
+          ],
+          "process_tip_covariance": [
+            [
+              0.8498432085362545,
+              0.7249018990148703
+            ],
+            [
+              0.7249018990148703,
+              0.8903382023279288
+            ]
+          ],
+          "optimizer": {
+            "evaluations": 140,
+            "invalid_evaluations": 0,
+            "alpha_candidates": [
+              {
+                "alpha_mode": "finite",
+                "success": true,
+                "log_likelihood": 51.22605381275696,
+                "optimizer": {
+                  "evaluations": 138,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "global grid search (17 points; 4 successful local refinement(s))"
+                }
+              },
+              {
+                "alpha_mode": "0.0",
+                "success": true,
+                "log_likelihood": 43.152921116499485,
+                "optimizer": {
+                  "evaluations": 1,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "Exact covariance profile at fixed alpha"
+                }
+              },
+              {
+                "alpha_mode": "inf",
+                "success": true,
+                "log_likelihood": 39.54835739630753,
+                "optimizer": {
+                  "evaluations": 1,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "Exact covariance profile at fixed alpha"
+                }
+              }
+            ],
+            "continuous_globally_optimal": false,
+            "complete_alpha_modes": true,
+            "evaluated_alpha_modes_succeeded": true,
+            "alpha_boundary_scope": "shared_limits_only; mixed_trait_specific_boundary_faces_not_enumerated",
+            "alpha_height_bounds": [
+              1e-06,
+              1000.0
+            ],
+            "normalized_variance_bounds": [
+              0.0,
+              10000.0
+            ],
+            "alpha_estimated": true,
+            "process_variance_estimated": true,
+            "measurement_variance_estimated": false,
+            "nuisance_variance_at_numerical_bound": false,
+            "equivalent_modes_disagree_on_variance_decomposition": false,
+            "likelihood_scope": "joint_across_traits"
+          },
+          "engine": "separable_profile",
+          "criteria": {
+            "AIC": {
+              "criterion": "AIC",
+              "score": 414.00027030401066,
+              "penalty": 18.0,
+              "parameter_count": 9,
+              "sample_size": 100,
+              "small_sample_correction": null,
+              "status": "ok",
+              "sample_size_convention": "observed_tip_vectors",
+              "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+            },
+            "BIC": {
+              "criterion": "BIC",
+              "score": 437.4468019779035,
+              "penalty": 41.44653167389283,
+              "parameter_count": 9,
+              "sample_size": 100,
+              "small_sample_correction": null,
+              "status": "ok",
+              "sample_size_convention": "observed_tip_vectors",
+              "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+            }
+          }
+        }
+      }
+    },
+    "retained": [
+      {
+        "log_likelihood": -221.06791157710094,
+        "shift_branch_ids": [],
+        "alpha": [
+          0.0,
+          0.0
+        ],
+        "alpha_status": [
+          "brownian_limit",
+          "brownian_limit"
+        ],
+        "process_tip_covariance": [
+          [
+            1.5484763490694495,
+            1.176753766401838
+          ],
+          [
+            1.176753766401838,
+            1.5392360221001258
+          ]
+        ],
+        "optimizer": {
+          "evaluations": 148,
+          "invalid_evaluations": 0,
+          "alpha_candidates": [
+            {
+              "alpha_mode": "finite",
+              "success": true,
+              "log_likelihood": 28.1582733815383,
+              "optimizer": {
+                "evaluations": 146,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "global grid search (17 points; 4 successful local refinement(s))"
+              }
+            },
+            {
+              "alpha_mode": "0.0",
+              "success": true,
+              "log_likelihood": 28.158277387661343,
+              "optimizer": {
+                "evaluations": 1,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "Exact covariance profile at fixed alpha"
+              }
+            },
+            {
+              "alpha_mode": "inf",
+              "success": true,
+              "log_likelihood": -56.66754553517546,
+              "optimizer": {
+                "evaluations": 1,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "Exact covariance profile at fixed alpha"
+              }
+            }
+          ],
+          "continuous_globally_optimal": false,
+          "complete_alpha_modes": true,
+          "evaluated_alpha_modes_succeeded": true,
+          "alpha_boundary_scope": "shared_limits_only; mixed_trait_specific_boundary_faces_not_enumerated",
+          "alpha_height_bounds": [
+            1e-06,
+            1000.0
+          ],
+          "normalized_variance_bounds": [
+            0.0,
+            10000.0
+          ],
+          "alpha_estimated": true,
+          "process_variance_estimated": true,
+          "measurement_variance_estimated": false,
+          "nuisance_variance_at_numerical_bound": false,
+          "equivalent_modes_disagree_on_variance_decomposition": false,
+          "likelihood_scope": "joint_across_traits"
+        },
+        "engine": "separable_profile",
+        "criteria": {
+          "AIC": {
+            "criterion": "AIC",
+            "score": 454.1358231542019,
+            "penalty": 12.0,
+            "parameter_count": 6,
+            "sample_size": 100,
+            "small_sample_correction": null,
+            "status": "ok",
+            "sample_size_convention": "observed_tip_vectors",
+            "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+          },
+          "BIC": {
+            "criterion": "BIC",
+            "score": 469.76684427013043,
+            "penalty": 27.63102111592855,
+            "parameter_count": 6,
+            "sample_size": 100,
+            "small_sample_correction": null,
+            "status": "ok",
+            "sample_size_convention": "observed_tip_vectors",
+            "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+          }
+        }
+      },
+      {
+        "log_likelihood": -198.00013515200533,
+        "shift_branch_ids": [
+          5
+        ],
+        "alpha": [
+          1.6617399602488092,
+          1.6617399602488092
+        ],
+        "alpha_status": [
+          "finite",
+          "finite"
+        ],
+        "process_tip_covariance": [
+          [
+            0.8498432085362545,
+            0.7249018990148703
+          ],
+          [
+            0.7249018990148703,
+            0.8903382023279288
+          ]
+        ],
+        "optimizer": {
+          "evaluations": 140,
+          "invalid_evaluations": 0,
+          "alpha_candidates": [
+            {
+              "alpha_mode": "finite",
+              "success": true,
+              "log_likelihood": 51.22605381275696,
+              "optimizer": {
+                "evaluations": 138,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "global grid search (17 points; 4 successful local refinement(s))"
+              }
+            },
+            {
+              "alpha_mode": "0.0",
+              "success": true,
+              "log_likelihood": 43.152921116499485,
+              "optimizer": {
+                "evaluations": 1,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "Exact covariance profile at fixed alpha"
+              }
+            },
+            {
+              "alpha_mode": "inf",
+              "success": true,
+              "log_likelihood": 39.54835739630753,
+              "optimizer": {
+                "evaluations": 1,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "Exact covariance profile at fixed alpha"
+              }
+            }
+          ],
+          "continuous_globally_optimal": false,
+          "complete_alpha_modes": true,
+          "evaluated_alpha_modes_succeeded": true,
+          "alpha_boundary_scope": "shared_limits_only; mixed_trait_specific_boundary_faces_not_enumerated",
+          "alpha_height_bounds": [
+            1e-06,
+            1000.0
+          ],
+          "normalized_variance_bounds": [
+            0.0,
+            10000.0
+          ],
+          "alpha_estimated": true,
+          "process_variance_estimated": true,
+          "measurement_variance_estimated": false,
+          "nuisance_variance_at_numerical_bound": false,
+          "equivalent_modes_disagree_on_variance_decomposition": false,
+          "likelihood_scope": "joint_across_traits"
+        },
+        "engine": "separable_profile",
+        "criteria": {
+          "AIC": {
+            "criterion": "AIC",
+            "score": 414.00027030401066,
+            "penalty": 18.0,
+            "parameter_count": 9,
+            "sample_size": 100,
+            "small_sample_correction": null,
+            "status": "ok",
+            "sample_size_convention": "observed_tip_vectors",
+            "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+          },
+          "BIC": {
+            "criterion": "BIC",
+            "score": 437.4468019779035,
+            "penalty": 41.44653167389283,
+            "parameter_count": 9,
+            "sample_size": 100,
+            "small_sample_correction": null,
+            "status": "ok",
+            "sample_size_convention": "observed_tip_vectors",
+            "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+          }
+        }
+      }
+    ],
+    "records": [
+      {
+        "shift_branch_ids": [],
+        "groups": [
+          [
+            0
+          ]
+        ],
+        "complexity": 0,
+        "log_likelihood": -221.06791157710094,
+        "evaluations": 148,
+        "complete_covariance_modes": true,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 454.1358231542019,
+          "penalty": 12.0,
+          "parameter_count": 6,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      },
+      {
+        "shift_branch_ids": [
+          5
+        ],
+        "groups": [
+          [
+            0
+          ],
+          [
+            5
+          ]
+        ],
+        "complexity": 2,
+        "log_likelihood": -198.00013515200533,
+        "evaluations": 140,
+        "complete_covariance_modes": true,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 414.00027030401066,
+          "penalty": 18.0,
+          "parameter_count": 9,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      },
+      {
+        "shift_branch_ids": [
+          190
+        ],
+        "groups": [
+          [
+            0
+          ],
+          [
+            190
+          ]
+        ],
+        "complexity": 2,
+        "log_likelihood": -215.62359884201032,
+        "evaluations": 151,
+        "complete_covariance_modes": true,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 449.24719768402065,
+          "penalty": 18.0,
+          "parameter_count": 9,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      },
+      {
+        "shift_branch_ids": [
+          75
+        ],
+        "groups": [
+          [
+            0
+          ],
+          [
+            75
+          ]
+        ],
+        "complexity": 2,
+        "log_likelihood": -217.21724090241372,
+        "evaluations": 152,
+        "complete_covariance_modes": true,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 452.43448180482744,
+          "penalty": 18.0,
+          "parameter_count": 9,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      },
+      {
+        "shift_branch_ids": [
+          103
+        ],
+        "groups": [
+          [
+            0
+          ],
+          [
+            103
+          ]
+        ],
+        "complexity": 2,
+        "log_likelihood": -217.66405978382556,
+        "evaluations": 152,
+        "complete_covariance_modes": true,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 453.32811956765113,
+          "penalty": 18.0,
+          "parameter_count": 9,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      }
+    ],
+    "search_metadata": {
+      "strategy": "group_lasso_beam",
+      "complete_discrete_enumeration": false,
+      "continuous_global_optimum_certified": false,
+      "screening": {
+        "method": "joint_covariance_whitened_group_lasso",
+        "total_branches": 198,
+        "preliminary_branches": 64,
+        "pool_size": 4,
+        "pool": [
+          5,
+          103,
+          190,
+          75
+        ],
+        "path": [
+          {
+            "relative_strength": 0.95,
+            "strength": 4.835699837440779,
+            "iterations": 81,
+            "kkt_residual": 3.2498454931366605e-05,
+            "converged": true
+          },
+          {
+            "relative_strength": 0.43891950764785354,
+            "strength": 2.2341926229287496,
+            "iterations": 15,
+            "kkt_residual": 1.7689480879339928e-05,
+            "converged": true
+          },
+          {
+            "relative_strength": 0.20278982546719382,
+            "strength": 1.0322428695224768,
+            "iterations": 45,
+            "kkt_residual": 4.643495200810954e-05,
+            "converged": true
+          },
+          {
+            "relative_strength": 0.09369306352637355,
+            "strength": 0.4769174021724349,
+            "iterations": 62,
+            "kkt_residual": 4.502547542002935e-05,
+            "converged": true
+          },
+          {
+            "relative_strength": 0.04328811927685784,
+            "strength": 0.22034563300023002,
+            "iterations": 113,
+            "kkt_residual": 4.840402871924596e-05,
+            "converged": true
+          },
+          {
+            "relative_strength": 0.02,
+            "strength": 0.1018042071040164,
+            "iterations": 166,
+            "kkt_residual": 4.9597396490537925e-05,
+            "converged": true
+          }
+        ],
+        "all_paths_converged": true,
+        "candidate_generation_only": true
+      },
+      "quick_evaluations": 4,
+      "refitted_candidates": 5,
+      "refit_budget": 5,
+      "screening_budget": 10000,
+      "budget_exhausted": true,
+      "refinement": "one_pass_drop_move_merge_split",
+      "candidate_ranking": "fixed_joint_null_covariance_profile; final candidates refitted without penalties"
+    },
+    "status": "complete",
+    "elapsed_seconds_not_benchmark": 0.42222349997609854,
+    "worker_peak_rss_kib": 145712
+  },
+  {
+    "job": {
+      "kind": "pilot",
+      "traits": 2,
+      "truth": "different",
+      "scenario": "null",
+      "replicate": 0,
+      "mode": "trait-specific",
+      "repeats": 3,
+      "timeout": 180
+    },
+    "implementation_sha256": "7f8431b6dda064e71863fbe2a3ef286afe1d6bbda2fa3973c01d836c635edd46",
+    "status": "failed",
+    "error": "ValueError: Joint process covariance must be positive semidefinite.",
+    "stage": "fixture",
+    "elapsed_seconds_not_benchmark": 0.0014736250159330666,
+    "worker_peak_rss_kib": 143944
+  },
+  {
+    "job": {
+      "kind": "pilot",
+      "traits": 2,
+      "truth": "different",
+      "scenario": "null",
+      "replicate": 0,
+      "mode": "shared",
+      "repeats": 3,
+      "timeout": 180
+    },
+    "implementation_sha256": "7f8431b6dda064e71863fbe2a3ef286afe1d6bbda2fa3973c01d836c635edd46",
+    "status": "failed",
+    "error": "ValueError: Joint process covariance must be positive semidefinite.",
+    "stage": "fixture",
+    "elapsed_seconds_not_benchmark": 0.0013617920340038836,
+    "worker_peak_rss_kib": 143980
+  },
+  {
+    "job": {
+      "kind": "pilot",
+      "traits": 2,
+      "truth": "different",
+      "scenario": "aligned",
+      "replicate": 0,
+      "mode": "trait-specific",
+      "repeats": 3,
+      "timeout": 180
+    },
+    "implementation_sha256": "7f8431b6dda064e71863fbe2a3ef286afe1d6bbda2fa3973c01d836c635edd46",
+    "status": "failed",
+    "error": "ValueError: Joint process covariance must be positive semidefinite.",
+    "stage": "fixture",
+    "elapsed_seconds_not_benchmark": 0.0013860419858247042,
+    "worker_peak_rss_kib": 143988
+  },
+  {
+    "job": {
+      "kind": "pilot",
+      "traits": 2,
+      "truth": "different",
+      "scenario": "aligned",
+      "replicate": 0,
+      "mode": "shared",
+      "repeats": 3,
+      "timeout": 180
+    },
+    "implementation_sha256": "7f8431b6dda064e71863fbe2a3ef286afe1d6bbda2fa3973c01d836c635edd46",
+    "status": "failed",
+    "error": "ValueError: Joint process covariance must be positive semidefinite.",
+    "stage": "fixture",
+    "elapsed_seconds_not_benchmark": 0.0016531249857507646,
+    "worker_peak_rss_kib": 144000
+  },
+  {
+    "job": {
+      "kind": "pilot",
+      "traits": 2,
+      "truth": "different",
+      "scenario": "opposed",
+      "replicate": 0,
+      "mode": "trait-specific",
+      "repeats": 3,
+      "timeout": 180
+    },
+    "implementation_sha256": "7f8431b6dda064e71863fbe2a3ef286afe1d6bbda2fa3973c01d836c635edd46",
+    "status": "failed",
+    "error": "ValueError: Joint process covariance must be positive semidefinite.",
+    "stage": "fixture",
+    "elapsed_seconds_not_benchmark": 0.0015029170317575336,
+    "worker_peak_rss_kib": 143792
+  },
+  {
+    "job": {
+      "kind": "pilot",
+      "traits": 2,
+      "truth": "different",
+      "scenario": "opposed",
+      "replicate": 0,
+      "mode": "shared",
+      "repeats": 3,
+      "timeout": 180
+    },
+    "implementation_sha256": "7f8431b6dda064e71863fbe2a3ef286afe1d6bbda2fa3973c01d836c635edd46",
+    "status": "failed",
+    "error": "ValueError: Joint process covariance must be positive semidefinite.",
+    "stage": "fixture",
+    "elapsed_seconds_not_benchmark": 0.0013988340506330132,
+    "worker_peak_rss_kib": 143940
+  },
+  {
+    "job": {
+      "kind": "pilot",
+      "traits": 2,
+      "truth": "shared",
+      "scenario": "null",
+      "replicate": 0,
+      "mode": "trait-specific",
+      "repeats": 3,
+      "timeout": 180
+    },
+    "implementation_sha256": "7f8431b6dda064e71863fbe2a3ef286afe1d6bbda2fa3973c01d836c635edd46",
+    "generating": {
+      "parameters": {
+        "trait_names": [
+          "x0",
+          "x1"
+        ],
+        "alpha": [
+          1.0,
+          1.0
+        ],
+        "process_tip_covariance": [
+          [
+            1.0,
+            0.8
+          ],
+          [
+            0.8,
+            1.0
+          ]
+        ],
+        "regime_optima": [
+          [
+            0.0,
+            0.0
+          ]
+        ],
+        "shift_branch_ids": []
+      },
+      "seed": 712000,
+      "data_sha256": "46b890ba34a6aa31b662e366cdab257d3897a04e33cc80c36473d8ac34334f22",
+      "tip_names": [
+        "t0",
+        "t1",
+        "t2",
+        "t3",
+        "t4",
+        "t5",
+        "t6",
+        "t7",
+        "t8",
+        "t9",
+        "t10",
+        "t11",
+        "t12",
+        "t13",
+        "t14",
+        "t15",
+        "t16",
+        "t17",
+        "t18",
+        "t19",
+        "t20",
+        "t21",
+        "t22",
+        "t23",
+        "t24",
+        "t25",
+        "t26",
+        "t27",
+        "t28",
+        "t29",
+        "t30",
+        "t31",
+        "t32",
+        "t33",
+        "t34",
+        "t35",
+        "t36",
+        "t37",
+        "t38",
+        "t39",
+        "t40",
+        "t41",
+        "t42",
+        "t43",
+        "t44",
+        "t45",
+        "t46",
+        "t47",
+        "t48",
+        "t49",
+        "t50",
+        "t51",
+        "t52",
+        "t53",
+        "t54",
+        "t55",
+        "t56",
+        "t57",
+        "t58",
+        "t59",
+        "t60",
+        "t61",
+        "t62",
+        "t63",
+        "t64",
+        "t65",
+        "t66",
+        "t67",
+        "t68",
+        "t69",
+        "t70",
+        "t71",
+        "t72",
+        "t73",
+        "t74",
+        "t75",
+        "t76",
+        "t77",
+        "t78",
+        "t79",
+        "t80",
+        "t81",
+        "t82",
+        "t83",
+        "t84",
+        "t85",
+        "t86",
+        "t87",
+        "t88",
+        "t89",
+        "t90",
+        "t91",
+        "t92",
+        "t93",
+        "t94",
+        "t95",
+        "t96",
+        "t97",
+        "t98",
+        "t99"
+      ],
+      "true_alpha": [
+        1.0,
+        1.0
+      ]
+    },
+    "selected": {
+      "AIC": {
+        "branches": [
+          73
+        ],
+        "any_shift": true,
+        "exact_branch": false,
+        "false_branch": true,
+        "fit": {
+          "log_likelihood": -200.3541836576237,
+          "shift_branch_ids": [
+            73
+          ],
+          "alpha": [
+            1.4564097957938147,
+            1.8973372038116096
+          ],
+          "alpha_status": [
+            "finite",
+            "finite"
+          ],
+          "process_tip_covariance": [
+            [
+              0.9895208273057675,
+              0.8471697971143017
+            ],
+            [
+              0.8471697971143017,
+              0.975600309482737
+            ]
+          ],
+          "optimizer": {
+            "evaluations": 939,
+            "invalid_evaluations": 5,
+            "alpha_candidates": [
+              {
+                "alpha_mode": "finite",
+                "success": true,
+                "log_likelihood": -11.076222554320225,
+                "optimizer": {
+                  "evaluations": 937,
+                  "invalid_evaluations": 5,
+                  "starts": [
+                    {
+                      "success": true,
+                      "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+                      "projected_score": 0.0001511267555541361
+                    },
+                    {
+                      "success": true,
+                      "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL",
+                      "projected_score": 6.004086117166842e-07
+                    },
+                    {
+                      "success": true,
+                      "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+                      "projected_score": 9.613003726362357e-05
+                    }
+                  ],
+                  "success": true,
+                  "message": "Checked multistart joint ML"
+                }
+              },
+              {
+                "alpha_mode": "0.0",
+                "success": true,
+                "log_likelihood": -17.7395887046966,
+                "optimizer": {
+                  "evaluations": 1,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "Exact covariance profile at fixed alpha"
+                }
+              },
+              {
+                "alpha_mode": "inf",
+                "success": true,
+                "log_likelihood": -22.096498672944563,
+                "optimizer": {
+                  "evaluations": 1,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "Exact covariance profile at fixed alpha"
+                }
+              }
+            ],
+            "continuous_globally_optimal": false,
+            "complete_alpha_modes": false,
+            "evaluated_alpha_modes_succeeded": true,
+            "alpha_boundary_scope": "shared_limits_only; mixed_trait_specific_boundary_faces_not_enumerated",
+            "alpha_height_bounds": [
+              1e-06,
+              1000.0
+            ],
+            "normalized_variance_bounds": [
+              0.0,
+              10000.0
+            ],
+            "alpha_estimated": true,
+            "process_variance_estimated": true,
+            "measurement_variance_estimated": false,
+            "nuisance_variance_at_numerical_bound": false,
+            "equivalent_modes_disagree_on_variance_decomposition": false,
+            "likelihood_scope": "joint_across_traits"
+          },
+          "engine": "vector_tree_pruning",
+          "criteria": {
+            "AIC": {
+              "criterion": "AIC",
+              "score": 420.7083673152474,
+              "penalty": 20.0,
+              "parameter_count": 10,
+              "sample_size": 100,
+              "small_sample_correction": null,
+              "status": "ok",
+              "sample_size_convention": "observed_tip_vectors",
+              "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+            },
+            "BIC": {
+              "criterion": "BIC",
+              "score": 446.76006917512836,
+              "penalty": 46.05170185988092,
+              "parameter_count": 10,
+              "sample_size": 100,
+              "small_sample_correction": null,
+              "status": "ok",
+              "sample_size_convention": "observed_tip_vectors",
+              "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+            }
+          }
+        }
+      },
+      "BIC": {
+        "branches": [],
+        "any_shift": false,
+        "exact_branch": false,
+        "false_branch": false,
+        "fit": {
+          "log_likelihood": -207.16595475239916,
+          "shift_branch_ids": [],
+          "alpha": [
+            1.5041819447429778,
+            1.94358554004795
+          ],
+          "alpha_status": [
+            "finite",
+            "finite"
+          ],
+          "process_tip_covariance": [
+            [
+              1.0053863584306932,
+              0.8365471889959532
+            ],
+            [
+              0.8365471889959532,
+              0.9738436737146526
+            ]
+          ],
+          "optimizer": {
+            "evaluations": 1465,
+            "invalid_evaluations": 5,
+            "alpha_candidates": [
+              {
+                "alpha_mode": "finite",
+                "success": true,
+                "log_likelihood": -17.887993649095677,
+                "optimizer": {
+                  "evaluations": 1463,
+                  "invalid_evaluations": 5,
+                  "starts": [
+                    {
+                      "success": false,
+                      "message": "ABNORMAL: ",
+                      "projected_score": 9.111928989104836e-05
+                    },
+                    {
+                      "success": false,
+                      "message": "ABNORMAL: ",
+                      "projected_score": 1.1183942660852792e-06
+                    },
+                    {
+                      "success": true,
+                      "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+                      "projected_score": 0.00011446346093168734
+                    }
+                  ],
+                  "success": true,
+                  "message": "Checked multistart joint ML"
+                }
+              },
+              {
+                "alpha_mode": "0.0",
+                "success": true,
+                "log_likelihood": -24.461697041965124,
+                "optimizer": {
+                  "evaluations": 1,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "Exact covariance profile at fixed alpha"
+                }
+              },
+              {
+                "alpha_mode": "inf",
+                "success": true,
+                "log_likelihood": -27.780970885036858,
+                "optimizer": {
+                  "evaluations": 1,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "Exact covariance profile at fixed alpha"
+                }
+              }
+            ],
+            "continuous_globally_optimal": false,
+            "complete_alpha_modes": false,
+            "evaluated_alpha_modes_succeeded": true,
+            "alpha_boundary_scope": "shared_limits_only; mixed_trait_specific_boundary_faces_not_enumerated",
+            "alpha_height_bounds": [
+              1e-06,
+              1000.0
+            ],
+            "normalized_variance_bounds": [
+              0.0,
+              10000.0
+            ],
+            "alpha_estimated": true,
+            "process_variance_estimated": true,
+            "measurement_variance_estimated": false,
+            "nuisance_variance_at_numerical_bound": false,
+            "equivalent_modes_disagree_on_variance_decomposition": false,
+            "likelihood_scope": "joint_across_traits"
+          },
+          "engine": "vector_tree_pruning",
+          "criteria": {
+            "AIC": {
+              "criterion": "AIC",
+              "score": 428.3319095047983,
+              "penalty": 14.0,
+              "parameter_count": 7,
+              "sample_size": 100,
+              "small_sample_correction": null,
+              "status": "ok",
+              "sample_size_convention": "observed_tip_vectors",
+              "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+            },
+            "BIC": {
+              "criterion": "BIC",
+              "score": 446.56810080671494,
+              "penalty": 32.23619130191664,
+              "parameter_count": 7,
+              "sample_size": 100,
+              "small_sample_correction": null,
+              "status": "ok",
+              "sample_size_convention": "observed_tip_vectors",
+              "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+            }
+          }
+        }
+      }
+    },
+    "retained": [
+      {
+        "log_likelihood": -207.16595475239916,
+        "shift_branch_ids": [],
+        "alpha": [
+          1.5041819447429778,
+          1.94358554004795
+        ],
+        "alpha_status": [
+          "finite",
+          "finite"
+        ],
+        "process_tip_covariance": [
+          [
+            1.0053863584306932,
+            0.8365471889959532
+          ],
+          [
+            0.8365471889959532,
+            0.9738436737146526
+          ]
+        ],
+        "optimizer": {
+          "evaluations": 1465,
+          "invalid_evaluations": 5,
+          "alpha_candidates": [
+            {
+              "alpha_mode": "finite",
+              "success": true,
+              "log_likelihood": -17.887993649095677,
+              "optimizer": {
+                "evaluations": 1463,
+                "invalid_evaluations": 5,
+                "starts": [
+                  {
+                    "success": false,
+                    "message": "ABNORMAL: ",
+                    "projected_score": 9.111928989104836e-05
+                  },
+                  {
+                    "success": false,
+                    "message": "ABNORMAL: ",
+                    "projected_score": 1.1183942660852792e-06
+                  },
+                  {
+                    "success": true,
+                    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+                    "projected_score": 0.00011446346093168734
+                  }
+                ],
+                "success": true,
+                "message": "Checked multistart joint ML"
+              }
+            },
+            {
+              "alpha_mode": "0.0",
+              "success": true,
+              "log_likelihood": -24.461697041965124,
+              "optimizer": {
+                "evaluations": 1,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "Exact covariance profile at fixed alpha"
+              }
+            },
+            {
+              "alpha_mode": "inf",
+              "success": true,
+              "log_likelihood": -27.780970885036858,
+              "optimizer": {
+                "evaluations": 1,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "Exact covariance profile at fixed alpha"
+              }
+            }
+          ],
+          "continuous_globally_optimal": false,
+          "complete_alpha_modes": false,
+          "evaluated_alpha_modes_succeeded": true,
+          "alpha_boundary_scope": "shared_limits_only; mixed_trait_specific_boundary_faces_not_enumerated",
+          "alpha_height_bounds": [
+            1e-06,
+            1000.0
+          ],
+          "normalized_variance_bounds": [
+            0.0,
+            10000.0
+          ],
+          "alpha_estimated": true,
+          "process_variance_estimated": true,
+          "measurement_variance_estimated": false,
+          "nuisance_variance_at_numerical_bound": false,
+          "equivalent_modes_disagree_on_variance_decomposition": false,
+          "likelihood_scope": "joint_across_traits"
+        },
+        "engine": "vector_tree_pruning",
+        "criteria": {
+          "AIC": {
+            "criterion": "AIC",
+            "score": 428.3319095047983,
+            "penalty": 14.0,
+            "parameter_count": 7,
+            "sample_size": 100,
+            "small_sample_correction": null,
+            "status": "ok",
+            "sample_size_convention": "observed_tip_vectors",
+            "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+          },
+          "BIC": {
+            "criterion": "BIC",
+            "score": 446.56810080671494,
+            "penalty": 32.23619130191664,
+            "parameter_count": 7,
+            "sample_size": 100,
+            "small_sample_correction": null,
+            "status": "ok",
+            "sample_size_convention": "observed_tip_vectors",
+            "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+          }
+        }
+      },
+      {
+        "log_likelihood": -200.3541836576237,
+        "shift_branch_ids": [
+          73
+        ],
+        "alpha": [
+          1.4564097957938147,
+          1.8973372038116096
+        ],
+        "alpha_status": [
+          "finite",
+          "finite"
+        ],
+        "process_tip_covariance": [
+          [
+            0.9895208273057675,
+            0.8471697971143017
+          ],
+          [
+            0.8471697971143017,
+            0.975600309482737
+          ]
+        ],
+        "optimizer": {
+          "evaluations": 939,
+          "invalid_evaluations": 5,
+          "alpha_candidates": [
+            {
+              "alpha_mode": "finite",
+              "success": true,
+              "log_likelihood": -11.076222554320225,
+              "optimizer": {
+                "evaluations": 937,
+                "invalid_evaluations": 5,
+                "starts": [
+                  {
+                    "success": true,
+                    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+                    "projected_score": 0.0001511267555541361
+                  },
+                  {
+                    "success": true,
+                    "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL",
+                    "projected_score": 6.004086117166842e-07
+                  },
+                  {
+                    "success": true,
+                    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+                    "projected_score": 9.613003726362357e-05
+                  }
+                ],
+                "success": true,
+                "message": "Checked multistart joint ML"
+              }
+            },
+            {
+              "alpha_mode": "0.0",
+              "success": true,
+              "log_likelihood": -17.7395887046966,
+              "optimizer": {
+                "evaluations": 1,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "Exact covariance profile at fixed alpha"
+              }
+            },
+            {
+              "alpha_mode": "inf",
+              "success": true,
+              "log_likelihood": -22.096498672944563,
+              "optimizer": {
+                "evaluations": 1,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "Exact covariance profile at fixed alpha"
+              }
+            }
+          ],
+          "continuous_globally_optimal": false,
+          "complete_alpha_modes": false,
+          "evaluated_alpha_modes_succeeded": true,
+          "alpha_boundary_scope": "shared_limits_only; mixed_trait_specific_boundary_faces_not_enumerated",
+          "alpha_height_bounds": [
+            1e-06,
+            1000.0
+          ],
+          "normalized_variance_bounds": [
+            0.0,
+            10000.0
+          ],
+          "alpha_estimated": true,
+          "process_variance_estimated": true,
+          "measurement_variance_estimated": false,
+          "nuisance_variance_at_numerical_bound": false,
+          "equivalent_modes_disagree_on_variance_decomposition": false,
+          "likelihood_scope": "joint_across_traits"
+        },
+        "engine": "vector_tree_pruning",
+        "criteria": {
+          "AIC": {
+            "criterion": "AIC",
+            "score": 420.7083673152474,
+            "penalty": 20.0,
+            "parameter_count": 10,
+            "sample_size": 100,
+            "small_sample_correction": null,
+            "status": "ok",
+            "sample_size_convention": "observed_tip_vectors",
+            "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+          },
+          "BIC": {
+            "criterion": "BIC",
+            "score": 446.76006917512836,
+            "penalty": 46.05170185988092,
+            "parameter_count": 10,
+            "sample_size": 100,
+            "small_sample_correction": null,
+            "status": "ok",
+            "sample_size_convention": "observed_tip_vectors",
+            "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+          }
+        }
+      }
+    ],
+    "records": [
+      {
+        "shift_branch_ids": [],
+        "groups": [
+          [
+            0
+          ]
+        ],
+        "complexity": 0,
+        "log_likelihood": -207.16595475239916,
+        "evaluations": 1465,
+        "complete_covariance_modes": false,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 428.3319095047983,
+          "penalty": 14.0,
+          "parameter_count": 7,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      },
+      {
+        "shift_branch_ids": [
+          73
+        ],
+        "groups": [
+          [
+            0
+          ],
+          [
+            73
+          ]
+        ],
+        "complexity": 2,
+        "log_likelihood": -200.3541836576237,
+        "evaluations": 939,
+        "complete_covariance_modes": false,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 420.7083673152474,
+          "penalty": 20.0,
+          "parameter_count": 10,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      },
+      {
+        "shift_branch_ids": [
+          188
+        ],
+        "groups": [
+          [
+            0
+          ],
+          [
+            188
+          ]
+        ],
+        "complexity": 2,
+        "log_likelihood": -203.79952191659504,
+        "evaluations": 1145,
+        "complete_covariance_modes": false,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 427.5990438331901,
+          "penalty": 20.0,
+          "parameter_count": 10,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      },
+      {
+        "shift_branch_ids": [
+          157
+        ],
+        "groups": [
+          [
+            0
+          ],
+          [
+            157
+          ]
+        ],
+        "complexity": 2,
+        "log_likelihood": -204.09892330922185,
+        "evaluations": 731,
+        "complete_covariance_modes": false,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 428.1978466184437,
+          "penalty": 20.0,
+          "parameter_count": 10,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      },
+      {
+        "shift_branch_ids": [
+          121
+        ],
+        "groups": [
+          [
+            0
+          ],
+          [
+            121
+          ]
+        ],
+        "complexity": 2,
+        "log_likelihood": -204.6385481615804,
+        "evaluations": 1216,
+        "complete_covariance_modes": false,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 429.2770963231608,
+          "penalty": 20.0,
+          "parameter_count": 10,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      }
+    ],
+    "search_metadata": {
+      "strategy": "group_lasso_beam",
+      "complete_discrete_enumeration": false,
+      "continuous_global_optimum_certified": false,
+      "screening": {
+        "method": "joint_covariance_whitened_group_lasso",
+        "total_branches": 198,
+        "preliminary_branches": 64,
+        "pool_size": 4,
+        "pool": [
+          73,
+          157,
+          188,
+          121
+        ],
+        "path": [
+          {
+            "relative_strength": 0.95,
+            "strength": 3.3889840750116886,
+            "iterations": 81,
+            "kkt_residual": 2.2775761508783658e-05,
+            "converged": true
+          },
+          {
+            "relative_strength": 0.43891950764785354,
+            "strength": 1.5657802332953124,
+            "iterations": 23,
+            "kkt_residual": 2.1287171897739205e-05,
+            "converged": true
+          },
+          {
+            "relative_strength": 0.20278982546719382,
+            "strength": 0.7234226200870734,
+            "iterations": 40,
+            "kkt_residual": 3.1197328396989845e-05,
+            "converged": true
+          },
+          {
+            "relative_strength": 0.09369306352637355,
+            "strength": 0.3342361055051984,
+            "iterations": 67,
+            "kkt_residual": 3.518356258837297e-05,
+            "converged": true
+          },
+          {
+            "relative_strength": 0.04328811927685784,
+            "strength": 0.15442394406997656,
+            "iterations": 145,
+            "kkt_residual": 3.344768722844419e-05,
+            "converged": true
+          },
+          {
+            "relative_strength": 0.02,
+            "strength": 0.07134703315814082,
+            "iterations": 200,
+            "kkt_residual": 5.6189948373110675e-05,
+            "converged": false
+          }
+        ],
+        "all_paths_converged": false,
+        "candidate_generation_only": true
+      },
+      "quick_evaluations": 4,
+      "refitted_candidates": 5,
+      "refit_budget": 5,
+      "screening_budget": 10000,
+      "budget_exhausted": true,
+      "refinement": "one_pass_drop_move_merge_split",
+      "candidate_ranking": "fixed_joint_null_covariance_profile; final candidates refitted without penalties"
+    },
+    "status": "complete",
+    "elapsed_seconds_not_benchmark": 52.407084899023175,
+    "worker_peak_rss_kib": 145676
+  },
+  {
+    "job": {
+      "kind": "pilot",
+      "traits": 2,
+      "truth": "shared",
+      "scenario": "aligned",
+      "replicate": 0,
+      "mode": "trait-specific",
+      "repeats": 3,
+      "timeout": 180
+    },
+    "implementation_sha256": "7f8431b6dda064e71863fbe2a3ef286afe1d6bbda2fa3973c01d836c635edd46",
+    "generating": {
+      "parameters": {
+        "trait_names": [
+          "x0",
+          "x1"
+        ],
+        "alpha": [
+          1.0,
+          1.0
+        ],
+        "process_tip_covariance": [
+          [
+            1.0,
+            0.8
+          ],
+          [
+            0.8,
+            1.0
+          ]
+        ],
+        "regime_optima": [
+          [
+            0.0,
+            0.0
+          ],
+          [
+            2.4251782770064483,
+            2.4251782770064483
+          ]
+        ],
+        "shift_branch_ids": [
+          5
+        ]
+      },
+      "seed": 712100,
+      "data_sha256": "7ddf592120647107800bc61e7cbeaa5c3051063162fdfd9a6fdc5126343ebe74",
+      "tip_names": [
+        "t0",
+        "t1",
+        "t2",
+        "t3",
+        "t4",
+        "t5",
+        "t6",
+        "t7",
+        "t8",
+        "t9",
+        "t10",
+        "t11",
+        "t12",
+        "t13",
+        "t14",
+        "t15",
+        "t16",
+        "t17",
+        "t18",
+        "t19",
+        "t20",
+        "t21",
+        "t22",
+        "t23",
+        "t24",
+        "t25",
+        "t26",
+        "t27",
+        "t28",
+        "t29",
+        "t30",
+        "t31",
+        "t32",
+        "t33",
+        "t34",
+        "t35",
+        "t36",
+        "t37",
+        "t38",
+        "t39",
+        "t40",
+        "t41",
+        "t42",
+        "t43",
+        "t44",
+        "t45",
+        "t46",
+        "t47",
+        "t48",
+        "t49",
+        "t50",
+        "t51",
+        "t52",
+        "t53",
+        "t54",
+        "t55",
+        "t56",
+        "t57",
+        "t58",
+        "t59",
+        "t60",
+        "t61",
+        "t62",
+        "t63",
+        "t64",
+        "t65",
+        "t66",
+        "t67",
+        "t68",
+        "t69",
+        "t70",
+        "t71",
+        "t72",
+        "t73",
+        "t74",
+        "t75",
+        "t76",
+        "t77",
+        "t78",
+        "t79",
+        "t80",
+        "t81",
+        "t82",
+        "t83",
+        "t84",
+        "t85",
+        "t86",
+        "t87",
+        "t88",
+        "t89",
+        "t90",
+        "t91",
+        "t92",
+        "t93",
+        "t94",
+        "t95",
+        "t96",
+        "t97",
+        "t98",
+        "t99"
+      ],
+      "true_alpha": [
+        1.0,
+        1.0
+      ]
+    },
+    "selected": {
+      "AIC": {
+        "branches": [
+          132
+        ],
+        "any_shift": true,
+        "exact_branch": false,
+        "false_branch": true,
+        "fit": {
+          "log_likelihood": -196.94387076077547,
+          "shift_branch_ids": [
+            132
+          ],
+          "alpha": [
+            0.6068778079079412,
+            0.8452322723323649
+          ],
+          "alpha_status": [
+            "finite",
+            "finite"
+          ],
+          "process_tip_covariance": [
+            [
+              1.1146704065213342,
+              0.8656406931643046
+            ],
+            [
+              0.8656406931643044,
+              0.9812143696972173
+            ]
+          ],
+          "optimizer": {
+            "evaluations": 1264,
+            "invalid_evaluations": 6,
+            "alpha_candidates": [
+              {
+                "alpha_mode": "finite",
+                "success": true,
+                "log_likelihood": -15.303998417061365,
+                "optimizer": {
+                  "evaluations": 1262,
+                  "invalid_evaluations": 6,
+                  "starts": [
+                    {
+                      "success": true,
+                      "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+                      "projected_score": 8.870486567493795e-05
+                    },
+                    {
+                      "success": false,
+                      "message": "ABNORMAL: ",
+                      "projected_score": 4.103384299010475e-06
+                    },
+                    {
+                      "success": true,
+                      "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+                      "projected_score": 0.0001229395252265611
+                    }
+                  ],
+                  "success": true,
+                  "message": "Checked multistart joint ML"
+                }
+              },
+              {
+                "alpha_mode": "0.0",
+                "success": true,
+                "log_likelihood": -17.74882170225986,
+                "optimizer": {
+                  "evaluations": 1,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "Exact covariance profile at fixed alpha"
+                }
+              },
+              {
+                "alpha_mode": "inf",
+                "success": true,
+                "log_likelihood": -46.349994038886955,
+                "optimizer": {
+                  "evaluations": 1,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "Exact covariance profile at fixed alpha"
+                }
+              }
+            ],
+            "continuous_globally_optimal": false,
+            "complete_alpha_modes": false,
+            "evaluated_alpha_modes_succeeded": true,
+            "alpha_boundary_scope": "shared_limits_only; mixed_trait_specific_boundary_faces_not_enumerated",
+            "alpha_height_bounds": [
+              1e-06,
+              1000.0
+            ],
+            "normalized_variance_bounds": [
+              0.0,
+              10000.0
+            ],
+            "alpha_estimated": true,
+            "process_variance_estimated": true,
+            "measurement_variance_estimated": false,
+            "nuisance_variance_at_numerical_bound": false,
+            "equivalent_modes_disagree_on_variance_decomposition": false,
+            "likelihood_scope": "joint_across_traits"
+          },
+          "engine": "vector_tree_pruning",
+          "criteria": {
+            "AIC": {
+              "criterion": "AIC",
+              "score": 413.88774152155094,
+              "penalty": 20.0,
+              "parameter_count": 10,
+              "sample_size": 100,
+              "small_sample_correction": null,
+              "status": "ok",
+              "sample_size_convention": "observed_tip_vectors",
+              "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+            },
+            "BIC": {
+              "criterion": "BIC",
+              "score": 439.93944338143183,
+              "penalty": 46.05170185988092,
+              "parameter_count": 10,
+              "sample_size": 100,
+              "small_sample_correction": null,
+              "status": "ok",
+              "sample_size_convention": "observed_tip_vectors",
+              "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+            }
+          }
+        }
+      },
+      "BIC": {
+        "branches": [],
+        "any_shift": false,
+        "exact_branch": false,
+        "false_branch": false,
+        "fit": {
+          "log_likelihood": -202.07944116803844,
+          "shift_branch_ids": [],
+          "alpha": [
+            0.6753878485023196,
+            0.9224512094859628
+          ],
+          "alpha_status": [
+            "finite",
+            "finite"
+          ],
+          "process_tip_covariance": [
+            [
+              1.0941618224751162,
+              0.8456790148873795
+            ],
+            [
+              0.8456790148873795,
+              0.9870988922143569
+            ]
+          ],
+          "optimizer": {
+            "evaluations": 833,
+            "invalid_evaluations": 6,
+            "alpha_candidates": [
+              {
+                "alpha_mode": "finite",
+                "success": true,
+                "log_likelihood": -20.439568824324326,
+                "optimizer": {
+                  "evaluations": 831,
+                  "invalid_evaluations": 6,
+                  "starts": [
+                    {
+                      "success": true,
+                      "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+                      "projected_score": 9.122516075867651e-05
+                    },
+                    {
+                      "success": true,
+                      "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+                      "projected_score": 5.790923296439025e-07
+                    },
+                    {
+                      "success": true,
+                      "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+                      "projected_score": 0.0005161716387642013
+                    }
+                  ],
+                  "success": true,
+                  "message": "Checked multistart joint ML"
+                }
+              },
+              {
+                "alpha_mode": "0.0",
+                "success": true,
+                "log_likelihood": -23.318252329397836,
+                "optimizer": {
+                  "evaluations": 1,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "Exact covariance profile at fixed alpha"
+                }
+              },
+              {
+                "alpha_mode": "inf",
+                "success": true,
+                "log_likelihood": -49.68337556776636,
+                "optimizer": {
+                  "evaluations": 1,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "Exact covariance profile at fixed alpha"
+                }
+              }
+            ],
+            "continuous_globally_optimal": false,
+            "complete_alpha_modes": false,
+            "evaluated_alpha_modes_succeeded": true,
+            "alpha_boundary_scope": "shared_limits_only; mixed_trait_specific_boundary_faces_not_enumerated",
+            "alpha_height_bounds": [
+              1e-06,
+              1000.0
+            ],
+            "normalized_variance_bounds": [
+              0.0,
+              10000.0
+            ],
+            "alpha_estimated": true,
+            "process_variance_estimated": true,
+            "measurement_variance_estimated": false,
+            "nuisance_variance_at_numerical_bound": false,
+            "equivalent_modes_disagree_on_variance_decomposition": false,
+            "likelihood_scope": "joint_across_traits"
+          },
+          "engine": "vector_tree_pruning",
+          "criteria": {
+            "AIC": {
+              "criterion": "AIC",
+              "score": 418.1588823360769,
+              "penalty": 14.0,
+              "parameter_count": 7,
+              "sample_size": 100,
+              "small_sample_correction": null,
+              "status": "ok",
+              "sample_size_convention": "observed_tip_vectors",
+              "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+            },
+            "BIC": {
+              "criterion": "BIC",
+              "score": 436.3950736379935,
+              "penalty": 32.23619130191664,
+              "parameter_count": 7,
+              "sample_size": 100,
+              "small_sample_correction": null,
+              "status": "ok",
+              "sample_size_convention": "observed_tip_vectors",
+              "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+            }
+          }
+        }
+      }
+    },
+    "retained": [
+      {
+        "log_likelihood": -202.07944116803844,
+        "shift_branch_ids": [],
+        "alpha": [
+          0.6753878485023196,
+          0.9224512094859628
+        ],
+        "alpha_status": [
+          "finite",
+          "finite"
+        ],
+        "process_tip_covariance": [
+          [
+            1.0941618224751162,
+            0.8456790148873795
+          ],
+          [
+            0.8456790148873795,
+            0.9870988922143569
+          ]
+        ],
+        "optimizer": {
+          "evaluations": 833,
+          "invalid_evaluations": 6,
+          "alpha_candidates": [
+            {
+              "alpha_mode": "finite",
+              "success": true,
+              "log_likelihood": -20.439568824324326,
+              "optimizer": {
+                "evaluations": 831,
+                "invalid_evaluations": 6,
+                "starts": [
+                  {
+                    "success": true,
+                    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+                    "projected_score": 9.122516075867651e-05
+                  },
+                  {
+                    "success": true,
+                    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+                    "projected_score": 5.790923296439025e-07
+                  },
+                  {
+                    "success": true,
+                    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+                    "projected_score": 0.0005161716387642013
+                  }
+                ],
+                "success": true,
+                "message": "Checked multistart joint ML"
+              }
+            },
+            {
+              "alpha_mode": "0.0",
+              "success": true,
+              "log_likelihood": -23.318252329397836,
+              "optimizer": {
+                "evaluations": 1,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "Exact covariance profile at fixed alpha"
+              }
+            },
+            {
+              "alpha_mode": "inf",
+              "success": true,
+              "log_likelihood": -49.68337556776636,
+              "optimizer": {
+                "evaluations": 1,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "Exact covariance profile at fixed alpha"
+              }
+            }
+          ],
+          "continuous_globally_optimal": false,
+          "complete_alpha_modes": false,
+          "evaluated_alpha_modes_succeeded": true,
+          "alpha_boundary_scope": "shared_limits_only; mixed_trait_specific_boundary_faces_not_enumerated",
+          "alpha_height_bounds": [
+            1e-06,
+            1000.0
+          ],
+          "normalized_variance_bounds": [
+            0.0,
+            10000.0
+          ],
+          "alpha_estimated": true,
+          "process_variance_estimated": true,
+          "measurement_variance_estimated": false,
+          "nuisance_variance_at_numerical_bound": false,
+          "equivalent_modes_disagree_on_variance_decomposition": false,
+          "likelihood_scope": "joint_across_traits"
+        },
+        "engine": "vector_tree_pruning",
+        "criteria": {
+          "AIC": {
+            "criterion": "AIC",
+            "score": 418.1588823360769,
+            "penalty": 14.0,
+            "parameter_count": 7,
+            "sample_size": 100,
+            "small_sample_correction": null,
+            "status": "ok",
+            "sample_size_convention": "observed_tip_vectors",
+            "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+          },
+          "BIC": {
+            "criterion": "BIC",
+            "score": 436.3950736379935,
+            "penalty": 32.23619130191664,
+            "parameter_count": 7,
+            "sample_size": 100,
+            "small_sample_correction": null,
+            "status": "ok",
+            "sample_size_convention": "observed_tip_vectors",
+            "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+          }
+        }
+      },
+      {
+        "log_likelihood": -196.94387076077547,
+        "shift_branch_ids": [
+          132
+        ],
+        "alpha": [
+          0.6068778079079412,
+          0.8452322723323649
+        ],
+        "alpha_status": [
+          "finite",
+          "finite"
+        ],
+        "process_tip_covariance": [
+          [
+            1.1146704065213342,
+            0.8656406931643046
+          ],
+          [
+            0.8656406931643044,
+            0.9812143696972173
+          ]
+        ],
+        "optimizer": {
+          "evaluations": 1264,
+          "invalid_evaluations": 6,
+          "alpha_candidates": [
+            {
+              "alpha_mode": "finite",
+              "success": true,
+              "log_likelihood": -15.303998417061365,
+              "optimizer": {
+                "evaluations": 1262,
+                "invalid_evaluations": 6,
+                "starts": [
+                  {
+                    "success": true,
+                    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+                    "projected_score": 8.870486567493795e-05
+                  },
+                  {
+                    "success": false,
+                    "message": "ABNORMAL: ",
+                    "projected_score": 4.103384299010475e-06
+                  },
+                  {
+                    "success": true,
+                    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+                    "projected_score": 0.0001229395252265611
+                  }
+                ],
+                "success": true,
+                "message": "Checked multistart joint ML"
+              }
+            },
+            {
+              "alpha_mode": "0.0",
+              "success": true,
+              "log_likelihood": -17.74882170225986,
+              "optimizer": {
+                "evaluations": 1,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "Exact covariance profile at fixed alpha"
+              }
+            },
+            {
+              "alpha_mode": "inf",
+              "success": true,
+              "log_likelihood": -46.349994038886955,
+              "optimizer": {
+                "evaluations": 1,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "Exact covariance profile at fixed alpha"
+              }
+            }
+          ],
+          "continuous_globally_optimal": false,
+          "complete_alpha_modes": false,
+          "evaluated_alpha_modes_succeeded": true,
+          "alpha_boundary_scope": "shared_limits_only; mixed_trait_specific_boundary_faces_not_enumerated",
+          "alpha_height_bounds": [
+            1e-06,
+            1000.0
+          ],
+          "normalized_variance_bounds": [
+            0.0,
+            10000.0
+          ],
+          "alpha_estimated": true,
+          "process_variance_estimated": true,
+          "measurement_variance_estimated": false,
+          "nuisance_variance_at_numerical_bound": false,
+          "equivalent_modes_disagree_on_variance_decomposition": false,
+          "likelihood_scope": "joint_across_traits"
+        },
+        "engine": "vector_tree_pruning",
+        "criteria": {
+          "AIC": {
+            "criterion": "AIC",
+            "score": 413.88774152155094,
+            "penalty": 20.0,
+            "parameter_count": 10,
+            "sample_size": 100,
+            "small_sample_correction": null,
+            "status": "ok",
+            "sample_size_convention": "observed_tip_vectors",
+            "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+          },
+          "BIC": {
+            "criterion": "BIC",
+            "score": 439.93944338143183,
+            "penalty": 46.05170185988092,
+            "parameter_count": 10,
+            "sample_size": 100,
+            "small_sample_correction": null,
+            "status": "ok",
+            "sample_size_convention": "observed_tip_vectors",
+            "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+          }
+        }
+      }
+    ],
+    "records": [
+      {
+        "shift_branch_ids": [],
+        "groups": [
+          [
+            0
+          ]
+        ],
+        "complexity": 0,
+        "log_likelihood": -202.07944116803844,
+        "evaluations": 833,
+        "complete_covariance_modes": false,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 418.1588823360769,
+          "penalty": 14.0,
+          "parameter_count": 7,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      },
+      {
+        "shift_branch_ids": [
+          132
+        ],
+        "groups": [
+          [
+            0
+          ],
+          [
+            132
+          ]
+        ],
+        "complexity": 2,
+        "log_likelihood": -196.94387076077547,
+        "evaluations": 1264,
+        "complete_covariance_modes": false,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 413.88774152155094,
+          "penalty": 20.0,
+          "parameter_count": 10,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      },
+      {
+        "shift_branch_ids": [
+          156
+        ],
+        "groups": [
+          [
+            0
+          ],
+          [
+            156
+          ]
+        ],
+        "complexity": 2,
+        "log_likelihood": -197.11509723933335,
+        "evaluations": 1080,
+        "complete_covariance_modes": false,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 414.2301944786667,
+          "penalty": 20.0,
+          "parameter_count": 10,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      },
+      {
+        "shift_branch_ids": [
+          196
+        ],
+        "groups": [
+          [
+            0
+          ],
+          [
+            196
+          ]
+        ],
+        "complexity": 2,
+        "log_likelihood": -197.54747959930776,
+        "evaluations": 1342,
+        "complete_covariance_modes": false,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 415.0949591986155,
+          "penalty": 20.0,
+          "parameter_count": 10,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      },
+      {
+        "shift_branch_ids": [
+          151
+        ],
+        "groups": [
+          [
+            0
+          ],
+          [
+            151
+          ]
+        ],
+        "complexity": 2,
+        "log_likelihood": -198.7861889325432,
+        "evaluations": 949,
+        "complete_covariance_modes": false,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 417.5723778650864,
+          "penalty": 20.0,
+          "parameter_count": 10,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      }
+    ],
+    "search_metadata": {
+      "strategy": "group_lasso_beam",
+      "complete_discrete_enumeration": false,
+      "continuous_global_optimum_certified": false,
+      "screening": {
+        "method": "joint_covariance_whitened_group_lasso",
+        "total_branches": 198,
+        "preliminary_branches": 64,
+        "pool_size": 4,
+        "pool": [
+          156,
+          132,
+          151,
+          196
+        ],
+        "path": [
+          {
+            "relative_strength": 0.95,
+            "strength": 3.3142769304691555,
+            "iterations": 91,
+            "kkt_residual": 2.6211177737757628e-05,
+            "converged": true
+          },
+          {
+            "relative_strength": 0.43891950764785354,
+            "strength": 1.5312639984528011,
+            "iterations": 36,
+            "kkt_residual": 2.3233242239296855e-05,
+            "converged": true
+          },
+          {
+            "relative_strength": 0.20278982546719382,
+            "strength": 0.7074754108208283,
+            "iterations": 59,
+            "kkt_residual": 3.319693274949047e-05,
+            "converged": true
+          },
+          {
+            "relative_strength": 0.09369306352637355,
+            "strength": 0.3268681673583589,
+            "iterations": 63,
+            "kkt_residual": 3.078488810645677e-05,
+            "converged": true
+          },
+          {
+            "relative_strength": 0.04328811927685784,
+            "strength": 0.15101980535019693,
+            "iterations": 200,
+            "kkt_residual": 5.693947330912853e-05,
+            "converged": false
+          },
+          {
+            "relative_strength": 0.02,
+            "strength": 0.0697742511677717,
+            "iterations": 200,
+            "kkt_residual": 0.00011401951801780966,
+            "converged": false
+          }
+        ],
+        "all_paths_converged": false,
+        "candidate_generation_only": true
+      },
+      "quick_evaluations": 4,
+      "refitted_candidates": 5,
+      "refit_budget": 5,
+      "screening_budget": 10000,
+      "budget_exhausted": true,
+      "refinement": "one_pass_drop_move_merge_split",
+      "candidate_ranking": "fixed_joint_null_covariance_profile; final candidates refitted without penalties"
+    },
+    "status": "complete",
+    "elapsed_seconds_not_benchmark": 53.33608764898963,
+    "worker_peak_rss_kib": 147848
+  },
+  {
+    "job": {
+      "kind": "pilot",
+      "traits": 2,
+      "truth": "shared",
+      "scenario": "opposed",
+      "replicate": 0,
+      "mode": "trait-specific",
+      "repeats": 3,
+      "timeout": 180
+    },
+    "implementation_sha256": "7f8431b6dda064e71863fbe2a3ef286afe1d6bbda2fa3973c01d836c635edd46",
+    "generating": {
+      "parameters": {
+        "trait_names": [
+          "x0",
+          "x1"
+        ],
+        "alpha": [
+          1.0,
+          1.0
+        ],
+        "process_tip_covariance": [
+          [
+            1.0,
+            0.8
+          ],
+          [
+            0.8,
+            1.0
+          ]
+        ],
+        "regime_optima": [
+          [
+            0.0,
+            0.0
+          ],
+          [
+            2.4251782770064483,
+            -2.4251782770064483
+          ]
+        ],
+        "shift_branch_ids": [
+          5
+        ]
+      },
+      "seed": 712200,
+      "data_sha256": "88f1284c8e6174464585ad721adc1afc1381748fe9032f2aa85a212a5333b448",
+      "tip_names": [
+        "t0",
+        "t1",
+        "t2",
+        "t3",
+        "t4",
+        "t5",
+        "t6",
+        "t7",
+        "t8",
+        "t9",
+        "t10",
+        "t11",
+        "t12",
+        "t13",
+        "t14",
+        "t15",
+        "t16",
+        "t17",
+        "t18",
+        "t19",
+        "t20",
+        "t21",
+        "t22",
+        "t23",
+        "t24",
+        "t25",
+        "t26",
+        "t27",
+        "t28",
+        "t29",
+        "t30",
+        "t31",
+        "t32",
+        "t33",
+        "t34",
+        "t35",
+        "t36",
+        "t37",
+        "t38",
+        "t39",
+        "t40",
+        "t41",
+        "t42",
+        "t43",
+        "t44",
+        "t45",
+        "t46",
+        "t47",
+        "t48",
+        "t49",
+        "t50",
+        "t51",
+        "t52",
+        "t53",
+        "t54",
+        "t55",
+        "t56",
+        "t57",
+        "t58",
+        "t59",
+        "t60",
+        "t61",
+        "t62",
+        "t63",
+        "t64",
+        "t65",
+        "t66",
+        "t67",
+        "t68",
+        "t69",
+        "t70",
+        "t71",
+        "t72",
+        "t73",
+        "t74",
+        "t75",
+        "t76",
+        "t77",
+        "t78",
+        "t79",
+        "t80",
+        "t81",
+        "t82",
+        "t83",
+        "t84",
+        "t85",
+        "t86",
+        "t87",
+        "t88",
+        "t89",
+        "t90",
+        "t91",
+        "t92",
+        "t93",
+        "t94",
+        "t95",
+        "t96",
+        "t97",
+        "t98",
+        "t99"
+      ],
+      "true_alpha": [
+        1.0,
+        1.0
+      ]
+    },
+    "selected": {
+      "AIC": {
+        "branches": [
+          5
+        ],
+        "any_shift": true,
+        "exact_branch": true,
+        "false_branch": false,
+        "fit": {
+          "log_likelihood": -197.60161479394588,
+          "shift_branch_ids": [
+            5
+          ],
+          "alpha": [
+            1.9685445085408273,
+            1.5741399139428098
+          ],
+          "alpha_status": [
+            "finite",
+            "finite"
+          ],
+          "process_tip_covariance": [
+            [
+              0.8239804622114386,
+              0.7166022000121197
+            ],
+            [
+              0.7166022000121197,
+              0.8980716179499454
+            ]
+          ],
+          "optimizer": {
+            "evaluations": 689,
+            "invalid_evaluations": 0,
+            "alpha_candidates": [
+              {
+                "alpha_mode": "finite",
+                "success": true,
+                "log_likelihood": 51.62457417081639,
+                "optimizer": {
+                  "evaluations": 687,
+                  "invalid_evaluations": 0,
+                  "starts": [
+                    {
+                      "success": true,
+                      "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+                      "projected_score": 0.00022979520508647266
+                    },
+                    {
+                      "success": true,
+                      "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+                      "projected_score": 0.00032689442264167203
+                    },
+                    {
+                      "success": true,
+                      "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+                      "projected_score": 0.0001050385083327321
+                    }
+                  ],
+                  "success": true,
+                  "message": "Checked multistart joint ML"
+                }
+              },
+              {
+                "alpha_mode": "0.0",
+                "success": true,
+                "log_likelihood": 43.152921116499485,
+                "optimizer": {
+                  "evaluations": 1,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "Exact covariance profile at fixed alpha"
+                }
+              },
+              {
+                "alpha_mode": "inf",
+                "success": true,
+                "log_likelihood": 39.54835739630753,
+                "optimizer": {
+                  "evaluations": 1,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "Exact covariance profile at fixed alpha"
+                }
+              }
+            ],
+            "continuous_globally_optimal": false,
+            "complete_alpha_modes": false,
+            "evaluated_alpha_modes_succeeded": true,
+            "alpha_boundary_scope": "shared_limits_only; mixed_trait_specific_boundary_faces_not_enumerated",
+            "alpha_height_bounds": [
+              1e-06,
+              1000.0
+            ],
+            "normalized_variance_bounds": [
+              0.0,
+              10000.0
+            ],
+            "alpha_estimated": true,
+            "process_variance_estimated": true,
+            "measurement_variance_estimated": false,
+            "nuisance_variance_at_numerical_bound": false,
+            "equivalent_modes_disagree_on_variance_decomposition": false,
+            "likelihood_scope": "joint_across_traits"
+          },
+          "engine": "vector_tree_pruning",
+          "criteria": {
+            "AIC": {
+              "criterion": "AIC",
+              "score": 415.20322958789177,
+              "penalty": 20.0,
+              "parameter_count": 10,
+              "sample_size": 100,
+              "small_sample_correction": null,
+              "status": "ok",
+              "sample_size_convention": "observed_tip_vectors",
+              "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+            },
+            "BIC": {
+              "criterion": "BIC",
+              "score": 441.2549314477727,
+              "penalty": 46.05170185988092,
+              "parameter_count": 10,
+              "sample_size": 100,
+              "small_sample_correction": null,
+              "status": "ok",
+              "sample_size_convention": "observed_tip_vectors",
+              "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+            }
+          }
+        }
+      },
+      "BIC": {
+        "branches": [
+          5
+        ],
+        "any_shift": true,
+        "exact_branch": true,
+        "false_branch": false,
+        "fit": {
+          "log_likelihood": -197.60161479394588,
+          "shift_branch_ids": [
+            5
+          ],
+          "alpha": [
+            1.9685445085408273,
+            1.5741399139428098
+          ],
+          "alpha_status": [
+            "finite",
+            "finite"
+          ],
+          "process_tip_covariance": [
+            [
+              0.8239804622114386,
+              0.7166022000121197
+            ],
+            [
+              0.7166022000121197,
+              0.8980716179499454
+            ]
+          ],
+          "optimizer": {
+            "evaluations": 689,
+            "invalid_evaluations": 0,
+            "alpha_candidates": [
+              {
+                "alpha_mode": "finite",
+                "success": true,
+                "log_likelihood": 51.62457417081639,
+                "optimizer": {
+                  "evaluations": 687,
+                  "invalid_evaluations": 0,
+                  "starts": [
+                    {
+                      "success": true,
+                      "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+                      "projected_score": 0.00022979520508647266
+                    },
+                    {
+                      "success": true,
+                      "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+                      "projected_score": 0.00032689442264167203
+                    },
+                    {
+                      "success": true,
+                      "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+                      "projected_score": 0.0001050385083327321
+                    }
+                  ],
+                  "success": true,
+                  "message": "Checked multistart joint ML"
+                }
+              },
+              {
+                "alpha_mode": "0.0",
+                "success": true,
+                "log_likelihood": 43.152921116499485,
+                "optimizer": {
+                  "evaluations": 1,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "Exact covariance profile at fixed alpha"
+                }
+              },
+              {
+                "alpha_mode": "inf",
+                "success": true,
+                "log_likelihood": 39.54835739630753,
+                "optimizer": {
+                  "evaluations": 1,
+                  "invalid_evaluations": 0,
+                  "success": true,
+                  "message": "Exact covariance profile at fixed alpha"
+                }
+              }
+            ],
+            "continuous_globally_optimal": false,
+            "complete_alpha_modes": false,
+            "evaluated_alpha_modes_succeeded": true,
+            "alpha_boundary_scope": "shared_limits_only; mixed_trait_specific_boundary_faces_not_enumerated",
+            "alpha_height_bounds": [
+              1e-06,
+              1000.0
+            ],
+            "normalized_variance_bounds": [
+              0.0,
+              10000.0
+            ],
+            "alpha_estimated": true,
+            "process_variance_estimated": true,
+            "measurement_variance_estimated": false,
+            "nuisance_variance_at_numerical_bound": false,
+            "equivalent_modes_disagree_on_variance_decomposition": false,
+            "likelihood_scope": "joint_across_traits"
+          },
+          "engine": "vector_tree_pruning",
+          "criteria": {
+            "AIC": {
+              "criterion": "AIC",
+              "score": 415.20322958789177,
+              "penalty": 20.0,
+              "parameter_count": 10,
+              "sample_size": 100,
+              "small_sample_correction": null,
+              "status": "ok",
+              "sample_size_convention": "observed_tip_vectors",
+              "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+            },
+            "BIC": {
+              "criterion": "BIC",
+              "score": 441.2549314477727,
+              "penalty": 46.05170185988092,
+              "parameter_count": 10,
+              "sample_size": 100,
+              "small_sample_correction": null,
+              "status": "ok",
+              "sample_size_convention": "observed_tip_vectors",
+              "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+            }
+          }
+        }
+      }
+    },
+    "retained": [
+      {
+        "log_likelihood": -221.06791157710094,
+        "shift_branch_ids": [],
+        "alpha": [
+          0.0,
+          0.0
+        ],
+        "alpha_status": [
+          "brownian_limit",
+          "brownian_limit"
+        ],
+        "process_tip_covariance": [
+          [
+            1.5484763490694495,
+            1.176753766401838
+          ],
+          [
+            1.176753766401838,
+            1.5392360221001258
+          ]
+        ],
+        "optimizer": {
+          "evaluations": 2347,
+          "invalid_evaluations": 6,
+          "alpha_candidates": [
+            {
+              "alpha_mode": "finite",
+              "success": true,
+              "log_likelihood": 28.158273381537953,
+              "optimizer": {
+                "evaluations": 2345,
+                "invalid_evaluations": 6,
+                "starts": [
+                  {
+                    "success": true,
+                    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+                    "projected_score": 2.29117857847679e-05
+                  },
+                  {
+                    "success": true,
+                    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+                    "projected_score": 6.442490985130385e-06
+                  },
+                  {
+                    "success": true,
+                    "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL",
+                    "projected_score": 4.810374321091067e-07
+                  }
+                ],
+                "success": true,
+                "message": "Checked multistart joint ML"
+              }
+            },
+            {
+              "alpha_mode": "0.0",
+              "success": true,
+              "log_likelihood": 28.158277387661343,
+              "optimizer": {
+                "evaluations": 1,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "Exact covariance profile at fixed alpha"
+              }
+            },
+            {
+              "alpha_mode": "inf",
+              "success": true,
+              "log_likelihood": -56.66754553517546,
+              "optimizer": {
+                "evaluations": 1,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "Exact covariance profile at fixed alpha"
+              }
+            }
+          ],
+          "continuous_globally_optimal": false,
+          "complete_alpha_modes": false,
+          "evaluated_alpha_modes_succeeded": true,
+          "alpha_boundary_scope": "shared_limits_only; mixed_trait_specific_boundary_faces_not_enumerated",
+          "alpha_height_bounds": [
+            1e-06,
+            1000.0
+          ],
+          "normalized_variance_bounds": [
+            0.0,
+            10000.0
+          ],
+          "alpha_estimated": true,
+          "process_variance_estimated": true,
+          "measurement_variance_estimated": false,
+          "nuisance_variance_at_numerical_bound": false,
+          "equivalent_modes_disagree_on_variance_decomposition": false,
+          "likelihood_scope": "joint_across_traits"
+        },
+        "engine": "separable_profile",
+        "criteria": {
+          "AIC": {
+            "criterion": "AIC",
+            "score": 456.1358231542019,
+            "penalty": 14.0,
+            "parameter_count": 7,
+            "sample_size": 100,
+            "small_sample_correction": null,
+            "status": "ok",
+            "sample_size_convention": "observed_tip_vectors",
+            "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+          },
+          "BIC": {
+            "criterion": "BIC",
+            "score": 474.3720144561185,
+            "penalty": 32.23619130191664,
+            "parameter_count": 7,
+            "sample_size": 100,
+            "small_sample_correction": null,
+            "status": "ok",
+            "sample_size_convention": "observed_tip_vectors",
+            "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+          }
+        }
+      },
+      {
+        "log_likelihood": -197.60161479394588,
+        "shift_branch_ids": [
+          5
+        ],
+        "alpha": [
+          1.9685445085408273,
+          1.5741399139428098
+        ],
+        "alpha_status": [
+          "finite",
+          "finite"
+        ],
+        "process_tip_covariance": [
+          [
+            0.8239804622114386,
+            0.7166022000121197
+          ],
+          [
+            0.7166022000121197,
+            0.8980716179499454
+          ]
+        ],
+        "optimizer": {
+          "evaluations": 689,
+          "invalid_evaluations": 0,
+          "alpha_candidates": [
+            {
+              "alpha_mode": "finite",
+              "success": true,
+              "log_likelihood": 51.62457417081639,
+              "optimizer": {
+                "evaluations": 687,
+                "invalid_evaluations": 0,
+                "starts": [
+                  {
+                    "success": true,
+                    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+                    "projected_score": 0.00022979520508647266
+                  },
+                  {
+                    "success": true,
+                    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+                    "projected_score": 0.00032689442264167203
+                  },
+                  {
+                    "success": true,
+                    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+                    "projected_score": 0.0001050385083327321
+                  }
+                ],
+                "success": true,
+                "message": "Checked multistart joint ML"
+              }
+            },
+            {
+              "alpha_mode": "0.0",
+              "success": true,
+              "log_likelihood": 43.152921116499485,
+              "optimizer": {
+                "evaluations": 1,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "Exact covariance profile at fixed alpha"
+              }
+            },
+            {
+              "alpha_mode": "inf",
+              "success": true,
+              "log_likelihood": 39.54835739630753,
+              "optimizer": {
+                "evaluations": 1,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "Exact covariance profile at fixed alpha"
+              }
+            }
+          ],
+          "continuous_globally_optimal": false,
+          "complete_alpha_modes": false,
+          "evaluated_alpha_modes_succeeded": true,
+          "alpha_boundary_scope": "shared_limits_only; mixed_trait_specific_boundary_faces_not_enumerated",
+          "alpha_height_bounds": [
+            1e-06,
+            1000.0
+          ],
+          "normalized_variance_bounds": [
+            0.0,
+            10000.0
+          ],
+          "alpha_estimated": true,
+          "process_variance_estimated": true,
+          "measurement_variance_estimated": false,
+          "nuisance_variance_at_numerical_bound": false,
+          "equivalent_modes_disagree_on_variance_decomposition": false,
+          "likelihood_scope": "joint_across_traits"
+        },
+        "engine": "vector_tree_pruning",
+        "criteria": {
+          "AIC": {
+            "criterion": "AIC",
+            "score": 415.20322958789177,
+            "penalty": 20.0,
+            "parameter_count": 10,
+            "sample_size": 100,
+            "small_sample_correction": null,
+            "status": "ok",
+            "sample_size_convention": "observed_tip_vectors",
+            "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+          },
+          "BIC": {
+            "criterion": "BIC",
+            "score": 441.2549314477727,
+            "penalty": 46.05170185988092,
+            "parameter_count": 10,
+            "sample_size": 100,
+            "small_sample_correction": null,
+            "status": "ok",
+            "sample_size_convention": "observed_tip_vectors",
+            "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+          }
+        }
+      }
+    ],
+    "records": [
+      {
+        "shift_branch_ids": [],
+        "groups": [
+          [
+            0
+          ]
+        ],
+        "complexity": 0,
+        "log_likelihood": -221.06791157710094,
+        "evaluations": 2347,
+        "complete_covariance_modes": false,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 456.1358231542019,
+          "penalty": 14.0,
+          "parameter_count": 7,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      },
+      {
+        "shift_branch_ids": [
+          5
+        ],
+        "groups": [
+          [
+            0
+          ],
+          [
+            5
+          ]
+        ],
+        "complexity": 2,
+        "log_likelihood": -197.60161479394588,
+        "evaluations": 689,
+        "complete_covariance_modes": false,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 415.20322958789177,
+          "penalty": 20.0,
+          "parameter_count": 10,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      },
+      {
+        "shift_branch_ids": [
+          190
+        ],
+        "groups": [
+          [
+            0
+          ],
+          [
+            190
+          ]
+        ],
+        "complexity": 2,
+        "log_likelihood": -215.62359884201032,
+        "evaluations": 1823,
+        "complete_covariance_modes": false,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 451.24719768402065,
+          "penalty": 20.0,
+          "parameter_count": 10,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      },
+      {
+        "shift_branch_ids": [
+          75
+        ],
+        "groups": [
+          [
+            0
+          ],
+          [
+            75
+          ]
+        ],
+        "complexity": 2,
+        "log_likelihood": -217.21724090241372,
+        "evaluations": 2335,
+        "complete_covariance_modes": false,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 454.43448180482744,
+          "penalty": 20.0,
+          "parameter_count": 10,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      },
+      {
+        "shift_branch_ids": [
+          103
+        ],
+        "groups": [
+          [
+            0
+          ],
+          [
+            103
+          ]
+        ],
+        "complexity": 2,
+        "log_likelihood": -217.66405978382556,
+        "evaluations": 2151,
+        "complete_covariance_modes": false,
+        "information_criterion": {
+          "criterion": "AIC",
+          "score": 455.32811956765113,
+          "penalty": 20.0,
+          "parameter_count": 10,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      }
+    ],
+    "search_metadata": {
+      "strategy": "group_lasso_beam",
+      "complete_discrete_enumeration": false,
+      "continuous_global_optimum_certified": false,
+      "screening": {
+        "method": "joint_covariance_whitened_group_lasso",
+        "total_branches": 198,
+        "preliminary_branches": 64,
+        "pool_size": 4,
+        "pool": [
+          5,
+          103,
+          190,
+          75
+        ],
+        "path": [
+          {
+            "relative_strength": 0.95,
+            "strength": 4.835699837440779,
+            "iterations": 81,
+            "kkt_residual": 3.2498454931366605e-05,
+            "converged": true
+          },
+          {
+            "relative_strength": 0.43891950764785354,
+            "strength": 2.2341926229287496,
+            "iterations": 15,
+            "kkt_residual": 1.7689480879339928e-05,
+            "converged": true
+          },
+          {
+            "relative_strength": 0.20278982546719382,
+            "strength": 1.0322428695224768,
+            "iterations": 45,
+            "kkt_residual": 4.643495200810954e-05,
+            "converged": true
+          },
+          {
+            "relative_strength": 0.09369306352637355,
+            "strength": 0.4769174021724349,
+            "iterations": 62,
+            "kkt_residual": 4.502547542002935e-05,
+            "converged": true
+          },
+          {
+            "relative_strength": 0.04328811927685784,
+            "strength": 0.22034563300023002,
+            "iterations": 113,
+            "kkt_residual": 4.840402871924596e-05,
+            "converged": true
+          },
+          {
+            "relative_strength": 0.02,
+            "strength": 0.1018042071040164,
+            "iterations": 166,
+            "kkt_residual": 4.9597396490537925e-05,
+            "converged": true
+          }
+        ],
+        "all_paths_converged": true,
+        "candidate_generation_only": true
+      },
+      "quick_evaluations": 4,
+      "refitted_candidates": 5,
+      "refit_budget": 5,
+      "screening_budget": 10000,
+      "budget_exhausted": true,
+      "refinement": "one_pass_drop_move_merge_split",
+      "candidate_ranking": "fixed_joint_null_covariance_profile; final candidates refitted without penalties"
+    },
+    "status": "complete",
+    "elapsed_seconds_not_benchmark": 86.98076954000862,
+    "worker_peak_rss_kib": 145764
+  }
+]

@@ -1,0 +1,196 @@
+{
+  "environment": {
+    "python": "3.12.14 (main, Aug 25 2026, 13:50:33) [Clang 22.1.3 ]",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "numpy": "2.5.4",
+    "scipy": "1.17.1",
+    "pandas": "3.0.6",
+    "nwkit": "0.43.55",
+    "nwkit_source": "/tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/__init__.py",
+    "baseline_commit": "86c8f2c537769d852c17e2c789340f6c9de4ef54",
+    "timing_limit": "Exploratory host-local measurements; unrelated CPU jobs are active.",
+    "memory_limit": "tracemalloc peak is not complete RSS or all native allocations."
+  },
+  "reason": "Initial 2-64 trait effects overlapped host noise; test O(d^3) unused solve at 128/256 traits and an actual complete fit without weakening checks.",
+  "cases": [
+    {
+      "case": "16tips-128traits-noisy-proper",
+      "scope": "complete condition_vector_tree; fixture excluded",
+      "comparison": {
+        "nodes": "exact",
+        "means": "exact",
+        "covariances": "exact",
+        "log_likelihood": "exact",
+        "conditional_slopes": "exact",
+        "conditional_intercepts": "exact",
+        "conditional_covariances": "exact",
+        "parents": "exact"
+      },
+      "timing": {
+        "loops_per_sample": 3,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.058022708360416196,
+            0.042809694345730044,
+            0.033628430644360684,
+            0.03312937500110517,
+            0.03191379166673869,
+            0.03507131966762245,
+            0.03710231933897982
+          ],
+          "median_seconds": 0.03507131966762245,
+          "min_seconds": 0.03191379166673869,
+          "max_seconds": 0.058022708360416196
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.04381105567639073,
+            0.034720944318299495,
+            0.033047389006242156,
+            0.03124622197356075,
+            0.030880624971662957,
+            0.03212909730306516,
+            0.03412416666590919
+          ],
+          "median_seconds": 0.033047389006242156,
+          "min_seconds": 0.030880624971662957,
+          "max_seconds": 0.04381105567639073
+        },
+        "speedup": 1.061243284938426
+      },
+      "peak_bytes": {
+        "baseline": 17173320,
+        "candidate": 17171460
+      }
+    },
+    {
+      "case": "16tips-256traits-noisy-proper",
+      "scope": "complete condition_vector_tree; fixture excluded",
+      "comparison": {
+        "nodes": "exact",
+        "means": "exact",
+        "covariances": "exact",
+        "log_likelihood": "exact",
+        "conditional_slopes": "exact",
+        "conditional_intercepts": "exact",
+        "conditional_covariances": "exact",
+        "parents": "exact"
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.1666291250148788,
+            0.151955374982208,
+            0.14259279193356633,
+            0.1465410829987377,
+            0.1377560830442235,
+            0.13905637490097433,
+            0.13884479191619903
+          ],
+          "median_seconds": 0.14259279193356633,
+          "min_seconds": 0.1377560830442235,
+          "max_seconds": 0.1666291250148788
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.1524742499459535,
+            0.14040879090316594,
+            0.13076112500857562,
+            0.12939387501683086,
+            0.13360795902553946,
+            0.1364736669929698,
+            0.12896624999120831
+          ],
+          "median_seconds": 0.13360795902553946,
+          "min_seconds": 0.12896624999120831,
+          "max_seconds": 0.1524742499459535
+        },
+        "speedup": 1.0672477371374964
+      },
+      "peak_bytes": {
+        "baseline": 68390744,
+        "candidate": 68387892
+      }
+    },
+    {
+      "case": "8tips-2traits-partial-noisy-complete-BM-fit",
+      "scope": "complete fit_pruning_mvbm including preparation, deterministic multistart optimization and all posterior fields",
+      "comparison": {
+        "every_fit_and_posterior_field_exact": true,
+        "fit_fields": [
+          "trait_names",
+          "sigma",
+          "sigma_rank",
+          "sigma_estimated",
+          "restricted_log_likelihood",
+          "log_likelihood",
+          "num_observed",
+          "num_effective_observations",
+          "residual_df",
+          "fit_status",
+          "optimizer_success",
+          "optimizer_message",
+          "optimizer_starts",
+          "optimizer_converged_starts",
+          "optimizer_failed_starts",
+          "model",
+          "alpha",
+          "alpha_by_trait",
+          "alpha_estimated",
+          "diffusion_sigma",
+          "theta",
+          "theta_estimated",
+          "measurement_covariances",
+          "attraction_matrix",
+          "attraction_estimated",
+          "identifiability_status",
+          "identifiability_rank",
+          "identifiability_ratio"
+        ],
+        "posterior_nodes": 15,
+        "status": "ok"
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            2.0553936660289764,
+            1.7792116660857573,
+            1.75069108302705,
+            2.507553750067018,
+            2.884221417014487,
+            1.8233258329564705,
+            1.763704082928598
+          ],
+          "median_seconds": 1.8233258329564705,
+          "min_seconds": 1.75069108302705,
+          "max_seconds": 2.884221417014487
+        },
+        "candidate": {
+          "raw_seconds": [
+            2.273232707986608,
+            1.9356885419692844,
+            1.6489526249933988,
+            1.6727677079616114,
+            2.6649697499815375,
+            1.8791731250239536,
+            1.6921103750355542
+          ],
+          "median_seconds": 1.8791731250239536,
+          "min_seconds": 1.6489526249933988,
+          "max_seconds": 2.6649697499815375
+        },
+        "speedup": 0.9702809223249341
+      },
+      "peak_bytes": {
+        "baseline": 452524,
+        "candidate": 449337
+      }
+    }
+  ]
+}

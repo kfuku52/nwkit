@@ -47,6 +47,33 @@ def test_grouped_predictor_loading_keeps_order_and_shared_species_factors():
     )
 
 
+def test_small_eiv_boundary_factor_preserves_covariance_root():
+    diagonal = np.full(12, 1e-12)
+    groups = sparse.csr_matrix(np.eye(6)[np.arange(12) // 2])
+    slopes = np.column_stack([np.arange(12) % 2, 1 - np.arange(12) % 2])
+    covariance, factor = measurement_error_mod._factor_structured_eiv(
+        diagonal, [groups, slopes], 12
+    )
+    assert isinstance(factor, np.ndarray)
+    assert np.all(np.diag(factor) > 0)
+    np.testing.assert_allclose(
+        factor @ factor.T, materialize_covariance(covariance), atol=1e-14
+    )
+
+
+def test_large_eiv_factor_keeps_structured_route(monkeypatch):
+    sentinel = object()
+    monkeypatch.setattr(
+        measurement_error_mod,
+        "factor_diagonal_low_rank_updates",
+        lambda diagonal, updates: sentinel,
+    )
+    _, factor = measurement_error_mod._factor_structured_eiv(
+        np.ones(65), [sparse.eye(65)], 65
+    )
+    assert factor is sentinel
+
+
 def test_latent_predictor_posterior_matches_gaussian_conditioning():
     observed = np.asarray([1.0, 2.0, -0.5])
     evolutionary = np.diag([1.0, 2.0, 3.0])
@@ -650,7 +677,7 @@ def test_sparse_precision_predictor_uncertainty_matches_dense_eiv_covariance():
     )
 
 
-def test_grouped_sparse_precision_eiv_objective_matches_dense_covariance():
+def test_normalized_sparse_precision_eiv_objective_matches_dense_covariance():
     response = np.asarray([1.0, 1.9, 3.2, 4.0])
     design = np.column_stack([np.ones(4), np.arange(4.0)])
     loading = sparse.eye(4, format="csr")
@@ -681,8 +708,6 @@ def test_grouped_sparse_precision_eiv_objective_matches_dense_covariance():
         fixed_covariance=np.full(4, 0.1),
         components=[("evolutionary", np.ones(4))],
         reml=False,
-        likelihood_observations=2,
-        likelihood_groups=np.asarray([0, 0, 1, 1]),
     )
 
     dense = fit_conditional_eiv_gaussian(
@@ -740,59 +765,6 @@ def test_sparse_precision_marginal_diagonal_is_exact_above_legacy_threshold():
     actual = sparse_precision_update_diagonal(loading, precision)
 
     np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
-
-
-def test_grouped_gmrf_marginals_are_precomputed_once_for_optimization(monkeypatch):
-    response = np.asarray([1.0, 2.0, 3.2, 4.1])
-    design = np.column_stack([np.ones(4), np.arange(4.0)])
-    loading = sparse.eye(4, format="csr")
-    precision = sparse.csc_matrix(
-        np.asarray(
-            [
-                [2.0, -0.3, 0.0, 0.0],
-                [-0.3, 1.8, -0.2, 0.0],
-                [0.0, -0.2, 1.7, -0.25],
-                [0.0, 0.0, -0.25, 1.6],
-            ]
-        )
-    )
-    model = measurement_error_mod.SparseCovarianceModel(
-        precision=precision,
-        tip_loading=loading,
-        logdet_covariance=-np.linalg.slogdet(precision.toarray())[1],
-        sampling_parent=np.empty(0, dtype=int),
-        sampling_transition=np.empty(0),
-        sampling_variance=np.empty(0),
-        sampling_precision_factor=sparse.csr_matrix(
-            np.linalg.cholesky(precision.toarray()).T
-        ),
-    )
-    original = measurement_error_mod.sparse_precision_update_diagonal
-    calls = 0
-
-    def count_calls(*args, **kwargs):
-        nonlocal calls
-        calls += 1
-        return original(*args, **kwargs)
-
-    monkeypatch.setattr(
-        measurement_error_mod, "sparse_precision_update_diagonal", count_calls
-    )
-    fit_conditional_eiv_gaussian(
-        response,
-        design,
-        [GmrfPredictorUncertainty(model, np.arange(4))],
-        [1],
-        np.full(4, 0.1),
-        [("evolutionary", np.ones(4))],
-        reml=False,
-        likelihood_observations=2,
-        likelihood_groups=np.asarray([0, 0, 1, 1]),
-    )
-
-    # One grouped profile before optimization and one row profile retained in
-    # the returned diagnostic covariance; never one exact solve per objective.
-    assert calls == 2
 
 
 def test_structured_eiv_warns_and_attempts_above_validated_size(monkeypatch):

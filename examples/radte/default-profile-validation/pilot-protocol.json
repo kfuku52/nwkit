@@ -1,0 +1,12 @@
+{
+  "role": "pilot",
+  "purpose": "External AliSim GY94 sequences; assess native default profile availability and calibration without species-age ensembles. Not a general coverage certificate.",
+  "generator": "AliSim GY{0.5,2}+FQ+G4{0.7} (omega 0.5, kappa 2); independent lognormal edge rates; true rooted topology; LCA reconciliation",
+  "estimand": "The named root or internal duplication age D, one event per independent family",
+  "rules": "Preserve every failed/timeout fit. Record point-only and profile separately. No method selection by observed coverage. Pilot seeds excluded from subsequent validation.",
+  "cases": [
+    {"name": "root", "species": 2, "codons": 300, "rate_sd": 0.3, "seed": 710000, "families": 4},
+    {"name": "high_sd", "species": 2, "codons": 300, "rate_sd": 0.6, "seed": 720000, "families": 4},
+    {"name": "internal", "species": 4, "codons": 300, "rate_sd": 0.3, "scenario": "nested", "seed": 730000, "families": 4}
+  ]
+}

@@ -1,0 +1,3 @@
+"alpha_mode","free_score","singleton_score","score_difference","free_log_likelihood","singleton_log_likelihood","free_alpha","singleton_alpha","coordinate_correction","fixed_alpha_correction","backend_version"
+"estimated",32.7762419888615,-36.0905866796332,68.8668286684947,-7.50198947125874,-7.50198947125872,3.33333596389919e-08,3.33333584594735e-08,-68.8668286684946,0,"3.0.9"
+"fixed",33.173628720606,26.6556554525704,6.51797326803555,-7.71527542947964,-7.71527542947964,0.4,0.4,-4.43853172635571,-2.07944154167984,"3.0.9"

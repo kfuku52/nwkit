@@ -23,15 +23,14 @@ from matplotlib.text import Text
 from matplotlib.transforms import ScaledTranslation
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
 
-from nwkit.clade_mapping import canonical_split
+from nwkit.clade_mapping import physical_edge_lookup
 from nwkit.draw_layouts import get_rectangular_coordinates, make_tree_layout
-from nwkit.draw_quality import DrawingArtist
+from nwkit.draw_quality import DrawingArtist, measure_figure_renderer
 from nwkit.time_tree import (
     posterior_sample_tree,
 )
 from nwkit.util import (
     extract_species_label,
-    get_subtree_leaf_name_sets,
     read_tip_table,
     validate_unique_named_leaves,
 )
@@ -933,8 +932,7 @@ def _fit_artists_within_figure(figure, axes, artists, padding_points=2.0):
         }
     padding_pixels = float(padding_points) * figure.dpi / 72.0
     for _ in range(4):
-        figure.canvas.draw()
-        renderer = figure.canvas.get_renderer()
+        renderer = measure_figure_renderer(figure)
         bounds = [artist.get_window_extent(renderer=renderer) for artist in artists]
         left = min(bound.x0 for bound in bounds)
         right = max(bound.x1 for bound in bounds)
@@ -957,8 +955,7 @@ def _fit_artists_within_figure(figure, axes, artists, padding_points=2.0):
         axes.set_position(
             [new_left, new_bottom, new_right - new_left, new_top - new_bottom]
         )
-    figure.canvas.draw()
-    renderer = figure.canvas.get_renderer()
+    renderer = measure_figure_renderer(figure)
     bounds = [artist.get_window_extent(renderer=renderer) for artist in artists]
     figure_bounds = figure.bbox
     overflow = {
@@ -1582,40 +1579,23 @@ def _branch_style_maps(
     )
 
 
-def _physical_edge_paths(tree, drawing_layout):
-    all_taxa = frozenset(str(name) for name in tree.leaf_names())
-    taxon_sets = get_subtree_leaf_name_sets(tree)
-    nodes_by_split: dict[Any, list[Any]] = {}
-    for node in tree.traverse():
-        if node.is_root or node not in drawing_layout.edge_paths:
-            continue
-        side = frozenset(str(name) for name in taxon_sets[node])
-        split = canonical_split(side, all_taxa - side)
-        nodes_by_split.setdefault(split, []).append(node)
-
+def _physical_edge_paths(tree, drawing_layout, splits):
+    edge_paths = drawing_layout.edge_paths
+    find_edge = physical_edge_lookup(tree, available_edges=edge_paths)
     paths = {}
-    for split, nodes in nodes_by_split.items():
-        if len(nodes) == 1:
-            node = nodes[0]
-            path = list(drawing_layout.edge_paths[node])
-            side = frozenset(str(name) for name in taxon_sets[node])
-            if side == split[0]:
-                path.reverse()
-            paths[split] = path
+    for split in dict.fromkeys(splits):
+        edge = find_edge(split)
+        if edge is None:
             continue
-        root_children = tree.get_children()
-        if len(nodes) == 2 and {id(node) for node in nodes} == {
-            id(child) for child in root_children
-        }:
-            side_a = next(
-                node
-                for node in nodes
-                if frozenset(str(name) for name in taxon_sets[node]) == split[0]
+        side_a, side_b = edge
+        if side_a.up is side_b:
+            paths[split] = list(reversed(edge_paths[side_a]))
+        elif side_b.up is side_a:
+            paths[split] = list(edge_paths[side_b])
+        else:
+            paths[split] = (
+                list(reversed(edge_paths[side_a])) + list(edge_paths[side_b])[1:]
             )
-            side_b = nodes[0] if nodes[1] is side_a else nodes[1]
-            path_a = list(reversed(drawing_layout.edge_paths[side_a]))
-            path_b = list(drawing_layout.edge_paths[side_b])
-            paths[split] = path_a + path_b[1:]
     return paths
 
 
@@ -1650,7 +1630,10 @@ def _point_on_path(path, fraction):
 
 
 def _draw_branch_marker_overlays(ax, figure, tree, drawing_layout, branch_markers):
-    edge_paths = _physical_edge_paths(tree, drawing_layout)
+    branch_markers = tuple(branch_markers)
+    edge_paths = _physical_edge_paths(
+        tree, drawing_layout, (marker["split"] for marker in branch_markers)
+    )
     resolved = []
     for marker in branch_markers:
         split = marker["split"]
@@ -1972,17 +1955,11 @@ def _densitree_edge_key(node):
 
 
 def _densitree_topology_signature(tree):
-    all_tips = frozenset(str(name) for name in tree.leaf_names())
+    tip_count = len({str(name) for name in tree.leaf_names()})
+    clades = (_densitree_edge_key(node) for node in tree.traverse() if not node.is_root)
     return tuple(
         sorted(
-            (
-                tuple(sorted(_densitree_edge_key(node)))
-                for node in tree.traverse()
-                if (
-                    not node.is_root
-                    and 1 < len(_densitree_edge_key(node)) < len(all_tips)
-                )
-            ),
+            (tuple(sorted(clade)) for clade in clades if 1 < len(clade) < tip_count),
             key=lambda clade: (len(clade), clade),
         )
     )
@@ -2009,7 +1986,11 @@ def _make_posterior_drawing_layouts(
 ):
     """Render corresponding posterior trees with exactly the main-tree settings."""
 
-    reference_nodes = list(tree.traverse(strategy="preorder"))
+    reference_clades = [
+        None if node.is_root else _densitree_edge_key(node)
+        for node in tree.traverse(strategy="preorder")
+    ]
+    reference_tip_names = [node.name for node in tree.leaves()]
     layouts = []
     for sample_index in range(posterior.sample_count):
         posterior_tree = posterior_sample_tree(
@@ -2020,13 +2001,11 @@ def _make_posterior_drawing_layouts(
         if ladderize:
             posterior_tree.ladderize()
         sample_nodes = list(posterior_tree.traverse(strategy="preorder"))
-        if len(sample_nodes) != len(reference_nodes):
+        if len(sample_nodes) != len(reference_clades):
             raise ValueError(
                 "Posterior sample topology differs from the displayed topology."
             )
-        if [node.name for node in posterior_tree.leaves()] != [
-            node.name for node in tree.leaves()
-        ]:
+        if [node.name for node in posterior_tree.leaves()] != reference_tip_names:
             raise ValueError(
                 "Posterior sample topology has a different ordered tip set."
             )
@@ -2054,9 +2033,9 @@ def _make_posterior_drawing_layouts(
             daylight_iterations=daylight_iterations,
         )
         path_by_clade = {
-            _densitree_edge_key(reference): sample_layout.edge_paths[sample]
-            for reference, sample in zip(reference_nodes, sample_nodes, strict=True)
-            if not reference.is_root
+            clade: sample_layout.edge_paths[sample]
+            for clade, sample in zip(reference_clades, sample_nodes, strict=True)
+            if clade is not None
         }
         layouts.append((sample_layout.bounds, path_by_clade))
     return layouts
@@ -2160,25 +2139,39 @@ def _resample_polyline(path, sample_count=32):
 def _convex_hull(points):
     """Return the counter-clockwise convex hull of two-dimensional points."""
 
-    unique = sorted({(float(x), float(y)) for x, y in points})
+    if (
+        type(points) is np.ndarray
+        and points.dtype == np.float64
+        and points.ndim == 2
+        and points.shape[1] == 2
+        and np.isfinite(points).all()
+    ):
+        # Stable ordering retains the first representative of signed-zero ties.
+        ordered = points[np.lexsort((points[:, 1], points[:, 0]))]
+        distinct = np.ones(len(ordered), dtype=bool)
+        distinct[1:] = np.any(ordered[1:] != ordered[:-1], axis=1)
+        unique = ordered[distinct].tolist()
+    else:
+        unique = sorted({(float(x), float(y)) for x, y in points})
     if len(unique) <= 1:
         return np.asarray(unique, dtype=float)
 
-    def cross(origin, first, second):
-        return (first[0] - origin[0]) * (second[1] - origin[1]) - (
-            first[1] - origin[1]
-        ) * (second[0] - origin[0])
+    def half_hull(ordered_points):
+        half: list[Any] = []
+        for point in ordered_points:
+            x, y = point
+            while len(half) >= 2:
+                ax, ay = half[-2]
+                bx, by = half[-1]
+                if (bx - ax) * (y - ay) - (by - ay) * (x - ax) <= 0.0:
+                    half.pop()
+                else:
+                    break
+            half.append(point)
+        return half
 
-    lower: list[tuple[float, float]] = []
-    for point in unique:
-        while len(lower) >= 2 and cross(lower[-2], lower[-1], point) <= 0.0:
-            lower.pop()
-        lower.append(point)
-    upper: list[tuple[float, float]] = []
-    for point in reversed(unique):
-        while len(upper) >= 2 and cross(upper[-2], upper[-1], point) <= 0.0:
-            upper.pop()
-        upper.append(point)
+    lower = half_hull(unique)
+    upper = half_hull(reversed(unique))
     return np.asarray(lower[:-1] + upper[:-1], dtype=float)
 
 

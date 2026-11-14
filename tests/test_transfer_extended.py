@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 from ete4 import Tree
 
-from nwkit.clade_mapping import canonical_split
+from nwkit.clade_mapping import CladeMatch, canonical_split
 from nwkit.transfer import (
     parse_root_edge_policies,
     transfer_main,
@@ -642,3 +642,39 @@ def test_transfer_without_report_tracks_counts_without_building_rows():
         "B": 3.0,
         "C": 4.0,
     }
+
+
+@pytest.mark.parametrize(
+    "source_prop,target_prop", [("support", "support"), ("name", "edge_label")]
+)
+def test_split_label_transfer_does_not_build_length_only_physical_splits(
+    monkeypatch, source_prop, target_prop
+):
+    from nwkit import transfer
+
+    def unused(*args, **kwargs):
+        raise AssertionError(
+            "Physical edge indexing is only needed for length transfer"
+        )
+
+    monkeypatch.setattr(transfer, "_physical_split_candidates", unused)
+    monkeypatch.setattr(CladeMatch, "projected_split", property(unused))
+    source = Tree(
+        "((A:1,B:1)90:1,(C:1,D:1)90:1);", parser=0 if source_prop == "support" else 1
+    )
+    target = Tree("((D:2,C:2):2,(B:2,A:2):2);", parser=1)
+    result = transfer_properties(
+        target,
+        source,
+        [(source_prop, target_prop)],
+        target_class="intnode",
+        exclude_root=True,
+        align_roots=False,
+        match_basis="split",
+        root_edge_policies={target_prop: "equal-only"},
+        collect_report=False,
+    )
+    assert result["status_counts"] == {"transferred": 2}
+    for node in target.children:
+        assert str(node.props[target_prop]) in ("90", "90.0")
+        assert node.dist == 2

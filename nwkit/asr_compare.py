@@ -17,6 +17,7 @@ from nwkit.asr_compare_figure import (
     _font_family_for_text,
     draw_comparison_figure,
 )
+from nwkit.asr_compare_panels import panels_requested, validate_panel_options
 from nwkit.asr_comparison import (
     grouped_model_comparison_table,
     has_nonregular_variance_boundary,
@@ -42,7 +43,7 @@ from nwkit.util import (
 REGIME_MODELS = frozenset(
     {"MK-REGIME", "BMS", "BMS-DRIFT", "OUM", "OUMA", "OUMV", "OUMVA"}
 )
-MULTIVARIATE_MODELS = frozenset({"MV-BM", "MV-OU", "MV-OU-DIAG"})
+MULTIVARIATE_MODELS = frozenset({"MV-BM", "MV-OU", "MV-OU-DIAG", "MV-OU-FULL"})
 PAGEL_MODELS = frozenset({"PAGEL-INDEPENDENT", "PAGEL-DEPENDENT"})
 ROOT_VARIANT_MODEL = "OU"
 ROOT_VARIANTS = frozenset({"stationary", "fixed", "gaussian"})
@@ -138,6 +139,8 @@ MODEL_OPTION_CONSUMERS = {
     "alpha_by_trait": frozenset({"MV-OU-DIAG"}),
     "alpha_bounds": OU_MODELS,
     "theta": OU_MODELS - {"MV-OU", "MV-OU-DIAG"},
+    "attraction_matrix": frozenset({"MV-OU-FULL"}),
+    "diffusion_matrix": frozenset({"MV-OU-FULL"}),
     "eb_rate": frozenset({"EB", "ACDC"}),
     "eb_rate_bounds": frozenset({"EB", "ACDC"}),
     "drift": frozenset({"BM-DRIFT", "BMS-DRIFT"}),
@@ -582,6 +585,17 @@ def _validate_comparison_options(context, candidates, *, automatic=False):
 
 
 def _candidate_inapplicability(context, candidate):
+    from nwkit.discrete_observation import UNSUPPORTED_MODELS
+
+    if candidate.model == "BRANCH-GAUSSIAN":
+        return "fixed branch assignments require asr --model BRANCH-GAUSSIAN with explicit model tables and root parameters"
+    if candidate.model in {"JUMP-BM", "MM-BM", "MM-OU"}:
+        return "fixed-parameter Monte Carlo latent-history models do not support IC comparison"
+    if candidate.model in UNSUPPORTED_MODELS and any(
+        getattr(context.args, name, None) not in (None, "")
+        for name in ("tip_likelihoods", "misclassification_matrix")
+    ):
+        return "explicit observation likelihoods require a single-character CTMC model"
     definition = model_definition(candidate.model)
     if candidate.root_prior not in definition.root_priors:
         return f"root prior {candidate.root_prior} is unsupported; choose " + ", ".join(
@@ -732,7 +746,7 @@ def _custom_discrete_data(context):
     return _cached(context, "custom_discrete_data", build)
 
 
-def _fit_single_discrete(context, candidate):
+def _fit_single_discrete(context, candidate, *, compute_posterior=True):
     from nwkit.asr import (
         _parse_rate_bounds,
         compute_covarion_marginals,
@@ -748,6 +762,9 @@ def _fit_single_discrete(context, candidate):
     else:
         states, observed, likelihoods = _single_discrete_data(context)
         fixed_rate_matrix = None
+    from nwkit.discrete_observation import apply_discrete_observation_model
+
+    likelihoods = apply_discrete_observation_model(states, likelihoods, candidate_args)
     rate_bounds = _parse_rate_bounds(getattr(candidate_args, "rate_bounds", None))
     rate_design = (
         _discrete_rate_design(context, states)
@@ -768,7 +785,7 @@ def _fit_single_discrete(context, candidate):
         "root_prior_mode": candidate.root_prior,
         "rate_bounds": rate_bounds,
         "transition_graph": graph,
-        "_compute_posterior": False,
+        "_compute_posterior": compute_posterior,
     }
     if candidate.model == "HRM":
         return compute_hrm_marginals(
@@ -914,6 +931,8 @@ def _fit_pagel(context, candidate):
 
 
 def _continuous_data(context):
+    from nwkit.continuous_observation import apply_replicate_observations
+
     def build():
         if len(context.trait_columns) == 1:
             observed, errors = continuous_tip_values(
@@ -932,7 +951,9 @@ def _continuous_data(context):
                 context.trait_columns,
                 context.leaf_names,
             )
-        return observed, errors
+        return apply_replicate_observations(
+            observed, errors, context.trait_columns, context.args
+        )
 
     return _cached(context, "continuous_data", build)
 
@@ -953,7 +974,7 @@ def _fit_continuous(context, candidate):
     regime_assignment = (
         _regime_assignment(context) if candidate.model in REGIME_MODELS else None
     )
-    return _fit_continuous_model(
+    posterior, fit = _fit_continuous_model(
         context.tree,
         observed,
         errors,
@@ -961,13 +982,28 @@ def _fit_continuous(context, candidate):
         candidate_args,
         settings,
         regime_assignment,
-        compute_posterior=False,
+        compute_posterior=bool(
+            getattr(context.args, "model_average_out", None)
+            or panels_requested(context.args)
+        ),
         geometry_cache=(
             context.cache.setdefault("multivariate_geometry", {})
             if candidate.model in MULTIVARIATE_MODELS
             else None
         ),
-    )[1]
+    )
+    if getattr(context.args, "model_average_out", None):
+        context.cache.setdefault("averaging_posteriors", {})[candidate.model_id] = (
+            posterior
+        )
+    if panels_requested(context.args):
+        context.cache.setdefault("figure_fits", {})[candidate.model_id] = (
+            posterior,
+            fit,
+            settings,
+            regime_assignment,
+        )
+    return fit
 
 
 def _fit_candidate(context, candidate):
@@ -977,7 +1013,14 @@ def _fit_candidate(context, candidate):
         return _fit_mk_mixture(context, candidate)
     if candidate.model in PAGEL_MODELS:
         return _fit_pagel(context, candidate)
-    return _fit_single_discrete(context, candidate)
+    return _fit_single_discrete(
+        context,
+        candidate,
+        compute_posterior=bool(
+            getattr(context.args, "model_average_out", None)
+            or panels_requested(context.args)
+        ),
+    )
 
 
 def _fit_value(fit, name, default=None):
@@ -1046,6 +1089,12 @@ def _classify_fit(candidate, fit, summary):
         )
     if "singular" in fit_status:
         return "nonregular", "no", f"Non-regular fit status: {fit_status}."
+    if candidate.model == "MV-OU-FULL" and fit_status != "ok":
+        return (
+            "nonregular",
+            "no",
+            f"Full OU local identifiability/boundary diagnostic: {fit_status}.",
+        )
     if has_nonregular_variance_boundary(fit_status):
         return (
             "nonregular",
@@ -1102,6 +1151,22 @@ def _continuous_parameter_contract(candidate, fit):
     estimated: list[str] = []
     fixed: list[str] = []
     model = candidate.model
+    if model == "MV-OU-FULL":
+        _route_parameters(
+            fit,
+            ["attraction_matrix", "diffusion_covariance"],
+            "attraction_estimated",
+            estimated,
+            fixed,
+        )
+        _route_parameters(
+            fit,
+            [f"theta[{name}]" for name in fit.trait_names],
+            "theta_estimated",
+            estimated,
+            fixed,
+        )
+        return estimated, fixed
     if model in MULTIVARIATE_MODELS:
         estimated.append(
             "diffusion_covariance" if model == "MV-OU-DIAG" else "trait_covariance"
@@ -1601,6 +1666,12 @@ def evaluate_comparison_candidates(context, candidates, *, automatic):
         sys.stderr.write(f"ASR comparison: fitting {candidate.model_id}.\n")
         try:
             fit = _fit_candidate(context, candidate)
+            if context.trait_type == "discrete" and getattr(
+                context.args, "model_average_out", None
+            ):
+                context.cache.setdefault("averaging_posteriors", {})[
+                    candidate.model_id
+                ] = fit["posterior_by_node"]
             row = _successful_row(
                 context, candidate, fit, time.perf_counter() - started
             )
@@ -1649,15 +1720,27 @@ def _validate_output_paths(args):
         raise ValueError("'--figure-out' must be a PDF file path, not STDOUT.")
     if figure not in (None, "") and os.path.splitext(str(figure))[1].lower() != ".pdf":
         raise ValueError("'--figure-out' must use the .pdf extension.")
-    outputs = [("--outfile", args.outfile), ("--figure-out", figure)]
+    average = getattr(args, "model_average_out", None)
+    if average == "-":
+        raise ValueError("--model-average-out requires a file path, not STDOUT.")
+    outputs = [
+        ("--outfile", args.outfile),
+        ("--figure-out", figure),
+        ("--model-average-out", average),
+    ]
     validate_distinct_output_paths(outputs)
     inputs = [
         ("--infile", args.infile),
         ("--trait", args.trait),
         ("--regime-map", getattr(args, "regime_map", None)),
+        ("--species-map-tsv", getattr(args, "species_map_tsv", None)),
         ("--regime-parameters", getattr(args, "regime_parameters", None)),
         ("--rate-matrix", getattr(args, "rate_matrix", None)),
         ("--rate-design", getattr(args, "rate_design", None)),
+        ("--measurement-covariance", getattr(args, "measurement_covariance", None)),
+        ("--replicate-observations", getattr(args, "replicate_observations", None)),
+        ("--tip-likelihoods", getattr(args, "tip_likelihoods", None)),
+        ("--misclassification-matrix", getattr(args, "misclassification_matrix", None)),
     ]
     transition_graph = getattr(args, "transition_graph", None)
     if transition_graph not in (None, "", "complete", "ordered"):
@@ -1667,9 +1750,13 @@ def _validate_output_paths(args):
     )
 
 
-def _write_outputs(table, args, criterion, *, include_figure):
+def _write_outputs(
+    table, args, criterion, *, include_figure, average_table=None, panel_context=None
+):
     figure = getattr(args, "figure_out", None) if include_figure else None
     outputs = []
+    if average_table is not None:
+        outputs.append(args.model_average_out)
     if args.outfile != "-":
         outputs.append(args.outfile)
     if figure not in (None, ""):
@@ -1679,10 +1766,17 @@ def _write_outputs(table, args, criterion, *, include_figure):
         return
     write_stdout = (lambda: _write_table(table, "-")) if args.outfile == "-" else None
     with output_transaction(outputs, after_install=write_stdout) as staged:
+        if average_table is not None:
+            _write_table(average_table, staged[args.model_average_out])
         if args.outfile != "-":
             _write_table(table, staged[args.outfile])
         if figure not in (None, ""):
-            draw_comparison_figure(table, staged[figure], criterion)
+            if panel_context is None:
+                draw_comparison_figure(table, staged[figure], criterion)
+            else:
+                from nwkit.asr_compare_panels import draw_comparison_panels
+
+                draw_comparison_panels(panel_context, table, staged[figure])
 
 
 def _has_completed_fit(table):
@@ -1733,6 +1827,7 @@ def asr_compare_main(args):
     )
     requested_type = getattr(args, "trait_type", "auto")
     trait_type = resolve_trait_type(requested_type, trait_df, state_input)
+    validate_panel_options(args, trait_type)
     _validate_mode_arguments(args, trait_type)
     candidates, automatic = resolve_comparison_candidates(trait_type, args)
     context = ComparisonContext(
@@ -1745,6 +1840,12 @@ def asr_compare_main(args):
     )
     context.cache["_shared_preparation_started"] = shared_preparation_started
     _validate_comparison_options(context, candidates, automatic=automatic)
+    if (
+        getattr(args, "model_average_out", None)
+        and trait_type == "discrete"
+        and len(trait_columns) != 1
+    ):
+        raise ValueError("--model-average-out requires a single discrete trait column.")
     criterion = getattr(args, "criterion", "aic")
     _preflight_comparison_figure(context, candidates, criterion)
     sys.stderr.write(
@@ -1763,7 +1864,21 @@ def asr_compare_main(args):
         criterion=criterion,
     )
     completed = _has_completed_fit(table)
-    _write_outputs(table, args, criterion, include_figure=completed)
+    from nwkit.asr_averaging import comparison_average_table
+
+    average_table = (
+        comparison_average_table(context, table, criterion)
+        if getattr(args, "model_average_out", None)
+        else None
+    )
+    _write_outputs(
+        table,
+        args,
+        criterion,
+        include_figure=completed,
+        average_table=average_table,
+        panel_context=context if panels_requested(args) else None,
+    )
     if not completed:
         raise ValueError(
             "Every selected ASR model failed or was not comparable; the summary TSV "

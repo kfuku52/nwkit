@@ -1,0 +1,110 @@
+{
+  "root": {
+    "families": 200,
+    "point_successes": 200,
+    "intervals_returned": 189,
+    "truth_covered": 176,
+    "coverage_among_returned": 0.9312169312169312,
+    "correct_return_fraction": 0.88,
+    "availability": 0.945,
+    "bias": 0.8759109308244666,
+    "rmse": 3.868881897745722,
+    "median_width": 13.431946689960633,
+    "statuses": {
+      "complete": 200
+    },
+    "interval_statuses": {
+      "conditional-profile": 189,
+      "unavailable-strict-clock-limit": 11
+    },
+    "estimators": {
+      "sequence-empirical-bayes-map": 188,
+      "sequence-marginal-quadratic": 12
+    },
+    "coverage_wilson95": [
+      0.8858884066874252,
+      0.9593655184633848
+    ],
+    "availability_wilson95": [
+      0.9042130012276915,
+      0.9690146582965412
+    ],
+    "correct_return_wilson95": [
+      0.8276574790170326,
+      0.9180200729362449
+    ]
+  },
+  "high_sd": {
+    "families": 100,
+    "point_successes": 100,
+    "intervals_returned": 98,
+    "truth_covered": 85,
+    "coverage_among_returned": 0.8673469387755102,
+    "correct_return_fraction": 0.85,
+    "availability": 0.98,
+    "bias": 3.024623790305151,
+    "rmse": 10.008344294420297,
+    "median_width": 24.658432251591158,
+    "statuses": {
+      "complete": 100
+    },
+    "interval_statuses": {
+      "unavailable-strict-clock-limit": 2,
+      "conditional-profile": 97,
+      "conditional-profile-calibration-limited": 1
+    },
+    "estimators": {
+      "sequence-marginal-quadratic": 2,
+      "sequence-empirical-bayes-map": 98
+    },
+    "coverage_wilson95": [
+      0.786171098539513,
+      0.9208101332078238
+    ],
+    "availability_wilson95": [
+      0.9299882092714561,
+      0.9944980324498377
+    ],
+    "correct_return_wilson95": [
+      0.7671644040916763,
+      0.9069401471634337
+    ]
+  },
+  "internal": {
+    "families": 100,
+    "point_successes": 99,
+    "intervals_returned": 99,
+    "truth_covered": 95,
+    "coverage_among_returned": 0.9595959595959596,
+    "correct_return_fraction": 0.95,
+    "availability": 0.99,
+    "bias": 0.04359709466522468,
+    "rmse": 0.8719057634349807,
+    "median_width": 3.4040259067392817,
+    "statuses": {
+      "complete": 99,
+      "none-exit-2": 1
+    },
+    "interval_statuses": {
+      "conditional-profile-calibration-limited": 54,
+      "conditional-profile": 45,
+      "none-exit-2": 1
+    },
+    "estimators": {
+      "sequence-empirical-bayes-map": 99,
+      "unavailable": 1
+    },
+    "coverage_wilson95": [
+      0.9006797874974577,
+      0.9841773610058524
+    ],
+    "availability_wilson95": [
+      0.9455138038212946,
+      0.9982325679358593
+    ],
+    "correct_return_wilson95": [
+      0.8882495307680809,
+      0.978456320845632
+    ]
+  }
+}

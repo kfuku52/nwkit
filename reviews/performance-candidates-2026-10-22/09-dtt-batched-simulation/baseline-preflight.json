@@ -1,0 +1,13 @@
+{
+  "baseline_commit": "d7116f80b9979739c69a5431a5e34b822795408b",
+  "python": "3.12.14",
+  "numpy": "2.5.4",
+  "scipy": "1.17.1",
+  "nwkit": "0.43.54",
+  "baseline_initial_seconds": 0.0052839580457657576,
+  "shape": [
+    64,
+    5
+  ],
+  "note": "single initial baseline, not speed claim; benchmark fixtures will normalize time"
+}

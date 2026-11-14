@@ -8,6 +8,7 @@ time-transformed BM, drift, and regime models differ only in how they build a
 
 import math
 from dataclasses import dataclass
+from sys import float_info
 from typing import Any, Mapping
 
 import numpy as np
@@ -15,8 +16,9 @@ import numpy as np
 from nwkit.compiled_tree import CompiledTree
 from nwkit.gaussian_tree import (
     GaussianTreeProcess,
+    _mean_at_tiny_variance_ratio,
+    _propagated_variance,
     _recover_affine_mean,
-    _scaled_gaussian_variance,
 )
 
 _LOG_2PI = math.log(2.0 * math.pi)
@@ -86,6 +88,10 @@ class _Factor:
     variance: float = 0.0
     log_weight: float = 0.0
     density_rank: int = 0
+    roundoff: float = 0.0
+
+
+_UNIT_FACTOR = _Factor()
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,19 +155,53 @@ def _normal_log_density_with_large_variance(
 
 def _combine(first: _Factor, second: _Factor) -> _Factor:
     if first.mean is None:
-        return _combine_constant(first, second)
+        # Adding the unit weight would turn a negative zero into positive zero.
+        if first is _UNIT_FACTOR and (
+            second.log_weight != 0.0 or math.copysign(1.0, second.log_weight) > 0.0
+        ):
+            return second
+        return _Factor(
+            second.mean,
+            second.variance,
+            first.log_weight + second.log_weight,
+            first.density_rank + second.density_rank,
+            second.roundoff,
+        )
     if second.mean is None:
-        return _combine_constant(second, first)
+        if second is _UNIT_FACTOR and (
+            first.log_weight != 0.0 or math.copysign(1.0, first.log_weight) > 0.0
+        ):
+            return first
+        return _Factor(
+            first.mean,
+            first.variance,
+            first.log_weight + second.log_weight,
+            first.density_rank + second.density_rank,
+            first.roundoff,
+        )
     variance_sum = first.variance + second.variance
     base_weight = first.log_weight + second.log_weight
     base_rank = first.density_rank + second.density_rank
     if variance_sum == 0.0:
-        if first.mean != second.mean:
+        # Deterministic affine messages can arrive a few ulps apart after
+        # forward/backward transforms, even for identical exact observations.
+        tolerance = first.roundoff + second.roundoff
+        if tolerance:
+            tolerance = max(
+                tolerance, 8 * max(math.ulp(first.mean), math.ulp(second.mean))
+            )
+        if abs(first.mean - second.mean) > tolerance:
             raise ValueError(
                 "Conflicting exact observations have zero likelihood under the "
                 "Gaussian tree process."
             )
-        return _Factor(first.mean, 0.0, base_weight, base_rank)
+        return _Factor(
+            first.mean,
+            0.0,
+            base_weight,
+            base_rank,
+            max(first.roundoff, second.roundoff),
+        )
     log_overlap = _normal_log_overlap(first, second, variance_sum)
     if not math.isfinite(log_overlap):
         raise ValueError("Observed values have zero Gaussian likelihood.")
@@ -176,6 +216,10 @@ def _combine(first: _Factor, second: _Factor) -> _Factor:
         first_weight = (second.variance / larger) / denominator
         second_weight = (first.variance / larger) / denominator
         mean = first_weight * first.mean + second_weight * second.mean
+        if ratio < float_info.min:
+            mean = _mean_at_tiny_variance_ratio(
+                first.mean, second.mean, first.variance, second.variance
+            )
         variance = min(first.variance, second.variance) / denominator
         if variance <= 0.0 or not math.isfinite(variance):
             raise ValueError("A positive Gaussian variance underflowed during pruning.")
@@ -184,6 +228,11 @@ def _combine(first: _Factor, second: _Factor) -> _Factor:
         variance,
         base_weight + log_overlap,
         base_rank + 1,
+        first.roundoff
+        if first.variance == 0.0
+        else second.roundoff
+        if second.variance == 0.0
+        else 0.0,
     )
 
 
@@ -195,6 +244,7 @@ def _combine_constant(constant: _Factor, factor: _Factor) -> _Factor:
         factor.variance,
         constant.log_weight + factor.log_weight,
         constant.density_rank + factor.density_rank,
+        factor.roundoff,
     )
 
 
@@ -208,7 +258,43 @@ def _push_up(
         return _push_up_large_variance(factor, slope, intercept, innovation)
     absolute_slope = abs(slope)
     if absolute_slope == 0.0:
-        return _independent_branch_likelihood(factor, intercept, total)
+        if total == 0.0:
+            if factor.mean != intercept:
+                raise ValueError(
+                    "An exact deterministic branch conflicts with an observation."
+                )
+            return _Factor(
+                None,
+                log_weight=factor.log_weight,
+                density_rank=factor.density_rank,
+            )
+        log_density = _normal_log_density(factor.mean, intercept, total)
+        if not math.isfinite(log_density):
+            raise ValueError("Observed values have zero Gaussian likelihood.")
+        return _Factor(
+            None,
+            log_weight=factor.log_weight + log_density,
+            density_rank=factor.density_rank + 1,
+        )
+    if total == 0.0:
+        if slope == 1.0 and intercept == 0.0:
+            return factor
+        difference = factor.mean - intercept
+        parent_mean = _inverse_affine_mean(factor.mean, intercept, slope)
+        if not math.isfinite(parent_mean):
+            raise ValueError("A Gaussian pruning message exceeds floating-point range.")
+        roundoff = (
+            math.ulp(difference) / absolute_slope
+            if math.isfinite(difference)
+            else math.ulp(factor.mean / slope) + math.ulp(intercept / slope)
+        )
+        return _Factor(
+            parent_mean,
+            0.0,
+            factor.log_weight - math.log(absolute_slope),
+            factor.density_rank,
+            factor.roundoff / absolute_slope + roundoff + math.ulp(parent_mean),
+        )
     parent_mean = _inverse_affine_mean(factor.mean, intercept, slope)
     parent_variance = total / slope / slope
     if not math.isfinite(parent_mean) or not math.isfinite(parent_variance):
@@ -287,13 +373,18 @@ def _push_down(
         if slope != 0.0:
             return factor
         return _Factor(intercept, innovation, factor.log_weight, factor.density_rank)
-    variance = _scaled_gaussian_variance(slope, factor.variance) + innovation
+    variance = _propagated_variance(slope, factor.variance, innovation)
     mean = slope * factor.mean + intercept
     if not math.isfinite(mean):
         mean = _recover_affine_mean(slope, factor.mean, intercept, mean)
     if not math.isfinite(mean) or not math.isfinite(variance) or variance < 0.0:
         raise ValueError("A Gaussian smoothing message exceeds floating-point range.")
-    return _Factor(mean, variance, factor.log_weight, factor.density_rank)
+    roundoff = (
+        abs(slope) * factor.roundoff + math.ulp(slope * factor.mean) + math.ulp(mean)
+        if variance == 0.0
+        else 0.0
+    )
+    return _Factor(mean, variance, factor.log_weight, factor.density_rank, roundoff)
 
 
 def _finite_number(value, label: str, *, nonnegative: bool = False) -> float:
@@ -307,6 +398,12 @@ def _finite_number(value, label: str, *, nonnegative: bool = False) -> float:
         qualifier = "non-negative and finite" if nonnegative else "finite"
         raise ValueError(f"{label} must be {qualifier}.")
     return result
+
+
+def _coordinate_roundoff(value: float, exponent: int) -> float:
+    # Centering can turn a nonzero exact observation into zero. Retain the
+    # existing eight-ulp allowance in its original coordinates, then scale it.
+    return 8 * math.ldexp(math.ulp(value), -exponent)
 
 
 def _gaussian_observation_records(compiled, values_by_leaf, standard_errors):
@@ -443,7 +540,7 @@ def _message_pass_prepared(
         raise ValueError(
             "A flat-root Gaussian process requires at least one observation."
         )
-    local = [_Factor()] * len(compiled.nodes)
+    local = [_UNIT_FACTOR] * len(compiled.nodes)
     latent_positions = list(range(len(compiled.nodes)))
     for index in range(1, len(compiled.nodes)):
         transition = scaled_process.transitions[compiled.nodes[index]]
@@ -461,7 +558,8 @@ def _message_pass_prepared(
         variance = error * error
         if error > 0.0 and variance == 0.0:
             raise ValueError("A positive observation variance underflowed.")
-        local[index] = _Factor(value, variance)
+        roundoff = _coordinate_roundoff(original, exponent) if variance == 0.0 else 0.0
+        local[index] = _Factor(value, variance, roundoff=roundoff)
         position = latent_positions[index]
         observed_positions.add(position)
         if (
@@ -469,8 +567,7 @@ def _message_pass_prepared(
             and exact_by_position.setdefault(position, original) != original
         ):
             raise ValueError(
-                "Conflicting exact observations have zero likelihood under the "
-                "Gaussian tree process."
+                "Conflicting exact observations have zero likelihood under the Gaussian tree process."
             )
     exact_nodes = (
         tuple(
@@ -494,7 +591,14 @@ def _message_pass_prepared(
         root_posterior = inside[0]
     else:
         assert root.variance is not None
-        root_posterior = _combine(_Factor(root.mean, root.variance), inside[0])
+        root_roundoff = (
+            _coordinate_roundoff(process.root.mean, exponent)
+            if root.variance == 0.0
+            else 0.0
+        )
+        root_posterior = _combine(
+            _Factor(root.mean, root.variance, roundoff=root_roundoff), inside[0]
+        )
     if not math.isfinite(root_posterior.log_weight):
         raise ValueError(
             "Observed values have zero likelihood under the Gaussian process."
@@ -560,7 +664,12 @@ def condition_gaussian_tree(
 ) -> GaussianConditioningResult:
     """Condition every process node on observed tip values in linear time."""
 
-    messages = _message_pass(process, values_by_leaf, standard_errors, compiled_tree)
+    messages = _message_pass(
+        process,
+        values_by_leaf,
+        standard_errors,
+        compiled_tree,
+    )
     compiled = messages.compiled
     records = messages.records
     center = messages.center
@@ -571,9 +680,16 @@ def condition_gaussian_tree(
     root_posterior = messages.root_posterior
     root = scaled_process.root
 
-    outside = [_Factor() for _ in compiled.nodes]
+    outside = [_UNIT_FACTOR] * len(compiled.nodes)
+    root_roundoff = (
+        _coordinate_roundoff(process.root.mean, exponent)
+        if root.variance == 0.0
+        else 0.0
+    )
     outside[0] = (
-        _Factor() if root.mode == "flat" else _Factor(root.mean, root.variance or 0.0)
+        _UNIT_FACTOR
+        if root.mode == "flat"
+        else _Factor(root.mean, root.variance or 0.0, roundoff=root_roundoff)
     )
     posterior: list[_Factor | None] = [None] * len(compiled.nodes)
     for index in range(len(compiled.nodes)):
@@ -583,7 +699,7 @@ def condition_gaussian_tree(
         for child in children:
             prefix.append(_combine(prefix[-1], upward[child]))
         posterior[index] = prefix[-1]
-        suffix = _Factor()
+        suffix = _UNIT_FACTOR
         for position in range(len(children) - 1, -1, -1):
             child = children[position]
             cavity = _combine(prefix[position], suffix)

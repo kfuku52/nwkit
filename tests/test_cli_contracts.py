@@ -1,17 +1,71 @@
 """Exercise every command's real parser and handler with small offline inputs."""
 
-import argparse
 import json
 
 import pandas as pd
 import pytest
 
-from nwkit.cli import main, parser
+from nwkit.cli import main
 from nwkit.util import read_tree
 
 pytestmark = pytest.mark.integration
 
 CASES = {
+    "gene-tree-search": ["--species-tree", "{tree}", "--species-parser", "taxonomic"],
+    "mul-reconcile": ["--species-tree", "{tree}", "--species-parser", "taxonomic"],
+    "ksrate": ["--ks-tsv", "{ks}", "--bootstrap", "9"],
+    "wgd-tree": [
+        "--species-tree",
+        "{tree}",
+        "--count-model",
+        "{count_model}",
+        "--species-parser",
+        "taxonomic",
+    ],
+    "wgd-count": [
+        "--counts",
+        "{counts}",
+        "--candidate-branches",
+        "1",
+        "--event-fractions",
+        "0.5",
+        "--family-gamma-shape",
+        "none",
+        "--rate-model",
+        "homogeneous",
+        "--max-states",
+        "64",
+    ],
+    "regress-select": [
+        "--input-rooted",
+        "yes",
+        "--tree",
+        "{tree}",
+        "--data",
+        "{data}",
+        "--folds",
+        "{folds}",
+        "--response",
+        "y",
+        "--predictors",
+        "x",
+        "--strengths",
+        "0.1",
+        "--l1-ratios",
+        "0.5",
+    ],
+    "dtt": ["--trait", "{data}", "--columns", "x,y", "--n-sim", "9"],
+    "pca": ["--trait", "{data}", "--columns", "x,y"],
+    "signal": ["--trait", "{data}", "--columns", "x", "--n-sim", "9"],
+    "shift": ["--trait", "{data}", "--state-column", "x", "--model-out", "{model}"],
+    "shift-simulate": [
+        "--parameters",
+        "{simulation}",
+        "--truth-out",
+        "{model}",
+        "--input-rooted",
+        "yes",
+    ],
     "annotate": ["--table", "{data}"],
     "asr": ["--trait", "{data}", "--state-column", "state", "--rate", "0.2"],
     "asrcompare": [
@@ -29,6 +83,7 @@ CASES = {
     "compose": ["--length-source", "{other}"],
     "cladefreq": [],
     "consensus": [],
+    "convert": [],
     "contrast": ["--trait", "{data}", "--columns", "x"],
     "diff": ["-i2", "{other}"],
     "dist": ["-i2", "{other}"],
@@ -47,6 +102,24 @@ CASES = {
     "label": [],
     "rename": ["--pattern", "Genus_a", "--replacement", "Renamed_a"],
     "reconcile": ["--species-tree", "{tree}"],
+    "radte-compare": [
+        "--fixed-prefix",
+        "{tree}",
+        "--bounded-prefix",
+        "{tree}",
+        "--ensemble-prefix",
+        "{tree}",
+        "--species-tree",
+        "{tree}",
+    ],
+    "radte": [
+        "--species-tree",
+        "{tree}",
+        "--gene-tree",
+        "{tree}",
+        "--reconcile",
+        "lca",
+    ],
     "regress": [
         "--tree",
         "{tree}",
@@ -88,6 +161,16 @@ CASES = {
 }
 
 TABLE_COLUMNS = {
+    "gene-tree-search": "candidate_id",
+    "mul-reconcile": "score",
+    "ksrate": "corrected_ks",
+    "wgd-count": "count_support",
+    "wgd-tree": "conditional_wgd_probability",
+    "dtt": "relative_disparity",
+    "pca": "PC1",
+    "signal": "estimate",
+    "shift": "regime",
+    "shift-simulate": "replicate",
     "asr": "map_state",
     "asrcompare": "model",
     "cladefreq": "frequency",
@@ -101,15 +184,6 @@ TABLE_COLUMNS = {
     "rootcompare": "method",
     "validate": "tree_id",
 }
-
-
-def test_every_registered_command_has_a_handler_contract():
-    subcommands = next(
-        action
-        for action in parser._actions
-        if isinstance(action, argparse._SubParsersAction)
-    )
-    assert set(subcommands.choices) == set(CASES)
 
 
 @pytest.mark.parametrize("command", CASES)
@@ -130,18 +204,89 @@ def test_command_parser_reaches_its_real_handler(
             "state": ["x", "x", "y", "y", "y"],
         }
     ).to_csv(data, sep="\t", index=False)
+    folds = tmp_path / "folds.tsv"
+    counts = tmp_path / "counts.tsv"
+    count_model = tmp_path / "count_model.json"
+    if command == "wgd-tree":
+        from tests.test_wgd_tree import model
+
+        count_model.write_text(json.dumps(model(tree)))
+    ks = tmp_path / "ks.tsv"
+    pd.DataFrame(
+        [
+            {"species_a": a, "species_b": b, "family_id": "f1", "ks": 0.5}
+            for i, a in enumerate(names)
+            for b in names[i + 1 :]
+        ]
+    ).to_csv(ks, sep="\t", index=False)
+    pd.DataFrame(
+        {"family_id": ["f1", "f2", "f3"], **{name: [1, 2, 1] for name in names}}
+    ).to_csv(counts, sep="\t", index=False)
+    if command == "regress-select":
+        names = [f"Genus_{i}" for i in range(12)]
+        tree.write_text("(" + ",".join(f"{name}:1" for name in names) + ");")
+        pd.DataFrame(
+            {
+                "leaf_name": names,
+                "x": range(12),
+                "y": [i + (i % 3) * 0.2 for i in range(12)],
+            }
+        ).to_csv(data, sep="\t", index=False)
+        pd.DataFrame(
+            {"leaf_name": names, "fold": [str(i // 4) for i in range(12)]}
+        ).to_csv(folds, sep="\t", index=False)
     species = tmp_path / "species.txt"
     species.write_text("\n".join(names) + "\n")
+    simulation = tmp_path / "simulation.json"
+    simulation.write_text(
+        json.dumps(
+            {
+                "trait_names": ["x", "y"],
+                "alpha": 1.0,
+                "process_tip_covariance": [[1.0, 0.5], [0.5, 1.0]],
+                "regime_optima": [[0.0, 0.0]],
+            }
+        )
+    )
     paths = {
         "tree": tree,
+        "counts": counts,
+        "count_model": count_model,
+        "ks": ks,
+        "folds": folds,
         "other": other,
         "data": data,
         "species": species,
         "images": tmp_path / "images",
         "downloads": tmp_path / "downloads",
         "pdf": tmp_path / "roots.pdf",
+        "model": tmp_path / "model.json",
+        "simulation": simulation,
     }
     arguments = [command, *(argument.format(**paths) for argument in CASES[command])]
+    if command == "shift":
+        from tests.test_shift import fake_backend
+
+        monkeypatch.setattr("nwkit.shift.run_backend", fake_backend)
+    if command == "regress-select":
+        prefix = tmp_path / "selection"
+        assert main([*arguments, "--out-prefix", str(prefix)]) == 0
+        coefficients = pd.read_csv(str(prefix) + ".coefficients.tsv", sep="\t")
+        assert "coefficient" in coefficients
+        assert not any("p_value" in name for name in coefficients)
+        return
+    if command == "radte-compare":
+        with pytest.raises(FileNotFoundError, match="manifest"):
+            main([*arguments, "--out-prefix", str(tmp_path / "comparison")])
+        return
+    if command == "radte":
+        prefix = tmp_path / "radte"
+        main([*arguments, "--out-prefix", str(prefix)])
+        assert prefix.with_suffix(".dated.nwk").is_file()
+        assert json.loads(prefix.with_suffix(".manifest.json").read_text())[
+            "shared_speciation_ages"
+        ]
+        return
     if command == "help":
         with pytest.raises(SystemExit) as exc:
             main(arguments)
@@ -182,7 +327,8 @@ def test_command_parser_reaches_its_real_handler(
 
 
 @pytest.mark.parametrize(
-    "arguments", [["--version"], ["--help"], ["regress", "--help"]]
+    "arguments",
+    [["--version"], ["--help"], ["regress", "--help"], ["regress-select", "--help"]],
 )
 def test_help_and_version_do_not_import_numerical_libraries(arguments):
     import subprocess

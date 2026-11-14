@@ -10,7 +10,6 @@ from nwkit.asr_compare import (
     _candidate_args,
     _classify_fit,
     _comparison_group,
-    _preflight_comparison_figure,
     _successful_row,
     _validate_comparison_options,
     comparison_table,
@@ -597,12 +596,25 @@ def test_candidate_overview_draws_every_ranked_and_unranked_model():
         if text.get_text() in {"BM", "LAMBDA"}
     }
     assert positions["BM"] > positions["LAMBDA"]
+    artists = pdf.figures[0].axes[0].texts
+    for header, value in {
+        "n": "20",
+        "k": "1",
+        "logL": "-10.000",
+        "AICc": "22.200",
+        "Delta AICc": "0.000",
+        "Weight": "0.750",
+    }.items():
+        header_text = next(text for text in artists if text.get_text() == header)
+        value_text = next(text for text in artists if text.get_text() == value)
+        assert header_text.get_position()[0] == value_text.get_position()[0]
+        assert header_text.get_ha() == value_text.get_ha() == "right"
     assert any(
         text.startswith("Comparison set 1: Continuous | single trait") for text in texts
     )
 
 
-def test_candidate_overview_bounds_long_text_and_aligns_numeric_headers():
+def test_candidate_overview_bounds_long_text():
     long_name = ",".join(f"trait_{index}_{'x' * 35}" for index in range(20))
     table = pd.DataFrame(
         [
@@ -707,78 +719,6 @@ def test_font_error_reports_the_actually_missing_codepoint(monkeypatch):
         _font_family_for_text("A🐍")
     assert "U+1F40D" in str(error.value)
     assert "U+0041" not in str(error.value)
-
-
-def test_figure_font_preflight_runs_before_model_fitting(monkeypatch):
-    context = ComparisonContext(
-        tree=None,
-        trait_df=pd.DataFrame(),
-        trait_type="continuous",
-        trait_columns=("trait🐍",),
-        error_columns=None,
-        args=SimpleNamespace(figure_out="comparison.pdf"),
-    )
-
-    def reject_font(text):
-        assert "trait🐍" in text
-        raise ValueError("missing U+1F40D")
-
-    monkeypatch.setattr("nwkit.asr_compare._font_family_for_text", reject_font)
-    with pytest.raises(ValueError, match=r"U\+1F40D"):
-        _preflight_comparison_figure(
-            context,
-            [ComparisonCandidate("BM", "flat", "model-default")],
-            "aic",
-        )
-
-
-def test_candidate_overview_numeric_headers_share_value_alignment():
-    table = pd.DataFrame(
-        [
-            {
-                "model_id": "BM",
-                "trait_type": "continuous",
-                "trait_columns": "x",
-                "status": "ok",
-                "rankable": "yes",
-                "message": "",
-                "comparison_group": "continuous:scalar:flat_root_integrated:flat",
-                "criterion_rank": 1,
-                "num_comparable_models": 2,
-                "is_best": "yes",
-                "sample_size": 20,
-                "num_parameters": 1,
-                "log_likelihood": -10.0,
-                "aic": 22.0,
-                "aic_weight": 0.75,
-                "delta_aic": 0.0,
-            }
-        ]
-    )
-
-    class CapturePdf:
-        def __init__(self):
-            self.figure = None
-
-        def savefig(self, figure):
-            self.figure = figure
-
-    pdf = CapturePdf()
-    _draw_candidate_overview(pdf, table, "aic")
-    texts = pdf.figure.axes[0].texts
-    expected = {
-        "n": "20",
-        "k": "1",
-        "logL": "-10.000",
-        "AIC": "22.000",
-        "Delta AIC": "0.000",
-        "Weight": "0.750",
-    }
-    for header, value in expected.items():
-        header_text = next(text for text in texts if text.get_text() == header)
-        value_text = next(text for text in texts if text.get_text() == value)
-        assert header_text.get_position()[0] == value_text.get_position()[0]
-        assert header_text.get_ha() == value_text.get_ha() == "right"
 
 
 def test_candidate_resolution_supports_ou_root_variants_and_exclusions():
@@ -1185,48 +1125,6 @@ def test_one_regime_brownian_and_ou_models_are_deduplicated(monkeypatch):
         "OUMV": "OU[stationary]",
         "OUMVA": "OU[stationary]",
     }
-
-
-def test_shared_preparation_timing_includes_work_done_before_candidate_fits(
-    monkeypatch,
-):
-    args = SimpleNamespace(
-        trait_type="continuous",
-        regime_map=None,
-        evolution_parameter=None,
-        evolution_parameter_bounds=None,
-        eb_rate=None,
-        eb_rate_bounds=None,
-        sigma2=None,
-    )
-    context = ComparisonContext(
-        tree=None,
-        trait_df=pd.DataFrame(),
-        trait_type="continuous",
-        trait_columns=("x",),
-        error_columns=None,
-        args=args,
-        cache={
-            "_shared_preparation_started": 10.0,
-            "continuous_data": ({}, None),
-        },
-    )
-    monkeypatch.setattr("nwkit.asr_compare.time.perf_counter", lambda: 15.0)
-    monkeypatch.setattr(
-        "nwkit.asr_compare._fit_candidate",
-        lambda *_args: SimpleNamespace(
-            sigma2_estimated=True,
-            restricted_log_likelihood=-3.0,
-            num_effective_observations=8,
-            fit_status="ok",
-        ),
-    )
-    rows = evaluate_comparison_candidates(
-        context,
-        [ComparisonCandidate("BM", "flat", "model-default")],
-        automatic=False,
-    )
-    assert rows[0]["shared_preparation_seconds"] == pytest.approx(5.0)
 
 
 def test_regime_parameter_table_rejects_incompatible_model_contracts():

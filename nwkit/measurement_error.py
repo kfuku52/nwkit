@@ -22,7 +22,6 @@ from nwkit.gaussian import (
     factor_logdet,
     finite_mean,
     gaussian_response_units,
-    grouped_average_marginal_logdet,
     grouped_mean_covariance_diagonal,
     is_diagonal,
     materialize_covariance,
@@ -1387,12 +1386,28 @@ def _add_structured_eiv_components(
 
 
 def _factor_structured_eiv(diagonal, updates, n_observations):
-    cholesky = factor_diagonal_low_rank_updates(diagonal, updates)
     low_rank = (
         sparse.hstack([sparse.csr_matrix(update) for update in updates], format="csr")
         if updates
         else sparse.csr_matrix((n_observations, 0), dtype=float)
     )
+    if n_observations <= 64 and low_rank.shape[1] <= 512:
+        if np.any(np.asarray(diagonal) <= 0) or not np.isfinite(diagonal).all():
+            raise np.linalg.LinAlgError(
+                "Covariance diagonal is not positive and finite."
+            )
+        if not np.isfinite(low_rank.data).all():
+            raise ValueError("Low-rank covariance update is non-finite.")
+        # At variance boundaries Woodbury subtraction can lose the likelihood
+        # curvature. Factor the rectangular covariance root directly for small
+        # fits; QR avoids both subtraction and forming an ill-conditioned Gram
+        # matrix. Larger fits retain their bounded-memory structured route.
+        root = np.column_stack([np.diag(np.sqrt(diagonal)), low_rank.toarray()])
+        _, triangular = np.linalg.qr(root.T, mode="reduced")
+        signs = np.where(np.diag(triangular) < 0, -1.0, 1.0)
+        cholesky = (signs[:, None] * triangular).T
+    else:
+        cholesky = factor_diagonal_low_rank_updates(diagonal, updates)
     return DiagonalLowRankCovariance(diagonal, low_rank), cholesky
 
 
@@ -1731,7 +1746,7 @@ def fit_conditional_eiv_gaussian(
         )
     response = np.asarray(response, dtype=float)
     design = np.asarray(design, dtype=float)
-    effective_likelihood_count, logdet_weight, likelihood_logdet_offset = (
+    effective_likelihood_count, _logdet_weight, likelihood_logdet_offset = (
         effective_likelihood_settings(
             len(response),
             design.shape[1],
@@ -1741,17 +1756,9 @@ def fit_conditional_eiv_gaussian(
         )
     )
     if likelihood_groups is not None:
-        likelihood_groups = np.asarray(likelihood_groups)
-        grouped_count = len(np.unique(likelihood_groups))
-        expected_count = (
-            len(response)
-            if likelihood_observations is None
-            else float(likelihood_observations)
+        raise ValueError(
+            "Grouped pseudo-likelihood is unsupported; use event-average estimation."
         )
-        if not math.isclose(
-            float(grouped_count), expected_count, rel_tol=1e-12, abs_tol=1e-12
-        ):
-            raise ValueError("Likelihood groups do not match likelihood_observations.")
     component_factors = {} if component_factors is None else dict(component_factors)
     structured = _uses_structured_eiv_covariance(
         fixed_covariance, components, component_factors, predictor_uncertainties
@@ -1855,30 +1862,7 @@ def fit_conditional_eiv_gaussian(
                 gram_logdet = 0.0
         except np.linalg.LinAlgError:
             return float("inf")
-        if likelihood_groups is None:
-            determinant_term = logdet_weight * (
-                covariance_logdet - likelihood_logdet_offset
-            )
-        else:
-            if any(name == "species_event_variance" for name, _ in components):
-                determinant_term = grouped_average_marginal_logdet(
-                    covariance,
-                    likelihood_groups,
-                    precision_factor=cholesky,
-                )
-            else:
-                grouped_variances = grouped_mean_covariance_diagonal(
-                    covariance,
-                    likelihood_groups,
-                    precision_factor=cholesky,
-                )
-                if (
-                    np.any(grouped_variances <= 0.0)
-                    or not np.isfinite(grouped_variances).all()
-                ):
-                    return float("inf")
-                determinant_term = float(np.log(grouped_variances).sum())
-            determinant_term -= likelihood_logdet_offset
+        determinant_term = covariance_logdet - likelihood_logdet_offset
         objective = 0.5 * (
             effective_likelihood_count * math.log(2.0 * math.pi)
             + determinant_term
@@ -1913,13 +1897,12 @@ def fit_conditional_eiv_gaussian(
             "upper_variance": upper_variance,
         }
 
-    if starting_parameters is None:
-        starts = [
-            np.concatenate(
-                [ordinary_beta, np.log(np.repeat(response_scale, len(components)))]
-            )
-        ]
-    else:
+    starts = [
+        np.concatenate(
+            [ordinary_beta, np.log(np.repeat(response_scale, len(components)))]
+        )
+    ]
+    if starting_parameters is not None:
         start = np.asarray(starting_parameters, dtype=float).copy()
         start[:num_coefficients] = (
             np.ldexp(start[:num_coefficients], -response_exponent) - beta_offset
@@ -1981,7 +1964,8 @@ def fit_conditional_eiv_gaussian(
     minimum_eigenvalue = float(np.linalg.eigvalsh(beta_covariance).min())
     if minimum_eigenvalue < -covariance_tolerance:
         raise ValueError(
-            "Errors-in-variables coefficient information is not positive definite."
+            "Errors-in-variables coefficient information is not positive definite; "
+            "check whether the fitted latent-predictor variance is near zero."
         )
     if minimum_eigenvalue < 0.0:
         eigenvalues, eigenvectors = np.linalg.eigh(beta_covariance)
@@ -2022,3 +2006,26 @@ def fit_conditional_eiv_gaussian(
     return _restore_eiv_response_units(
         details, response_exponent, effective_likelihood_count
     )
+
+
+def _gmrf_uncertainty_update(beta, column, uncertainty):
+    indices = np.asarray(uncertainty.observation_index, dtype=int)
+    model = uncertainty.model
+    if (
+        indices.ndim != 1
+        or np.any(indices < 0)
+        or np.any(indices >= model.n_tips)
+        or not np.isfinite(float(beta[column]))
+    ):
+        raise ValueError("GMRF predictor uncertainty is malformed.")
+    row_scale = (
+        np.ones(len(indices), dtype=float)
+        if uncertainty.row_scale is None
+        else np.asarray(uncertainty.row_scale, dtype=float)
+    )
+    if row_scale.shape != indices.shape or not np.isfinite(row_scale).all():
+        raise ValueError("GMRF predictor row scale is malformed.")
+    loading = sparse.csr_matrix(model.tip_loading[indices], dtype=float).multiply(
+        (float(beta[column]) * row_scale)[:, None]
+    )
+    return loading.tocsr(), model.precision, model.precision_factor()

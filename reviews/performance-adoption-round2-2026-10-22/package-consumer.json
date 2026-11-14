@@ -1,0 +1,31 @@
+{
+  "version": "0.43.57",
+  "modules_equal_in_checkout_sdist_wheel": [
+    "full_ou",
+    "phylogenetic_pca",
+    "wgd_count_model",
+    "gaussian_tree",
+    "signal_stats",
+    "asr",
+    "stochastic_history"
+  ],
+  "wheel_sha256": "434ed4052bb1105642edc882e990d7ad9b3dba92c5420d4395a09cc2a8976f9e",
+  "selection": [
+    "tests/test_cli.py",
+    "tests/test_cli_contracts.py",
+    "tests/test_interface_conventions.py",
+    "tests/test_full_ou.py::test_moments_preserve_unsorted_distance_pairs_and_trait_entries",
+    "tests/test_pca.py::test_final_likelihood_reuses_tree_factor_without_changing_ml",
+    "tests/test_gaussian_tree.py::test_large_covariance_blocks_preserve_arbitrary_duplicate_node_order",
+    "tests/test_wgd_count_model.py::test_log_pruning_tiles_preserve_impossible_states_and_reduction_order",
+    "tests/test_signal.py::test_exact_lambda_spectrum_matches_independent_gaussian_profiles",
+    "tests/test_signal.py::test_lambda_spectrum_retains_error_constant_and_resolution_guards",
+    "tests/test_signal.py::test_exact_lambda_bootstrap_preserves_draws_against_cholesky",
+    "tests/test_signal.py::test_lambda_spectrum_preserves_near_boundary_ill_conditioned_profiles",
+    "tests/test_stochastic_history.py::test_uniformization_preparation_is_reused_only_within_one_request",
+    "tests/test_stochastic_history.py::test_uniformization_work_guard_still_precedes_context_allocation",
+    "tests/test_asr.py::test_structured_er_is_limited_to_large_fixed_rate_posterior",
+    "tests/test_asr.py::test_structured_er_checks_supplied_transition_exactly_and_per_call"
+  ],
+  "result": "passed"
+}

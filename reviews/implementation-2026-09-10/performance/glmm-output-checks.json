@@ -1,0 +1,746 @@
+{
+  "regress-binomial-30": [
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [
+          "bootstrap_attempted",
+          "bootstrap_failed",
+          "bootstrap_succeeded",
+          "coefficient_profile",
+          "covariance_basis",
+          "interval_method",
+          "monte_carlo_se",
+          "objective_kind",
+          "objective_value",
+          "observation_model",
+          "p_value_method",
+          "penalty_value"
+        ],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [
+          "bootstrap_attempted",
+          "bootstrap_failed",
+          "bootstrap_succeeded",
+          "coefficient_profile",
+          "covariance_basis",
+          "interval_method",
+          "monte_carlo_se",
+          "objective_kind",
+          "objective_value",
+          "observation_model",
+          "p_value_method",
+          "penalty_value"
+        ],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [
+          "bootstrap_attempted",
+          "bootstrap_failed",
+          "bootstrap_succeeded",
+          "coefficient_profile",
+          "covariance_basis",
+          "interval_method",
+          "monte_carlo_se",
+          "objective_kind",
+          "objective_value",
+          "observation_model",
+          "p_value_method",
+          "penalty_value"
+        ],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    }
+  ],
+  "binomial-n60-p0.05": [
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [
+          "bootstrap_attempted",
+          "bootstrap_failed",
+          "bootstrap_succeeded",
+          "coefficient_profile",
+          "covariance_basis",
+          "interval_method",
+          "monte_carlo_se",
+          "objective_kind",
+          "objective_value",
+          "observation_model",
+          "p_value_method",
+          "penalty_value"
+        ],
+        "removed_columns": [],
+        "changed_columns": [
+          "p_value",
+          "confidence_interval_upper"
+        ],
+        "equivalent_shared_columns": false
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [
+          "bootstrap_attempted",
+          "bootstrap_failed",
+          "bootstrap_succeeded",
+          "coefficient_profile",
+          "covariance_basis",
+          "interval_method",
+          "monte_carlo_se",
+          "objective_kind",
+          "objective_value",
+          "observation_model",
+          "p_value_method",
+          "penalty_value"
+        ],
+        "removed_columns": [],
+        "changed_columns": [
+          "p_value",
+          "confidence_interval_upper"
+        ],
+        "equivalent_shared_columns": false
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [
+          "bootstrap_attempted",
+          "bootstrap_failed",
+          "bootstrap_succeeded",
+          "coefficient_profile",
+          "covariance_basis",
+          "interval_method",
+          "monte_carlo_se",
+          "objective_kind",
+          "objective_value",
+          "observation_model",
+          "p_value_method",
+          "penalty_value"
+        ],
+        "removed_columns": [],
+        "changed_columns": [
+          "p_value",
+          "confidence_interval_upper"
+        ],
+        "equivalent_shared_columns": false
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    }
+  ],
+  "negative-binomial-n30-boundary": [
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [
+          "bootstrap_attempted",
+          "bootstrap_failed",
+          "bootstrap_succeeded",
+          "coefficient_profile",
+          "covariance_basis",
+          "interval_method",
+          "monte_carlo_se",
+          "objective_kind",
+          "objective_value",
+          "observation_model",
+          "p_value_method",
+          "penalty_value"
+        ],
+        "removed_columns": [],
+        "changed_columns": [
+          "response_dispersion",
+          "separation_warning",
+          "coefficient",
+          "standard_error",
+          "statistic",
+          "p_value",
+          "confidence_interval_lower",
+          "confidence_interval_upper",
+          "condition_number",
+          "evolutionary_rate",
+          "inference_status"
+        ],
+        "equivalent_shared_columns": false
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [
+          "bootstrap_attempted",
+          "bootstrap_failed",
+          "bootstrap_succeeded",
+          "coefficient_profile",
+          "covariance_basis",
+          "interval_method",
+          "monte_carlo_se",
+          "objective_kind",
+          "objective_value",
+          "observation_model",
+          "p_value_method",
+          "penalty_value"
+        ],
+        "removed_columns": [],
+        "changed_columns": [
+          "response_dispersion",
+          "separation_warning",
+          "coefficient",
+          "standard_error",
+          "statistic",
+          "p_value",
+          "confidence_interval_lower",
+          "confidence_interval_upper",
+          "condition_number",
+          "evolutionary_rate",
+          "inference_status"
+        ],
+        "equivalent_shared_columns": false
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [
+          "bootstrap_attempted",
+          "bootstrap_failed",
+          "bootstrap_succeeded",
+          "coefficient_profile",
+          "covariance_basis",
+          "interval_method",
+          "monte_carlo_se",
+          "objective_kind",
+          "objective_value",
+          "observation_model",
+          "p_value_method",
+          "penalty_value"
+        ],
+        "removed_columns": [],
+        "changed_columns": [
+          "response_dispersion",
+          "separation_warning",
+          "coefficient",
+          "standard_error",
+          "statistic",
+          "p_value",
+          "confidence_interval_lower",
+          "confidence_interval_upper",
+          "condition_number",
+          "evolutionary_rate",
+          "inference_status"
+        ],
+        "equivalent_shared_columns": false
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    }
+  ]
+}

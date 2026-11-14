@@ -1,9 +1,16 @@
 import pandas as pd
 import pytest
 
-from nwkit.cladefreq import cladefreq_main
+from nwkit.cladefreq import _mask_to_leaf_set, cladefreq_main
 from tests.helpers import make_args
 from tests.helpers import write_tree_collection as _write_tree_collection
+
+
+@pytest.mark.parametrize("selected", [[], [0, 31, 127, 511], list(range(512))])
+def test_mask_taxa_preserve_index_order_for_sparse_and_dense_clades(selected):
+    names = ["T{}".format(index) for index in range(512)]
+    mask = sum(1 << index for index in selected)
+    assert _mask_to_leaf_set(mask, names) == [names[index] for index in selected]
 
 
 class TestCladefreqMain:
@@ -60,31 +67,6 @@ class TestCladefreqMain:
             pd.read_csv(threaded_out, sep="\t"),
         )
 
-    def test_reports_internal_clade_frequencies(self, tmp_path):
-        infile = _write_tree_collection(
-            tmp_path,
-            [
-                "((A:1,B:1):1,(C:1,D:1):1);",
-                "((A:1,B:1):1,(C:1,D:1):1);",
-                "((A:1,C:1):1,(B:1,D:1):1);",
-            ],
-        )
-        outfile = tmp_path / "cladefreq.tsv"
-        args = make_args(
-            infile=infile,
-            outfile=str(outfile),
-            reference=None,
-            reference_format="auto",
-            weight_tsv=None,
-            support_scale="percent",
-        )
-        cladefreq_main(args)
-        table = pd.read_csv(outfile, sep="\t")
-        ab_row = table.loc[table["descendant_taxa"] == "A,B"].iloc[0]
-        ac_row = table.loc[table["descendant_taxa"] == "A,C"].iloc[0]
-        assert abs(ab_row["frequency"] - (200.0 / 3.0)) < 1e-4
-        assert abs(ac_row["frequency"] - (100.0 / 3.0)) < 1e-4
-
     def test_reference_tree_flags_present_clades(self, tmp_path):
         infile = _write_tree_collection(
             tmp_path,
@@ -113,6 +95,8 @@ class TestCladefreqMain:
         assert bool(ac_row["in_reference"]) is True
         assert abs(ac_row["reference_support"] - 42.0) < 1e-6
         assert bool(ab_row["in_reference"]) is False
+        assert ac_row["frequency"] == pytest.approx(100.0 / 3.0, abs=1e-4)
+        assert ab_row["frequency"] == pytest.approx(200.0 / 3.0, abs=1e-4)
 
     def test_reference_tree_rejects_duplicate_leaf_labels(self, tmp_path):
         infile = _write_tree_collection(

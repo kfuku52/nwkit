@@ -1,0 +1,75 @@
+{
+  "laplace": {
+    "families": 200,
+    "completed": 200,
+    "intervals_available": 200,
+    "interval_return_fraction": 1.0,
+    "truth_covered": 185,
+    "coverage_among_available": 0.925,
+    "correct_interval_returned_fraction": 0.925,
+    "full_domain_return_fraction": 0.0,
+    "unavailable_reasons": {},
+    "median_width": 4.6250937424052,
+    "coverage_wilson_95": [
+      0.8799563897637054,
+      0.9540250828156179
+    ],
+    "availability_wilson_95": [
+      0.9811546736227335,
+      1.0
+    ],
+    "correct_return_wilson_95": [
+      0.8799563897637054,
+      0.9540250828156179
+    ]
+  },
+  "studentized": {
+    "families": 200,
+    "completed": 200,
+    "intervals_available": 200,
+    "interval_return_fraction": 1.0,
+    "truth_covered": 200,
+    "coverage_among_available": 1.0,
+    "correct_interval_returned_fraction": 1.0,
+    "full_domain_return_fraction": 0.0,
+    "unavailable_reasons": {},
+    "median_width": 8.786797677162136,
+    "coverage_wilson_95": [
+      0.9811546736227335,
+      1.0
+    ],
+    "availability_wilson_95": [
+      0.9811546736227335,
+      1.0
+    ],
+    "correct_return_wilson_95": [
+      0.9811546736227335,
+      1.0
+    ]
+  },
+  "profile": {
+    "families": 200,
+    "completed": 200,
+    "intervals_available": 200,
+    "interval_return_fraction": 1.0,
+    "truth_covered": 187,
+    "coverage_among_available": 0.935,
+    "correct_interval_returned_fraction": 0.935,
+    "full_domain_return_fraction": 0.0,
+    "unavailable_reasons": {},
+    "median_width": 4.659785581037628,
+    "coverage_wilson_95": [
+      0.891980920700931,
+      0.9616236453508471
+    ],
+    "availability_wilson_95": [
+      0.9811546736227335,
+      1.0
+    ],
+    "correct_return_wilson_95": [
+      0.891980920700931,
+      0.9616236453508471
+    ]
+  },
+  "elapsed_seconds": 117.75568337494042
+}

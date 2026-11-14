@@ -1,0 +1,37 @@
++ /Users/kf/miniforge3/bin/python -m ruff check nwkit tests setup.py tools
+All checks passed!
++ /Users/kf/miniforge3/bin/python -m ruff format --check nwkit tests setup.py tools
+440 files already formatted
++ /Users/kf/miniforge3/bin/python -m mypy
+Success: no issues found in 204 source files
++ /Users/kf/miniforge3/bin/python -m pytest -q --durations=20 --durations-min=0.05 -m  tests/test_asr_output.py tests/test_asr.py tests/test_asr_averaging.py tests/test_asr_figure.py tests/test_pca.py tests/test_output_transaction.py
+........................................................................ [ 52%]
+................................................................         [100%]
+=============================== warnings summary ===============================
+../../../../../../../../Users/kf/miniforge3/lib/python3.10/site-packages/requests/__init__.py:113
+  /Users/kf/miniforge3/lib/python3.10/site-packages/requests/__init__.py:113: RequestsDependencyWarning: urllib3 (2.6.3) or chardet (7.5.1)/charset_normalizer (3.4.4) doesn't match a supported version!
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+============================= slowest 20 durations =============================
+5.70s call     tests/test_asr.py::TestAsrMain::test_sym_and_ard_models_estimate_rates
+4.14s call     tests/test_asr.py::test_tiny_asymmetric_rates_are_not_misclassified_as_er
+1.90s call     tests/test_asr_averaging.py::test_model_average_cli
+1.09s call     tests/test_asr_output.py::test_ensemble_publishes_stdout_and_figure
+0.76s call     tests/test_asr_figure.py::test_multivariate_cli_has_one_panel_per_trait
+0.58s call     tests/test_pca.py::test_cli_all_artifacts_and_asr
+0.55s call     tests/test_asr_figure.py::test_custom_species_regex_is_shared_with_asrcompare
+0.54s call     tests/test_pca.py::test_figure_formats_and_zero_lambda_ancestors[pdf-%PDF-]
+0.45s call     tests/test_pca.py::test_figure_formats_and_zero_lambda_ancestors[svg-<?xml]
+0.42s call     tests/test_asr_figure.py::test_cli_exports_all_formats_without_changing_target[pdf-%PDF]
+0.40s call     tests/test_asr_figure.py::test_cli_exports_all_formats_without_changing_target[png-\x89PNG]
+0.36s call     tests/test_asr_figure.py::test_cli_exports_all_formats_without_changing_target[svg-<?xml]
+0.26s call     tests/test_pca.py::test_deep_tree_cli_preserves_covariance_and_input_ids[True]
+0.25s call     tests/test_pca.py::test_deep_tree_cli_preserves_covariance_and_input_ids[False]
+0.22s call     tests/test_asr_figure.py::test_simulation_branch_markers_use_sampled_nodes_and_shared_event_colors[True-unconditional]
+0.13s call     tests/test_asr_figure.py::test_simulation_branch_markers_use_sampled_nodes_and_shared_event_colors[True-conditional]
+0.12s call     tests/test_asr_figure.py::test_simulation_branch_markers_use_sampled_nodes_and_shared_event_colors[False-conditional]
+0.11s call     tests/test_asr.py::test_cli_defaults_and_stochastic_maps_do_not_depend_on_time_units
+0.11s call     tests/test_asr_figure.py::test_long_tip_labels_clear_the_legends
+0.11s call     tests/test_asr_figure.py::test_regimes_and_theta_use_same_colors_and_values
+136 passed, 1 warning in 22.20s

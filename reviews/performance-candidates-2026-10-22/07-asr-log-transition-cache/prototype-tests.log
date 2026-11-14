@@ -1,0 +1,20 @@
+/tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python tools/check.py test -- tests/test_asr.py tests/test_asr_polytomy.py tests/test_asr_regimes.py tests/test_discrete_asr_models.py -rs
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m pytest -q --durations=20 --durations-min=0.05 tests/test_asr.py tests/test_asr_polytomy.py tests/test_asr_regimes.py tests/test_discrete_asr_models.py -rs
+........................................................................ [ 64%]
+........................................                                 [100%]
+============================= slowest 20 durations =============================
+4.94s call     tests/test_discrete_asr_models.py::test_frequency_model_cli_fits_stationary_root_and_reports_equilibrium[GTR]
+2.70s call     tests/test_discrete_asr_models.py::test_frequency_model_cli_fits_stationary_root_and_reports_equilibrium[F81]
+2.54s call     tests/test_asr_regimes.py::test_hrm_cli_marginalizes_hidden_classes_and_maps_observed_changes
+2.12s call     tests/test_asr.py::TestAsrMain::test_sym_and_ard_models_estimate_rates
+1.14s call     tests/test_asr_regimes.py::test_mk_regime_cli_fits_and_reports_each_regime_q
+1.06s call     tests/test_discrete_asr_models.py::test_mk_multistart_handles_penalty_regions_on_long_branches
+0.86s call     tests/test_discrete_asr_models.py::test_mk_fit_recovers_from_scipy_bound_roundoff
+0.69s call     tests/test_discrete_asr_models.py::test_directed_ard_multistart_avoids_single_start_local_optimum
+0.23s call     tests/test_asr_polytomy.py::test_large_star_matches_analytic_likelihood
+0.19s call     tests/test_asr_polytomy.py::test_outside_evidence_can_restore_a_very_unlikely_inside_state
+0.13s call     tests/test_asr_polytomy.py::test_asr_cli_polytomy_with_missing_tip_and_stochastic_maps[ARD]
+0.08s call     tests/test_asr.py::test_cli_defaults_and_stochastic_maps_do_not_depend_on_time_units
+
+(8 durations < 0.05s hidden.)
+112 passed in 17.37s

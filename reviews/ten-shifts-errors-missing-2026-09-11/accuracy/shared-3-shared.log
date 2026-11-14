@@ -1,0 +1,29 @@
+{"branches": [], "status": "complete", "seconds": 24.823051219980698}
+{"branches": [26], "status": "complete", "seconds": 62.43826311198063}
+{"branches": [26, 28], "status": "complete", "seconds": 49.268431064032484}
+{"branches": [26, 30], "status": "complete", "seconds": 33.05044263997115}
+{"branches": [22, 26, 28], "status": "complete", "seconds": 36.57457576703746}
+{"branches": [22, 26, 30], "status": "complete", "seconds": 30.35090584802674}
+{"branches": [22, 26, 28, 30], "status": "complete", "seconds": 34.95891347399447}
+{"branches": [15, 22, 26, 30], "status": "complete", "seconds": 43.23388772801263}
+{"branches": [15, 22, 26, 28, 30], "status": "complete", "seconds": 39.30125335097546}
+{"branches": [22, 26, 28, 30, 47], "status": "complete", "seconds": 35.150724225037266}
+{"branches": [15, 22, 26, 28, 30, 47], "status": "complete", "seconds": 58.66888694401132}
+{"branches": [15, 22, 26, 28, 30, 90], "status": "complete", "seconds": 52.60654006502591}
+{"branches": [15, 22, 26, 28, 30, 47, 90], "status": "complete", "seconds": 62.58640461298637}
+{"branches": [15, 22, 25, 26, 28, 30, 47], "status": "complete", "seconds": 84.79716091399314}
+{"branches": [15, 22, 25, 26, 28, 30, 47, 90], "status": "complete", "seconds": 69.86305690702284}
+{"branches": [15, 22, 26, 28, 30, 47, 90, 197], "status": "complete", "seconds": 76.51822491001803}
+/opt/conda/lib/python3.12/site-packages/scipy/optimize/_numdiff.py:686: RuntimeWarning: invalid value encountered in subtract
+  df = [f_eval - f0 for f_eval in f_evals]
+{"branches": [15, 22, 25, 26, 28, 30, 47, 90, 197], "status": "complete", "seconds": 76.70459836901864}
+{"branches": [15, 22, 25, 26, 28, 30, 47, 90, 139], "status": "complete", "seconds": 80.44064907799475}
+{"branches": [15, 22, 25, 26, 28, 30, 47, 90, 139, 197], "status": "complete", "seconds": 67.05090953002218}
+{"branches": [15, 19, 22, 25, 26, 28, 30, 47, 90, 197], "status": "complete", "seconds": 67.13264286302729}
+{"branches": [15, 19, 22, 25, 26, 28, 30, 47, 90, 139, 197], "status": "complete", "seconds": 52.136442482005805}
+{"branches": [15, 22, 25, 26, 28, 30, 47, 65, 90, 139, 197], "status": "complete", "seconds": 54.1915975669981}
+{"branches": [15, 19, 22, 25, 26, 28, 30, 47, 65, 90, 139, 197], "status": "complete", "seconds": 63.10407902899897}
+{"branches": [15, 19, 22, 25, 26, 28, 30, 47, 90, 139, 175, 197], "status": "complete", "seconds": 56.78630685899407}
+{"branches": [15, 19, 22, 25, 26, 28, 30, 47, 90, 139, 183, 197], "status": "complete", "seconds": 56.62123635900207}
+{"branches": [15, 19, 22, 25, 26, 28, 30, 47, 65, 90, 197], "status": "complete", "seconds": 60.65019582002424}
+{"job": {"truth": "shared", "mode": "shared", "replicate": 3, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "accuracy"}, "status": "complete", "elapsed": 1429.5421838620096, "error": null}

@@ -1,0 +1,224 @@
++ /Users/kf/miniforge3-arm64/bin/python -m ruff check nwkit tests setup.py tools
+All checks passed!
++ /Users/kf/miniforge3-arm64/bin/python -m ruff format --check nwkit tests setup.py tools
+513 files already formatted
++ /Users/kf/miniforge3-arm64/bin/python -m mypy
+Success: no issues found in 227 source files
++ /Users/kf/miniforge3-arm64/bin/python -m pytest -q --durations=20 --durations-min=0.05 -m not slow
+........................................................................ [  1%]
+........................................................................ [  3%]
+........................................................................ [  5%]
+........................................................................ [  6%]
+........................................................................ [  8%]
+........................................................................ [ 10%]
+........................................................................ [ 12%]
+........................................................................ [ 13%]
+........................................................................ [ 15%]
+........................................................................ [ 17%]
+........................................................................ [ 19%]
+........................................................................ [ 20%]
+........................................................................ [ 22%]
+........................................................................ [ 24%]
+...................F.................................................... [ 26%]
+........................................................................ [ 27%]
+........................................................................ [ 29%]
+.......s................................................................ [ 31%]
+........................................................................ [ 33%]
+........................................................................ [ 34%]
+........................................................................ [ 36%]
+........................................................................ [ 38%]
+...................................................ss................... [ 40%]
+........................................................................ [ 41%]
+......................................................................s. [ 43%]
+........................................................................ [ 45%]
+........................................................................ [ 47%]
+........................................................................ [ 48%]
+............FFF......................................................... [ 50%]
+........................................................................ [ 52%]
+........................................................................ [ 54%]
+........................................................................ [ 55%]
+......................................................ss................ [ 57%]
+...............................sssssssssssss...........s.s.sss..sssssss. [ 59%]
+.........s.............ss............................................... [ 61%]
+........................................................................ [ 62%]
+........................................................................ [ 64%]
+........................................................................ [ 66%]
+........................................................................ [ 68%]
+........................................................................ [ 69%]
+........................................................................ [ 71%]
+........................................................................ [ 73%]
+........................................................................ [ 75%]
+............................................................ssss........ [ 76%]
+..........................sss........sssss...........ss...ssss.......... [ 78%]
+........................................................................ [ 80%]
+ssss..sssss.........ssss................................................ [ 81%]
+........................................................................ [ 83%]
+........................................................................ [ 85%]
+........................................................................ [ 87%]
+....................s....ssssssssssssssssssss........................... [ 88%]
+........................................................................ [ 90%]
+........................................................................ [ 92%]
+........................................................................ [ 94%]
+........................................................................ [ 95%]
+........................................................................ [ 97%]
+........................................................................ [ 99%]
+........................                                                 [100%]
+=================================== FAILURES ===================================
+_________ test_mk_multistart_handles_penalty_regions_on_long_branches __________
+
+    def test_mk_multistart_handles_penalty_regions_on_long_branches():
+        tree = tree_from("[&R]((a:0.3,b:0.7):0.5,(c:50,d:0.9):0.25)R;")
+        states = ["x", "y", "z"]
+        observed = {"a": "x", "b": "y", "c": "z", "d": "x"}
+        likelihood = {
+            name: np.array([state == item for item in states], dtype=float)
+            for name, state in observed.items()
+        }
+        _, fit = asr.compute_mk_marginals(
+            tree,
+            states,
+            observed,
+            likelihood,
+            model="SYM",
+        )
+        assert fit["log_likelihood"] == pytest.approx(-3.666938522, abs=2e-7)
+        assert fit["optimizer_converged_starts"] == fit["optimizer_starts"]
+>       assert fit["fit_status"] == "ok"
+E       AssertionError: assert 'rate_lower_boundary' == 'ok'
+E         
+E         - ok
+E         + rate_lower_boundary
+
+tests/test_discrete_asr_models.py:539: AssertionError
+_ test_screen_harness_rejects_invalid_sizes_and_colliding_outputs[extra0-.npz] _
+
+tmp_path = PosixPath('/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/pytest-of-kf/pytest-70/test_screen_harness_rejects_in0')
+extra = [], suffix = '.npz'
+
+    @pytest.mark.parametrize(
+        "extra,suffix",
+        [([], ".npz"), (["--tips", "0"], ".json"), (["--traits", "0"], ".json")],
+    )
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="The resource-based benchmark is POSIX-only."
+    )
+    def test_screen_harness_rejects_invalid_sizes_and_colliding_outputs(
+        tmp_path, extra, suffix
+    ):
+        tool = RUNNER_PATH.parents[2] / "tools/benchmark_native_screen.py"
+        output = tmp_path / ("result" + suffix)
+        result = subprocess.run(
+            [sys.executable, str(tool), "--output", str(output), *extra],
+            capture_output=True,
+            text=True,
+        )
+>       assert result.returncode == 2
+E       AssertionError: assert 1 == 2
+E        +  where 1 = CompletedProcess(args=['/Users/kf/miniforge3-arm64/bin/python', '/Users/kf/repos/nwkit/tools/benchmark_native_screen.p...it.shift_native_model import ShiftData, ShiftLayout, evaluate_trait\nModuleNotFoundError: No module named \'nwkit\'\n').returncode
+
+tests/test_native_optimization_audit.py:130: AssertionError
+_ test_screen_harness_rejects_invalid_sizes_and_colliding_outputs[extra1-.json] _
+
+tmp_path = PosixPath('/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/pytest-of-kf/pytest-70/test_screen_harness_rejects_in1')
+extra = ['--tips', '0'], suffix = '.json'
+
+    @pytest.mark.parametrize(
+        "extra,suffix",
+        [([], ".npz"), (["--tips", "0"], ".json"), (["--traits", "0"], ".json")],
+    )
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="The resource-based benchmark is POSIX-only."
+    )
+    def test_screen_harness_rejects_invalid_sizes_and_colliding_outputs(
+        tmp_path, extra, suffix
+    ):
+        tool = RUNNER_PATH.parents[2] / "tools/benchmark_native_screen.py"
+        output = tmp_path / ("result" + suffix)
+        result = subprocess.run(
+            [sys.executable, str(tool), "--output", str(output), *extra],
+            capture_output=True,
+            text=True,
+        )
+>       assert result.returncode == 2
+E       AssertionError: assert 1 == 2
+E        +  where 1 = CompletedProcess(args=['/Users/kf/miniforge3-arm64/bin/python', '/Users/kf/repos/nwkit/tools/benchmark_native_screen.p...it.shift_native_model import ShiftData, ShiftLayout, evaluate_trait\nModuleNotFoundError: No module named \'nwkit\'\n').returncode
+
+tests/test_native_optimization_audit.py:130: AssertionError
+_ test_screen_harness_rejects_invalid_sizes_and_colliding_outputs[extra2-.json] _
+
+tmp_path = PosixPath('/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/pytest-of-kf/pytest-70/test_screen_harness_rejects_in2')
+extra = ['--traits', '0'], suffix = '.json'
+
+    @pytest.mark.parametrize(
+        "extra,suffix",
+        [([], ".npz"), (["--tips", "0"], ".json"), (["--traits", "0"], ".json")],
+    )
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="The resource-based benchmark is POSIX-only."
+    )
+    def test_screen_harness_rejects_invalid_sizes_and_colliding_outputs(
+        tmp_path, extra, suffix
+    ):
+        tool = RUNNER_PATH.parents[2] / "tools/benchmark_native_screen.py"
+        output = tmp_path / ("result" + suffix)
+        result = subprocess.run(
+            [sys.executable, str(tool), "--output", str(output), *extra],
+            capture_output=True,
+            text=True,
+        )
+>       assert result.returncode == 2
+E       AssertionError: assert 1 == 2
+E        +  where 1 = CompletedProcess(args=['/Users/kf/miniforge3-arm64/bin/python', '/Users/kf/repos/nwkit/tools/benchmark_native_screen.p...it.shift_native_model import ShiftData, ShiftLayout, evaluate_trait\nModuleNotFoundError: No module named \'nwkit\'\n').returncode
+
+tests/test_native_optimization_audit.py:130: AssertionError
+============================= slowest 20 durations =============================
+56.84s call     tests/test_shift_null_contract_audit.py::test_archived_engine_requires_explicit_scope_and_intact_snapshot
+15.52s call     tests/test_pagel_asr.py::test_pagel_partial_missing_trait_retains_partial_likelihood
+9.19s call     tests/test_threshold_reference.py::test_estimated_ordinal_posterior_matches_independent_integration[True]
+8.27s call     tests/test_shift_native_path.py::test_free_alpha_covariance_seed_is_counted_in_refit_budget
+7.34s call     tests/test_threshold_reference.py::test_estimated_ordinal_posterior_matches_independent_integration[False]
+7.04s call     tests/test_pagel_asr.py::test_pagel_cli_and_batch_comparison
+6.94s call     tests/test_radte_initial_boundary.py::test_sequence_fit_starts_inside_chronology_when_branch_initializer_collapses
+6.01s call     tests/test_signal.py::test_cli_se_and_reproducible_permutations
+5.93s call     tests/test_pagel_asr.py::test_asrcompare_all_routes_two_discrete_columns_to_mixture_and_pagel
+5.43s call     tests/test_pagel_asr.py::test_pagel_dependent_nests_independent_likelihood
+5.22s call     tests/test_ordinary_regression.py::test_censored_gaussian_cli_preserves_censored_biological_replicates[False]
+4.90s call     tests/test_ordinary_regression.py::test_censored_gaussian_cli_preserves_censored_biological_replicates[True]
+4.68s call     tests/test_threshold_reference.py::test_fixed_ordinal_reference
+4.49s call     tests/test_threshold_reference.py::test_binary_posterior_matches_independent_quadrature[True]
+4.31s call     tests/test_asr_review_regressions.py::test_many_tip_labels_do_not_overlap_in_equal_width_columns[asr]
+4.22s call     tests/test_discrete_asr_models.py::test_frequency_model_cli_fits_stationary_root_and_reports_equilibrium[GTR]
+4.04s call     tests/test_shift_native_path.py::test_path_memory_guard_precedes_design_allocation
+3.62s call     tests/test_vector_fit.py::test_pruning_ou_matches_dense_fit[True]
+3.46s call     tests/test_signal.py::test_interior_lambda_with_errors_independent_optimization
+3.41s call     tests/test_asr_review_regressions.py::test_many_tip_labels_do_not_overlap_in_equal_width_columns[asrcompare]
+=========================== short test summary info ============================
+FAILED tests/test_discrete_asr_models.py::test_mk_multistart_handles_penalty_regions_on_long_branches
+FAILED tests/test_native_optimization_audit.py::test_screen_harness_rejects_invalid_sizes_and_colliding_outputs[extra0-.npz]
+FAILED tests/test_native_optimization_audit.py::test_screen_harness_rejects_invalid_sizes_and_colliding_outputs[extra1-.json]
+FAILED tests/test_native_optimization_audit.py::test_screen_harness_rejects_invalid_sizes_and_colliding_outputs[extra2-.json]
+4 failed, 4038 passed, 86 skipped, 12 deselected in 337.16s (0:05:37)
+Traceback (most recent call last):
+  File "/Users/kf/repos/nwkit/tools/check.py", line 150, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "/Users/kf/repos/nwkit/tools/check.py", line 138, in main
+    run_tests(pytest_args, quick=True)
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kf/repos/nwkit/tools/check.py", line 45, in run_tests
+    run(
+    ~~~^
+        PYTHON,
+        ^^^^^^^
+    ...<6 lines>...
+        *pytest_args,
+        ^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/kf/repos/nwkit/tools/check.py", line 20, in run
+    subprocess.run(command, cwd=PROJECT_ROOT, check=True, env=env)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kf/miniforge3-arm64/lib/python3.14/subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '('/Users/kf/miniforge3-arm64/bin/python', '-m', 'pytest', '-q', '--durations=20', '--durations-min=0.05', '-m', 'not slow')' returned non-zero exit status 1.

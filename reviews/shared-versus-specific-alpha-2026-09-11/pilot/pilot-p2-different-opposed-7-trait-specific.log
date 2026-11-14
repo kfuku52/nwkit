@@ -1,0 +1,2 @@
+/opt/conda/lib/python3.12/site-packages/scipy/optimize/_numdiff.py:721: RuntimeWarning: invalid value encountered in subtract
+  df.append(f2 - f1)

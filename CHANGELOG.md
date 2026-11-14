@@ -4,6 +4,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.46.7] - 2026-11-15
+
 ### Fixed
 
 - Mk transition matrices preserve rare multi-step changes on short branches
@@ -223,6 +225,1039 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Group regression inputs and replicate observations by tip before processing
   individual traits. Build ancestral and sampling covariance output tables
   by column.
+
+## [0.46.6] - 2026-11-14
+
+### Added
+
+- Support resumable WGD count bootstraps, supplied background genome doublings,
+  and diagnostics for the fitted count background.
+
+### Fixed
+
+- Preserve rare WGD transition and ascertainment probabilities in log space.
+- Preserve short branches in Brownian, OU, and SHIFT calculations and keep
+  estimates stable at extreme trait scales in DTT, phylogenetic signal, and PCA.
+- Preserve small differences in Ks corrections and weighted tree distances,
+  and stabilize minimum-variance rooting and MCMC diagnostics.
+
+### Performance
+
+- Reuse WGD transitions and prune unrepresented species from gene-topology
+  likelihood calculations. Share tree indexing across MUL hypotheses.
+- Reduce Gaussian fitting and simulation work in ASR and SHIFT, and solve
+  fixed-covariance multivariate OU optima directly with GLS.
+- Reduce work and memory for Ks summaries, phylogenetic signal permutations,
+  DTT simulation and drawing, and path distances between large trees.
+
+## [0.46.5] - 2026-11-13
+
+### Added
+
+- Date gene trees from amino acid alignments with the RADTE MCMCTree backend
+  using CODEML, the bundled LG matrix and approximate likelihood (issue #32).
+
+### Fixed
+
+- Normalize unknown DNA bases for PAML and reject incomplete or invalid
+  MCMCTree traces before publishing RADTE results.
+- Stop PAML child processes on timeout on POSIX.
+
+### Performance
+
+- Run independent MCMCTree chains concurrently and read each alignment and
+  chain trace once. Build RADTE age-sample tables from arrays.
+
+## [0.46.4] - 2026-11-13
+
+### Fixed
+
+- Score the same gene trees for every MUL hypothesis when a caller supplies
+  a single-pass iterable.
+
+### Performance
+
+- Validate and index gene topologies and resolve species labels once per
+  D+L search instead of repeating those operations for each MUL hypothesis.
+
+## [0.46.3] - 2026-11-13
+
+### Fixed
+
+- Enforce minimum RADTE age gaps at fixed calibration boundaries and report
+  why a converged optimizer candidate failed validation (issue #31).
+- Preserve minimum age gaps at RADTE profile endpoints and reject infeasible
+  fixed chronologies before calculating likelihoods.
+
+### Performance
+
+- Keep the RADTE branch-initialization precision matrix sparse, reuse the
+  age-gradient design, and compute feasible profile endpoints in one pass.
+
+## [0.46.2] - 2026-11-11
+
+### Fixed
+
+- Preserve small nonzero weighted path differences and accumulate large
+  topological and weighted path distances in exact branch units before rounding.
+- Normalize staged package permissions for reproducible wheel builds.
+
+### Performance
+
+- Index clades, leaf intervals, projected splits and repeated tree mappings
+  across comparison, reconciliation, annotation, sampling and subtree commands.
+- Reduce retained drawing layouts, posterior samples, annotation buffers and
+  temporary containers during Newick and table processing.
+- Reuse Gaussian factors, branch transitions and fixed covariance models in
+  ASR, regression, GLMM, phylogenetic signal and PCA calculations.
+- Reuse WGD emissions, transitions and topology terms, and prepare shared-family
+  Ks bootstrap observations and trio indices once per calculation.
+- Stream DTT simulation tables and IQ-TREE Hessian exports, reuse codon state
+  masks, pack DNA site patterns and inspect FASTA alphabets record by record.
+- Share MUL species indexes and gene-tree inputs across candidate evaluations
+  and worker processes.
+
+## [0.46.1] - 2026-11-09
+
+### Added
+
+- Use the checksum-verified VertLife amphibian consensus as a reference for
+  topology constraints, dated branch lengths, rooting, and divergence-age reports.
+- Support offline reference files and cached downloads. Include species matching
+  and source provenance in the reports.
+
+### Fixed
+
+- Preserve input branch precision and annotations in VertLife rooting and age
+  reports. Accept rooted polytomies in the age-report mode.
+- Read UTF-8 species lists with an optional byte-order mark.
+
+### Performance
+
+- Check repeated-species groups and projected root splits without rescanning
+  descendant tip sets. Share downloads across concurrent cache misses.
+
+## [0.46.0] - 2026-11-05
+
+### Added
+
+- Provide reusable parent/LCA, branch-feature, constraint, foreground, tool-tree,
+  calibration, reconciliation-record and presentation APIs for workflows.
+- Add opt-in `extended-taxonomic` species parsing, ASTRAL support-label
+  conversion, comment removal and optional R tree/chain diagnostic backends.
+
+### Fixed
+
+- Preserve strict support transfer and ordered raw reconciliation evidence;
+  reject invalid result taxa, repeated chain inputs and malformed samples.
+- Stage validated GeneRax exports before publication and protect input paths.
+
+### Performance
+
+- Avoid quadratic ancestor and foreground-clade storage on deep trees, batch
+  numbered clade keys, and avoid unused split reports during property transfer.
+
+## [0.45.3] - 2026-11-03
+
+### Added
+
+- Export stable species-clade IDs for every implied LCA loss, including repeated
+  losses of separate copies on one species edge. Counts retain the existing
+  duplication/speciation convention and exclude losses above the gene root.
+- Keep loss locations unavailable for NHX/overlap or unmapped events; mapped
+  LCA gene leaves explicitly have an empty loss list.
+
+## [0.45.2] - 2026-10-27
+
+### Changed
+
+- Draw one observed gene tree inside the species tree by default for X1
+  documents, preserving its topology and compatible recorded D/T/L events.
+- Start transferred copies on fresh recipient branches, preserve opposite-arm
+  S/D forks, and retain X-replaced source events in selectable HTML details.
+- Reduce display crossings with bounded branch rotations and use centered,
+  uniformly spaced turns and equal-width sibling species corridors.
+- Accept display schema 0.2.0 while retaining legacy saved views and the
+  unchanged scientific document schema.
+
+## [0.45.1] - 2026-10-26
+
+### Changed
+
+- Remove tests for unreachable internal inputs and unsupported helper use cases,
+  plus helper assertions already covered by higher-level numerical regressions.
+
+## [0.45.0] - 2026-10-24
+
+### Added
+
+- Read validated reconciliation documents from canonical JSON, recPhyloXML,
+  phyloXML, Newick/NHX and saved reconciliation tables through `nwkit draw`.
+- Render embedded, paired and nested histories and arbitrary comparison panels
+  as PDF, SVG, PNG or offline HTML with selectable events and embedded PDF.
+- Preserve source trees, recorded events and provenance in normalized document
+  output, with explicit display selections and recoverable output bundles.
+
+### Fixed
+
+- Keep nested copy paths orthogonal, separate concurrent forks, retain terminal
+  loss versus marginalized-empty-side distinctions, and include labels and
+  transfer curves in export bounds.
+
+## [0.44.0] - 2026-10-23
+
+### Changed
+
+- Reduce repeated ancestor and descendant traversal in LCA queries, consensus
+  construction, clade summaries, monophyly checks and tree-to-table output.
+- Reduce temporary allocations in Gaussian covariance construction, Brownian
+  DTT batches, TSV input and sampling-covariance validation.
+- Reuse trait-independent contrast metadata and requested descendant-taxon
+  summaries while preserving trait-specific calculations and output order.
+- Document two rounds of measured performance candidates, including rejected
+  approaches, exact-output checks and workload-specific tradeoffs.
+
+## [0.43.57] - 2026-10-22
+
+### Changed
+
+- Reuse a resolved correlation spectrum across exact-observation signal lambda
+  profiles, preserving sampling-error and ill-conditioned-spectrum calculations.
+- Fill large Gaussian covariances by descendant blocks with bounded temporary
+  storage, retaining arbitrary node order, repeated nodes and stable fallbacks.
+- Reuse final PCA whitening and adjacent full-OU moment products without
+  changing ML divisors, rank diagnostics or matrix multiplication order.
+- Batch rare-family log pruning within a workspace estimate, preserving count
+  tails, ascertainment and missing-subtree likelihoods.
+- Reuse validated uniformization preparation within each stochastic-map request
+  while retaining work/storage guards, conditional tails and indexed seeds.
+- Accelerate final ER posterior pruning only for fixed rates and at least 32
+  states, checking the actual transition structure exactly. Rate optimization
+  retains its existing calculation.
+
+## [0.43.56] - 2026-10-22
+
+### Fixed
+
+- Accept rounded dated-tree branches using the existing tolerance against the
+  whole tree height, preserving supplied ages, intervals and branch lengths.
+  Reject excessive root-to-tip spread, including accumulated differences that
+  local child-mean comparisons could miss, before attaching inferred ages.
+- Reject nonfinite or negative dated-tree branches and invalid tolerances.
+
+## [0.43.55] - 2026-10-22
+
+### Changed
+
+- Reuse covariance factors in exact-observation K permutations and existing Cholesky factors throughout dense GLMM fits.
+- Group cluster scores without repeated observation scans while retaining their original reduction order; batch grouped predictor covariance products within a workspace budget.
+- Accelerate exact numeric diagonal checks and log-domain count transitions without changing object-array behavior or branching-process probabilities.
+- Batch Brownian DTT simulations within a bounded workspace while preserving indexed random streams and exact serial/parallel results.
+- Construct only observed covariance during large, highly missing dense multivariate PGLS optimization, retaining the full final covariance for callers.
+
+### Fixed
+
+- Preserve consumed random draws on failed K permutations and lazy input handling for empty simulation requests.
+
+## [0.43.54] - 2026-10-17
+
+### Changed
+
+- Run complete CI regression suites in parallel on each platform and combine worker branch coverage without lowering the coverage floor or changing scientific studies.
+
+## [0.43.53] - 2026-10-15
+
+### Changed
+
+- Allow Python callers of `root_compare_main` to retain exact midpoint, MAD and MV rooted trees from the comparison pass, avoiding repeated rooting and lossy table round trips.
+
+## 0.43.52 (2026-10-13)
+
+- Notify the central Dependabot controller after prepared updates finish CI.
+
+## [0.43.51] - 2026-10-13
+
+### Changed
+
+- Update development-tool constraints after validating the current regression and release checks.
+
+## [0.43.50] - 2026-10-09
+
+### Fixed
+
+- Stabilize negative-binomial log probabilities near the Poisson limit instead
+  of subtracting large log-gamma values. Preserve the NB2 model, optimizer
+  convergence checks and bounds; include zero-inflated and hurdle likelihoods
+  and independent high-precision probability/dispersion-score regressions.
+
+## [0.43.49] - 2026-10-09
+
+### Fixed
+
+- Apply the existing near-machine-precision alpha-grid coordinate contract to
+  archived SHIFT replay comparisons as well as probability metadata validation.
+  Platform-dependent `geomspace` rounding no longer rejects identical statistics,
+  probabilities and decisions; changed probabilities, grid entries and ordering
+  are still rejected.
+
+## [0.43.48] - 2026-10-09
+
+### Fixed
+
+- Replay archived SHIFT bootstrap fits from their exact stored observations
+  after independently verifying regenerated data. Keep input-roundoff allowances
+  separate from exact probability/decision checks, and report both test records
+  when a seeded replay still disagrees.
+
+## [0.43.47] - 2026-10-09
+
+### Changed
+
+- Keep replicated WGD count and Ks coverage studies behind pytest's explicit
+  `--run-studies` option; run their original protocols once in weekly/manual
+  CI instead of every platform and coverage job. Retain small real-bootstrap
+  and independent-reference regressions, and reduce signal CLI bootstrap draws
+  where tests check metadata, ordering and missing data rather than significance.
+
+### Fixed
+
+- Keep weekly/manual scientific studies in a separate concurrency group so
+  ordinary pushes do not cancel the only scheduled study run.
+- Allow the existing bounded non-Gaussian elastic-net curvature resets after a
+  finite line-search failure, retaining successful termination, stationarity,
+  objective and iteration-budget checks.
+- Replay the archived SHIFT experiment with its declared single-thread BLAS
+  protocol, initialized before numerical imports; keep all 480 replays and
+  exact discrete-decision comparisons.
+
+## [0.43.46] - 2026-10-09
+
+### Fixed
+
+- Exclude automatic AngioCal stem calibrations when the candidate divergence or
+  either child branch conflicts with sampled NCBI clades. Report
+  `conflicting_tree_taxonomy` instead of placing fossil minima on nodes created
+  by an incompatible rooting; retain projections where the local rooted split is
+  taxonomically compatible.
+
+## [0.43.45] - 2026-10-09
+
+### Changed
+
+- Replace the optional `xlrd` reader with a dependency-free XLS parser for
+  AngioCal. Preserve bundled official records, original source metadata and
+  date/boolean/error-cell validation; read custom XLS files and reproduce the
+  normalized TSV without an Excel-reading package. Remove `xlrd` from test and
+  development dependencies; retain `xls` as an empty compatibility extra.
+
+### Fixed
+
+- Reject overlapping XLS sheet and OLE stream allocations before repeated
+  parsing or calibration import, invalid nested worksheet substreams and rows
+  beyond the BIFF version's limit. Preserve physical/directory sheet ordering
+  differences and support legacy Macintosh Icelandic and Turkish text.
+- Avoid quadratic scans of malformed number-format brackets and repeated
+  date-format classification across cells sharing one format.
+
+## [0.43.44] - 2026-10-09
+
+### Changed
+
+- Remove `xlrd` from mandatory runtime dependencies. Verify the official
+  AngioCal v1.0 workbook and use its bundled, independently verified normalized
+  records without changing source hashes, metadata or original worksheet rows.
+  Custom XLS input retains an optional `xls` extra; TSV input needs no extra.
+  Preserve the bundled TSV's checksum during Windows Git checkout by fixing
+  its line endings to LF.
+
+## [0.43.43] - 2026-10-08
+
+### Added
+
+- Import pinned AngioCal v1.0 fossil minima through `mcmctree`, with local
+  XLS/TSV inputs, conservative crown/stem placement, explicit fossil anchors,
+  Ma-unit conversion, source/reference reports, nominal-bound validation and
+  staged tree/report output. Reject combining AngioCal with TimeTree.
+
+### Fixed
+
+- Preserve MCMCtree tip labels containing `NoName` or colon-number text while
+  omitting branch lengths from calibration-tree output.
+- Preserve prior-parameter precision and exact fossil IDs; protect automatic
+  AngioCal caches from audit/output collisions and include first downloads in
+  audit input hashes. Reject incompatible PAML topologies/names, ineffective
+  `@age` fossil annotations, invalid bounded priors and inconsistent crown/stem
+  metadata in AngioCal mode.
+- Normalize existing AngioCal prior constructors for PAML and reject unsupported
+  annotations instead of discarding them. Exclude digit-only PAML tip identifiers,
+  distinguish internal clade assertions from tip names, and detect original XLS
+  inputs without relying on filename extensions.
+- Reject Excel Boolean/date cells and error codes rather than importing them as
+  fossil ages or identifiers.
+
+### Changed
+
+- Document standard local release validation for the affected CPython 3.12.14
+  timed-traceback hang, preserving complete test coverage and scientific settings.
+
+## [0.43.42] - 2026-10-07
+
+### Fixed
+
+- Write BOM-bearing test fixtures as UTF-8 and assert native relative GeneRax
+  paths on Windows, retaining the same inputs and worker protocol.
+
+### Changed
+
+- Add opt-in, bounded test-start markers, CI test progress, a diagnostic stack
+  dump for long tests, and
+  allowlisted Python/package/BLAS metadata. Identify the cell, replicate, lane
+  and seed on an archived replay mismatch without changing scientific checks,
+  test selection, job deadlines or retry behavior.
+
+## [0.43.41] - 2026-10-06
+
+### Changed
+
+- Default leading rooted/unrooted output tokens to off across tree-writing CLI
+  commands; add `--rooting-token yes` for explicit output, using one shared
+  policy for common writers, RADTE, MUL trees and gene-tree-search outputs.
+- Preserve existing annotations and root interpretation without adding NHX to
+  ordinary rooted binary trees. Retain metadata when topology cannot express
+  the state; strict plain-Newick conversion rejects information loss before
+  replacing files. NEXUS retains its format-specific declaration.
+- Keep dated branch precision, companion-output transactions, saved-model
+  compatibility and native external-worker/calibration syntax unchanged.
+
+## [0.43.40] - 2026-10-06
+
+### Added
+
+- Add `gene-tree-search` to detect species-overlap covers and LCA cuts, propose
+  joint tip/clade regrafts, and compare complete-tip topologies with independent
+  GeneRax EVAL fits under DL or DTL models. Report finite-search coverage,
+  per-round likelihoods, score-rounding bounds and input provenance.
+- Include the supplied BMI1 regression fixture, exhaustive small-tree reference
+  checks and real GeneRax checks for both reconciliation models and root policies.
+
+### Fixed
+
+- Retain and warm-start the best fit across equal refit rounds for every topology,
+  including the baseline; select only candidates with resolved joint improvement.
+- Preserve canonical move metadata when duplicate candidates are reserved;
+  distinguish protein asparagine from unknown DNA and validate fitted trees.
+- Support inline/stdin tree provenance, reject absent output directories before
+  search, and protect all companion outputs from audit collisions.
+- Write round-relative GeneRax paths so spaces, quotes and comment characters
+  in work-directory names do not corrupt family-file paths or native workers.
+- Stop local POSIX workers when a launcher exits unsuccessfully, as well as on
+  timeout or cancellation.
+- Use iterative tree copies for gene-tree proposals, GeneRax serialization and
+  MUL mapping annotations, preserving support for deep trees on Python 3.10/3.11.
+- Exclude SciPy 1.18.0 and 1.18.1 after reproducing a finite-input matrix
+  exponential hang outside NWKIT; document the input and removal condition.
+- Preserve probability-one survival in count-WGM ascertainment algebra, avoiding
+  a rounded probability above one and invalid pulse logarithm without clipping.
+
+### Changed
+
+- Document the command, reproducible BMI1 evidence, component-preserving and
+  pairwise-coupling restrictions, and the limits of biological interpretation.
+
+## [0.43.39] - 2026-10-03
+
+### Fixed
+
+- Preserve original-coordinate floating-point roundoff when centering exact
+  Gaussian observations and fixed roots, avoiding false deterministic
+  conflicts on platforms with slightly different OU coefficients. Keep real
+  conflicting observations rejected in likelihood, smoothing and sampling.
+- Allow the complete scientific test and quality jobs to finish on hosted CI
+  runners by increasing their execution budget from 30 to 120 minutes, without
+  removing checks or reducing scientific replicate counts.
+
+## [0.43.38] - 2026-10-03
+
+### Added
+
+- Add opt-in conditional MUL/MSC likelihoods and bounded age/Ne estimation,
+  with explicit parameter-identifiability and optimization diagnostics.
+- Add experimental locus DL + ILS null/allopolyploid comparison, finite-grid
+  search-wide calibration, detection/hybrid conditional integration, and
+  conservative Chernoff-KL score-bank uncertainty bounds.
+- Add D+L `--node-out` for complete node assignments across every globally
+  tied best hypothesis, with rooted topology/clade identities and explicit
+  resource-limit failures. Preserve the legacy first-best detailed report.
+- Add independent reference checks, frozen research protocols and validation
+  reports, including fixed-data MC budget diagnostics. These experimental
+  models do not establish production WGD detection or node-origin posteriors.
+
+### Fixed
+
+- Restore saved histogram strata when replaying research banks, preserving
+  exact probabilities and scores instead of using pooled-count approximations.
+- Reject incompatible model-specific options and protect all related outputs
+  and inputs through shared staged publication and provenance contracts.
+
+### Changed
+
+- Extend command documentation and retain alphabetical feature listings;
+  D+L remains the default model and existing output contracts are preserved.
+- Include MUL research scripts and protocols in reproducible source archives.
+
+## [0.43.37] - 2026-10-02
+
+### Added
+
+- Add `ksrate` for focal-lineage Ks correction, shared-family bootstrap
+  diagnostics, and conservative simultaneous pair-median intervals.
+- Add `mul-reconcile` for exact minimum duplication-plus-loss reconciliation
+  of auto-/allopolyploid MUL-tree hypotheses, including all optimal mappings,
+  explicit resource limits, and GRAMPA-compatible score/detail columns.
+- Add experimental `wgd-count` gene-count DL/WGM scans with missing-data and
+  detection handling, branch-burst diagnostics, numerical convergence checks,
+  and search-wide parametric bootstrap.
+- Add `wgd-tree` fixed-topology DL/WGD likelihoods and conditional node-origin
+  assignments from supplied count fits, with analytic branch transport.
+- Document command contracts, independent reference checks, scientific audits,
+  and the limits of parsimony, model-conditional support, and Ks uncertainty.
+
+### Changed
+
+- Alphabetize the complete README and Wiki Home subcommand lists and add
+  dedicated Wiki pages for the four new commands.
+
+## [0.43.36] - 2026-10-01
+
+### Changed
+
+- Keep `[&R]`/`[&U]` declarations in shared Newick output by default instead
+  of converting them to root NHX. Add `--rooting-nhx yes` for the previous
+  representation, retaining existing NHX and otherwise-lost unknown states.
+
+## [0.43.35] - 2026-09-28
+
+### Fixed
+
+- Reject CLI output paths that would overwrite input trees, tables, mappings,
+  or sequence files, while retaining supported in-place tree edits.
+- Include the missing input and output roles in provenance records and prevent
+  audit logs from replacing those paths.
+- Stage image metadata outputs together and restrict frozen SHIFT audit replay
+  to a trusted archived engine digest.
+- Include repository tools in the security gate, correct coverage terminology,
+  and repair local-only links in historical reviews.
+
+## [0.43.34] - 2026-09-28
+
+### Added
+
+- Add opt-in studentized bootstrap inference for Gaussian phylogenetic
+  regression and an opt-in parametric-bootstrap test for Pagel's lambda.
+- Retain independent calibration records and audit tools for regression,
+  RADTE interval methods, and phylogenetic signal.
+
+### Fixed
+
+- Preserve event-average coefficient inference during regression bootstrap
+  refits and clarify errors-in-variables identifiability diagnostics.
+- Guard RADTE profile intervals against inferior reference fits and improve
+  their constrained-search diagnostics.
+- Skip lambda bootstrap draws when the observed likelihood ratio is zero and
+  reduce repeated work in known-SE likelihood evaluations.
+
+### Validation
+
+- Document remaining limits: RADTE profile undercoverage, predictor-error
+  regression undercoverage, and uninformative eight-tip lambda profile
+  intervals. These findings do not change the default inference methods.
+
+## [0.43.33] - 2026-09-23
+
+### Fixed
+
+- Recognize a converged refinement of the selected scalar-search interval when
+  a flat objective has equal values at separated coordinates, without borrowing
+  convergence from another interval.
+
+## [0.43.32] - 2026-09-22
+
+### Fixed
+
+- Reject duplicate or empty headers and ragged rows in shared and image-specific
+  species mapping TSVs instead of silently overwriting or ignoring fields.
+- Read species and rename mapping files as UTF-8 with an optional BOM, while
+  preserving literal keys and support for standard input.
+
+## [0.43.31] - 2026-09-22
+
+### Changed
+
+- Share descendant flag propagation between the two mark clade-selection modes,
+  preserving their separate ancestor selection, traversal order, and outputs.
+
+## [0.43.30] - 2026-09-22
+
+### Fixed
+
+- Report stdin and inline tree input accurately in `info`, while retaining
+  resolved file paths for file input.
+- Document and verify a same-version SciPy wheel recovery for the Python 3.10
+  native-extension import failure on macOS 27 ARM64, without changing runtime
+  dependency constraints.
+
+## [0.43.28] - 2026-09-22
+
+### Fixed
+
+- Correct the annotated-tree conversion example to remove all properties
+  explicitly before plain-Newick output, and route documentation links to
+  their respective command guides.
+- Add a runnable first analysis and clarify installation isolation, table
+  columns and units, configuration precedence, cache controls and rerun behavior.
+
+## [0.43.27] - 2026-09-22
+
+### Changed
+
+- Add repository-specific agent guidance and a change-validation skill; centralize
+  environment preflight, affected-test selection, and check cost boundaries in
+  the development guide.
+
+### Fixed
+
+- Replace the removed wiki-example test path in source-distribution CI checks
+  with the maintained CLI/TSV interface suite.
+
+## [0.43.26] - 2026-09-22
+
+### Changed
+
+- Consolidate redundant test scenarios and replace weak output smoke checks with
+  exact behavior assertions; remove internal/library self-checks and excessive
+  numerical repetitions while retaining independent scientific and failure-path
+  regression coverage. See `reviews/test-suite-2026-09-22/README.md` for decisions.
+
+## [0.43.25] - 2026-09-22
+
+### Fixed
+
+- Protect shift simulation inputs and truth/latent outputs from audit-log
+  collisions and include their hashes in audit records.
+- Reject annotation outputs that replace input trait tables, and reports that
+  replace input trees; preserve intentional in-place tree annotation.
+- Stage standalone Newick file writes so handled write failures preserve
+  existing results, and reject ambiguous rename-table headers and row widths.
+- Refine the best scalar-search basin before less promising minima and report
+  convergence for the selected solution rather than an unrelated basin.
+- Validate Mk boundary diagnostics against the fitted rates and an independent
+  likelihood calculation across numerical environments.
+
+## [0.43.24] - 2026-09-21
+
+### Fixed
+
+- Separate IQ-TREE trial likelihoods from derivative requests so exact dating
+  can reject poor trial points with nonfinite unused IQ2MC derivatives.
+  Keep finite-score checks and strict derivative validation wherever derivatives
+  are consumed, including cached evaluations; avoid requiring unused derivatives
+  during model prefit and frozen-model consistency checks.
+
+## [0.43.23] - 2026-09-20
+
+### Changed
+
+- Group repository documentation under `docs/guides/` and `docs/validation/`,
+  update links and CLI references, and keep the documentation in distribution
+  archives.
+
+## [0.43.22] - 2026-09-18
+
+### Added
+
+- Add `constrain --backbone ncbi_apgv` with a 68-tip backbone transcribed from
+  APG V Figure 1 (66 orders plus Huaceae and Columelliaceae), preserving its
+  polytomies and prioritizing the two unplaced families in taxonomy matching
+  ([DOI](https://doi.org/10.1111/jse.70096)).
+
+## [0.43.21] - 2026-09-17
+
+### Changed
+
+- Remove tests that duplicated production implementations, inspected private
+  optimization details, or re-tested mock data without exercising the product
+  path. Consolidate transport and numerical boundary cases in their canonical
+  suites.
+
+## [0.43.20] - 2026-09-17
+
+### Fixed
+
+- Propagate affine-operation roundoff bounds for exact Gaussian messages through
+  cancellation to zero while retaining rejection of conflicting observations.
+- Read the Unicode process-output fixture explicitly as UTF-8 on Windows.
+
+## [0.43.19] - 2026-09-14
+
+### Fixed
+
+- Factor small errors-in-variables covariance roots with QR to retain likelihood
+  curvature near zero residual variance without Woodbury cancellation.
+- Limit deterministic Gaussian-message and archived nuisance-grid comparisons
+  to machine-roundoff tolerance, while rejecting substantive changes.
+- Retain hard regression-calibration timeouts on Windows with a reusable spawned
+  worker that is terminated and replaced after a timeout.
+- Preserve LF source bytes for calibration hashes and make Unicode, fake-worker,
+  and table-output test fixtures portable across Windows and POSIX systems.
+
+## [0.43.18] - 2026-09-14
+
+### Fixed
+
+- Keep archived calibrated-shift audits stable when equivalent branch
+  representations differ only by numerical-library roundoff, while retaining
+  exact tip-partition and calibration decisions.
+- Make regression-calibration peak-memory reporting portable to Windows, where
+  the POSIX `resource` module is unavailable.
+
+## [0.43.17] - 2026-09-11
+
+### Fixed
+
+- Link the external IQ-TREE worker with the system zlib selected by its CMake
+  build, fixing unresolved gzip symbols when zlib is not bundled into the
+  static IQ-TREE library. Preserve the selected Debug/Release library path.
+
+## [0.43.16] - 2026-09-11
+
+### Added
+
+- Add experimental native multivariate OU shift inference with bounded path
+  search, automatic search caps, AIC/AICc/BIC, calibrated selection and bootstrap
+  support. Support joint trait covariance, shared or trait-specific attraction,
+  bounded dense GLS with checked analytic gradients, and reproducible
+  `shift-simulate` generation from explicit parameters or fitted models.
+  See `NATIVE_SHIFT.md` and `SHIFT_JOINT.md`.
+
+- Export all optimal reconciliation roots with `root --candidates-out` as a
+  transactional Newick collection. Add nullable per-event `implied_losses` to
+  LCA reconciliation tables for downstream duplication/loss summaries.
+
+### Changed
+
+- Require a same-process numerical capability probe for pBIC backends; export
+  boundary-family and calibration-scope metadata. Retain independent null audits
+  and close the final confidence-set calibration attempt without adoption after
+  its prespecified power-improvement screen failed.
+
+- Make event-average estimating equations the default reconciled coefficient
+  estimand, with a separate common-coefficient likelihood option and explicit
+  inference metadata. Remove event pseudo-determinants and row-count inflation
+  from biological covariance and bootstrap generation.
+- Require an explicit observation mechanism for censored-Gaussian bootstrap;
+  regenerate censoring labels and bounds from detection limits or interval bins.
+- Separate penalized point estimates from frequentist Wald/LR/profile inference.
+  Add null-generated GLMM objective-difference tests and optional pointwise
+  test inversion on an explicit coefficient grid, with Monte Carlo error.
+  Bootstrap failures abort inference rather than being replaced.
+
+### Fixed
+
+- Preserve exact stationary modes in sequence and symmetric Mk transition
+  matrices, including extremely long branches and disconnected Mk graphs.
+- Avoid constructing empty optimizer bounds for fixed-age, branch-only RADTE
+  diagnostics and calibrated profiles with recent SciPy versions.
+- Resolve numerically tied marginal rate-variance fits by explicitly refitting
+  the zero boundary and checking its one-sided score, retaining genuine small
+  positive variances and the corresponding interval diagnostics.
+- Keep missing bootstrap Monte Carlo standard errors numeric so shape-refitted
+  regression bootstrap can populate them with pandas 3.
+- Restore the `root --candidates_out` compatibility alias and four historical
+  review artifacts recovered from an archived worktree.
+- Make archived shift audits portable across numerical libraries: tolerate only
+  near-machine roundoff in generated arrays, LR statistics and confidence bounds,
+  while retaining exact seeds, counts, Monte Carlo p-values and decisions.
+
+- Preserve requested shift regimes and duplicate validation when Python callers
+  supply a one-pass iterator of branch IDs.
+- Read simulation parameter/model JSON and regression predictor lists as UTF-8
+  so non-ASCII trait and predictor names work under non-UTF-8 locales.
+
+- Preserve branch-fit likelihood resolution for extremely poor initial rates,
+  center large trait offsets before fitting, and reject nonfinite convergence
+  gradients. Include the supplied initial model in local identifiability checks.
+
+- Allow replicate-observation aggregation to fill missing ASR tips without
+  requiring pre-existing measurement-error entries for unobserved values.
+
+- Harden joint individual ASR against premature covariance-optimizer stopping,
+  unit-dependent matrix validation, variance underflow during unit restoration,
+  and cancellation in conditional covariance calculations. Make normalization
+  independent of row order and verify every reported converged start.
+
+- Harden signal diffusion-rate profiling for widely separated sampling-error
+  scales and exact observations; use logarithmic search and stable unit
+  restoration instead of losing small optima or overflowing intermediate scales.
+
+- Diagnose all THRESHOLD node liabilities, second moments, categories and free
+  thresholds using rank/split/folded R-hat, multi-lag bulk/tail ESS and probability
+  MCSE. Distinguish structural constants from unvisited/stuck quantities; add
+  `--liability-diagnostics-out`, dispersed reproducible initialization, temporary
+  disk-backed traces, and diagnostic method metadata. Existing aggregate ESS
+  columns now summarize the new diagnostics, not lag-one ESS.
+- Preserve the relative probability of disjoint threshold observation intervals
+  in extreme Gaussian tails using log-domain interval masses.
+
+### Added
+
+- Add opt-in fixed-assignment BM/OU parameter estimation to
+  `asr --model BRANCH-GAUSSIAN --branch-fit`: explicit parameter sharing and
+  bounds, numerical identifiability and convergence checks, fitted model
+  replay, ASR plots and diagnostic refits. Jumps and root parameters stay
+  fixed; process JSON schema 2 records the estimation diagnostics.
+
+- Add paired known-error shift diagnostics and research-only nuisance-envelope
+  calibration with explicit unresolved results and certified variance-tail
+  extension. Retain the production CLI calibration limitations.
+
+- Add `asr --model BRANCH-GAUSSIAN` with strict direct/regime TSV assignments,
+  explicit root priors, fixed-parameter summary/likelihood/prior samples,
+  normalized model TSV and process JSON export, and transactional outputs.
+  Support common ASR figures, posterior diagnostics, and conditional/prior
+  histories with each prescribed Gaussian end jump shown exactly once.
+
+- Audit stochastic mapping: control truncation relative to rare endpoint
+  probabilities; stabilize duration variance and local-coordinate time-bin
+  integration; reject unresolved root coordinates and overflowing summaries;
+  bound probability-grid work and dense simulation arrays; render labels
+  literally even when they contain dollar signs.
+
+- Extend discrete ASR stochastic maps with conditional event-time histories,
+  branch/state duration summaries, lineage-time bin summaries, probability
+  grids, and PNG/PDF/SVG ribbons. Preserve seeded transition-count output and
+  worker-count reproducibility, and commit combined ASR exports transactionally.
+  See `STOCHASTIC_MAPS.md`.
+
+- Add individual-keyed multivariate BM ASR with simultaneous ML/REML estimation
+  of evolutionary Sigma and full/diagonal within-species W, partially observed
+  individuals, latent species/ancestor reconstruction, individual predictions,
+  and explicit identifiability and conditional-uncertainty diagnostics.
+  See `ASR_INDIVIDUALS.md`.
+
+- Add `nwkit pca` with BM/shared-lambda covariance or correlation PCA, score and
+  loading tables, evolutionary eigenvalues, reusable model JSON, conditional
+  ancestral scores and phylomorphospace figures. See `PCA.md`.
+
+- Add `nwkit signal` for batch Blomberg K and Pagel lambda estimation, known
+  sampling errors, K permutation tests, lambda profile intervals and likelihood
+  ratio tests, per-method BH correction, and explicit unestimable-trait rows.
+  See `SIGNAL.md` for statistical conventions and examples.
+
+- Audit calibrated shift selection: count only enabled candidates, use QR
+  least squares, batch bootstrap residual calculations, reject unbounded mixed
+  zero-error likelihoods, and calibrate the no-error null across the alpha grid.
+  Export explicit probability bounds in schema 7, reconstruct/replay evidence,
+  and add independent random-tree and weak-pull validation.
+
+- Default small-tree OU shift selection to complete-search parametric bootstrap
+  calibration. Include exact Brownian and independent α limits, suppress weakly
+  identified optima, and retain IC inference through explicit `--selection ic`.
+  Add versioned model output and independently seeded validation studies.
+
+- Add a frozen 520-dataset OU selection study comparing BIC/pBIC, two-stage/joint
+  search and alpha bounds, with paired recovery/error metrics, independent
+  likelihood audits, complete candidate ledgers and a portable technical report.
+
+- Record the kfl1ou pBIC coordinate/fitted-alpha correction and its before/after
+  reproduction; replay the joint-search grid with the corrected local backend
+  and mark historical pBIC evidence as belonging to the old implementation.
+
+- Add `nwkit dtt` for scalar or joint continuous-trait disparity through time,
+  fitted Brownian simulations, MDI, transactional TSV/JSON outputs and figures
+  with aligned observed-trait trees, compact heatmaps by default for any trait count, and independent
+  display-column selection and color scaling.
+  Include geiger reference checks and a reproducible example. Harden deep-tree
+  pruning, event-time rounding, extreme-unit color scales, and literal/Unicode
+  figure labels.
+- Add a small-tree joint shift/convergence reference, held-out candidate ledgers
+  and independent likelihood verification. Audit score equivalence and flag
+  kfl1ou pBIC representation discrepancies instead of reporting improvements.
+
+- Audit shift simulation exports against regenerated truth, actual inputs and
+  saved model results; reject stale summaries, publish bundles transactionally,
+  and reject duplicate grid entries or invalid bootstrap counts before a run.
+
+- Add an independent branchwise OU simulation harness for shift/convergence
+  validation, paired BIC/pBIC pilot evidence, truth-partition recovery metrics,
+  Monte Carlo intervals and explicit outer/inner failure denominators.
+
+- Make shift result checks account for cancellation along each ancestral path,
+  while preventing unrelated large effects from masking invalid shared optima.
+  Retain directly fitted optima instead of cancellation-prone reconstructions,
+  and keep search-bound metadata attached to the original discovery fit.
+
+- Add opt-in `nwkit shift --convergence`: refit shared OU optima using backward
+  search, preserve unconstrained diagnostics, propagate shared labels to ASR,
+  and repeat both discovery stages in bootstrap. Model JSON uses schema 5.
+
+- Add parametric bootstrap selection support to `nwkit shift`, with successful
+  refit denominators, failure counts/messages, branch and configuration support,
+  and tip-partition frequencies in model JSON schema 4. Preserve counts for
+  failures whose messages the backend omits and warn on partial failure.
+
+- Add experimental `nwkit shift` with an external kfl1ou backend for single-trait
+  OU optimum-shift discovery, ASR-compatible branch-regime maps, candidate/model
+  metadata and optional RDS fits. Preserve original time units and validate
+  clade mappings independently of backend edge numbering. Include shift effects,
+  conditional regime optima, tip predictions/residuals and structured search
+  diagnostics; verify fixed-parameter moments and likelihoods against kfl1ou
+  across root models, nested shifts, the BM boundary and time rescaling.
+  Add named known-SE input, preserving observations and variances in output;
+  canonicalize all-zero errors, validate error variance range and search
+  diagnostics, and make result checks robust to trait units and short branches.
+  See `SHIFT.md`.
+
+- Restore the common underscore compatibility aliases for `regress-select`
+  options while retaining kebab-case help and canonical spellings.
+
+- Add `nwkit regress-select` for Gaussian, binomial, Poisson and negative-binomial
+  phylogenetic lasso/elastic net with nested group CV, baseline predictions,
+  coefficient paths, selection frequencies and audited transactional bundles.
+  These exploratory outputs deliberately omit post-selection P-values.
+  Refine Gaussian fits by GLS coordinate minimization, enforce independent
+  KKT convergence checks, and flag rank-deficient lasso equicorrelation designs.
+- Verify and polish scalar GLMM latent-mode scores when objective rounding near
+  the negative-binomial Poisson limit stalls the numerical optimizer.
+
+- Add a fixed-parameter branch-specific scalar Gaussian Python API combining
+  BM, OU and prescribed Gaussian end jumps, with explicit roots and shared
+  likelihood, ancestral-state conditioning and simulation.
+
+## [0.43.15] - 2026-09-10
+
+### Changed
+
+- Use unmodified official IQ-TREE 3 for sequence dating. An optional external
+  library worker keeps the fitted model, alignment and topology resident;
+  auto discovery uses ordinary CLI evaluations when no worker is installed.
+- Keep IQ-TREE source, libraries and executables outside the MIT NWKIT package.
+  Document external library/adapter setup and separate Conda packaging.
+- Replace the unpublished custom IQ-TREE session interface while retaining
+  complete-export caching and shared marginal-profile matrices.
+
+## [0.43.14] - 2026-09-09
+
+### Added
+
+- Add opt-in `nwkit radte --uncertainty studentized` with residual branch degrees
+  of freedom, a small-sample t correction, and bounded age coordinates. Preserve
+  point estimates and hard constraints; record unavailable intervals explicitly.
+  Document paired coverage, availability and width on the original 200 families
+  and 900 new independent families, with a reproducible validation runner.
+
+
+## [0.43.13] - 2026-09-09
+
+### Added
+
+- Add `convert --node-label PROPERTY` and explicit `--properties keep|drop`
+  for NHX-to-Newick workflows, preserving loss-aware defaults and tip names.
+  Copy rooting properties before canonicalization, validate generated labels
+  independently of input quoting policy, and reject ambiguous reserved NHX keys.
+- Add reconciliation/RADTE result plots, species-age uncertainty propagation,
+  and comparison reports with worked examples and validation guidance.
+
+## [0.43.12] - 2026-09-09
+
+### Changed
+
+- Report cyclomatic-complexity increases as review warnings while enforcing a
+  common per-function ceiling and documented, tested exceptions. Keep mandatory
+  formatting checks and separate interval-bound expansion from drawing-axis setup.
+
+### Added
+
+- Add experimental `nwkit radte` with shared speciation ages, GeneRax/Notung
+  input adapters, internal LCA reconciliation, native branch and sequence
+  relaxed-clock estimation, conditional uncertainty, and an optional MCMCTree
+  reference backend. See `RADTE.md` for estimator assumptions and validation limits.
+
+### Fixed
+
+- Keep root-age interval endpoints inside the saved drawing axes.
+- Preserve joint-MAP rate variance when reusing a RADTE likelihood summary,
+  reject incompatible zero-variance tree inputs, and avoid degenerate
+  rate-bootstrap intervals at the strict-clock limit.
+
+## [0.43.11] - 2026-09-08
+
+### Fixed
+
+- Read tree and trait-table files as UTF-8, with optional BOM, independently of
+  the operating system locale; this fixes Japanese ASR input on Windows.
+  Tree writers also use UTF-8 so names survive file round trips.
+
+## [0.43.10] - 2026-09-08
+
+### Fixed
+
+- Protect species-map inputs from every ASR output, including file aliases.
+- Refine full OU trait optima with a tree-based GLS solve and recompute the
+  likelihood and posterior after covariance optimization.
+- Reject excessive multivariate history matrix memory before refining the tree.
+- Size equal-width figure columns to prevent overlapping tip labels in larger
+  multivariate ASR and comparison figures.
+- Apply Unicode font selection to standalone ASR figures and support observed
+  heatmaps when the root is the only tip.
+
+## [0.43.9] - 2026-09-08
+
+### Added
+
+- Add optional, value-ordered full tip labels below ASR and simulation panels,
+  with thin connectors, shared value scales and explicit first-history labeling.
+
+### Changed
+
+- Give phylogeny, ASR and simulation plots equal widths and include labeled
+  examples in the figure guide.
+
+## [0.43.8] - 2026-09-08
+
+### Added
+
+- Add continuous ASR figures with shared-depth phylogeny, ancestral summaries,
+  exact Gaussian sampled histories, observed-tip heatmaps and species-overlap
+  event colors; include a reproducible 16-tip example.
+- Add single-page per-model ASR comparison panels and computed `branch_id`
+  labels for tree drawings.
+- Expand ASR with bootstrap prediction-error intervals, tip/clade predictive
+  cross-validation, phylogenetic predictive statistics, clade/MRCA-aligned tree
+  ensembles and likelihood-compatible model averaging.
+- Add discrete tip-likelihood/misclassification inputs, correlated continuous
+  measurement covariance and known-error within-species replicate reduction.
+- Add vector Gaussian pruning for missing/noisy multivariate traits, joint
+  posterior samples, predictive simulation and bootstrap refitting; retain
+  dense fitting for smaller supported problems.
+- Add stable full-attraction multivariate OU with local identifiability checks,
+  and fixed-parameter CTMC-modulated BM/OU and Gaussian compound-Poisson jump
+  models with weighted history integration and Monte Carlo diagnostics.
+
+## [0.43.7] - 2026-09-08
+
+### Added
+
+- Add `convert` for Newick, NHX, FigTree NEXUS and MCMCtree output, with explicit
+  time scaling, interval retention/removal and selection of ambiguous trees.
+  Preserve node names, support, interval methods/levels and unrelated comments;
+  reject implicit property loss and unsupported NEXUS translation tables.
+- Add `label --start` for configurable sequential numbering and
+  `validate --require-all-lengths` for complete non-root branch lengths.
+
+### Changed
+
+- Share quote-aware container and age-annotation parsing across tree readers
+  and conversion. Recognize MCMCtree's topology and paired dated-tree views.
 
 ## [0.43.6] - 2026-09-08
 

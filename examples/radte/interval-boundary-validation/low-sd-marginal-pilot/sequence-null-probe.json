@@ -1,0 +1,12 @@
+{
+  "age": 20.0,
+  "statistic": 1.2604834039884736,
+  "p_value": 0.65,
+  "p_upper": 0.8631749592319564,
+  "replicates": 19,
+  "exceedances": 12,
+  "failures": 12,
+  "first_failure": "Profile interval left the validated quadratic likelihood region; use exact likelihood or bootstrap.",
+  "null_rate_sd": 0.0,
+  "null_log_rate_mean": -4.591004205277139
+}

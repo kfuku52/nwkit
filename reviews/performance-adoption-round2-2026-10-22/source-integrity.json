@@ -1,0 +1,55 @@
+{
+  "base": "8664baa7e88afae7e384c0e4d8d16437846493a2",
+  "production_commit": "abd97a1f777efbdb2cd81e32d5e4d7c63a6c0c22",
+  "files": [
+    {
+      "file": "nwkit/full_ou.py",
+      "baseline_sha256": "6fc26153a050cc0c4a12c282a0ecb41c154f3582ee4b4bc3e1a4cd0a9b026606",
+      "archive_matches_git": true,
+      "production_sha256": "cd3950b402ddd754f32703859f7cffffe3db59210e6a9d78ce043a03aff31b51",
+      "production_matches_head": true
+    },
+    {
+      "file": "nwkit/phylogenetic_pca.py",
+      "baseline_sha256": "ba0a284c5e6859d19197b7d6c30677547c226776f5a28518434e0a7299d9cb2a",
+      "archive_matches_git": true,
+      "production_sha256": "2300bef469b0e77ac787a35db671cdf1d1dd612b3a4dbdf3a0a7b292052a636a",
+      "production_matches_head": true
+    },
+    {
+      "file": "nwkit/wgd_count_model.py",
+      "baseline_sha256": "86a7524788bdfe052a61122cea04442482b3c63dc8c6a94fc5b55512d1b23ec4",
+      "archive_matches_git": true,
+      "production_sha256": "8386d1460d02fa6f80cfdd108bfa63ee96edc3017f7264c4c49f77c2fb81c48a",
+      "production_matches_head": true
+    },
+    {
+      "file": "nwkit/gaussian_tree.py",
+      "baseline_sha256": "adbf3851b5cc743d5a76712727f022d48df39bd597171d15869099deb7f8a655",
+      "archive_matches_git": true,
+      "production_sha256": "088ddabe2f889abc844d1851462c7781cea20a6e334c8149ce509063135f3097",
+      "production_matches_head": true
+    },
+    {
+      "file": "nwkit/signal_stats.py",
+      "baseline_sha256": "a50742337b97ade6e47d237f147f3775d16cd22e0489c7b793032f383c4d4ec4",
+      "archive_matches_git": true,
+      "production_sha256": "e89426e85c02348bbb4d2a0ce408d3fcfbab754f4494022376b4992078a640db",
+      "production_matches_head": true
+    },
+    {
+      "file": "nwkit/asr.py",
+      "baseline_sha256": "db19c984a4a0ff59c213cce1190ffcd91748d18beae892e508c0d4caadf29f10",
+      "archive_matches_git": true,
+      "production_sha256": "26548d4de07b40aab13f2524fb64e8e2e6e32a92604e2fe03bc1ca0c9a88ee08",
+      "production_matches_head": true
+    },
+    {
+      "file": "nwkit/stochastic_history.py",
+      "baseline_sha256": "c95b5cc7043c62a8e8a05dd12c1ac63f2c92a8de02a43c79c84f54b6e57a6340",
+      "archive_matches_git": true,
+      "production_sha256": "d89ac33dcb1921764aba5dd958614416501ab19b36f696922cb3c9c8b2b7667e",
+      "production_matches_head": true
+    }
+  ]
+}

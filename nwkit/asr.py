@@ -5,12 +5,14 @@ from collections import defaultdict
 from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor
 from copy import copy
+from functools import partial
 from typing import Any
 
 import numpy as np
 import pandas as pd
 from scipy.linalg import expm
 from scipy.optimize import OptimizeResult, minimize
+from scipy.sparse.csgraph import connected_components
 from scipy.special import gammainc, gammaincinv, gammaln, logsumexp
 from scipy.stats import poisson
 
@@ -311,16 +313,22 @@ def _get_root_prior(root_prior, states, observed_state_by_leaf, likelihood_by_le
     if root_prior == "equal":
         return np.full(num_states, 1.0 / float(num_states), dtype=float)
     if root_prior == "empirical":
-        counts = np.zeros(num_states, dtype=float)
-        for leaf_name, observed_state in observed_state_by_leaf.items():
-            if observed_state is None:
-                continue
-            likelihood = likelihood_by_leaf[leaf_name]
-            counts += likelihood / likelihood.sum()
+        counts = _empirical_state_counts(
+            num_states, observed_state_by_leaf, likelihood_by_leaf
+        )
         if counts.sum() == 0.0:
             return np.full(num_states, 1.0 / float(num_states), dtype=float)
         return counts / counts.sum()
     raise ValueError("Unsupported '--root-prior': {}".format(root_prior))
+
+
+def _empirical_state_counts(num_states, observed, likelihoods):
+    counts = np.zeros(num_states, dtype=float)
+    for name, state in observed.items():
+        likelihood = likelihoods[name]
+        if state is not None or _is_informative_tip_likelihood(likelihood):
+            counts += likelihood / likelihood.sum()
+    return counts
 
 
 def _root_prior_for_matrix(
@@ -614,12 +622,14 @@ def _compute_inside_likelihoods(
     *,
     log_space=False,
     fixed_transition_matrices=None,
+    _structured_er=False,
 ):
     inside, log_scales, child_terms, matrices = _compute_log_inside_likelihoods(
         tree,
         likelihood_by_leaf,
         rate_matrix,
         fixed_transition_matrices=fixed_transition_matrices,
+        _structured_er=_structured_er,
     )
     if not log_space:
         inside = {node: np.exp(values) for node, values in inside.items()}
@@ -630,13 +640,33 @@ def _compute_inside_likelihoods(
     return inside, log_scales, child_terms, matrices
 
 
+def _er_log_transition_description(matrix):
+    """Recognize an exact diagonal-plus-constant transition, without rounding."""
+    diagonal = np.diag(matrix)
+    a, b = float(diagonal[0]), float(matrix[0, 1])
+    if (
+        math.isfinite(a)
+        and math.isfinite(b)
+        and 0 <= b <= a
+        and np.all(diagonal == a)
+        and np.count_nonzero(matrix != b) == (0 if a == b else len(matrix))
+    ):
+        delta = a - b
+        return (
+            -math.inf if delta == 0 else math.log(delta),
+            -math.inf if b == 0 else math.log(b),
+        )
+    return None
+
+
 def _compute_log_inside_likelihoods(
     tree,
     likelihood_by_leaf,
     rate_matrix,
     *,
     fixed_transition_matrices=None,
-    collect_marginal_inputs=True,
+    retain_messages=True,
+    _structured_er=False,
     prepared_leaves=None,
     prepared_branches=None,
 ):
@@ -653,12 +683,9 @@ def _compute_log_inside_likelihoods(
     log_scales = dict()
     child_terms: dict[Any, Any] = {}
     transition_matrices = dict()
-    prepared_generators: dict[
-        int,
-        tuple[
-            Callable[[float], np.ndarray], dict[float, tuple[np.ndarray, np.ndarray]]
-        ],
-    ] = {}
+    prepared_generators: dict[int, tuple[Callable, dict]] = {}
+    er_descriptions = {}
+    structured = _structured_er and num_states >= 32
     for node in tree.traverse(strategy="postorder"):
         if node.is_leaf:
             inside[node] = (
@@ -671,27 +698,44 @@ def _compute_log_inside_likelihoods(
 
         likelihood = np.zeros(num_states, dtype=float)
         log_scale = 0.0
-        if collect_marginal_inputs:
+        if retain_messages:
             child_terms[node] = dict()
         for child in node.get_children():
             if fixed_transition_matrices is not None:
                 matrix = fixed_transition_matrices[child]
-                log_matrix = _log_probabilities(matrix)
+                if not structured:
+                    log_matrix = _log_probabilities(matrix)
             else:
                 matrix, log_matrix = _mk_regime_edge_transition(
                     rate_matrix[child], child.dist, prepared_generators
                 )
-            child_inside = (
-                inside[child] if collect_marginal_inputs else inside.pop(child)
-            )
-            term = _edge_logsumexp(log_matrix + child_inside[None, :])
-            if collect_marginal_inputs:
-                transition_matrices[child] = matrix
-                child_terms[node][child] = term
+            description = None
+            if structured:
+                key = id(matrix)
+                if key not in er_descriptions:
+                    # Retain each array so its identity cannot be recycled.
+                    er_descriptions[key] = (
+                        matrix,
+                        _er_log_transition_description(matrix),
+                    )
+                description = er_descriptions[key][1]
+            if description is None:
+                if structured and fixed_transition_matrices is not None:
+                    log_matrix = _log_probabilities(matrix)
+                term = _edge_logsumexp(log_matrix + inside[child][None, :])
+            else:
+                log_delta, log_b = description
+                term = np.logaddexp(
+                    log_delta + inside[child], log_b + logsumexp(inside[child])
+                )
             likelihood += term
-            log_scale += (
-                log_scales[child] if collect_marginal_inputs else log_scales.pop(child)
-            )
+            log_scale += log_scales[child]
+            if retain_messages:
+                child_terms[node][child] = term
+                transition_matrices[child] = matrix
+            else:
+                del inside[child]
+                del log_scales[child]
         scale = float(np.max(likelihood))
         if not math.isfinite(scale):
             inside[node] = likelihood
@@ -731,7 +775,7 @@ def _log_likelihood(
         likelihood_by_leaf=likelihood_by_leaf,
         rate_matrix=rate_matrix,
         fixed_transition_matrices=fixed_transition_matrices,
-        collect_marginal_inputs=False,
+        retain_messages=False,
         prepared_leaves=prepared_leaves,
         prepared_branches=prepared_branches,
     )
@@ -877,7 +921,11 @@ def _fit_mk_likelihood(tree, likelihood_by_leaf, fit, retain_inside):
     root_prior = fit["root_prior"]
     if retain_inside:
         inside, scales, child_terms, matrices = _compute_inside_likelihoods(
-            tree, likelihood_by_leaf, rate_matrix, log_space=True
+            tree,
+            likelihood_by_leaf,
+            rate_matrix,
+            log_space=True,
+            _structured_er=fit.get("model") == "ER" and not fit.get("rate_estimated"),
         )
         fit["log_likelihood"] = _mk_root_log_likelihood(
             root_prior, inside[tree], scales[tree]
@@ -1515,10 +1563,11 @@ def _mk_marginals_from_fit(tree, likelihood_by_leaf, fit):
     messages = fit.pop("_inside_messages", None)
     if messages is None:
         inside, _, child_terms, transition_matrices = _compute_inside_likelihoods(
-            tree=tree,
-            likelihood_by_leaf=likelihood_by_leaf,
-            rate_matrix=fit.get("rate_matrix_by_node", fit["rate_matrix"]),
+            tree,
+            likelihood_by_leaf,
+            fit.get("rate_matrix_by_node", fit["rate_matrix"]),
             log_space=True,
+            _structured_er=fit.get("model") == "ER" and not fit.get("rate_estimated"),
         )
     else:
         inside, child_terms, transition_matrices = messages
@@ -1570,44 +1619,59 @@ def _transition_matrices_for_tree(
     return by_node
 
 
-def _mk_transition_evaluator(matrix, time_multiplier=1.0):
-    num_states = matrix.shape[0]
-    er_rate = _get_er_rate_from_matrix(matrix)
-    if er_rate is None:
-        prepared = _prepare_generator_exponential(matrix)
-
-        def transition(length):
-            return _transition_from_generator(matrix, length, prepared, time_multiplier)
-
-        return transition
-    if time_multiplier == 1.0:
-        return lambda length: _er_transition_matrix(length, er_rate, num_states)
-
-    rate, rate_exponent = math.frexp(er_rate)
-
-    def scaled_transition(length):
-        time, time_exponent = _mk_scaled_time(length, time_multiplier)
-        try:
-            elapsed_rate = math.ldexp(time * rate, time_exponent + rate_exponent)
-        except OverflowError:
-            elapsed_rate = math.inf
-        return _er_transition_from_elapsed_rate(elapsed_rate, num_states)
-
-    return scaled_transition
+def _symmetric_generator_spectrum(matrix):
+    """Diagonalize disconnected components at their own numerical scales."""
+    count, labels = connected_components(matrix > 0, directed=False)
+    eigenvalues = np.empty(len(matrix))
+    eigenvectors = np.zeros_like(matrix)
+    stationary = []
+    for component in range(count):
+        indices = np.flatnonzero(labels == component)
+        values, vectors = np.linalg.eigh(matrix[np.ix_(indices, indices)])
+        eigenvalues[indices] = values
+        eigenvectors[np.ix_(indices, indices)] = vectors
+        stationary.append(indices[-1])
+    return eigenvalues, eigenvectors, stationary
 
 
-def _mixture_category_transitions(tree, matrix, rate, branches):
-    with np.errstate(over="ignore", under="ignore"):
-        scaled = matrix * rate
-    # Keep the time multiplier in binary components if scaling the generator
-    # would round a positive rate to a subnormal value or to infinity.
-    if np.isfinite(scaled).all() and not np.any(
-        (matrix > 0.0) & (scaled < np.finfo(float).tiny)
-    ):
-        return _transition_matrices_for_tree(tree, scaled, prepared_branches=branches)
-    return _transition_matrices_for_tree(
-        tree, matrix, prepared_branches=branches, time_multiplier=float(rate)
+def _symmetric_transition_matrices(rate_matrix, lengths):
+    """Exponentiate an exactly reversible symmetric generator once per Q."""
+
+    matrix = np.asarray(rate_matrix, dtype=float)
+    scale = float(np.max(np.abs(matrix), initial=0.0))
+    tolerance = np.finfo(float).eps * max(1.0, scale) * max(100, len(matrix))
+    if not np.allclose(matrix, matrix.T, rtol=0.0, atol=tolerance):
+        return None
+    eigenvalues, eigenvectors, stationary = _symmetric_generator_spectrum(
+        (matrix + matrix.T) / 2.0
     )
+    if float(np.max(eigenvalues)) > tolerance:
+        return None
+    eigenvalues = np.minimum(eigenvalues, 0.0)
+    # A symmetric generator has one exact stationary mode per connected
+    # component. Negative roundoff in these zero modes otherwise leaks mass
+    # as branch lengths grow, including for disconnected transition graphs.
+    eigenvalues[stationary] = 0.0
+    row_norm = float(np.max(np.sum(np.abs(matrix), axis=1), initial=0.0))
+    result = {}
+    for raw_length in lengths:
+        length = _validated_branch_length(raw_length)
+        if length == 0.0:
+            result[length] = np.eye(len(matrix), dtype=float)
+            continue
+        with np.errstate(over="ignore", under="ignore"):
+            transition = (eigenvectors * np.exp(eigenvalues * length)) @ eigenvectors.T
+        if row_norm == 0.0:
+            exponent_norm = 0.0
+        else:
+            log_exponent_norm = math.log(row_norm) + math.log(length)
+            exponent_norm = (
+                math.exp(log_exponent_norm)
+                if log_exponent_norm <= math.log(np.finfo(float).max)
+                else math.inf
+            )
+        result[length] = _validated_transition_matrix(transition, exponent_norm)
+    return result
 
 
 def _discrete_gamma_category_rates(shape, categories):
@@ -2510,6 +2574,8 @@ def _model_rate_bounds_text(fit):
 
 
 def _threshold_model_row(states, root_prior_mode, fit):
+    from nwkit.mcmc_diagnostics import DIAGNOSTIC_VERSION
+
     threshold_fit = fit["threshold_fit"]
     return {
         "trait_type": "discrete",
@@ -2533,6 +2599,26 @@ def _threshold_model_row(states, root_prior_mode, fit):
         "mcmc_seed": "" if threshold_fit.seed is None else threshold_fit.seed,
         "mcmc_rhat_max": threshold_fit.rhat_max,
         "mcmc_ess_min": threshold_fit.ess_min,
+        "mcmc_diagnostic_version": DIAGNOSTIC_VERSION,
+        "mcmc_ess_bulk_min": threshold_fit.ess_bulk_min,
+        "mcmc_ess_tail_min": threshold_fit.ess_tail_min,
+        "mcmc_probability_mcse_max": threshold_fit.probability_mcse_max,
+        "mcmc_monitored_variables": int(
+            (threshold_fit.diagnostics.status != "structural_constant").sum()
+        ),
+        "mcmc_unavailable_variables": int(
+            (
+                (threshold_fit.diagnostics.status != "structural_constant")
+                & threshold_fit.diagnostics.status.str.contains(
+                    "unavailable|constant_trace|insufficient_draws|unresolved_rare_category|nonfinite_trace"
+                )
+            ).sum()
+        ),
+        "mcmc_problem_variables": ";".join(
+            f"{row.branch_id}:{row.variable}:{row.state_or_threshold}"
+            for row in threshold_fit.diagnostics.itertuples()
+            if row.status not in ("ok", "structural_constant")
+        ),
         "fit_status": threshold_fit.fit_status,
     }
 
@@ -2760,6 +2846,17 @@ def _uniformization_parameters(rate_matrix, branch_length):
             "floating-point indexing."
         )
     max_n = int(max(10, num_states - 1, poisson_limit))
+    if max_n <= _MAX_UNIFORMIZATION_TERMS and lam > 0:
+        # An unconditional Poisson tail is not a conditional bridge error bound:
+        # rare endpoints can put substantial conditional mass beyond that cutoff.
+        # Bound the omitted mass relative to every representable endpoint in P(t).
+        transition = _transition_matrix(rate_matrix, branch_length)
+        minimum = float(np.min(transition[transition > 0]))
+        log_target = math.log(minimum) + math.log(1e-12)
+        while _poisson_log_tail_bound(lam, max_n) > log_target:
+            max_n += max(8, max_n // 10)
+            if max_n > _MAX_UNIFORMIZATION_TERMS:
+                break
     if max_n > _MAX_UNIFORMIZATION_TERMS:
         raise ValueError(
             "Stochastic mapping would require more than "
@@ -2769,9 +2866,21 @@ def _uniformization_parameters(rate_matrix, branch_length):
     return omega, lam, max_n
 
 
-def _build_uniformization_context(rate_matrix, branch_length):
+def _poisson_log_tail_bound(lam, max_n):
+    # Chernoff bound for Pr[N >= max_n + 1], evaluated without tail underflow.
+    first_omitted = max_n + 1
+    if first_omitted <= lam:
+        return 0.0
+    return -lam + first_omitted * (1.0 + math.log(lam) - math.log(first_omitted))
+
+
+def _build_uniformization_context(rate_matrix, branch_length, *, _parameters=None):
     num_states = rate_matrix.shape[0]
-    omega, lam, max_n = _uniformization_parameters(rate_matrix, branch_length)
+    omega, lam, max_n = (
+        _uniformization_parameters(rate_matrix, branch_length)
+        if _parameters is None
+        else _parameters
+    )
     if max_n == 0:
         return {"no_events": True}
     backward_bytes = (max_n + 1) * num_states * np.dtype(float).itemsize
@@ -2817,11 +2926,15 @@ def _uniformization_log_jump_matrix(rate_matrix, omega, jump_matrix):
     return log_jump
 
 
-def _build_uniformization_contexts(rate_matrix, branch_lengths):
+def _build_uniformization_contexts(rate_matrix, branch_lengths, *, _parameters=None):
     contexts = dict()
     for branch_length in sorted(set(float(length) for length in branch_lengths)):
         contexts[branch_length] = _build_uniformization_context(
-            rate_matrix, branch_length
+            rate_matrix,
+            branch_length,
+            _parameters=None
+            if _parameters is None
+            else _parameters[(id(rate_matrix), branch_length)],
         )
     return contexts
 
@@ -2937,7 +3050,30 @@ def _draw_bridge_event_count(start_state, end_state, context, rng):
     return event_count, (backward, logged)
 
 
-def _draw_bridge_transition_counts(start_state, end_state, context, rng):
+def _sample_bridge_transition_counts(
+    start_state,
+    end_state,
+    branch_length,
+    rate_matrix,
+    rng,
+    uniformization_contexts=None,
+    uniformization_context=None,
+    history=None,
+):
+    context = _resolve_uniformization_context(
+        rate_matrix,
+        float(branch_length),
+        uniformization_contexts,
+        uniformization_context,
+    )
+    return _draw_bridge_transition_counts(
+        start_state, end_state, context, rng, history=history
+    )
+
+
+def _draw_bridge_transition_counts(
+    start_state, end_state, context, rng, *, history=None
+):
     event_count, messages = _draw_bridge_event_count(
         start_state, end_state, context, rng
     )
@@ -2956,6 +3092,8 @@ def _draw_bridge_transition_counts(start_state, end_state, context, rng):
         if next_state != current_state:
             counts[(current_state, next_state)] += 1
         current_state = next_state
+        if history is not None:
+            history.append(current_state)
     return counts
 
 
@@ -2965,24 +3103,29 @@ def _bridge_step_probabilities(context, backward, state, logged):
     return _bridge_probabilities(context["r_matrix"][state] * backward)
 
 
-def _sample_node_states(tree, states, fit, rng):
+def _conditional_node_state_probabilities(fit, child, parent_state):
+    transition_matrix = fit["transition_matrices"][child]
+    weights = (
+        _log_probabilities(transition_matrix[parent_state, :])
+        + fit["log_inside"][child]
+    )
+    return _probabilities_from_logs(weights)
+
+
+def _sample_node_states(tree, states, fit, rng, *, conditional_probabilities=None):
+    if conditional_probabilities is None:
+        conditional_probabilities = partial(_conditional_node_state_probabilities, fit)
     sampled_states = dict()
     num_states = len(fit["posterior_by_node"][tree])
+    state_indices = np.arange(num_states)
     sampled_states[tree] = int(
-        rng.choice(np.arange(num_states), p=fit["posterior_by_node"][tree])
+        rng.choice(state_indices, p=fit["posterior_by_node"][tree])
     )
     for node in tree.traverse(strategy="preorder"):
         for child in node.get_children():
             parent_state = sampled_states[node]
-            transition_matrix = fit["transition_matrices"][child]
-            weights = (
-                _log_probabilities(transition_matrix[parent_state, :])
-                + fit["log_inside"][child]
-            )
-            probabilities = _probabilities_from_logs(weights)
-            sampled_states[child] = int(
-                rng.choice(np.arange(num_states), p=probabilities)
-            )
+            probabilities = conditional_probabilities(child, parent_state)
+            sampled_states[child] = int(rng.choice(state_indices, p=probabilities))
     return sampled_states
 
 
@@ -2994,48 +3137,57 @@ def _simulation_seed_sequence(seed, num_simulations):
     return seed_sequence.spawn(num_simulations)
 
 
-def _map_conditional_probabilities(transition_matrices, inside):
-    log_weights = _log_probabilities(transition_matrices)
-    log_weights += inside[:, None, :]
-    normalizers = logsumexp(log_weights, axis=-1, keepdims=True)
-    # Some parent states are impossible given observations on this branch.
-    # They have zero mass and are never drawn from the joint posterior.
-    log_weights -= np.where(np.isfinite(normalizers), normalizers, 0.0)
-    return np.exp(log_weights, out=log_weights)
-
-
-def _build_stochastic_map_spec(tree, fit, node_to_branch_id, uniformization_contexts):
+def _build_stochastic_map_spec(
+    tree, fit, node_to_branch_id, uniformization_contexts, *, prepare_probabilities=True
+):
     nodes = list(tree.traverse(strategy="preorder"))
     node_to_index = {node: index for index, node in enumerate(nodes)}
     children_by_index: list[list[int]] = [[] for _ in nodes]
     parent_indices = [-1] * len(nodes)
     branch_ids = [-1] * len(nodes)
-    transition_matrices = np.zeros(
-        (len(nodes), fit["rate_matrix"].shape[0], fit["rate_matrix"].shape[1]),
-        dtype=float,
-    )
+    branch_lengths = [0.0] * len(nodes)
+    rate_matrix = fit["rate_matrix"]
+    num_states = rate_matrix.shape[0]
+    node_weights = np.full((len(nodes), num_states, num_states), np.nan)
+    rate_matrices = [rate_matrix] * len(nodes)
+    rate_by_node = fit.get("rate_matrix_by_node", {})
     contexts = [None] * len(nodes)
-    inside = np.zeros((len(nodes), fit["rate_matrix"].shape[0]), dtype=float)
     for node, node_index in node_to_index.items():
-        inside[node_index, :] = fit["log_inside"][node]
         if node.is_root:
             continue
         parent_index = node_to_index[node.up]
         parent_indices[node_index] = parent_index
         children_by_index[parent_index].append(node_index)
         branch_ids[node_index] = node_to_branch_id[node]
-        transition_matrices[node_index, :, :] = fit["transition_matrices"][node]
+        branch_lengths[node_index] = float(node.dist)
+        log_weights = _log_probabilities(
+            np.asarray(fit["transition_matrices"][node], dtype=float)
+        )
+        log_weights += np.asarray(fit["log_inside"][node], dtype=float)
+        if prepare_probabilities:
+            normalizers = logsumexp(log_weights, axis=1)
+            valid = np.isfinite(normalizers)
+            # Impossible parent states are never used by a valid draw.
+            node_weights[node_index, valid] = np.exp(
+                log_weights[valid] - normalizers[valid, None]
+            )
+        else:
+            node_weights[node_index] = log_weights
+        rate_matrices[node_index] = rate_by_node.get(node, rate_matrix)
         contexts[node_index] = _stochastic_map_context(uniformization_contexts, node)
     return {
         "children_by_index": children_by_index,
         "parent_indices": parent_indices,
         "branch_ids": branch_ids,
-        "conditional_probabilities": _map_conditional_probabilities(
-            transition_matrices, inside
-        ),
+        "branch_lengths": branch_lengths,
+        "node_weights": node_weights,
+        "probabilities_prepared": prepare_probabilities,
+        "state_indices": np.arange(num_states),
+        "rate_matrix": rate_matrix,
+        "rate_matrices": rate_matrices,
         "root_posterior": fit["posterior_by_node"][tree],
         "uniformization_contexts": contexts,
-        "num_states": fit["rate_matrix"].shape[0],
+        "num_states": num_states,
         "state_projection": fit.get("state_projection"),
     }
 
@@ -3048,14 +3200,21 @@ def _stochastic_map_context(uniformization_contexts, node):
 
 def _sample_node_states_from_spec(spec, rng):
     sampled_states = np.zeros(len(spec["parent_indices"]), dtype=int)
-    num_states = spec["num_states"]
-    sampled_states[0] = int(rng.choice(num_states, p=spec["root_posterior"]))
-    conditionals = spec["conditional_probabilities"]
+    state_indices = spec["state_indices"]
+    node_weights = spec["node_weights"]
+    probabilities_prepared = spec["probabilities_prepared"]
+    sampled_states[0] = int(rng.choice(state_indices, p=spec["root_posterior"]))
     for parent_index, child_indices in enumerate(spec["children_by_index"]):
         parent_state = sampled_states[parent_index]
         for child_index in child_indices:
-            probabilities = conditionals[child_index, parent_state]
-            sampled_states[child_index] = int(rng.choice(num_states, p=probabilities))
+            probabilities = node_weights[child_index, parent_state]
+            if not probabilities_prepared:
+                probabilities = _probabilities_from_logs(probabilities)
+            elif not math.isfinite(probabilities[0]):
+                raise ValueError("Failed to calculate posterior state probabilities.")
+            sampled_states[child_index] = int(
+                rng.choice(state_indices, p=probabilities)
+            )
     return sampled_states
 
 
@@ -3147,7 +3306,7 @@ def _validated_simulation_threads(num_simulations, threads):
     return num_simulations, threads
 
 
-def _stochastic_uniformization_contexts(fit, branches):
+def _stochastic_uniformization_contexts(fit, branches, *, _parameters=None):
     if "rate_matrix_by_node" in fit:
         uniformization_contexts = {}
         cache = {}
@@ -3155,26 +3314,36 @@ def _stochastic_uniformization_contexts(fit, branches):
             matrix = fit["rate_matrix_by_node"][node]
             key = (id(matrix), float(node.dist))
             if key not in cache:
-                cache[key] = _build_uniformization_context(matrix, node.dist)
+                cache[key] = _build_uniformization_context(
+                    matrix,
+                    node.dist,
+                    _parameters=None if _parameters is None else _parameters[key],
+                )
             uniformization_contexts[node] = cache[key]
         return uniformization_contexts
     return _build_uniformization_contexts(
-        fit["rate_matrix"], [float(node.dist) for node in branches]
+        fit["rate_matrix"],
+        [float(node.dist) for node in branches],
+        _parameters=_parameters,
     )
 
 
-def _validate_stochastic_map_work(fit, branches, num_simulations):
+def _validate_stochastic_map_work(
+    fit, branches, num_simulations, *, _return_parameters=False
+):
     """Reject uniformization jobs whose bounded loop count is impractical."""
 
     by_node = fit.get("rate_matrix_by_node", {})
     cached_terms = {}
+    parameters = {}
     per_simulation = 0
     preparation = 0
     for node in branches:
         matrix = by_node.get(node, fit["rate_matrix"])
         key = (id(matrix), float(node.dist))
         if key not in cached_terms:
-            max_n = _uniformization_parameters(matrix, node.dist)[2]
+            parameters[key] = _uniformization_parameters(matrix, node.dist)
+            max_n = parameters[key][2]
             cached_terms[key] = max_n
             preparation += max_n * min(matrix.shape[0], num_simulations)
         per_simulation += cached_terms[key]
@@ -3185,6 +3354,8 @@ def _validate_stochastic_map_work(fit, branches, num_simulations):
             f"{_MAX_STOCHASTIC_MAP_WORK:,} bounded uniformization steps; reduce "
             "--n-sim, the rate/time scale, or fitted rate bounds."
         )
+    if _return_parameters:
+        return parameters
 
 
 def _run_stochastic_simulations(spec, seed_sequences, threads):
@@ -3280,9 +3451,20 @@ def _simulate_stochastic_maps(tree, states, fit, num_simulations, seed=None, thr
     num_simulations, threads = _validated_simulation_threads(num_simulations, threads)
     node_to_branch_id = assign_branch_ids(tree)
     branches = [node for node in tree.traverse() if not node.is_root]
-    _validate_stochastic_map_work(fit, branches, num_simulations)
-    contexts = _stochastic_uniformization_contexts(fit, branches)
-    spec = _build_stochastic_map_spec(tree, fit, node_to_branch_id, contexts)
+    parameters = _validate_stochastic_map_work(
+        fit, branches, num_simulations, _return_parameters=True
+    )
+    contexts = _stochastic_uniformization_contexts(
+        fit, branches, _parameters=parameters
+    )
+    del parameters
+    spec = _build_stochastic_map_spec(
+        tree,
+        fit,
+        node_to_branch_id,
+        contexts,
+        prepare_probabilities=num_simulations > 1,
+    )
     seed_sequences = _simulation_seed_sequence(seed, num_simulations)
     total_counts, any_counts = _run_stochastic_simulations(
         spec, seed_sequences, threads
@@ -3298,6 +3480,10 @@ def _simulate_stochastic_maps(tree, states, fit, num_simulations, seed=None, thr
 
 
 def _write_stochastic_map(tree, states, fit, args):
+    from nwkit.stochastic_map_io import extended_maps_requested, write_extended_maps
+
+    if extended_maps_requested(args):
+        return write_extended_maps(tree, states, fit, args)
     stochastic_map_out = getattr(args, "stochastic_map_out", None)
     if stochastic_map_out in ["", None]:
         return
@@ -3313,20 +3499,70 @@ def _write_stochastic_map(tree, states, fit, args):
 
 
 def _validate_asr_output_paths(args):
+    from nwkit.asr_figure import validate_figure_options
+    from nwkit.asr_tree_ensemble import validate_tree_ensemble_options
+    from nwkit.stochastic_map_io import MAP_OUTPUTS, validate_map_options
+    from nwkit.util import validate_outputs_do_not_replace_inputs
+
+    validate_map_options(args)
+    validate_figure_options(args)
+    validate_tree_ensemble_options(args)
     auxiliary_outputs = {
+        "--process-out": getattr(args, "process_out", None),
+        "--branch-models-out": getattr(args, "branch_models_out", None),
+        "--individual-out": getattr(args, "individual_out", None),
+        "--latent-history-out": getattr(args, "latent_history_out", None),
+        "--tree-ensemble-out": getattr(args, "tree_ensemble_out", None),
+        "--figure-out": getattr(args, "figure_out", None),
         "--model-out": getattr(args, "model_out", None),
         "--tree-out": getattr(args, "tree_out", None),
         "--stochastic-map-out": getattr(args, "stochastic_map_out", None),
         "--covariance-out": getattr(args, "covariance_out", None),
         "--liability-out": getattr(args, "liability_out", None),
+        "--liability-diagnostics-out": getattr(args, "liability_diagnostics_out", None),
         "--posterior-samples-out": getattr(args, "posterior_samples_out", None),
         "--posterior-predictive-out": getattr(args, "posterior_predictive_out", None),
         "--bootstrap-out": getattr(args, "bootstrap_out", None),
+        "--cross-validation-out": getattr(args, "cross_validation_out", None),
+        "--bootstrap-intervals-out": getattr(args, "bootstrap_intervals_out", None),
         "--model-comparison-out": getattr(args, "model_comparison_out", None),
     }
+    auxiliary_outputs.update(
+        {
+            "--" + name.replace("_", "-"): getattr(args, name, None)
+            for name in MAP_OUTPUTS
+        }
+    )
     stdout_auxiliary_outputs = [
         option_name for option_name, path in auxiliary_outputs.items() if path == "-"
     ]
+    validate_outputs_do_not_replace_inputs(
+        [
+            ("--" + name.replace("_", "-"), getattr(args, name, None))
+            for name in (
+                "trait",
+                "infile",
+                "rate_matrix",
+                "rate_design",
+                "regime_map",
+                "regime_parameters",
+                "transition_graph",
+                "tree_ensemble",
+                "measurement_covariance",
+                "replicate_observations",
+                "tip_likelihoods",
+                "misclassification_matrix",
+                "latent_regime_config",
+                "species_map_tsv",
+                "branch_fit",
+                "branch_models",
+                "branch_regimes",
+                "regime_models",
+            )
+        ],
+        [("--outfile", getattr(args, "outfile", None)), *auxiliary_outputs.items()],
+        label="ASR output",
+    )
     if stdout_auxiliary_outputs:
         raise ValueError(
             "Auxiliary outputs require file paths, not STDOUT: {}".format(
@@ -3335,12 +3571,26 @@ def _validate_asr_output_paths(args):
         )
     validate_distinct_output_paths(
         [
+            ("--" + name.replace("_", "-"), getattr(args, name, None))
+            for name in MAP_OUTPUTS
+        ]
+        + [
+            ("--process-out", getattr(args, "process_out", None)),
+            ("--branch-models-out", getattr(args, "branch_models_out", None)),
+            ("--individual-out", getattr(args, "individual_out", None)),
+            ("--latent-history-out", getattr(args, "latent_history_out", None)),
+            ("--tree-ensemble-out", getattr(args, "tree_ensemble_out", None)),
+            ("--figure-out", getattr(args, "figure_out", None)),
             ("--outfile", getattr(args, "outfile", None)),
             ("--model-out", getattr(args, "model_out", None)),
             ("--tree-out", getattr(args, "tree_out", None)),
             ("--stochastic-map-out", getattr(args, "stochastic_map_out", None)),
             ("--covariance-out", getattr(args, "covariance_out", None)),
             ("--liability-out", getattr(args, "liability_out", None)),
+            (
+                "--liability-diagnostics-out",
+                getattr(args, "liability_diagnostics_out", None),
+            ),
             (
                 "--posterior-samples-out",
                 getattr(args, "posterior_samples_out", None),
@@ -3350,6 +3600,11 @@ def _validate_asr_output_paths(args):
                 getattr(args, "posterior_predictive_out", None),
             ),
             ("--bootstrap-out", getattr(args, "bootstrap_out", None)),
+            ("--cross-validation-out", getattr(args, "cross_validation_out", None)),
+            (
+                "--bootstrap-intervals-out",
+                getattr(args, "bootstrap_intervals_out", None),
+            ),
             (
                 "--model-comparison-out",
                 getattr(args, "model_comparison_out", None),
@@ -3365,6 +3620,36 @@ def _validate_asr_output_paths(args):
 
 
 def asr_main(args):
+    if getattr(args, "tree_ensemble", None) and not getattr(
+        args, "_ensemble_output_staged", False
+    ):
+        from nwkit.asr_output import run_ensemble_transaction
+
+        return run_ensemble_transaction(args, asr_main)
+    if getattr(args, "model", None) == "BRANCH-GAUSSIAN" and not getattr(
+        args, "_branch_output_staged", False
+    ):
+        from nwkit.branch_gaussian_output import run_branch_transaction
+
+        return run_branch_transaction(args, asr_main)
+    from nwkit.stochastic_map_io import extended_maps_requested, run_map_transaction
+
+    if extended_maps_requested(args) and not getattr(args, "_map_output_staged", False):
+        return run_map_transaction(args, asr_main)
+    return _asr_main_impl(args)
+
+
+def _asr_main_impl(args):
+    from nwkit.asr_figure import validate_figure_trait
+    from nwkit.asr_latent import regime_input_columns
+    from nwkit.asr_paths import validate_path_model
+    from nwkit.asr_tree_ensemble import (
+        validate_tree_ensemble_options,
+        write_tree_ensemble,
+    )
+    from nwkit.individual_asr import run_individual_asr, validate_individual_options
+
+    individual_settings = validate_individual_options(args)
     _validate_asr_output_paths(args)
     tree = read_tree(
         args.infile,
@@ -3373,7 +3658,19 @@ def asr_main(args):
         rooted=getattr(args, "input_rooted", "auto"),
     )
     _validate_tree_for_asr(tree)
+    if individual_settings is not None:
+        return run_individual_asr(tree, args, individual_settings)
     model = getattr(args, "model", None)
+    if model == "BRANCH-GAUSSIAN" and getattr(args, "output", None) == "prior-samples":
+        from nwkit.branch_gaussian_output import run_branch_prior
+
+        return run_branch_prior(tree, args)
+    if getattr(args, "trait", None) in (None, "") or getattr(
+        args, "state_column", None
+    ) in (None, ""):
+        raise ValueError(
+            "--trait and --state-column are required except for BRANCH-GAUSSIAN prior-samples."
+        )
     trait_columns = asr_trait_columns(args.state_column, model)
     standard_error_columns = asr_standard_error_columns(
         getattr(args, "standard_error_column", None), model, trait_columns
@@ -3382,6 +3679,7 @@ def asr_main(args):
         "MV-BM",
         "MV-OU",
         "MV-OU-DIAG",
+        "MV-OU-FULL",
         "MK-MIXTURE",
         "PAGEL-INDEPENDENT",
         "PAGEL-DEPENDENT",
@@ -3396,10 +3694,14 @@ def asr_main(args):
         missing_values=getattr(args, "missing_values", None),
         unmatched=getattr(args, "unmatched", "warn"),
         standard_error_column=standard_error_columns,
+        additional_columns=regime_input_columns(args, model),
     )
     requested_type = getattr(args, "trait_type", "auto")
     trait_type = resolve_trait_type(requested_type, trait_df, state_column_input)
+    validate_figure_trait(args, trait_type)
     settings = AsrSettings.from_args(args, trait_type)
+    validate_path_model(args, settings.model)
+    validate_tree_ensemble_options(args, settings)
     effective = effective_asr_args(args, settings)
     sys.stderr.write(f"ASR trait type: {trait_type} ({requested_type}).\n")
     if requested_type == "auto" and trait_type == "continuous":
@@ -3410,6 +3712,7 @@ def asr_main(args):
     targets = _parse_targets(getattr(args, "target", DEFAULT_TARGET))
     handlers = {"discrete": _run_discrete_asr, "continuous": _run_continuous_asr}
     handlers[trait_type](tree, trait_df, effective, settings, targets)
+    write_tree_ensemble(tree, trait_df, effective, settings)
 
 
 def _warn_discrete_rate_fit(fit):
@@ -3464,6 +3767,11 @@ def _run_discrete_asr(tree, trait_df, args, settings, targets):
         trait_df=trait_df,
         state_source="--rate-matrix" if settings.model == "CUSTOM" else "--states",
     )
+    from nwkit.discrete_observation import apply_discrete_observation_model
+
+    likelihood_by_leaf = apply_discrete_observation_model(
+        states, likelihood_by_leaf, args
+    )
     if settings.model == "THRESHOLD":
         from nwkit.threshold_asr import (
             compute_threshold_marginals,
@@ -3505,6 +3813,8 @@ def _run_discrete_asr(tree, trait_df, args, settings, targets):
             _write_table(
                 threshold_liability_table(tree, threshold_fit), args.liability_out
             )
+        if getattr(args, "liability_diagnostics_out", None) not in (None, ""):
+            _write_table(threshold_fit.diagnostics, args.liability_diagnostics_out)
         if threshold_fit.fit_status != "ok":
             sys.stderr.write(
                 "Threshold ASR MCMC diagnostics: "
@@ -3594,6 +3904,19 @@ def _run_discrete_asr(tree, trait_df, args, settings, targets):
     )
     _write_annotated_tree(tree, states, posterior_by_node, observed_state_by_leaf, args)
     _write_stochastic_map(tree, states, fit, args)
+
+    from nwkit.asr_discrete_cross_validation import write_discrete_cross_validation
+
+    write_discrete_cross_validation(
+        tree,
+        trait_df,
+        states,
+        observed_state_by_leaf,
+        likelihood_by_leaf,
+        args,
+        settings,
+        fixed_rate_matrix,
+    )
 
 
 def _comparison_model_names(value):
@@ -3966,7 +4289,9 @@ def _run_discrete_mixture_asr(tree, trait_df, args, settings, targets):
 
 
 def _continuous_observations(tree, trait_df, args, settings):
-    if settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG"}:
+    from nwkit.continuous_observation import apply_replicate_observations
+
+    if settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG", "MV-OU-FULL"}:
         trait_columns = asr_trait_columns(args.state_column, settings.model)
         observed = continuous_tip_vectors(
             trait_df, trait_columns, list(tree.leaf_names())
@@ -3982,12 +4307,18 @@ def _continuous_observations(tree, trait_df, args, settings):
             trait_columns,
             list(tree.leaf_names()),
         )
+        observed, errors = apply_replicate_observations(
+            observed, errors, trait_columns, args
+        )
         return trait_columns, observed, errors
     observed, errors = continuous_tip_values(
         trait_df,
         args.state_column,
         list(tree.leaf_names()),
         getattr(args, "standard_error_column", None),
+    )
+    observed, errors = apply_replicate_observations(
+        observed, errors, (args.state_column,), args
     )
     return (args.state_column,), observed, errors
 
@@ -4000,7 +4331,89 @@ def _continuous_regime_assignment(tree, args, model):
     return read_regime_map(getattr(args, "regime_map", None), tree)
 
 
+def _fit_correlated_measurement_model(
+    tree, observed, errors, trait_columns, args, settings, compute_posterior
+):
+    from nwkit.continuous_observation import read_measurement_covariances
+    from nwkit.ou_asr import parse_alpha_bounds
+    from nwkit.vector_fit import fit_pruning_mvbm
+    from nwkit.vector_ou_fit import fit_pruning_mvou
+
+    if settings.model not in {"MV-BM", "MV-OU", "MV-OU-DIAG", "MV-OU-FULL"}:
+        raise ValueError("--measurement-covariance requires a multivariate model.")
+    covariance = read_measurement_covariances(
+        args.measurement_covariance, observed, trait_columns
+    )
+    options = dict(
+        standard_errors=errors,
+        measurement_covariances=covariance,
+        compute_posterior=compute_posterior,
+    )
+    if settings.model == "MV-BM":
+        return fit_pruning_mvbm(tree, observed, trait_columns, **options)
+    if settings.model == "MV-OU-FULL":
+        return _fit_full_ou_model(tree, observed, trait_columns, args, **options)
+    return fit_pruning_mvou(
+        tree,
+        observed,
+        trait_columns,
+        alpha=getattr(args, "alpha", None),
+        alpha_by_trait=getattr(args, "alpha_by_trait", None),
+        alpha_bounds=parse_alpha_bounds(args.alpha_bounds, tree)
+        if getattr(args, "alpha_bounds", None) not in (None, "")
+        else None,
+        diagonal=settings.model == "MV-OU-DIAG",
+        **options,
+    )
+
+
+def _fit_full_ou_model(tree, observed, traits, args, **options):
+    from nwkit.full_ou import parse_full_ou_matrix
+    from nwkit.full_ou_fit import fit_full_mvou
+
+    return fit_full_mvou(
+        tree,
+        observed,
+        traits,
+        attraction=parse_full_ou_matrix(
+            getattr(args, "attraction_matrix", None), len(traits), "--attraction-matrix"
+        ),
+        diffusion=parse_full_ou_matrix(
+            getattr(args, "diffusion_matrix", None), len(traits), "--diffusion-matrix"
+        ),
+        **options,
+    )
+
+
 def _fit_continuous_model(
+    tree,
+    observed,
+    errors,
+    trait_columns,
+    args,
+    settings,
+    regime_assignment,
+    *,
+    compute_posterior=True,
+    geometry_cache=None,
+):
+    from nwkit.continuous_observation import restore_replicate_likelihood
+
+    posterior, fit = _fit_continuous_model_impl(
+        tree,
+        observed,
+        errors,
+        trait_columns,
+        args,
+        settings,
+        regime_assignment,
+        compute_posterior=compute_posterior,
+        geometry_cache=geometry_cache,
+    )
+    return posterior, restore_replicate_likelihood(fit, args)
+
+
+def _fit_continuous_model_impl(
     tree,
     observed,
     errors,
@@ -4016,6 +4429,16 @@ def _fit_continuous_model(
     from nwkit.continuous_asr import compute_bm_marginals
 
     model = settings.model
+    if model == "BRANCH-GAUSSIAN":
+        from nwkit.branch_gaussian_asr import compute_branch_marginals
+
+        return compute_branch_marginals(
+            tree, observed, errors, args=args, compute_posterior=compute_posterior
+        )
+    if getattr(args, "measurement_covariance", None) not in (None, ""):
+        return _fit_correlated_measurement_model(
+            tree, observed, errors, trait_columns, args, settings, compute_posterior
+        )
     if model == "BM":
         return compute_bm_marginals(
             tree,
@@ -4110,6 +4533,15 @@ def _fit_continuous_model(
             _tree_validated=True,
             compute_posterior=compute_posterior,
             _geometry_cache=geometry_cache,
+        )
+    if model == "MV-OU-FULL":
+        return _fit_full_ou_model(
+            tree,
+            observed,
+            trait_columns,
+            args,
+            standard_errors=errors,
+            compute_posterior=compute_posterior,
         )
     if model == "MV-OU":
         from nwkit.multivariate_gaussian_asr import fit_dense_mvou
@@ -4284,6 +4716,10 @@ def _run_continuous_asr(tree, trait_df, args, settings, targets):
     trait_columns, observed, errors = _continuous_observations(
         tree, trait_df, args, settings
     )
+    from nwkit.asr_latent import LATENT_MODELS, run_latent_asr
+
+    if settings.model in LATENT_MODELS:
+        return run_latent_asr(tree, trait_df, observed, errors, args, settings, targets)
     regime_assignment = _continuous_regime_assignment(tree, args, settings.model)
     posterior, fit = _fit_continuous_model(
         tree,
@@ -4293,8 +4729,33 @@ def _run_continuous_asr(tree, trait_df, args, settings, targets):
         args,
         settings,
         regime_assignment,
+        compute_posterior=settings.output != "likelihood",
     )
+    if settings.model == "BRANCH-GAUSSIAN":
+        from nwkit.branch_gaussian_output import write_branch_outputs
+
+        write_branch_outputs(tree, observed, errors, fit, args, settings)
+        regime_assignment = fit.display_assignment
+        if settings.output == "likelihood":
+            table = continuous_model_table(fit, args, settings.ci_level)
+            _write_table(table, args.outfile)
+            if getattr(args, "model_out", None):
+                _write_table(table, args.model_out)
+            return
     _write_continuous_model_comparison(tree, observed, errors, args, settings, fit)
+    from nwkit.asr_figure import write_continuous_asr_figure
+
+    write_continuous_asr_figure(
+        tree,
+        observed,
+        errors,
+        posterior,
+        trait_columns,
+        args,
+        settings,
+        fit,
+        regime_assignment,
+    )
     from nwkit.asr_continuous_diagnostics import write_continuous_diagnostics
 
     write_continuous_diagnostics(
@@ -4309,7 +4770,7 @@ def _run_continuous_asr(tree, trait_df, args, settings, targets):
     selected = [
         node for node in tree.traverse() if _should_output_node(node, observed, targets)
     ]
-    if settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG"}:
+    if settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG", "MV-OU-FULL"}:
         from nwkit.multivariate_asr import (
             multivariate_covariance_table,
             multivariate_model_table,
@@ -4341,7 +4802,10 @@ def _run_continuous_asr(tree, trait_df, args, settings, targets):
             f"Continuous ASR: sigma2=0 ({fit.fit_status}); intervals condition on this rate "
             "and exclude rate-estimation uncertainty.\n"
         )
-    elif settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG"} and fit.fit_status != "ok":
+    elif (
+        settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG", "MV-OU-FULL"}
+        and fit.fit_status != "ok"
+    ):
         sys.stderr.write(_multivariate_fit_status_message(settings.model, fit))
     elif settings.model in {
         "BMS",
@@ -4363,7 +4827,7 @@ def _run_continuous_asr(tree, trait_df, args, settings, targets):
             "on fitted parameters and exclude parameter-estimation uncertainty.\n"
         )
     _write_table(table, args.outfile)
-    if settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG"} and getattr(
+    if settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG", "MV-OU-FULL"} and getattr(
         args, "covariance_out", None
     ) not in (None, ""):
         _write_table(
@@ -4373,11 +4837,14 @@ def _run_continuous_asr(tree, trait_df, args, settings, targets):
     if getattr(args, "model_out", None) not in (None, ""):
         model_table = (
             multivariate_model_table(fit, args, settings.ci_level)
-            if settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG"}
+            if settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG", "MV-OU-FULL"}
             else continuous_model_table(fit, args, settings.ci_level)
         )
+        if getattr(args, "replicate_observations", None):
+            model_table["replicate_observations"] = args.replicate_observations
+            model_table["replicate_log_constant"] = args._replicate_log_constant
         _write_table(model_table, args.model_out)
-    if settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG"}:
+    if settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG", "MV-OU-FULL"}:
         write_multivariate_tree(
             tree,
             observed,
@@ -4447,8 +4914,62 @@ def _write_continuous_model_comparison(
                 standard_errors=errors,
                 _tree_validated=True,
             )
+        if model != settings.model:
+            from nwkit.continuous_observation import restore_replicate_likelihood
+
+            candidate_fit = restore_replicate_likelihood(candidate_fit, args)
         summaries.append(summarize_fit(model, candidate_fit, trait_type="continuous"))
     _write_table(
         model_comparison_table(summaries),
         args.model_comparison_out,
+    )
+
+
+def _resolve_uniformization_context(
+    rate_matrix, branch_length, contexts, explicit_context
+):
+    if explicit_context is not None:
+        return explicit_context
+    if contexts is not None:
+        return contexts[branch_length]
+    return _build_uniformization_context(rate_matrix, branch_length)
+
+
+def _mk_transition_evaluator(matrix, time_multiplier=1.0):
+    num_states = matrix.shape[0]
+    er_rate = _get_er_rate_from_matrix(matrix)
+    if er_rate is None:
+        prepared = _prepare_generator_exponential(matrix)
+
+        def transition(length):
+            return _transition_from_generator(matrix, length, prepared, time_multiplier)
+
+        return transition
+    if time_multiplier == 1.0:
+        return lambda length: _er_transition_matrix(length, er_rate, num_states)
+
+    rate, rate_exponent = math.frexp(er_rate)
+
+    def scaled_transition(length):
+        time, time_exponent = _mk_scaled_time(length, time_multiplier)
+        try:
+            elapsed_rate = math.ldexp(time * rate, time_exponent + rate_exponent)
+        except OverflowError:
+            elapsed_rate = math.inf
+        return _er_transition_from_elapsed_rate(elapsed_rate, num_states)
+
+    return scaled_transition
+
+
+def _mixture_category_transitions(tree, matrix, rate, branches):
+    with np.errstate(over="ignore", under="ignore"):
+        scaled = matrix * rate
+    # Keep the time multiplier in binary components if scaling the generator
+    # would round a positive rate to a subnormal value or to infinity.
+    if np.isfinite(scaled).all() and not np.any(
+        (matrix > 0.0) & (scaled < np.finfo(float).tiny)
+    ):
+        return _transition_matrices_for_tree(tree, scaled, prepared_branches=branches)
+    return _transition_matrices_for_tree(
+        tree, matrix, prepared_branches=branches, time_multiplier=float(rate)
     )

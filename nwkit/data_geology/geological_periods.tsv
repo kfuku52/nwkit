@@ -1,0 +1,14 @@
+name	short_name	young_Ma	old_Ma	colour
+Quaternary	Q	0	2.58	#F7F7F7
+Neogene	Ng	2.58	23.04	#E7E7E7
+Paleogene	Pg	23.04	66	#F7F7F7
+Cretaceous	K	66	143.1	#E7E7E7
+Jurassic	J	143.1	201.4	#F7F7F7
+Triassic	Tr	201.4	251.902	#E7E7E7
+Permian	P	251.902	298.9	#F7F7F7
+Carboniferous	C	298.9	358.86	#E7E7E7
+Devonian	D	358.86	419.62	#F7F7F7
+Silurian	S	419.62	443.1	#E7E7E7
+Ordovician	O	443.1	486.85	#F7F7F7
+Cambrian	Cm	486.85	538.8	#E7E7E7
+Precambrian	Pc	538.8	4567	#F7F7F7

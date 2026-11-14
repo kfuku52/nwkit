@@ -1,0 +1,528 @@
+{
+  "environment": {
+    "python": "3.12.14 (main, Aug 25 2026, 13:50:33) [Clang 22.1.3 ]",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "numpy": "2.5.4",
+    "scipy": "1.17.1",
+    "pandas": "3.0.6",
+    "nwkit": "0.43.55",
+    "nwkit_source": "/tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/__init__.py",
+    "baseline_commit": "86c8f2c537769d852c17e2c789340f6c9de4ef54",
+    "timing_limit": "Exploratory host-local measurements; unrelated CPU jobs are active.",
+    "memory_limit": "tracemalloc peak is not complete RSS or all native allocations."
+  },
+  "target_sources": {
+    "_validate_stochastic_map_work": "d3306e72d5d92eb6c0312c79b8a812d8a6acfa70e245ab3874b8b0154c5997ad",
+    "_build_uniformization_context": "99b3c6e040cac85ecdd64f166b40e9c5d31b142a5539a0b327f2305b5d7e2fcf",
+    "_build_uniformization_contexts": "101d483a5e0b05bd0a6829ef000d0d014ddb5ec6152b710dd859ef1408a59e6b",
+    "_stochastic_uniformization_contexts": "c8196610a4a706cbaa299724b8d93f90b00d7071bb51ae379dd29cc7b57a40bf",
+    "_simulate_stochastic_maps": "cac6c60c5f4e418de69df1c55946e119afc2c90f387b6c0981ea1ab14142b192",
+    "_history_work": "236c6fe2aabd949205e8bd5633702989cb19ca5cdc0386b31640c9040bc6b404",
+    "sample_histories": "ada57e399ac69db3740bcd65d636f660516a0730687f3c60598e4ec32cb09f00"
+  },
+  "complete_operations": [
+    {
+      "case": "small-repeated-count-1",
+      "scope": "complete count-table operation",
+      "draws": 1,
+      "branches": 6,
+      "states": 3,
+      "comparison": {
+        "all_fields_exact": true,
+        "rows": 36
+      },
+      "uniformization_calls": {
+        "baseline": 2,
+        "candidate": 1
+      },
+      "timing": {
+        "loops_per_sample": 82,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.0009948094517401441,
+            0.0009227703160765331,
+            0.0009748353651247737,
+            0.0009784171706996858,
+            0.0009525767186792885,
+            0.0009233175859241406,
+            0.0009347886094119308
+          ],
+          "median_seconds": 0.0009525767186792885,
+          "min_seconds": 0.0009227703160765331,
+          "max_seconds": 0.0009948094517401441
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.0008820736831871838,
+            0.0008766061950066104,
+            0.0009224679869054476,
+            0.0009245716458436375,
+            0.0008871819151042983,
+            0.0009266270364339395,
+            0.0008836717447038831
+          ],
+          "median_seconds": 0.0008871819151042983,
+          "min_seconds": 0.0008766061950066104,
+          "max_seconds": 0.0009266270364339395
+        },
+        "speedup": 1.0737107040412364
+      },
+      "peak_bytes": {
+        "baseline": 56385,
+        "candidate": 56056
+      }
+    },
+    {
+      "case": "unique-count-1",
+      "scope": "complete count-table operation",
+      "draws": 1,
+      "branches": 62,
+      "states": 3,
+      "comparison": {
+        "all_fields_exact": true,
+        "rows": 372
+      },
+      "uniformization_calls": {
+        "baseline": 124,
+        "candidate": 62
+      },
+      "timing": {
+        "loops_per_sample": 6,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.01508981934360539,
+            0.016178236168343574,
+            0.01587898615980521,
+            0.015539062500465661,
+            0.015501361010440936,
+            0.01526202082944413,
+            0.015374055500918379
+          ],
+          "median_seconds": 0.015501361010440936,
+          "min_seconds": 0.01508981934360539,
+          "max_seconds": 0.016178236168343574
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.011741826330156377,
+            0.012333250003090749,
+            0.012104965338949114,
+            0.011966562500068298,
+            0.01187259032546232,
+            0.0116280138414974,
+            0.011720715342865637
+          ],
+          "median_seconds": 0.01187259032546232,
+          "min_seconds": 0.0116280138414974,
+          "max_seconds": 0.012333250003090749
+        },
+        "speedup": 1.3056427102682253
+      },
+      "peak_bytes": {
+        "baseline": 429062,
+        "candidate": 413727
+      }
+    },
+    {
+      "case": "unique-count-20",
+      "scope": "complete count-table operation",
+      "draws": 20,
+      "branches": 62,
+      "states": 3,
+      "comparison": {
+        "all_fields_exact": true,
+        "rows": 372
+      },
+      "uniformization_calls": {
+        "baseline": 124,
+        "candidate": 62
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.08235849998891354,
+            0.08675883302930743,
+            0.08642045804299414,
+            0.08757954195607454,
+            0.0845020420383662,
+            0.0838123329449445,
+            0.08285679202526808
+          ],
+          "median_seconds": 0.0845020420383662,
+          "min_seconds": 0.08235849998891354,
+          "max_seconds": 0.08757954195607454
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.0794217080110684,
+            0.0796994159463793,
+            0.08206908300053328,
+            0.08280454098712653,
+            0.08001158304978162,
+            0.07946783304214478,
+            0.07973529200535268
+          ],
+          "median_seconds": 0.07973529200535268,
+          "min_seconds": 0.0794217080110684,
+          "max_seconds": 0.08280454098712653
+        },
+        "speedup": 1.0597821856938021
+      },
+      "peak_bytes": {
+        "baseline": 574900,
+        "candidate": 571944
+      }
+    },
+    {
+      "case": "repeated-count-20",
+      "scope": "complete count-table operation",
+      "draws": 20,
+      "branches": 62,
+      "states": 3,
+      "comparison": {
+        "all_fields_exact": true,
+        "rows": 372
+      },
+      "uniformization_calls": {
+        "baseline": 2,
+        "candidate": 1
+      },
+      "timing": {
+        "loops_per_sample": 2,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.0649681250215508,
+            0.06449354148935527,
+            0.06370679149404168,
+            0.06426008301787078,
+            0.0656096040038392,
+            0.06442293745931238,
+            0.06561893748585135
+          ],
+          "median_seconds": 0.06449354148935527,
+          "min_seconds": 0.06370679149404168,
+          "max_seconds": 0.06561893748585135
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.0642298124730587,
+            0.0637047914788127,
+            0.06584168755216524,
+            0.06572079152101651,
+            0.06387110450305045,
+            0.06443106249207631,
+            0.11632587504573166
+          ],
+          "median_seconds": 0.06443106249207631,
+          "min_seconds": 0.0637047914788127,
+          "max_seconds": 0.11632587504573166
+        },
+        "speedup": 1.0009697030417066
+      },
+      "peak_bytes": {
+        "baseline": 327472,
+        "candidate": 329373
+      }
+    },
+    {
+      "case": "unique-history-1",
+      "scope": "complete conditional-history sample",
+      "draws": 1,
+      "branches": 62,
+      "states": 3,
+      "comparison": {
+        "all_fields_exact": true,
+        "draws": 1,
+        "history_rows": 90
+      },
+      "uniformization_calls": {
+        "baseline": 186,
+        "candidate": 62
+      },
+      "timing": {
+        "loops_per_sample": 4,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.020512270741164684,
+            0.02059837500564754,
+            0.020528802240733057,
+            0.02016068750526756,
+            0.020224218751536682,
+            0.019205208256607875,
+            0.019193770742276683
+          ],
+          "median_seconds": 0.020224218751536682,
+          "min_seconds": 0.019193770742276683,
+          "max_seconds": 0.02059837500564754
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.012991312483791262,
+            0.014215958479326218,
+            0.012390156247420236,
+            0.012441072729416192,
+            0.01244779149419628,
+            0.012306968739721924,
+            0.012368062481982633
+          ],
+          "median_seconds": 0.012441072729416192,
+          "min_seconds": 0.012306968739721924,
+          "max_seconds": 0.014215958479326218
+        },
+        "speedup": 1.6256008779466176
+      },
+      "peak_bytes": {
+        "baseline": 220842,
+        "candidate": 210415
+      }
+    },
+    {
+      "case": "unique-history-20",
+      "scope": "complete conditional-history sample",
+      "draws": 20,
+      "branches": 62,
+      "states": 3,
+      "comparison": {
+        "all_fields_exact": true,
+        "draws": 20,
+        "history_rows": 1779
+      },
+      "uniformization_calls": {
+        "baseline": 186,
+        "candidate": 62
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.09307179099414498,
+            0.09201787493657321,
+            0.09112379199359566,
+            0.09308737504761666,
+            0.09088287502527237,
+            0.09292462503071874,
+            0.09484666609205306
+          ],
+          "median_seconds": 0.09292462503071874,
+          "min_seconds": 0.09088287502527237,
+          "max_seconds": 0.09484666609205306
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.08617912500631064,
+            0.0843902500346303,
+            0.08579266595188528,
+            0.08479312504641712,
+            0.0834985829424113,
+            0.08388683293014765,
+            0.08639299997594208
+          ],
+          "median_seconds": 0.08479312504641712,
+          "min_seconds": 0.0834985829424113,
+          "max_seconds": 0.08639299997594208
+        },
+        "speedup": 1.0958981047089644
+      },
+      "peak_bytes": {
+        "baseline": 654528,
+        "candidate": 650689
+      }
+    },
+    {
+      "case": "repeated-history-20",
+      "scope": "complete conditional-history sample",
+      "draws": 20,
+      "branches": 62,
+      "states": 3,
+      "comparison": {
+        "all_fields_exact": true,
+        "draws": 20,
+        "history_rows": 1835
+      },
+      "uniformization_calls": {
+        "baseline": 3,
+        "candidate": 1
+      },
+      "timing": {
+        "loops_per_sample": 2,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.07099670852767304,
+            0.0709270000224933,
+            0.07174897904042155,
+            0.07062320847762749,
+            0.0711955624865368,
+            0.07199593749828637,
+            0.07143833296140656
+          ],
+          "median_seconds": 0.0711955624865368,
+          "min_seconds": 0.07062320847762749,
+          "max_seconds": 0.07199593749828637
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.07066999998642132,
+            0.06988112500403076,
+            0.06980116647901013,
+            0.07015431253239512,
+            0.07124049996491522,
+            0.0706890415167436,
+            0.06953464599791914
+          ],
+          "median_seconds": 0.07015431253239512,
+          "min_seconds": 0.06953464599791914,
+          "max_seconds": 0.07124049996491522
+        },
+        "speedup": 1.0148422800616976
+      },
+      "peak_bytes": {
+        "baseline": 417608,
+        "candidate": 419166
+      }
+    },
+    {
+      "case": "regime-hidden-history-4",
+      "scope": "complete conditional-history sample",
+      "draws": 4,
+      "branches": 30,
+      "states": 4,
+      "comparison": {
+        "all_fields_exact": true,
+        "draws": 4,
+        "history_rows": 185
+      },
+      "uniformization_calls": {
+        "baseline": 90,
+        "candidate": 30
+      },
+      "timing": {
+        "loops_per_sample": 5,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.018386008404195308,
+            0.01834687499795109,
+            0.018289308389648797,
+            0.01908229161053896,
+            0.01906488339882344,
+            0.01913111680187285,
+            0.018089266610331833
+          ],
+          "median_seconds": 0.018386008404195308,
+          "min_seconds": 0.018089266610331833,
+          "max_seconds": 0.01913111680187285
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.014964458183385432,
+            0.014940274995751679,
+            0.014639691589400173,
+            0.015362141607329249,
+            0.014984650001861156,
+            0.015485491580329835,
+            0.014825300010852516
+          ],
+          "median_seconds": 0.014964458183385432,
+          "min_seconds": 0.014639691589400173,
+          "max_seconds": 0.015485491580329835
+        },
+        "speedup": 1.2286451122305728
+      },
+      "peak_bytes": {
+        "baseline": 216273,
+        "candidate": 205818
+      }
+    }
+  ],
+  "setup_only": [
+    {
+      "histories": false,
+      "timing": {
+        "loops_per_sample": 10,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.008839045802596956,
+            0.008935424999799579,
+            0.008921695803292096,
+            0.008823737502098083,
+            0.008748183294665068,
+            0.008910291595384479,
+            0.008742837491445244
+          ],
+          "median_seconds": 0.008839045802596956,
+          "min_seconds": 0.008742837491445244,
+          "max_seconds": 0.008935424999799579
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.005132508301176131,
+            0.005458604206796736,
+            0.0051224625087343155,
+            0.005081833293661475,
+            0.005147162498906255,
+            0.005240912490990013,
+            0.005055529205128551
+          ],
+          "median_seconds": 0.005132508301176131,
+          "min_seconds": 0.005055529205128551,
+          "max_seconds": 0.005458604206796736
+        },
+        "speedup": 1.7221688273882498
+      },
+      "uniformization_calls": {
+        "baseline": 124,
+        "candidate": 62
+      }
+    },
+    {
+      "histories": true,
+      "timing": {
+        "loops_per_sample": 7,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.012173797569370695,
+            0.012444744003005326,
+            0.012586321415645736,
+            0.011771482149405139,
+            0.012061648852457958,
+            0.012048976279662124,
+            0.012031434436461754
+          ],
+          "median_seconds": 0.012061648852457958,
+          "min_seconds": 0.011771482149405139,
+          "max_seconds": 0.012586321415645736
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.005050547570655388,
+            0.0051969464236338225,
+            0.0050568988579990605,
+            0.004974083276465535,
+            0.004938464279153517,
+            0.004993369004556111,
+            0.004859577432008726
+          ],
+          "median_seconds": 0.004993369004556111,
+          "min_seconds": 0.004859577432008726,
+          "max_seconds": 0.0051969464236338225
+        },
+        "speedup": 2.4155332484846443
+      },
+      "uniformization_calls": {
+        "baseline": 186,
+        "candidate": 62
+      }
+    }
+  ]
+}

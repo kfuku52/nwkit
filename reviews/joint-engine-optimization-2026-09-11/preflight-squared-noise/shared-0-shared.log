@@ -1,0 +1,38 @@
+{"branches": [], "status": "complete", "seconds": 0.6734911249950528}
+{"branches": [16], "status": "complete", "seconds": 0.5925075419945642}
+{"branches": [16, 27], "status": "complete", "seconds": 0.6690685839857906}
+{"branches": [16, 17], "status": "complete", "seconds": 0.7455619169631973}
+{"branches": [16, 17, 27], "status": "complete", "seconds": 0.7234775010147132}
+{"branches": [16, 20, 27], "status": "complete", "seconds": 0.7075838330201805}
+{"branches": [16, 17, 25, 27], "status": "complete", "seconds": 0.8619187510339543}
+{"branches": [16, 17, 20, 27], "status": "complete", "seconds": 0.8435875010327436}
+{"branches": [16, 17, 19, 25, 27], "status": "complete", "seconds": 0.9828202920034528}
+{"branches": [16, 17, 20, 25, 27], "status": "complete", "seconds": 1.0218518340261653}
+{"branches": [16, 17, 19, 23, 25, 27], "status": "complete", "seconds": 0.94450883398531}
+{"branches": [16, 17, 20, 23, 25, 27], "status": "complete", "seconds": 1.2785805839812383}
+{"branches": [16, 17, 19, 23, 25, 27, 29], "status": "complete", "seconds": 1.0366522090043873}
+{"branches": [16, 17, 19, 23, 25, 27, 178], "status": "complete", "seconds": 1.2153261679923162}
+{"branches": [16, 17, 19, 23, 25, 27, 29, 161], "status": "complete", "seconds": 0.9955874169827439}
+{"branches": [16, 17, 19, 23, 25, 27, 29, 178], "status": "complete", "seconds": 1.2228482089703903}
+{"branches": [16, 17, 19, 23, 25, 27, 29, 161, 178], "status": "complete", "seconds": 1.1401155009516515}
+{"branches": [16, 17, 19, 23, 25, 27, 29, 107, 178], "status": "complete", "seconds": 1.3222010420286097}
+{"branches": [16, 17, 19, 23, 25, 27, 29, 107, 161, 178], "status": "complete", "seconds": 1.2974742919905111}
+{"branches": [16, 17, 19, 23, 25, 27, 29, 161, 168, 178], "status": "complete", "seconds": 1.4931445010006428}
+{"branches": [16, 17, 19, 23, 25, 27, 29, 107, 161, 168, 178], "status": "complete", "seconds": 1.6551418339950033}
+{"branches": [16, 17, 19, 20, 23, 25, 27, 29, 107, 161, 178], "status": "complete", "seconds": 1.4445257089682855}
+{"branches": [16, 17, 19, 20, 23, 25, 27, 29, 107, 161, 168, 178], "status": "complete", "seconds": 1.8386782919988036}
+{"branches": [11, 16, 17, 19, 23, 25, 27, 29, 107, 161, 168, 178], "status": "complete", "seconds": 1.3756405839812942}
+{"branches": [11, 16, 17, 19, 20, 23, 25, 27, 29, 161, 168, 178], "status": "complete", "seconds": 2.6232836679555476}
+{"branches": [16, 17, 20, 23, 25, 27, 29, 107, 161, 168, 178], "status": "complete", "seconds": 1.8120010840357281}
+Traceback (most recent call last):
+  File "/work/tools/benchmark_ten_shifts_missing.py", line 191, in <module>
+    worker(json.loads(args.job), args.output)
+  File "/work/tools/benchmark_ten_shifts_missing.py", line 172, in worker
+    path.write_text(json.dumps(clean(result), indent=2, allow_nan=False) + "\n")
+  File "/opt/conda/lib/python3.12/pathlib.py", line 1047, in write_text
+    with self.open(mode='w', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.12/pathlib.py", line 1013, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'reviews/joint-engine-optimization-2026-09-11/timing/shared-0-shared.json'

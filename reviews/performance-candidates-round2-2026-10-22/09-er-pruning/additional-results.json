@@ -1,0 +1,215 @@
+{
+  "environment": {
+    "python": "3.12.14 (main, Aug 25 2026, 13:50:33) [Clang 22.1.3 ]",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "numpy": "2.5.4",
+    "scipy": "1.17.1",
+    "pandas": "3.0.6",
+    "nwkit": "0.43.55",
+    "nwkit_source": "/tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/__init__.py",
+    "baseline_commit": "86c8f2c537769d852c17e2c789340f6c9de4ef54",
+    "timing_limit": "Exploratory host-local measurements; unrelated CPU jobs are active.",
+    "memory_limit": "tracemalloc peak is not complete RSS or all native allocations."
+  },
+  "fixed_P_regime_lifetime": [
+    {
+      "case": "original",
+      "all_fields_exact": false,
+      "max_absolute": 1.7763568394002505e-15,
+      "max_scaled": 1.1314032784827856e-15,
+      "different_fields": [
+        {
+          "path": "result/0/ \u256d\u2500\u252c\u2574T0\n\u2500\u2524 \u2570\u2574T1\n \u2570\u2500\u252c\u2574T2\n   \u2570\u2574T3",
+          "max_absolute": 8.881784197001252e-16,
+          "max_scaled": 8.881784197001252e-16
+        },
+        {
+          "path": "result/0/   \u256d\u2500\u252c\u2574T0\n \u256d\u2500\u2524 \u2570\u2574T1\n \u2502 \u2570\u2500\u252c\u2574T2\n\u2500\u2524   \u2570\u2574T3\n \u2502 \u256d\u2500\u252c\u2574T4\n \u2570\u2500\u2524 \u2570\u2574T5\n   \u2570\u2500\u252c\u2574T6\n     \u2570\u2574T7",
+          "max_absolute": 1.7763568394002505e-15,
+          "max_scaled": 1.1314032784827856e-15
+        },
+        {
+          "path": "result/1/\u2500\u252c\u2574T0\n \u2570\u2574T1",
+          "max_absolute": 2.7755575615628914e-17,
+          "max_scaled": 2.7755575615628914e-17
+        },
+        {
+          "path": "result/1/ \u256d\u2500\u252c\u2574T0\n\u2500\u2524 \u2570\u2574T1\n \u2570\u2500\u252c\u2574T2\n   \u2570\u2574T3",
+          "max_absolute": 1.7763568394002505e-15,
+          "max_scaled": 2.0010820328588354e-16
+        },
+        {
+          "path": "result/2/\u2500\u252c\u2574T0\n \u2570\u2574T1/\u2574T0",
+          "max_absolute": 5.551115123125783e-17,
+          "max_scaled": 5.551115123125783e-17
+        },
+        {
+          "path": "result/2/\u2500\u252c\u2574T0\n \u2570\u2574T1/\u2574T1",
+          "max_absolute": 2.7755575615628914e-17,
+          "max_scaled": 2.7755575615628914e-17
+        },
+        {
+          "path": "result/2/\u2500\u252c\u2574T2\n \u2570\u2574T3/\u2574T2",
+          "max_absolute": 6.938893903907228e-18,
+          "max_scaled": 6.938893903907228e-18
+        },
+        {
+          "path": "result/2/\u2500\u252c\u2574T2\n \u2570\u2574T3/\u2574T3",
+          "max_absolute": 5.551115123125783e-17,
+          "max_scaled": 5.551115123125783e-17
+        },
+        {
+          "path": "result/2/ \u256d\u2500\u252c\u2574T0\n\u2500\u2524 \u2570\u2574T1\n \u2570\u2500\u252c\u2574T2\n   \u2570\u2574T3/\u2500\u252c\u2574T0\n \u2570\u2574T1",
+          "max_absolute": 8.881784197001252e-16,
+          "max_scaled": 2.1796705956548457e-16
+        },
+        {
+          "path": "result/2/ \u256d\u2500\u252c\u2574T0\n\u2500\u2524 \u2570\u2574T1\n \u2570\u2500\u252c\u2574T2\n   \u2570\u2574T3/\u2500\u252c\u2574T2\n \u2570\u2574T3",
+          "max_absolute": 2.220446049250313e-16,
+          "max_scaled": 1.878095490525239e-16
+        },
+        {
+          "path": "result/2/\u2500\u252c\u2574T4\n \u2570\u2574T5/\u2574T5",
+          "max_absolute": 5.551115123125783e-17,
+          "max_scaled": 5.551115123125783e-17
+        },
+        {
+          "path": "result/2/\u2500\u252c\u2574T6\n \u2570\u2574T7/\u2574T6",
+          "max_absolute": 2.7755575615628914e-17,
+          "max_scaled": 2.7755575615628914e-17
+        },
+        {
+          "path": "result/2/ \u256d\u2500\u252c\u2574T4\n\u2500\u2524 \u2570\u2574T5\n \u2570\u2500\u252c\u2574T6\n   \u2570\u2574T7/\u2500\u252c\u2574T4\n \u2570\u2574T5",
+          "max_absolute": 1.1102230246251565e-16,
+          "max_scaled": 1.1102230246251565e-16
+        },
+        {
+          "path": "result/2/ \u256d\u2500\u252c\u2574T4\n\u2500\u2524 \u2570\u2574T5\n \u2570\u2500\u252c\u2574T6\n   \u2570\u2574T7/\u2500\u252c\u2574T6\n \u2570\u2574T7",
+          "max_absolute": 2.7755575615628914e-17,
+          "max_scaled": 2.7755575615628914e-17
+        },
+        {
+          "path": "result/2/   \u256d\u2500\u252c\u2574T0\n \u256d\u2500\u2524 \u2570\u2574T1\n \u2502 \u2570\u2500\u252c\u2574T2\n\u2500\u2524   \u2570\u2574T3\n \u2502 \u256d\u2500\u252c\u2574T4\n \u2570\u2500\u2524 \u2570\u2574T5\n   \u2570\u2500\u252c\u2574T6\n     \u2570\u2574T7/ \u256d\u2500\u252c\u2574T0\n\u2500\u2524 \u2570\u2574T1\n \u2570\u2500\u252c\u2574T2\n   \u2570\u2574T3",
+          "max_absolute": 8.881784197001252e-16,
+          "max_scaled": 8.881784197001252e-16
+        },
+        {
+          "path": "result/2/   \u256d\u2500\u252c\u2574T0\n \u256d\u2500\u2524 \u2570\u2574T1\n \u2502 \u2570\u2500\u252c\u2574T2\n\u2500\u2524   \u2570\u2574T3\n \u2502 \u256d\u2500\u252c\u2574T4\n \u2570\u2500\u2524 \u2570\u2574T5\n   \u2570\u2500\u252c\u2574T6\n     \u2570\u2574T7/ \u256d\u2500\u252c\u2574T4\n\u2500\u2524 \u2570\u2574T5\n \u2570\u2500\u252c\u2574T6\n   \u2570\u2574T7",
+          "max_absolute": 2.7755575615628914e-17,
+          "max_scaled": 2.7755575615628914e-17
+        }
+      ]
+    },
+    {
+      "case": "one-ulp-P",
+      "all_fields_exact": true,
+      "max_absolute": 0.0,
+      "max_scaled": 0.0,
+      "different_fields": []
+    },
+    {
+      "case": "ordered-P",
+      "all_fields_exact": true,
+      "max_absolute": 0.0,
+      "max_scaled": 0.0,
+      "different_fields": []
+    },
+    {
+      "case": "mixed-regime",
+      "all_fields_exact": false,
+      "max_absolute": 7.105427357601002e-15,
+      "max_scaled": 1.3322676295501878e-15,
+      "different_fields": [
+        {
+          "path": "result/0/ \u256d\u2500\u252c\u2574T0\n\u2500\u2524 \u2570\u2574T1\n \u2570\u2500\u252c\u2574T2\n   \u2570\u2574T3",
+          "max_absolute": 3.552713678800501e-15,
+          "max_scaled": 8.881784197001252e-16
+        },
+        {
+          "path": "result/0/   \u256d\u2500\u252c\u2574T0\n \u256d\u2500\u2524 \u2570\u2574T1\n \u2502 \u2570\u2500\u252c\u2574T2\n\u2500\u2524   \u2570\u2574T3\n \u2502 \u256d\u2500\u252c\u2574T4\n \u2570\u2500\u2524 \u2570\u2574T5\n   \u2570\u2500\u252c\u2574T6\n     \u2570\u2574T7",
+          "max_absolute": 7.105427357601002e-15,
+          "max_scaled": 1.3322676295501878e-15
+        },
+        {
+          "path": "result/1/\u2500\u252c\u2574T0\n \u2570\u2574T1",
+          "max_absolute": 2.7755575615628914e-17,
+          "max_scaled": 2.7755575615628914e-17
+        },
+        {
+          "path": "result/2/\u2500\u252c\u2574T0\n \u2570\u2574T1/\u2574T1",
+          "max_absolute": 2.7755575615628914e-17,
+          "max_scaled": 2.7755575615628914e-17
+        },
+        {
+          "path": "result/2/\u2500\u252c\u2574T2\n \u2570\u2574T3/\u2574T2",
+          "max_absolute": 6.938893903907228e-18,
+          "max_scaled": 6.938893903907228e-18
+        },
+        {
+          "path": "result/2/ \u256d\u2500\u252c\u2574T0\n\u2500\u2524 \u2570\u2574T1\n \u2570\u2500\u252c\u2574T2\n   \u2570\u2574T3/\u2500\u252c\u2574T0\n \u2570\u2574T1",
+          "max_absolute": 8.881784197001252e-16,
+          "max_scaled": 2.1796705956548457e-16
+        },
+        {
+          "path": "result/2/ \u256d\u2500\u252c\u2574T4\n\u2500\u2524 \u2570\u2574T5\n \u2570\u2500\u252c\u2574T6\n   \u2570\u2574T7/\u2500\u252c\u2574T6\n \u2570\u2574T7",
+          "max_absolute": 8.881784197001252e-16,
+          "max_scaled": 1.9809431892936657e-16
+        },
+        {
+          "path": "result/2/   \u256d\u2500\u252c\u2574T0\n \u256d\u2500\u2524 \u2570\u2574T1\n \u2502 \u2570\u2500\u252c\u2574T2\n\u2500\u2524   \u2570\u2574T3\n \u2502 \u256d\u2500\u252c\u2574T4\n \u2570\u2500\u2524 \u2570\u2574T5\n   \u2570\u2500\u252c\u2574T6\n     \u2570\u2574T7/ \u256d\u2500\u252c\u2574T0\n\u2500\u2524 \u2570\u2574T1\n \u2570\u2500\u252c\u2574T2\n   \u2570\u2574T3",
+          "max_absolute": 7.105427357601002e-15,
+          "max_scaled": 7.771561172376096e-16
+        },
+        {
+          "path": "result/2/   \u256d\u2500\u252c\u2574T0\n \u256d\u2500\u2524 \u2570\u2574T1\n \u2502 \u2570\u2500\u252c\u2574T2\n\u2500\u2524   \u2570\u2574T3\n \u2502 \u256d\u2500\u252c\u2574T4\n \u2570\u2500\u2524 \u2570\u2574T5\n   \u2570\u2500\u252c\u2574T6\n     \u2570\u2574T7/ \u256d\u2500\u252c\u2574T4\n\u2500\u2524 \u2570\u2574T5\n \u2570\u2500\u252c\u2574T6\n   \u2570\u2574T7",
+          "max_absolute": 4.440892098500626e-16,
+          "max_scaled": 1.6308358508898055e-16
+        }
+      ]
+    },
+    {
+      "case": "mutated-input-new-call",
+      "all_fields_exact": true,
+      "max_absolute": 0.0,
+      "max_scaled": 0.0,
+      "different_fields": []
+    }
+  ],
+  "failures": [
+    {
+      "rate": "0.0",
+      "outcome": [
+        "ValueError",
+        "The observed tip states have zero likelihood under the Mk model."
+      ]
+    },
+    {
+      "rate": "-1.0",
+      "outcome": [
+        "ValueError",
+        "'--rate' must be a non-negative finite number."
+      ]
+    },
+    {
+      "rate": "nan",
+      "outcome": [
+        "ValueError",
+        "'--rate' must be a non-negative finite number."
+      ]
+    },
+    {
+      "rate": "inf",
+      "outcome": [
+        "ValueError",
+        "'--rate' must be a non-negative finite number."
+      ]
+    }
+  ],
+  "seeded_map_counts": {
+    "exact": true,
+    "seed": 971,
+    "draws": 20,
+    "states": 32
+  }
+}

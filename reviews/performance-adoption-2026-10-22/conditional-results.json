@@ -1,0 +1,1015 @@
+{
+  "scope": "current integrated library vs unchanged isolated conditional prototype",
+  "contention": "other user-owned CPU jobs active outside our lock",
+  "batched_solves": [
+    {
+      "kind": "dense",
+      "observations": 128,
+      "predictors": 3,
+      "reml": false,
+      "batch": 98,
+      "timings": {
+        "baseline": {
+          "samples_seconds": [
+            0.0004422138670782502,
+            0.00042470663248998477,
+            0.00040221896868351164,
+            0.00043818282619194717,
+            0.00041327976540909435,
+            0.000411946010509772,
+            0.0004139715206942388
+          ],
+          "median_seconds": 0.0004139715206942388,
+          "min_seconds": 0.00040221896868351164,
+          "max_seconds": 0.0004422138670782502,
+          "peak_python_bytes": 932314
+        },
+        "candidate": {
+          "samples_seconds": [
+            0.00036914880644073897,
+            0.0003653652146363593,
+            0.0003414940509508003,
+            0.00037181080551818013,
+            0.0003637861429561614,
+            0.0003618834996405913,
+            0.0003514430302727435
+          ],
+          "median_seconds": 0.0003637861429561614,
+          "min_seconds": 0.0003414940509508003,
+          "max_seconds": 0.00037181080551818013,
+          "peak_python_bytes": 934656
+        }
+      },
+      "speedup": 1.1379529669004602,
+      "equivalence": {
+        "objective": {
+          "max_absolute": 2.842170943040401e-14,
+          "max_scaled": 1.5283288129969253e-16
+        },
+        "beta": {
+          "max_absolute": 8.326672684688674e-17,
+          "max_scaled": 8.326672684688674e-17
+        },
+        "beta_covariance": {
+          "max_absolute": 1.0842021724855044e-19,
+          "max_scaled": 1.0842021724855044e-19
+        },
+        "residual": {
+          "max_absolute": 4.440892098500626e-16,
+          "max_scaled": 2.1916807230109584e-16
+        },
+        "inverse_residual": {
+          "max_absolute": 8.881784197001252e-16,
+          "max_scaled": 5.859908759883495e-16
+        },
+        "covariance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "quadratic": {
+          "max_absolute": 1.4210854715202004e-14,
+          "max_scaled": 1.1102230246251573e-16
+        },
+        "component_variances": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "log_variances": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "lower_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "upper_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "optimizer_message": {
+          "baseline": "closed-form single-scale covariance fit",
+          "candidate": "closed-form single-scale covariance fit",
+          "exact_match": true
+        }
+      },
+      "solve_counts": {
+        "baseline": 6,
+        "candidate": 4
+      },
+      "solve_shapes": {
+        "baseline_first_six": [
+          [
+            128,
+            3
+          ],
+          [
+            128
+          ],
+          [
+            128
+          ],
+          [
+            128,
+            3
+          ],
+          [
+            128
+          ],
+          [
+            128
+          ]
+        ],
+        "candidate_first_six": [
+          [
+            128,
+            4
+          ],
+          [
+            128
+          ],
+          [
+            128,
+            4
+          ],
+          [
+            128
+          ]
+        ]
+      }
+    },
+    {
+      "kind": "dense-fixed",
+      "observations": 256,
+      "predictors": 5,
+      "reml": true,
+      "batch": 3,
+      "timings": {
+        "baseline": {
+          "samples_seconds": [
+            0.018722999996195238,
+            0.019530860978799563,
+            0.019404694670811296,
+            0.01861886098049581,
+            0.018905416674291093,
+            0.01868986097785334,
+            0.018470513983629644
+          ],
+          "median_seconds": 0.018722999996195238,
+          "min_seconds": 0.018470513983629644,
+          "max_seconds": 0.019530860978799563,
+          "peak_python_bytes": 2674754
+        },
+        "candidate": {
+          "samples_seconds": [
+            0.01685915266474088,
+            0.017250263675426442,
+            0.01890568066543589,
+            0.01732531931096067,
+            0.01650102766385923,
+            0.01658872200641781,
+            0.01627988899902751
+          ],
+          "median_seconds": 0.01685915266474088,
+          "min_seconds": 0.01627988899902751,
+          "max_seconds": 0.01890568066543589,
+          "peak_python_bytes": 2683953
+        }
+      },
+      "speedup": 1.110554033676461,
+      "equivalence": {
+        "objective": {
+          "max_absolute": 3.979039320256561e-13,
+          "max_scaled": 1.0199738768831532e-15
+        },
+        "beta": {
+          "max_absolute": 9.79528014255493e-10,
+          "max_scaled": 9.79528014255493e-10
+        },
+        "beta_covariance": {
+          "max_absolute": 4.017644904263928e-09,
+          "max_scaled": 4.017644904263928e-09
+        },
+        "residual": {
+          "max_absolute": 4.951927534690981e-09,
+          "max_scaled": 3.4513513682930576e-09
+        },
+        "inverse_residual": {
+          "max_absolute": 3.989351085031956e-07,
+          "max_scaled": 1.3664032213985744e-07
+        },
+        "covariance": {
+          "max_absolute": 2.128693157299466e-07,
+          "max_scaled": 1.4001617567746293e-07
+        },
+        "quadratic": {
+          "max_absolute": 3.169957938098378e-05,
+          "max_scaled": 1.1916522631272318e-07
+        },
+        "component_variances": {
+          "max_absolute": 1.773910964786296e-07,
+          "max_scaled": 1.6122561487733321e-07
+        },
+        "log_variances": {
+          "max_absolute": 1.6122562784826044e-07,
+          "max_scaled": 1.6122562784826044e-07
+        },
+        "lower_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "upper_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "optimizer_message": {
+          "baseline": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+          "candidate": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+          "exact_match": true
+        }
+      },
+      "solve_counts": {
+        "baseline": 75,
+        "candidate": 50
+      },
+      "solve_shapes": {
+        "baseline_first_six": [
+          [
+            256,
+            5
+          ],
+          [
+            256
+          ],
+          [
+            256
+          ],
+          [
+            256,
+            5
+          ],
+          [
+            256
+          ],
+          [
+            256
+          ]
+        ],
+        "candidate_first_six": [
+          [
+            256,
+            6
+          ],
+          [
+            256
+          ],
+          [
+            256,
+            6
+          ],
+          [
+            256
+          ],
+          [
+            256,
+            6
+          ],
+          [
+            256
+          ]
+        ]
+      }
+    },
+    {
+      "kind": "dense",
+      "observations": 512,
+      "predictors": 8,
+      "reml": true,
+      "batch": 7,
+      "timings": {
+        "baseline": {
+          "samples_seconds": [
+            0.006890922568605414,
+            0.007014541570762438,
+            0.007317910702633006,
+            0.0079889999968665,
+            0.007029267859512142,
+            0.00623476185968944,
+            0.007132267845528466
+          ],
+          "median_seconds": 0.007029267859512142,
+          "min_seconds": 0.00623476185968944,
+          "max_seconds": 0.0079889999968665,
+          "peak_python_bytes": 14744051
+        },
+        "candidate": {
+          "samples_seconds": [
+            0.005996999996049064,
+            0.006026690559727805,
+            0.006982726144737431,
+            0.006974690427471485,
+            0.005929637001827359,
+            0.006268845139337438,
+            0.005787005997262895
+          ],
+          "median_seconds": 0.006026690559727805,
+          "min_seconds": 0.005787005997262895,
+          "max_seconds": 0.006982726144737431,
+          "peak_python_bytes": 14775609
+        }
+      },
+      "speedup": 1.1663561933117763,
+      "equivalence": {
+        "objective": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "beta": {
+          "max_absolute": 1.6653345369377348e-16,
+          "max_scaled": 1.6653345369377348e-16
+        },
+        "beta_covariance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "residual": {
+          "max_absolute": 4.440892098500626e-16,
+          "max_scaled": 3.8899706351147553e-16
+        },
+        "inverse_residual": {
+          "max_absolute": 8.881784197001252e-16,
+          "max_scaled": 6.106226635438361e-16
+        },
+        "covariance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "quadratic": {
+          "max_absolute": 5.684341886080802e-14,
+          "max_scaled": 1.1278456123176195e-16
+        },
+        "component_variances": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "log_variances": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "lower_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "upper_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "optimizer_message": {
+          "baseline": "closed-form single-scale covariance fit",
+          "candidate": "closed-form single-scale covariance fit",
+          "exact_match": true
+        }
+      },
+      "solve_counts": {
+        "baseline": 6,
+        "candidate": 4
+      },
+      "solve_shapes": {
+        "baseline_first_six": [
+          [
+            512,
+            8
+          ],
+          [
+            512
+          ],
+          [
+            512
+          ],
+          [
+            512,
+            8
+          ],
+          [
+            512
+          ],
+          [
+            512
+          ]
+        ],
+        "candidate_first_six": [
+          [
+            512,
+            9
+          ],
+          [
+            512
+          ],
+          [
+            512,
+            9
+          ],
+          [
+            512
+          ]
+        ]
+      }
+    },
+    {
+      "kind": "diagonal",
+      "observations": 2000,
+      "predictors": 5,
+      "reml": true,
+      "batch": 100,
+      "timings": {
+        "baseline": {
+          "samples_seconds": [
+            0.00027765249949879945,
+            0.00030661166994832455,
+            0.00029466041014529764,
+            0.0002866779093164951,
+            0.0002840666694100946,
+            0.0002982650010380894,
+            0.00028734375024214387
+          ],
+          "median_seconds": 0.00028734375024214387,
+          "min_seconds": 0.00027765249949879945,
+          "max_seconds": 0.00030661166994832455,
+          "peak_python_bytes": 326867
+        },
+        "candidate": {
+          "samples_seconds": [
+            0.00029836999950930474,
+            0.00030372500070370735,
+            0.00035038041998632254,
+            0.00031124499975703656,
+            0.00033306124969385565,
+            0.00034348250017501413,
+            0.00032206667005084454
+          ],
+          "median_seconds": 0.00032206667005084454,
+          "min_seconds": 0.00029836999950930474,
+          "max_seconds": 0.00035038041998632254,
+          "peak_python_bytes": 439139
+        }
+      },
+      "speedup": 0.8921871679450128,
+      "equivalence": {
+        "objective": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "beta": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "beta_covariance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "residual": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "inverse_residual": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "covariance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "quadratic": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "component_variances": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "log_variances": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "lower_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "upper_variance": {
+          "max_absolute": 0.0,
+          "max_scaled": 0.0
+        },
+        "optimizer_message": {
+          "baseline": "closed-form single-scale covariance fit",
+          "candidate": "closed-form single-scale covariance fit",
+          "exact_match": true
+        }
+      },
+      "solve_counts": {
+        "baseline": 6,
+        "candidate": 4
+      },
+      "solve_shapes": {
+        "baseline_first_six": [
+          [
+            2000,
+            5
+          ],
+          [
+            2000
+          ],
+          [
+            2000
+          ],
+          [
+            2000,
+            5
+          ],
+          [
+            2000
+          ],
+          [
+            2000
+          ]
+        ],
+        "candidate_first_six": [
+          [
+            2000,
+            6
+          ],
+          [
+            2000
+          ],
+          [
+            2000,
+            6
+          ],
+          [
+            2000
+          ]
+        ]
+      }
+    }
+  ],
+  "observed_covariance": [
+    {
+      "tips": 64,
+      "traits": 4,
+      "missing_fraction_requested": 0.5,
+      "missing_fraction_actual": 0.3515625,
+      "reml": true,
+      "fixed_noise": false,
+      "multiple_components": false,
+      "equivalence": {
+        "coefficients": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            4,
+            2
+          ]
+        },
+        "coefficient_covariance": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            8,
+            8
+          ]
+        },
+        "component_trait_covariances": {
+          "tree": {
+            "max_absolute": 0.0,
+            "exact": true,
+            "shape": [
+              4,
+              4
+            ]
+          }
+        },
+        "fitted_covariance": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            256,
+            256
+          ]
+        },
+        "evolution_parameter": {
+          "exact": true,
+          "value": null
+        },
+        "evolution_parameter_status": {
+          "exact": true,
+          "value": "fixed"
+        },
+        "log_likelihood": {
+          "absolute_difference": 0.0,
+          "exact": true
+        },
+        "optimizer_converged": {
+          "exact": true,
+          "value": true
+        },
+        "optimizer_message": {
+          "exact": true,
+          "value": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+        },
+        "boundary_warning": {
+          "exact": true,
+          "value": false
+        },
+        "n_observations": {
+          "exact": true,
+          "value": 166
+        },
+        "reml": {
+          "exact": true,
+          "value": true
+        }
+      },
+      "batch_calls": 1,
+      "timings": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.05674412497319281,
+            0.05748883297201246,
+            0.05871212505735457,
+            0.059217332978732884,
+            0.05991304200142622,
+            0.058435707935132086,
+            0.06175020895898342
+          ],
+          "median_seconds": 0.05871212505735457,
+          "min_seconds": 0.05674412497319281,
+          "max_seconds": 0.06175020895898342,
+          "relative_range": 0.08526490875437191
+        },
+        "candidate": {
+          "samples_seconds_per_call": [
+            0.06008199998177588,
+            0.06063433294184506,
+            0.06278787506744266,
+            0.0640965000493452,
+            0.06281629099976271,
+            0.062378874979913235,
+            0.06486679194495082
+          ],
+          "median_seconds": 0.06278787506744266,
+          "min_seconds": 0.06008199998177588,
+          "max_seconds": 0.06486679194495082,
+          "relative_range": 0.07620566802165907
+        }
+      },
+      "speedup": 0.9350869892362151,
+      "peak_python_bytes": {
+        "baseline": 1502946,
+        "candidate": 1496241
+      }
+    },
+    {
+      "tips": 128,
+      "traits": 4,
+      "missing_fraction_requested": 0.65,
+      "missing_fraction_actual": 0.482421875,
+      "reml": true,
+      "fixed_noise": false,
+      "multiple_components": false,
+      "equivalence": {
+        "coefficients": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            4,
+            2
+          ]
+        },
+        "coefficient_covariance": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            8,
+            8
+          ]
+        },
+        "component_trait_covariances": {
+          "tree": {
+            "max_absolute": 0.0,
+            "exact": true,
+            "shape": [
+              4,
+              4
+            ]
+          }
+        },
+        "fitted_covariance": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            512,
+            512
+          ]
+        },
+        "evolution_parameter": {
+          "exact": true,
+          "value": null
+        },
+        "evolution_parameter_status": {
+          "exact": true,
+          "value": "fixed"
+        },
+        "log_likelihood": {
+          "absolute_difference": 0.0,
+          "exact": true
+        },
+        "optimizer_converged": {
+          "exact": true,
+          "value": true
+        },
+        "optimizer_message": {
+          "exact": true,
+          "value": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+        },
+        "boundary_warning": {
+          "exact": true,
+          "value": false
+        },
+        "n_observations": {
+          "exact": true,
+          "value": 265
+        },
+        "reml": {
+          "exact": true,
+          "value": true
+        }
+      },
+      "batch_calls": 1,
+      "timings": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.1335142080206424,
+            0.1341889169998467,
+            0.1310367500409484,
+            0.13148841704241931,
+            0.12935449997894466,
+            0.1240402499679476,
+            0.13131079194135964
+          ],
+          "median_seconds": 0.13131079194135964,
+          "min_seconds": 0.1240402499679476,
+          "max_seconds": 0.1341889169998467,
+          "relative_range": 0.07728737967273287
+        },
+        "candidate": {
+          "samples_seconds_per_call": [
+            0.13456174999009818,
+            0.13856587489135563,
+            0.1304647499928251,
+            0.13539650000166148,
+            0.13039754203055054,
+            0.13135404093191028,
+            0.13737345801200718
+          ],
+          "median_seconds": 0.13456174999009818,
+          "min_seconds": 0.13039754203055054,
+          "max_seconds": 0.13856587489135563,
+          "relative_range": 0.06070323001451874
+        }
+      },
+      "speedup": 0.9758404000469839,
+      "peak_python_bytes": {
+        "baseline": 4566626,
+        "candidate": 4561147
+      }
+    },
+    {
+      "tips": 128,
+      "traits": 4,
+      "missing_fraction_requested": 0.9,
+      "missing_fraction_actual": 0.677734375,
+      "reml": true,
+      "fixed_noise": false,
+      "multiple_components": false,
+      "equivalence": {
+        "coefficients": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            4,
+            2
+          ]
+        },
+        "coefficient_covariance": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            8,
+            8
+          ]
+        },
+        "component_trait_covariances": {
+          "tree": {
+            "max_absolute": 0.0,
+            "exact": true,
+            "shape": [
+              4,
+              4
+            ]
+          }
+        },
+        "fitted_covariance": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            512,
+            512
+          ]
+        },
+        "evolution_parameter": {
+          "exact": true,
+          "value": null
+        },
+        "evolution_parameter_status": {
+          "exact": true,
+          "value": "fixed"
+        },
+        "log_likelihood": {
+          "absolute_difference": 0.0,
+          "exact": true
+        },
+        "optimizer_converged": {
+          "exact": true,
+          "value": true
+        },
+        "optimizer_message": {
+          "exact": true,
+          "value": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+        },
+        "boundary_warning": {
+          "exact": true,
+          "value": false
+        },
+        "n_observations": {
+          "exact": true,
+          "value": 165
+        },
+        "reml": {
+          "exact": true,
+          "value": true
+        }
+      },
+      "batch_calls": 1,
+      "timings": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.10338504193350673,
+            0.10601800004951656,
+            0.10580191703047603,
+            0.09936920797917992,
+            0.10373654204886407,
+            0.11647266696672887,
+            0.10961299994960427
+          ],
+          "median_seconds": 0.10580191703047603,
+          "min_seconds": 0.09936920797917992,
+          "max_seconds": 0.11647266696672887,
+          "relative_range": 0.16165547343175576
+        },
+        "candidate": {
+          "samples_seconds_per_call": [
+            0.07841004198417068,
+            0.08034824999049306,
+            0.07621145807206631,
+            0.07434408308472484,
+            0.07540312502533197,
+            0.08188733307179064,
+            0.07879787497222424
+          ],
+          "median_seconds": 0.07841004198417068,
+          "min_seconds": 0.07434408308472484,
+          "max_seconds": 0.08188733307179064,
+          "relative_range": 0.09620260104679722
+        }
+      },
+      "speedup": 1.3493414153742602,
+      "peak_python_bytes": {
+        "baseline": 4540544,
+        "candidate": 4533217
+      }
+    },
+    {
+      "tips": 256,
+      "traits": 4,
+      "missing_fraction_requested": 0.9,
+      "missing_fraction_actual": 0.6806640625,
+      "reml": true,
+      "fixed_noise": false,
+      "multiple_components": false,
+      "equivalence": {
+        "coefficients": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            4,
+            2
+          ]
+        },
+        "coefficient_covariance": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            8,
+            8
+          ]
+        },
+        "component_trait_covariances": {
+          "tree": {
+            "max_absolute": 0.0,
+            "exact": true,
+            "shape": [
+              4,
+              4
+            ]
+          }
+        },
+        "fitted_covariance": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            1024,
+            1024
+          ]
+        },
+        "evolution_parameter": {
+          "exact": true,
+          "value": null
+        },
+        "evolution_parameter_status": {
+          "exact": true,
+          "value": "fixed"
+        },
+        "log_likelihood": {
+          "absolute_difference": 0.0,
+          "exact": true
+        },
+        "optimizer_converged": {
+          "exact": true,
+          "value": true
+        },
+        "optimizer_message": {
+          "exact": true,
+          "value": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+        },
+        "boundary_warning": {
+          "exact": true,
+          "value": false
+        },
+        "n_observations": {
+          "exact": true,
+          "value": 327
+        },
+        "reml": {
+          "exact": true,
+          "value": true
+        }
+      },
+      "batch_calls": 1,
+      "timings": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.37322416703682393,
+            0.38170087500475347,
+            0.3581822500564158,
+            0.3795796250924468,
+            0.3615513750119135,
+            0.37130166694987565,
+            0.3860689589055255
+          ],
+          "median_seconds": 0.37322416703682393,
+          "min_seconds": 0.3581822500564158,
+          "max_seconds": 0.3860689589055255,
+          "relative_range": 0.07471838994380631
+        },
+        "candidate": {
+          "samples_seconds_per_call": [
+            0.25589233299251646,
+            0.2562250420451164,
+            0.2567745840642601,
+            0.2630223330343142,
+            0.2583046250510961,
+            0.2575606250902638,
+            0.26049775001592934
+          ],
+          "median_seconds": 0.2575606250902638,
+          "min_seconds": 0.25589233299251646,
+          "max_seconds": 0.2630223330343142,
+          "relative_range": 0.027682802987836368
+        }
+      },
+      "speedup": 1.4490730751489096,
+      "peak_python_bytes": {
+        "baseline": 17566886,
+        "candidate": 17562255
+      }
+    }
+  ]
+}

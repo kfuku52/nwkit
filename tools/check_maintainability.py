@@ -1,4 +1,4 @@
-"""Enforce per-function cyclomatic-complexity ratchets without an average gate."""
+"""Report complexity growth and enforce reviewed per-function upper limits."""
 
 import argparse
 import json
@@ -6,9 +6,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-MAX_NEW_FUNCTION_COMPLEXITY = 40
+MAX_FUNCTION_COMPLEXITY = 40
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_PATH = Path(__file__).with_name("complexity_baseline.json")
+EXCEPTIONS_PATH = Path(__file__).with_name("complexity_exceptions.json")
 
 
 def function_complexities(results):
@@ -33,20 +34,54 @@ def function_complexities(results):
     return functions
 
 
-def complexity_violations(current, baseline):
+def complexity_violations(current, exceptions=None):
+    # The baseline is a comparison point, never implicit permission to exceed
+    # the common limit. Only a documented exception changes the hard ceiling.
+    exceptions = {} if exceptions is None else exceptions
     violations = []
     for name, complexity in sorted(current.items()):
-        limit = baseline.get(name, MAX_NEW_FUNCTION_COMPLEXITY)
+        limit = exceptions.get(name, {}).get("limit", MAX_FUNCTION_COMPLEXITY)
         if complexity > limit:
-            label = (
-                "existing function ceiling"
-                if name in baseline
-                else "new function limit"
-            )
-            violations.append(
-                f"{name}: complexity {complexity} exceeds {label} {limit}"
-            )
+            violations.append(f"{name}: complexity {complexity} exceeds limit {limit}")
     return violations
+
+
+def complexity_increases(current, baseline):
+    return [
+        f"{name}: complexity increased from {baseline[name]} to {complexity}; review the added branching."
+        for name, complexity in sorted(current.items())
+        if name in baseline and complexity > baseline[name]
+    ]
+
+
+def validate_exceptions(exceptions, current):
+    if not isinstance(exceptions, dict):
+        raise ValueError("Complexity exceptions must be an object keyed by function.")
+    for name, record in exceptions.items():
+        if name not in current:
+            raise ValueError(f"Stale complexity exception: {name}")
+        if (
+            not isinstance(record, dict)
+            or set(record) != {"limit", "reason", "tests"}
+            or type(record["limit"]) is not int
+            or record["limit"] <= MAX_FUNCTION_COMPLEXITY
+            or not isinstance(record["reason"], str)
+            or not record["reason"].strip()
+            or not isinstance(record["tests"], list)
+            or not record["tests"]
+        ):
+            raise ValueError(
+                f"Exception requires limit, reason, and test paths: {name}"
+            )
+        for test in record["tests"]:
+            if (
+                not isinstance(test, str)
+                or not test.startswith("tests/")
+                or ".." in Path(test).parts
+                or not test.endswith(".py")
+                or not (PROJECT_ROOT / test).is_file()
+            ):
+                raise ValueError(f"Exception has an invalid test path: {name}: {test}")
 
 
 def collect_complexities():
@@ -68,12 +103,16 @@ def main(argv=None) -> int:
     parser.add_argument(
         "--update-baseline",
         action="store_true",
-        help="Record reductions/new functions and remove deleted functions; never raise an existing ceiling.",
+        help="Record reviewed current values for future growth warnings; hard limits and exceptions stay unchanged.",
     )
     args = parser.parse_args(argv)
     baseline = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
     current = collect_complexities()
-    violations = complexity_violations(current, baseline)
+    exceptions = json.loads(EXCEPTIONS_PATH.read_text(encoding="utf-8"))
+    validate_exceptions(exceptions, current)
+    for warning in complexity_increases(current, baseline):
+        print("Warning: " + warning, file=sys.stderr)
+    violations = complexity_violations(current, exceptions)
     if violations:
         raise RuntimeError(
             "Cyclomatic-complexity budget failed:\n- " + "\n- ".join(violations)
@@ -84,7 +123,7 @@ def main(argv=None) -> int:
         )
     average = sum(current.values()) / len(current)
     print(
-        f"Radon: {len(current)} functions, {average:.2f} average (informational), {max(current.values())} maximum; all function ceilings respected."
+        f"Radon: {len(current)} functions, {average:.2f} average (informational), {max(current.values())} maximum; all hard limits respected."
     )
     return 0
 

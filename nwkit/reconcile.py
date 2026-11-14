@@ -1,4 +1,6 @@
+import json
 import sys
+from functools import cache
 from typing import Any
 
 import pandas as pd
@@ -31,6 +33,8 @@ RECONCILIATION_COLUMNS = [
     "lineage_clade_id",
     "event_type",
     "event_source",
+    "implied_losses",
+    "implied_loss_species_clade_ids",
     "event_status",
     "collapsed_event_boundary",
     "transfer_source_species",
@@ -319,6 +323,30 @@ def lca_duplication_loss_contribution(
     return int(is_duplication), losses
 
 
+def lca_loss_species_nodes(mapped_species_node, child_species_nodes):
+    """Locate implied losses on missing sister edges below one LCA event.
+
+    The returned node identifies the incoming species-tree edge. Repeated
+    nodes represent separate lost copies. Nothing above the gene root is
+    considered, and a speciation consumes the first edge on each child path.
+    """
+    children = tuple(child_species_nodes)
+    duplication = any(child is mapped_species_node for child in children)
+    losses: list[Any] = []
+    for child in children:
+        current = child
+        while current is not mapped_species_node:
+            parent = current.up
+            if parent is None:
+                raise ValueError("Child mapping is not below its LCA event")
+            if duplication or parent is not mapped_species_node:
+                losses.extend(
+                    sister for sister in parent.children if sister is not current
+                )
+            current = parent
+    return losses
+
+
 def _is_subset(mask, container_mask):
     return mask != 0 and mask & ~container_mask == 0
 
@@ -377,7 +405,9 @@ def _lineage_roots(gene_tree, event_type_by_node):
     return lineage_root_by_node
 
 
-def _coverage_fields(orientation, species_mask_by_gene_node, species_clades):
+def _coverage_fields(
+    orientation, species_mask_by_gene_node, species_clades, species_csv
+):
     empty = {
         "coverage_status": "not-applicable",
         "numerator_observed_species_taxa": "",
@@ -410,18 +440,14 @@ def _coverage_fields(orientation, species_mask_by_gene_node, species_clades):
     )
     return {
         "coverage_status": "complete" if complete else "partial",
-        "numerator_observed_species_taxa": species_clades.csv_for_mask(
-            numerator_observed
-        ),
+        "numerator_observed_species_taxa": species_csv(numerator_observed),
         "num_numerator_observed_species_taxa": numerator_observed_count,
-        "numerator_species_clade_taxa": species_clades.csv_for_mask(numerator_full),
+        "numerator_species_clade_taxa": species_csv(numerator_full),
         "num_numerator_species_clade_taxa": numerator_full_count,
         "numerator_species_coverage": numerator_observed_count / numerator_full_count,
-        "denominator_observed_species_taxa": species_clades.csv_for_mask(
-            denominator_observed
-        ),
+        "denominator_observed_species_taxa": species_csv(denominator_observed),
         "num_denominator_observed_species_taxa": denominator_observed_count,
-        "denominator_species_clade_taxa": species_clades.csv_for_mask(denominator_full),
+        "denominator_species_clade_taxa": species_csv(denominator_full),
         "num_denominator_species_clade_taxa": denominator_full_count,
         "denominator_species_coverage": denominator_observed_count
         / denominator_full_count,
@@ -555,6 +581,8 @@ def _reconciliation_row(
     gene_clades,
     species_clades,
     species_mask_by_gene_node,
+    *,
+    species_csv,
 ):
     numerator_gene, denominator_gene, numerator_species, denominator_species = (
         _orientation_nodes(orientation)
@@ -618,16 +646,18 @@ def _reconciliation_row(
         ),
         "descendant_taxa": gene_clades.csv_for_node(node),
         "num_taxa": gene_clades.count_for_node(node),
-        "descendant_species_taxa": species_clades.csv_for_mask(
-            species_mask_by_gene_node[node]
-        ),
+        "descendant_species_taxa": species_csv(species_mask_by_gene_node[node]),
         "num_descendant_species_taxa": species_clades.count_for_mask(
             species_mask_by_gene_node[node]
         ),
-        "species_event_taxa": species_clades.csv_for_mask(species_event_mask),
+        "species_event_taxa": species_csv(species_event_mask),
         "num_species_event_taxa": species_clades.count_for_mask(species_event_mask),
     }
-    row.update(_coverage_fields(orientation, species_mask_by_gene_node, species_clades))
+    row.update(
+        _coverage_fields(
+            orientation, species_mask_by_gene_node, species_clades, species_csv
+        )
+    )
     return row
 
 
@@ -649,6 +679,8 @@ def build_reconciliation_table(
     species_branch_ids = assign_branch_ids(species_tree)
     gene_clades = CladeIndex(gene_tree)
     species_clades = CladeIndex(species_tree)
+    # The same species masks occur in event, descendant and coverage fields.
+    species_csv = cache(species_clades.csv_for_mask)
     species_lca = LcaIndex(species_tree)
     species_leaf_by_name = {str(leaf.name): leaf for leaf in species_tree.leaves()}
     species_nodes_by_name, ambiguous_species_names = _named_species_nodes(species_tree)
@@ -681,6 +713,10 @@ def build_reconciliation_table(
     )
     lineage_root_by_node = _lineage_roots(gene_tree, event_type_by_node)
     rows = list()
+    species_depths = {
+        node: species_lca.depth[index]
+        for node, index in species_lca.index_by_node.items()
+    }
     for node in gene_tree.traverse():
         mapped_species_node = species_node_by_gene_node[node]
         mapping_status, orientation, reason = _reconciliation_state(
@@ -711,9 +747,45 @@ def build_reconciliation_table(
                 gene_clades,
                 species_clades,
                 species_mask_by_gene_node,
+                species_csv=species_csv,
             )
         )
-    return pd.DataFrame(rows, columns=RECONCILIATION_COLUMNS)
+        # LCA losses below this event, excluding losses above the gene root.
+        # NHX/overlap events are not an LCA loss model; keep them undefined.
+        losses = None
+        loss_clades = None
+        if event_source == "lca" and mapping_status == "mapped":
+            if node.is_leaf:
+                losses = 0
+                loss_clades = []
+            else:
+                mapped_children = [
+                    species_node_by_gene_node[child] for child in node.children
+                ]
+                _, losses = lca_duplication_loss_contribution(
+                    mapped_species_node,
+                    mapped_children,
+                    species_depths,
+                )
+                loss_clades = sorted(
+                    species_clades.clade_id_for_node(lost)
+                    for lost in lca_loss_species_nodes(
+                        mapped_species_node, mapped_children
+                    )
+                )
+                if len(loss_clades) != losses:
+                    raise ValueError(
+                        "LCA loss locations disagree with implied loss count"
+                    )
+        rows[-1]["implied_losses"] = losses
+        rows[-1]["implied_loss_species_clade_ids"] = (
+            json.dumps(loss_clades, separators=(",", ":"))
+            if loss_clades is not None
+            else None
+        )
+    table = pd.DataFrame(rows, columns=RECONCILIATION_COLUMNS)
+    table["implied_losses"] = pd.array(table["implied_losses"], dtype="Int64")
+    return table
 
 
 def _parsed_species_labels(gene_tree, args):
@@ -758,6 +830,12 @@ def _report_unmatched_species(species_label_by_gene_leaf, species_tree, policy):
 
 def reconcile_main(args):
     outputs = [("--outfile", args.outfile)]
+    figure_out = getattr(args, "figure_out", None)
+    if figure_out:
+        from nwkit.result_plot import figure_format
+
+        figure_format(figure_out)
+        outputs.append(("--figure-out", figure_out))
     validate_distinct_output_paths(outputs)
     validate_outputs_do_not_replace_inputs(
         [
@@ -791,7 +869,29 @@ def reconcile_main(args):
         event_source=args.event_source,
         tree_id=getattr(args, "tree_id", ""),
     )
-    if args.outfile == "-":
+    if figure_out:
+        from nwkit.output_transaction import output_transaction
+        from nwkit.result_plot import save_result_figure
+        from nwkit.result_plot_cli import result_figure_options
+        from nwkit.result_plot_data import reconciliation_plot_data
+
+        data = reconciliation_plot_data(gene_tree, species_tree, table)
+        paths = [path for _, path in outputs if path != "-"]
+        with output_transaction(paths, follow_symlinks=False) as staged:
+            if args.outfile != "-":
+                staged.write_text(
+                    args.outfile,
+                    lambda handle: table.to_csv(handle, sep="\t", index=False),
+                )
+            save_result_figure(
+                data,
+                staged[figure_out],
+                image_format=figure_format(figure_out),
+                **result_figure_options(args),
+            )
+        if args.outfile == "-":
+            print(table.to_csv(sep="\t", index=False), end="")
+    elif args.outfile == "-":
         print(table.to_csv(sep="\t", index=False), end="")
     else:
         from nwkit.regression_pipeline import _write_dataframes_transactionally

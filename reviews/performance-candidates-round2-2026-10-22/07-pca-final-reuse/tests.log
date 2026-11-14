@@ -1,0 +1,14 @@
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m pytest -q --durations=20 --durations-min=0.05 -p candidate07_plugin tests/test_pca.py tests/test_numerical_invariance.py -rs
+.........................................................                [100%]
+============================= slowest 20 durations =============================
+0.89s call     tests/test_pca.py::test_cli_all_artifacts_and_asr
+0.36s call     tests/test_pca.py::test_figure_formats_and_zero_lambda_ancestors[pdf-%PDF-]
+0.25s call     tests/test_pca.py::test_figure_formats_and_zero_lambda_ancestors[svg-<?xml]
+0.09s call     tests/test_pca.py::test_deep_tree_cli_preserves_covariance_and_input_ids[True]
+0.09s call     tests/test_pca.py::test_deep_tree_cli_preserves_covariance_and_input_ids[False]
+0.06s call     tests/test_numerical_invariance.py::test_explicit_dense_opt_in_keeps_the_full_lambda_search
+0.05s call     tests/test_numerical_invariance.py::test_latent_predictor_is_invariant_to_an_intercept_shift[factor]
+0.05s call     tests/test_numerical_invariance.py::test_latent_predictor_is_invariant_to_an_intercept_shift[sparse]
+
+(12 durations < 0.05s hidden.)
+57 passed in 2.31s

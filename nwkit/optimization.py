@@ -98,7 +98,7 @@ def _bounded_scalar_minimize(function, bounds):
 
 
 def global_bounded_scalar_minimize(function, bounds, *, grid_size=17):
-    """Search a bounded one-dimensional objective without assuming unimodality."""
+    """Search a grid and at most four basins; no global-optimality guarantee."""
 
     lower, upper = (float(bounds[0]), float(bounds[1]))
     if not all(math.isfinite(value) for value in (lower, upper)) or lower >= upper:
@@ -132,18 +132,28 @@ def global_bounded_scalar_minimize(function, bounds, *, grid_size=17):
         key=lambda index: grid_values[index],
     )
     refinement_indices = []
-    for index in sorted(local_indices, key=grid_values.__getitem__) + ranked_indices:
+    # Always refine the best interior grid point, including when more than
+    # four local minima were found. Coordinate order must not choose basins.
+    priority = (
+        ranked_indices[:1]
+        + sorted(local_indices, key=lambda index: grid_values[index])
+        + ranked_indices
+    )
+    for index in priority:
         if index not in refinement_indices:
             refinement_indices.append(index)
         if len(refinement_indices) == 4:
             break
 
     candidates = [
-        SimpleNamespace(
-            x=float(grid[index]),
-            fun=float(grid_values[index]),
-            success=index in {0, grid_size - 1},
-            message="global grid point",
+        (
+            SimpleNamespace(
+                x=float(grid[index]),
+                fun=float(grid_values[index]),
+                success=index in {0, grid_size - 1},
+                message="global grid point",
+            ),
+            int(index),
         )
         for index in finite_indices
     ]
@@ -154,12 +164,26 @@ def global_bounded_scalar_minimize(function, bounds, *, grid_size=17):
             (float(grid[index - 1]), float(grid[index + 1])),
         )
         if math.isfinite(float(refined.fun)):
-            candidates.append(refined)
+            candidates.append((refined, index))
             successful_refinements += int(bool(refined.success))
-    best = min(
-        candidates,
-        key=lambda candidate: (float(candidate.fun), not bool(candidate.success)),
+    best, best_index = min(candidates, key=lambda entry: float(entry[0].fun))
+    # A flat profile can give the grid point and its converged refinement the
+    # same objective at distant coordinates. Confirm it only with a refinement
+    # of that grid interval, never with convergence from another basin.
+    confirming = next(
+        (
+            candidate
+            for candidate, index in candidates
+            if index == best_index
+            and bool(candidate.success)
+            and math.isclose(
+                float(candidate.fun), float(best.fun), rel_tol=1e-12, abs_tol=1e-12
+            )
+        ),
+        None,
     )
+    if confirming is not None:
+        best = confirming
     return SimpleNamespace(
         x=float(best.x),
         fun=float(best.fun),

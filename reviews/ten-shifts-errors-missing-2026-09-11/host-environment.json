@@ -1,0 +1,10 @@
+{
+  "cpu": "Apple M2 Max",
+  "logical_cpus": "12",
+  "memory_bytes": "68719476736",
+  "docker_resources": {
+    "cpus": 12,
+    "memory_bytes": 8216580096
+  },
+  "image_id": "sha256:c8c69075b5d591499bf3195ec912ef5b5e1aa1cd163f03864639ed6a669e9429"
+}

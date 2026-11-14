@@ -1,0 +1,1415 @@
+{
+  "environment": {
+    "python": "3.12.14 (main, Aug 25 2026, 13:50:33) [Clang 22.1.3 ]",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "numpy": "2.5.4",
+    "scipy": "1.17.1",
+    "pandas": "3.0.6",
+    "nwkit": "0.43.55",
+    "nwkit_source": "/tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/__init__.py",
+    "baseline_commit": "86c8f2c537769d852c17e2c789340f6c9de4ef54",
+    "timing_limit": "Exploratory host-local measurements; unrelated CPU jobs are active.",
+    "memory_limit": "tracemalloc peak is not complete RSS or all native allocations."
+  },
+  "target_source_sha256": "96536841b27299c3e91df6bbe857a8dafa33ed37495eed6610cbef1afc280f75",
+  "profile_source_sha256": "aead712090ea3ea582e55709bb3bbed29379ac35199eb6115e4f37ba1b6a7ee6",
+  "cases": [
+    {
+      "case": "small-bm-cov",
+      "tips": 8,
+      "traits": 2,
+      "kwargs": {},
+      "scope": "complete fit_pca including lambda search when requested; fixture/import excluded",
+      "comparison": {
+        "center": {
+          "exact": true,
+          "shape": [
+            2
+          ],
+          "max_abs_difference": 0.0
+        },
+        "scale": {
+          "exact": true,
+          "shape": [
+            2
+          ],
+          "max_abs_difference": 0.0
+        },
+        "rotation": {
+          "exact": true,
+          "shape": [
+            2,
+            2
+          ],
+          "max_abs_difference": 0.0
+        },
+        "loadings": {
+          "exact": true,
+          "shape": [
+            2,
+            2
+          ],
+          "max_abs_difference": 0.0
+        },
+        "eigenvalues": {
+          "exact": true,
+          "shape": [
+            2
+          ],
+          "max_abs_difference": 0.0
+        },
+        "scores": {
+          "exact": true,
+          "shape": [
+            8,
+            2
+          ],
+          "max_abs_difference": 0.0
+        },
+        "covariance": {
+          "exact": true,
+          "shape": [
+            8,
+            8
+          ],
+          "max_abs_difference": 0.0
+        },
+        "lambda_value": {
+          "exact": true,
+          "value": 1.0
+        },
+        "lambda_estimated": {
+          "exact": true,
+          "value": false
+        },
+        "log_likelihood": {
+          "exact": true,
+          "value": -13.505379320771972
+        },
+        "status": {
+          "exact": true,
+          "value": "ok"
+        },
+        "repeated_eigenvalues": {
+          "exact": true,
+          "value": false
+        }
+      },
+      "timing": {
+        "loops_per_sample": 142,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.00016880193626849164,
+            0.0001620134997876807,
+            0.0001585404929691847,
+            0.00014646420448782369,
+            0.00014327112650892263,
+            0.00015455838801129392,
+            0.00014878257053156554
+          ],
+          "median_seconds": 0.00015455838801129392,
+          "min_seconds": 0.00014327112650892263,
+          "max_seconds": 0.00016880193626849164
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.00012386238045046028,
+            0.00012193251447096257,
+            0.00011544513375117956,
+            0.0001136605073632279,
+            0.00011122212696059698,
+            0.00011557218303877703,
+            0.0001104433666652357
+          ],
+          "median_seconds": 0.00011544513375117956,
+          "min_seconds": 0.0001104433666652357,
+          "max_seconds": 0.00012386238045046028
+        },
+        "speedup": 1.3388038368461306
+      },
+      "baseline_peak_bytes": 10222,
+      "candidate_peak_bytes": 8740
+    },
+    {
+      "case": "bm-cov",
+      "tips": 128,
+      "traits": 4,
+      "kwargs": {},
+      "scope": "complete fit_pca including lambda search when requested; fixture/import excluded",
+      "comparison": {
+        "center": {
+          "exact": true,
+          "shape": [
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "scale": {
+          "exact": true,
+          "shape": [
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "rotation": {
+          "exact": true,
+          "shape": [
+            4,
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "loadings": {
+          "exact": true,
+          "shape": [
+            4,
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "eigenvalues": {
+          "exact": true,
+          "shape": [
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "scores": {
+          "exact": true,
+          "shape": [
+            128,
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "covariance": {
+          "exact": true,
+          "shape": [
+            128,
+            128
+          ],
+          "max_abs_difference": 0.0
+        },
+        "lambda_value": {
+          "exact": true,
+          "value": 1.0
+        },
+        "lambda_estimated": {
+          "exact": true,
+          "value": false
+        },
+        "log_likelihood": {
+          "exact": true,
+          "value": -795.7740854352411
+        },
+        "status": {
+          "exact": true,
+          "value": "ok"
+        },
+        "repeated_eigenvalues": {
+          "exact": true,
+          "value": false
+        }
+      },
+      "timing": {
+        "loops_per_sample": 83,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.00035349146956690104,
+            0.00035535592827048285,
+            0.0003529236980164087,
+            0.00035683383059923547,
+            0.00035863001241786293,
+            0.00036798192732350295,
+            0.0003698293122474149
+          ],
+          "median_seconds": 0.00035683383059923547,
+          "min_seconds": 0.0003529236980164087,
+          "max_seconds": 0.0003698293122474149
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.00026363403541989716,
+            0.00026228815648166173,
+            0.0002647710849070944,
+            0.0002605843382988529,
+            0.0002784372534580439,
+            0.00027665913284543047,
+            0.00027559689212455806
+          ],
+          "median_seconds": 0.0002647710849070944,
+          "min_seconds": 0.0002605843382988529,
+          "max_seconds": 0.0002784372534580439
+        },
+        "speedup": 1.3477069473973904
+      },
+      "baseline_peak_bytes": 548092,
+      "candidate_peak_bytes": 397894
+    },
+    {
+      "case": "large-bm-cov",
+      "tips": 512,
+      "traits": 4,
+      "kwargs": {},
+      "scope": "complete fit_pca including lambda search when requested; fixture/import excluded",
+      "comparison": {
+        "center": {
+          "exact": true,
+          "shape": [
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "scale": {
+          "exact": true,
+          "shape": [
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "rotation": {
+          "exact": true,
+          "shape": [
+            4,
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "loadings": {
+          "exact": true,
+          "shape": [
+            4,
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "eigenvalues": {
+          "exact": true,
+          "shape": [
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "scores": {
+          "exact": true,
+          "shape": [
+            512,
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "covariance": {
+          "exact": true,
+          "shape": [
+            512,
+            512
+          ],
+          "max_abs_difference": 0.0
+        },
+        "lambda_value": {
+          "exact": true,
+          "value": 1.0
+        },
+        "lambda_estimated": {
+          "exact": true,
+          "value": false
+        },
+        "log_likelihood": {
+          "exact": true,
+          "value": -3159.35644863338
+        },
+        "status": {
+          "exact": true,
+          "value": "ok"
+        },
+        "repeated_eigenvalues": {
+          "exact": true,
+          "value": false
+        }
+      },
+      "timing": {
+        "loops_per_sample": 5,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.006303049996495247,
+            0.007875524996779858,
+            0.008982891612686218,
+            0.008626100001856684,
+            0.009089500014670193,
+            0.0068637000164017085,
+            0.006830666586756707
+          ],
+          "median_seconds": 0.007875524996779858,
+          "min_seconds": 0.006303049996495247,
+          "max_seconds": 0.009089500014670193
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.003864316619001329,
+            0.004249975015409291,
+            0.006388549995608628,
+            0.005495816585607827,
+            0.005127183417789638,
+            0.004577133199200034,
+            0.004429324995726347
+          ],
+          "median_seconds": 0.004577133199200034,
+          "min_seconds": 0.003864316619001329,
+          "max_seconds": 0.006388549995608628
+        },
+        "speedup": 1.7206239482294943
+      },
+      "baseline_peak_bytes": 8467824,
+      "candidate_peak_bytes": 6302374
+    },
+    {
+      "case": "large-bm-corr",
+      "tips": 512,
+      "traits": 16,
+      "kwargs": {
+        "mode": "corr"
+      },
+      "scope": "complete fit_pca including lambda search when requested; fixture/import excluded",
+      "comparison": {
+        "center": {
+          "exact": true,
+          "shape": [
+            16
+          ],
+          "max_abs_difference": 0.0
+        },
+        "scale": {
+          "exact": true,
+          "shape": [
+            16
+          ],
+          "max_abs_difference": 0.0
+        },
+        "rotation": {
+          "exact": true,
+          "shape": [
+            16,
+            16
+          ],
+          "max_abs_difference": 0.0
+        },
+        "loadings": {
+          "exact": true,
+          "shape": [
+            16,
+            16
+          ],
+          "max_abs_difference": 0.0
+        },
+        "eigenvalues": {
+          "exact": true,
+          "shape": [
+            16
+          ],
+          "max_abs_difference": 0.0
+        },
+        "scores": {
+          "exact": true,
+          "shape": [
+            512,
+            16
+          ],
+          "max_abs_difference": 0.0
+        },
+        "covariance": {
+          "exact": true,
+          "shape": [
+            512,
+            512
+          ],
+          "max_abs_difference": 0.0
+        },
+        "lambda_value": {
+          "exact": true,
+          "value": 1.0
+        },
+        "lambda_estimated": {
+          "exact": true,
+          "value": false
+        },
+        "log_likelihood": {
+          "exact": true,
+          "value": -12823.060910792847
+        },
+        "status": {
+          "exact": true,
+          "value": "ok"
+        },
+        "repeated_eigenvalues": {
+          "exact": true,
+          "value": false
+        }
+      },
+      "timing": {
+        "loops_per_sample": 5,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.006961841601878405,
+            0.007212474988773465,
+            0.007118033384904266,
+            0.006486958218738436,
+            0.005831966619007289,
+            0.006247274996712804,
+            0.005678633204661309
+          ],
+          "median_seconds": 0.006486958218738436,
+          "min_seconds": 0.005678633204661309,
+          "max_seconds": 0.007212474988773465
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.004700474999845028,
+            0.004763591615483165,
+            0.0046891500009223815,
+            0.004432716593146324,
+            0.003855174989439547,
+            0.004113500006496906,
+            0.003620791621506214
+          ],
+          "median_seconds": 0.004432716593146324,
+          "min_seconds": 0.003620791621506214,
+          "max_seconds": 0.004763591615483165
+        },
+        "speedup": 1.4634272420592582
+      },
+      "baseline_peak_bytes": 8668752,
+      "candidate_peak_bytes": 6302374
+    },
+    {
+      "case": "many-trait-bm-corr",
+      "tips": 128,
+      "traits": 32,
+      "kwargs": {
+        "mode": "corr"
+      },
+      "scope": "complete fit_pca including lambda search when requested; fixture/import excluded",
+      "comparison": {
+        "center": {
+          "exact": true,
+          "shape": [
+            32
+          ],
+          "max_abs_difference": 0.0
+        },
+        "scale": {
+          "exact": true,
+          "shape": [
+            32
+          ],
+          "max_abs_difference": 0.0
+        },
+        "rotation": {
+          "exact": true,
+          "shape": [
+            32,
+            32
+          ],
+          "max_abs_difference": 0.0
+        },
+        "loadings": {
+          "exact": true,
+          "shape": [
+            32,
+            32
+          ],
+          "max_abs_difference": 0.0
+        },
+        "eigenvalues": {
+          "exact": true,
+          "shape": [
+            32
+          ],
+          "max_abs_difference": 0.0
+        },
+        "scores": {
+          "exact": true,
+          "shape": [
+            128,
+            32
+          ],
+          "max_abs_difference": 0.0
+        },
+        "covariance": {
+          "exact": true,
+          "shape": [
+            128,
+            128
+          ],
+          "max_abs_difference": 0.0
+        },
+        "lambda_value": {
+          "exact": true,
+          "value": 1.0
+        },
+        "lambda_estimated": {
+          "exact": true,
+          "value": false
+        },
+        "log_likelihood": {
+          "exact": true,
+          "value": -6051.339532650473
+        },
+        "status": {
+          "exact": true,
+          "value": "ok"
+        },
+        "repeated_eigenvalues": {
+          "exact": true,
+          "value": false
+        }
+      },
+      "timing": {
+        "loops_per_sample": 45,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.0006614416682471832,
+            0.0006797694445898135,
+            0.0006487916663496031,
+            0.0006534722219738695,
+            0.0006591972222344742,
+            0.0006461990867844886,
+            0.0006453703571524885
+          ],
+          "median_seconds": 0.0006534722219738695,
+          "min_seconds": 0.0006453703571524885,
+          "max_seconds": 0.0006797694445898135
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.0006074509324712886,
+            0.0005970305556224452,
+            0.000591591668004791,
+            0.000564329623658624,
+            0.0005603462897448077,
+            0.000559796289437347,
+            0.0005601268442761567
+          ],
+          "median_seconds": 0.000564329623658624,
+          "min_seconds": 0.000559796289437347,
+          "max_seconds": 0.0006074509324712886
+        },
+        "speedup": 1.1579619332001787
+      },
+      "baseline_peak_bytes": 699342,
+      "candidate_peak_bytes": 534602
+    },
+    {
+      "case": "wide-bm-corr",
+      "tips": 32,
+      "traits": 64,
+      "kwargs": {
+        "mode": "corr"
+      },
+      "scope": "complete fit_pca including lambda search when requested; fixture/import excluded",
+      "comparison": {
+        "center": {
+          "exact": true,
+          "shape": [
+            64
+          ],
+          "max_abs_difference": 0.0
+        },
+        "scale": {
+          "exact": true,
+          "shape": [
+            64
+          ],
+          "max_abs_difference": 0.0
+        },
+        "rotation": {
+          "exact": true,
+          "shape": [
+            64,
+            31
+          ],
+          "max_abs_difference": 0.0
+        },
+        "loadings": {
+          "exact": true,
+          "shape": [
+            64,
+            31
+          ],
+          "max_abs_difference": 0.0
+        },
+        "eigenvalues": {
+          "exact": true,
+          "shape": [
+            31
+          ],
+          "max_abs_difference": 0.0
+        },
+        "scores": {
+          "exact": true,
+          "shape": [
+            32,
+            31
+          ],
+          "max_abs_difference": 0.0
+        },
+        "covariance": {
+          "exact": true,
+          "shape": [
+            32,
+            32
+          ],
+          "max_abs_difference": 0.0
+        },
+        "lambda_value": {
+          "exact": true,
+          "value": 1.0
+        },
+        "lambda_estimated": {
+          "exact": true,
+          "value": false
+        },
+        "log_likelihood": {
+          "exact": true,
+          "value": null
+        },
+        "status": {
+          "exact": true,
+          "value": "rank_deficient"
+        },
+        "repeated_eigenvalues": {
+          "exact": true,
+          "value": false
+        }
+      },
+      "timing": {
+        "loops_per_sample": 62,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.0004734139844414688,
+            0.00046920227337508434,
+            0.00046856048321651837,
+            0.0004683313065118367,
+            0.0004680786289334778,
+            0.00047153225844545713,
+            0.00047652487222465777
+          ],
+          "median_seconds": 0.00046920227337508434,
+          "min_seconds": 0.0004680786289334778,
+          "max_seconds": 0.00047652487222465777
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.00045923253280981895,
+            0.00044038170956135276,
+            0.0004359905818297017,
+            0.0004353857403921504,
+            0.00043573454886134115,
+            0.00043543951676016854,
+            0.00043893951712356457
+          ],
+          "median_seconds": 0.0004359905818297017,
+          "min_seconds": 0.0004353857403921504,
+          "max_seconds": 0.00045923253280981895
+        },
+        "speedup": 1.0761752499469246
+      },
+      "baseline_peak_bytes": 200434,
+      "candidate_peak_bytes": 174658
+    },
+    {
+      "case": "fixed-lambda-corr",
+      "tips": 128,
+      "traits": 4,
+      "kwargs": {
+        "model": "LAMBDA",
+        "lambda_value": 0.4,
+        "mode": "corr"
+      },
+      "scope": "complete fit_pca including lambda search when requested; fixture/import excluded",
+      "comparison": {
+        "center": {
+          "exact": true,
+          "shape": [
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "scale": {
+          "exact": true,
+          "shape": [
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "rotation": {
+          "exact": true,
+          "shape": [
+            4,
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "loadings": {
+          "exact": true,
+          "shape": [
+            4,
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "eigenvalues": {
+          "exact": true,
+          "shape": [
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "scores": {
+          "exact": true,
+          "shape": [
+            128,
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "covariance": {
+          "exact": true,
+          "shape": [
+            128,
+            128
+          ],
+          "max_abs_difference": 0.0
+        },
+        "lambda_value": {
+          "exact": true,
+          "value": 0.4
+        },
+        "lambda_estimated": {
+          "exact": true,
+          "value": false
+        },
+        "log_likelihood": {
+          "exact": true,
+          "value": -827.7348463425976
+        },
+        "status": {
+          "exact": true,
+          "value": "ok"
+        },
+        "repeated_eigenvalues": {
+          "exact": true,
+          "value": false
+        }
+      },
+      "timing": {
+        "loops_per_sample": 84,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.00034888939366542866,
+            0.00035504464315073124,
+            0.0003928923688363284,
+            0.00037232589342498353,
+            0.00037193501235118935,
+            0.0003450823326905568,
+            0.0003513591308590202
+          ],
+          "median_seconds": 0.00035504464315073124,
+          "min_seconds": 0.0003450823326905568,
+          "max_seconds": 0.0003928923688363284
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.00025945187995343337,
+            0.000258313489168705,
+            0.00027484623881589087,
+            0.00027351586807829637,
+            0.0002749479165123332,
+            0.00026780357196306187,
+            0.00025964038130561154
+          ],
+          "median_seconds": 0.00026780357196306187,
+          "min_seconds": 0.000258313489168705,
+          "max_seconds": 0.0002749479165123332
+        },
+        "speedup": 1.3257651514808866
+      },
+      "baseline_peak_bytes": 547814,
+      "candidate_peak_bytes": 397850
+    },
+    {
+      "case": "fixed-zero-lambda-cov",
+      "tips": 512,
+      "traits": 4,
+      "kwargs": {
+        "model": "LAMBDA",
+        "lambda_value": 0.0
+      },
+      "scope": "complete fit_pca including lambda search when requested; fixture/import excluded",
+      "comparison": {
+        "center": {
+          "exact": true,
+          "shape": [
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "scale": {
+          "exact": true,
+          "shape": [
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "rotation": {
+          "exact": true,
+          "shape": [
+            4,
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "loadings": {
+          "exact": true,
+          "shape": [
+            4,
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "eigenvalues": {
+          "exact": true,
+          "shape": [
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "scores": {
+          "exact": true,
+          "shape": [
+            512,
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "covariance": {
+          "exact": true,
+          "shape": [
+            512,
+            512
+          ],
+          "max_abs_difference": 0.0
+        },
+        "lambda_value": {
+          "exact": true,
+          "value": 0.0
+        },
+        "lambda_estimated": {
+          "exact": true,
+          "value": false
+        },
+        "log_likelihood": {
+          "exact": true,
+          "value": -3831.8594105276625
+        },
+        "status": {
+          "exact": true,
+          "value": "ok"
+        },
+        "repeated_eigenvalues": {
+          "exact": true,
+          "value": false
+        }
+      },
+      "timing": {
+        "loops_per_sample": 6,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.005345507001038641,
+            0.005378097315163662,
+            0.0056824929973420995,
+            0.0053075485047884285,
+            0.005228395826028039,
+            0.005293270825253178,
+            0.0053038609912618995
+          ],
+          "median_seconds": 0.0053075485047884285,
+          "min_seconds": 0.005228395826028039,
+          "max_seconds": 0.0056824929973420995
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.003458743003041794,
+            0.0034566875159119568,
+            0.003794520841135333,
+            0.003725715330801904,
+            0.0035094096674583852,
+            0.003627479173398266,
+            0.0033739375066943467
+          ],
+          "median_seconds": 0.0035094096674583852,
+          "min_seconds": 0.0033739375066943467,
+          "max_seconds": 0.003794520841135333
+        },
+        "speedup": 1.5123764415433172
+      },
+      "baseline_peak_bytes": 8467780,
+      "candidate_peak_bytes": 6302374
+    },
+    {
+      "case": "estimated-lambda-corr",
+      "tips": 64,
+      "traits": 4,
+      "kwargs": {
+        "model": "LAMBDA",
+        "mode": "corr"
+      },
+      "scope": "complete fit_pca including lambda search when requested; fixture/import excluded",
+      "comparison": {
+        "center": {
+          "exact": true,
+          "shape": [
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "scale": {
+          "exact": true,
+          "shape": [
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "rotation": {
+          "exact": true,
+          "shape": [
+            4,
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "loadings": {
+          "exact": true,
+          "shape": [
+            4,
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "eigenvalues": {
+          "exact": true,
+          "shape": [
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "scores": {
+          "exact": true,
+          "shape": [
+            64,
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "covariance": {
+          "exact": true,
+          "shape": [
+            64,
+            64
+          ],
+          "max_abs_difference": 0.0
+        },
+        "lambda_value": {
+          "exact": true,
+          "value": 0.9540196591309864
+        },
+        "lambda_estimated": {
+          "exact": true,
+          "value": true
+        },
+        "log_likelihood": {
+          "exact": true,
+          "value": -388.39102589848494
+        },
+        "status": {
+          "exact": true,
+          "value": "ok"
+        },
+        "repeated_eigenvalues": {
+          "exact": true,
+          "value": false
+        }
+      },
+      "timing": {
+        "loops_per_sample": 4,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.008678926998982206,
+            0.008976708224508911,
+            0.008808864746242762,
+            0.009493739489698783,
+            0.009055593749508262,
+            0.008882458496373147,
+            0.008636583253974095
+          ],
+          "median_seconds": 0.008882458496373147,
+          "min_seconds": 0.008636583253974095,
+          "max_seconds": 0.009493739489698783
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.008726541767828166,
+            0.008713697723578662,
+            0.009160499990684912,
+            0.00862603125278838,
+            0.008850697980960831,
+            0.008979843725683168,
+            0.009219343744916841
+          ],
+          "median_seconds": 0.008850697980960831,
+          "min_seconds": 0.00862603125278838,
+          "max_seconds": 0.009219343744916841
+        },
+        "speedup": 1.0035884757880833
+      },
+      "baseline_peak_bytes": 196314,
+      "candidate_peak_bytes": 196176
+    },
+    {
+      "case": "nonultra-estimated-lambda-cov",
+      "tips": 128,
+      "traits": 4,
+      "kwargs": {
+        "model": "LAMBDA"
+      },
+      "scope": "complete fit_pca including lambda search when requested; fixture/import excluded",
+      "comparison": {
+        "center": {
+          "exact": true,
+          "shape": [
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "scale": {
+          "exact": true,
+          "shape": [
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "rotation": {
+          "exact": true,
+          "shape": [
+            4,
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "loadings": {
+          "exact": true,
+          "shape": [
+            4,
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "eigenvalues": {
+          "exact": true,
+          "shape": [
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "scores": {
+          "exact": true,
+          "shape": [
+            128,
+            4
+          ],
+          "max_abs_difference": 0.0
+        },
+        "covariance": {
+          "exact": true,
+          "shape": [
+            128,
+            128
+          ],
+          "max_abs_difference": 0.0
+        },
+        "lambda_value": {
+          "exact": true,
+          "value": 1.0
+        },
+        "lambda_estimated": {
+          "exact": true,
+          "value": true
+        },
+        "log_likelihood": {
+          "exact": true,
+          "value": -880.3275493775402
+        },
+        "status": {
+          "exact": true,
+          "value": "boundary"
+        },
+        "repeated_eigenvalues": {
+          "exact": true,
+          "value": false
+        }
+      },
+      "timing": {
+        "loops_per_sample": 2,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.017100687487982213,
+            0.01652604149421677,
+            0.016613542044069618,
+            0.016750437498558313,
+            0.01761891646310687,
+            0.016476833494380116,
+            0.017214708495885134
+          ],
+          "median_seconds": 0.016750437498558313,
+          "min_seconds": 0.016476833494380116,
+          "max_seconds": 0.01761891646310687
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.01673291652696207,
+            0.016705583489965647,
+            0.016450583469122648,
+            0.0166491040145047,
+            0.018341624992899597,
+            0.01779766648542136,
+            0.01823539548786357
+          ],
+          "median_seconds": 0.01673291652696207,
+          "min_seconds": 0.016450583469122648,
+          "max_seconds": 0.018341624992899597
+        },
+        "speedup": 1.0010470960975637
+      },
+      "baseline_peak_bytes": 692870,
+      "candidate_peak_bytes": 692822
+    }
+  ],
+  "edge_checks": [
+    {
+      "case": "cov-BM-None",
+      "status": "ok",
+      "likelihood_is_none": false,
+      "exact": true
+    },
+    {
+      "case": "cov-LAMBDA-0",
+      "status": "ok",
+      "likelihood_is_none": false,
+      "exact": true
+    },
+    {
+      "case": "cov-LAMBDA-0.4",
+      "status": "ok",
+      "likelihood_is_none": false,
+      "exact": true
+    },
+    {
+      "case": "cov-LAMBDA-1",
+      "status": "ok",
+      "likelihood_is_none": false,
+      "exact": true
+    },
+    {
+      "case": "rank-deficient-cov",
+      "status": "rank_deficient",
+      "likelihood_is_none": true,
+      "exact": true
+    },
+    {
+      "case": "almost-dependent-cov",
+      "status": "rank_deficient",
+      "likelihood_is_none": true,
+      "exact": true
+    },
+    {
+      "case": "tree-units--200-cov",
+      "status": "ok",
+      "likelihood_is_none": false,
+      "exact": true
+    },
+    {
+      "case": "tree-units-200-cov",
+      "status": "ok",
+      "likelihood_is_none": false,
+      "exact": true
+    },
+    {
+      "case": "mixed-trait-units-cov",
+      "status": "rank_deficient",
+      "likelihood_is_none": false,
+      "exact": true
+    },
+    {
+      "case": "large-offset-cov",
+      "status": "ok",
+      "likelihood_is_none": false,
+      "exact": true
+    },
+    {
+      "case": "corr-BM-None",
+      "status": "ok",
+      "likelihood_is_none": false,
+      "exact": true
+    },
+    {
+      "case": "corr-LAMBDA-0",
+      "status": "ok",
+      "likelihood_is_none": false,
+      "exact": true
+    },
+    {
+      "case": "corr-LAMBDA-0.4",
+      "status": "ok",
+      "likelihood_is_none": false,
+      "exact": true
+    },
+    {
+      "case": "corr-LAMBDA-1",
+      "status": "ok",
+      "likelihood_is_none": false,
+      "exact": true
+    },
+    {
+      "case": "rank-deficient-corr",
+      "status": "rank_deficient",
+      "likelihood_is_none": true,
+      "exact": true
+    },
+    {
+      "case": "almost-dependent-corr",
+      "status": "rank_deficient",
+      "likelihood_is_none": true,
+      "exact": true
+    },
+    {
+      "case": "tree-units--200-corr",
+      "status": "ok",
+      "likelihood_is_none": false,
+      "exact": true
+    },
+    {
+      "case": "tree-units-200-corr",
+      "status": "ok",
+      "likelihood_is_none": false,
+      "exact": true
+    },
+    {
+      "case": "mixed-trait-units-corr",
+      "status": "ok",
+      "likelihood_is_none": false,
+      "exact": true
+    },
+    {
+      "case": "large-offset-corr",
+      "status": "ok",
+      "likelihood_is_none": false,
+      "exact": true
+    },
+    {
+      "case": "free-lambda-nonultrametric",
+      "status": "ok",
+      "likelihood_is_none": false,
+      "exact": true
+    },
+    {
+      "case": "wide-fixed",
+      "status": "rank_deficient",
+      "likelihood_is_none": true,
+      "exact": true
+    },
+    {
+      "case": "wide-free-rejected",
+      "error": [
+        "ValueError",
+        "Estimating lambda requires a full-rank trait matrix and more tips than traits."
+      ],
+      "exact": true
+    },
+    {
+      "case": "repeated-eigenvalues",
+      "status": "ok",
+      "likelihood_is_none": false,
+      "exact": true
+    },
+    {
+      "case": "constant",
+      "error": [
+        "ValueError",
+        "PCA requires nonconstant trait columns; remove constant columns."
+      ],
+      "exact": true
+    },
+    {
+      "case": "nonfinite",
+      "error": [
+        "ValueError",
+        "Traits exceeds floating-point range; rescale trait or tree units."
+      ],
+      "exact": true
+    },
+    {
+      "case": "asymmetric",
+      "error": [
+        "ValueError",
+        "Tree covariance must be symmetric and match trait rows."
+      ],
+      "exact": true
+    },
+    {
+      "case": "singular",
+      "error": [
+        "LinAlgError",
+        "Matrix is not positive definite"
+      ],
+      "exact": true
+    },
+    {
+      "case": "bad-mode",
+      "error": [
+        "ValueError",
+        "PCA mode must be cov or corr."
+      ],
+      "exact": true
+    },
+    {
+      "case": "bad-model",
+      "error": [
+        "ValueError",
+        "PCA model must be BM or LAMBDA."
+      ],
+      "exact": true
+    },
+    {
+      "case": "bad-fixed",
+      "error": [
+        "ValueError",
+        "--lambda-value requires LAMBDA and a finite value in [0,1]."
+      ],
+      "exact": true
+    }
+  ],
+  "independent_matrix_normal": {
+    "absolute_log_likelihood_difference": 2.842170943040401e-14,
+    "existing_test_atol": 1e-07
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "image_id": "sha256:c8c69075b5d591499bf3195ec912ef5b5e1aa1cd163f03864639ed6a669e9429",
+  "implementation_reference": "accuracy/manifest.json",
+  "scripts": {
+    "benchmark_ten_shifts_missing.py": "a24c91b3407dc48bdfe0e80d0ab8730ebba181f2fc451d0a53946e613c72c3f4",
+    "benchmark_ten_shift_kernel.py": "67832b46571be5f65c56ab77a1df1a7117da2ef4d81582632fc855df56d77508",
+    "benchmark_shift_alpha_models.py": "7eb601e062622715b6c967e1faa9732212544a2522ff29cc3551830dea6e593c",
+    "benchmark_shift_covariance.py": "e5893431a130830b1007aa6738dd4f6c69f7f153817c8615214efb89c907cbcb"
+  },
+  "warmups": 3,
+  "batches": 7,
+  "evaluations_per_batch": 10,
+  "isolated": true,
+  "original_covariance_coordinate": [
+    [
+      1.0,
+      0.8
+    ],
+    [
+      0.8,
+      1.0
+    ]
+  ],
+  "original_measurement_variances": [
+    0.04,
+    0.04
+  ],
+  "known_sampling_se": 0.1
+}

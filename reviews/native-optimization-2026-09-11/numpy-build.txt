@@ -1,0 +1,74 @@
+Build Dependencies:
+  blas:
+    detection method: pkgconfig
+    found: true
+    include directory: /usr/local/include
+    lib directory: /usr/local/lib
+    name: openblas64
+    openblas configuration: USE_64BITINT=1 DYNAMIC_ARCH=1 DYNAMIC_OLDER= NO_CBLAS=
+      NO_LAPACK= NO_LAPACKE= NO_AFFINITY=1 USE_OPENMP= SANDYBRIDGE MAX_THREADS=3
+    pc file directory: /usr/local/lib/pkgconfig
+    version: 0.3.23.dev
+  lapack:
+    detection method: internal
+    found: true
+    include directory: unknown
+    lib directory: unknown
+    name: dep4498988128
+    openblas configuration: unknown
+    pc file directory: unknown
+    version: 1.26.4
+Compilers:
+  c:
+    args: -fno-strict-aliasing
+    commands: clang
+    linker: ld64
+    linker args: -fno-strict-aliasing
+    name: clang
+    version: 14.0.0
+  c++:
+    commands: clang++
+    linker: ld64
+    name: clang
+    version: 14.0.0
+  cython:
+    commands: cython
+    linker: cython
+    name: cython
+    version: 3.0.8
+Machine Information:
+  build:
+    cpu: x86_64
+    endian: little
+    family: x86_64
+    system: darwin
+  host:
+    cpu: x86_64
+    endian: little
+    family: x86_64
+    system: darwin
+Python Information:
+  path: /private/var/folders/qv/pdh5wsgn0lq3dp77zj602b5c0000gn/T/cibw-run-06bn5kul/cp310-macosx_x86_64/build/venv/bin/python
+  version: '3.10'
+SIMD Extensions:
+  baseline:
+  - SSE
+  - SSE2
+  - SSE3
+  found:
+  - SSSE3
+  - SSE41
+  - POPCNT
+  - SSE42
+  not found:
+  - AVX
+  - F16C
+  - FMA3
+  - AVX2
+  - AVX512F
+  - AVX512CD
+  - AVX512_KNL
+  - AVX512_SKX
+  - AVX512_CLX
+  - AVX512_CNL
+  - AVX512_ICL

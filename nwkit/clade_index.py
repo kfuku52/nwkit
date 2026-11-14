@@ -5,9 +5,30 @@ from io import StringIO
 import numpy as np
 
 CLADE_ID_PREFIX = "clade-sha256:"
-_SET_BYTE_BITS = tuple(
-    tuple(index for index in range(8) if value & (1 << index)) for value in range(256)
+_POSITIONS_BY_BYTE = tuple(
+    tuple(bit for bit in range(8) if value & (1 << bit)) for value in range(256)
 )
+
+
+def names_from_mask(mask, leaf_names):
+    remaining = int(mask)
+    length = remaining.bit_length()
+    if remaining >= 0 and length >= 64 and 32 * remaining.bit_count() >= length:
+        # Dense masks need only one byte conversion and small table lookups.
+        packed = remaining.to_bytes((length + 7) // 8, "little")
+        return [
+            leaf_names[byte * 8 + bit]
+            for byte, value in enumerate(packed)
+            for bit in _POSITIONS_BY_BYTE[value]
+        ]
+    names = []
+    offset = 0
+    while remaining:
+        step = (remaining & -remaining).bit_length()
+        offset += step
+        names.append(leaf_names[offset - 1])
+        remaining >>= step
+    return names
 
 
 class CladeIndex:
@@ -29,29 +50,8 @@ class CladeIndex:
         self._clade_id_by_node = dict()
 
     def names_for_mask(self, mask):
-        remaining = int(mask) & self._all_names_mask
-        width = remaining.bit_length()
-        # Clearing high bits repeatedly copies the entire integer. Process
-        # dense, wide masks in bytes, while sparse masks need only a few steps.
-        if remaining.bit_count() > max(32, width // 32):
-            return self._names_for_dense_mask(remaining)
-        return self._names_for_sparse_mask(remaining)
-
-    def _names_for_sparse_mask(self, remaining):
-        names = []
-        while remaining:
-            lowest_bit = remaining & -remaining
-            names.append(self.names[lowest_bit.bit_length() - 1])
-            remaining ^= lowest_bit
-        return tuple(names)
-
-    def _names_for_dense_mask(self, mask):
-        width = (mask.bit_length() + 7) // 8
-        return tuple(
-            self.names[8 * offset + bit]
-            for offset, byte in enumerate(mask.to_bytes(width, byteorder="little"))
-            for bit in _SET_BYTE_BITS[byte]
-        )
+        remaining = int(mask) & ((1 << len(self.names)) - 1)
+        return tuple(names_from_mask(remaining, self.names))
 
     def names_for_node(self, node):
         return self.names_for_mask(self.mask_by_node[node])
@@ -90,7 +90,7 @@ class LcaIndex:
         parent = list()
         depth = list()
         for node in self.nodes:
-            if node.is_root:
+            if node is tree:
                 parent.append(self.index_by_node[node])
                 depth.append(0)
             else:
@@ -114,9 +114,10 @@ class LcaIndex:
         if self.depth[index1] < self.depth[index2]:
             index1, index2 = index2, index1
         depth_difference = self.depth[index1] - self.depth[index2]
-        for level, ancestors in enumerate(self.ancestors):
-            if depth_difference & (1 << level):
-                index1 = ancestors[index1]
+        while depth_difference:
+            level = depth_difference.bit_length() - 1
+            index1 = self.ancestors[level][index1]
+            depth_difference ^= 1 << level
         if index1 == index2:
             return index1
         for ancestors in reversed(self.ancestors):

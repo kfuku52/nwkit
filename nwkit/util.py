@@ -47,7 +47,8 @@ from nwkit.rooting_state import (
     extract_rooting_token,
     get_rooting_info,
     inherit_subtree_rooting,
-    rooting_needs_serialization,
+    rooting_output_options,
+    rooting_output_policy,
     set_rooting_info,
 )
 from nwkit.rooting_state import is_rooted as is_rooted
@@ -57,6 +58,7 @@ from nwkit.species_parser import (
 )
 
 NUMERIC_NODE_NAME_PATTERN = re.compile(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?")
+_INTERNAL_LABEL_SCAN = re.compile(r"""['"\[)]""")
 UNQUOTED_NODE_NAME_PATTERN = re.compile(r"""^[^\s\(\)\[\]'":;,]+$""")
 TREE_FORMAT_PROP = "_nwkit_parser_format"
 MISSING_SUPPORT_VALUE = -999999.0
@@ -74,31 +76,35 @@ ETE_DOWNLOAD_HEADERS = {
 ETE_TAXONOMY_DEFAULT_MAX_AGE_DAYS = 30.0
 
 _PAML_TREEFILE_HEADER_PATTERN = re.compile(r"^\s*\d+\s+\d+\s*$")
-_PAML_FIGTREE_INTERVAL_PATTERN = re.compile(
-    r"\[\s*&\s*(95%HPD|95%)\s*=\s*\{\s*"
-    r"([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)\s*,\s*"
-    r"([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)\s*\}\s*\]"
-    r"(\s*:\s*[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)?",
-    flags=re.IGNORECASE,
-)
-_PAML_NEXUS_TREE_PATTERN = re.compile(
-    r"(?ims)^\s*(?:u?tree)\s+[^=]+?=\s*(.+?;)\s*$",
-)
-_PAML_MAIN_OUTPUT_MARKER = "Species tree for FigTree."
 COMMON_ETE_CACHE_DIRS = (
     os.path.join(os.path.expanduser("~"), ".local", "share", "ete"),
     os.path.join(os.path.expanduser("~"), ".etetoolkit"),
 )
+_IMMUTABLE_TREE_PROP_TYPES = frozenset(
+    {str, int, float, bool, bytes, complex, type(None)}
+)
 
 
-def copy_tree_iteratively(tree):
+def copy_tree_iteratively(tree, *, inherit_rooting=True):
     """Return a topology-and-properties copy without recursing over the tree."""
     copied_values: dict[int, Any] = {}
 
     def copy_node(source):
         target = Tree()
         target.props.clear()
-        target.props.update(copy.deepcopy(source.props, copied_values))
+        props = source.props
+        # Once a compound value needs copying, keep its memo for later nodes.
+        if (
+            not copied_values
+            and type(props) is dict
+            and all(
+                type(key) is str and type(value) in _IMMUTABLE_TREE_PROP_TYPES
+                for key, value in props.items()
+            )
+        ):
+            target.props.update(props)
+        else:
+            target.props.update(copy.deepcopy(props, copied_values))
         return target
 
     copied_root = copy_node(tree)
@@ -111,45 +117,35 @@ def copy_tree_iteratively(tree):
             target_parent.add_child(target_child)
             child_pairs.append((source_child, target_child))
         stack.extend(reversed(child_pairs))
-    return inherit_subtree_rooting(tree, copied_root)
+    if inherit_rooting:
+        return inherit_subtree_rooting(tree, copied_root)
+    return copied_root
 
 
 def read_input_text(infile):
+    """Read UTF-8 files (with an optional BOM), or already-decoded stdin/text."""
     if infile == "-":
         return sys.stdin.read()
     if os.path.isfile(infile):
-        with open(infile) as handle:
+        with open(infile, encoding="utf-8-sig") as handle:
             return handle.read()
     return str(infile)
 
 
 def _convert_paml_figtree_intervals(text):
-    """Convert PAML/FigTree age intervals into ETE-readable NHX properties."""
+    """Normalize annotations through the same quote-aware syntax as convert."""
+    from nwkit.tree_formats import transform_annotations
 
-    def replace_interval(match):
-        kind = "HPD" if match.group(1).upper() == "95%HPD" else "equal-tail"
-        return (
-            "{}[&&NHX:age_ci_low={}:age_ci_high={}:age_ci_kind={}:age_ci_level=0.95]"
-        ).format(match.group(4) or "", match.group(2), match.group(3), kind)
-
-    return _PAML_FIGTREE_INTERVAL_PATTERN.sub(replace_interval, str(text))
+    return transform_annotations(str(text), parser=True)
 
 
 def _extract_paml_main_output_tree(text):
-    marker_index = text.find(_PAML_MAIN_OUTPUT_MARKER)
-    if marker_index < 0:
+    from nwkit.tree_formats import MCMCTREE_MARKER, read_container, select_mcmctree_tree
+
+    if MCMCTREE_MARKER.search(text) is None:
         return None
-    candidates = []
-    for line in text[marker_index:].splitlines()[1:]:
-        candidate = line.strip()
-        if candidate.startswith("(") and candidate.endswith(";"):
-            candidates.append(candidate)
-            if len(candidates) == 3:
-                break
-    if not candidates:
-        raise ValueError("MCMCtree output did not contain its FigTree species tree.")
-    annotated = [candidate for candidate in candidates if "[&95%" in candidate]
-    return annotated[-1] if annotated else candidates[-1]
+    _, statements = read_container(text, "mcmctree-output")
+    return select_mcmctree_tree(statements)
 
 
 def normalize_phylogenetic_tree_text(tree_text, collection=False):
@@ -167,16 +163,10 @@ def normalize_phylogenetic_tree_text(tree_text, collection=False):
     main_output_tree = _extract_paml_main_output_tree(text)
     if main_output_tree is not None:
         text = main_output_tree
-    elif re.search(r"(?im)^\s*(?:u?tree)\s+[^=]+?=", text):
-        if re.search(r"(?im)^\s*translate\b", text):
-            raise ValueError(
-                "NEXUS TRANSLATE tables are not supported; provide direct tip labels."
-            )
-        nexus_trees = _PAML_NEXUS_TREE_PATTERN.findall(text)
-        if not nexus_trees:
-            raise ValueError(
-                "NEXUS input did not contain a complete TREE or UTREE statement."
-            )
+    elif re.search(r"(?im)^\s*(?:#NEXUS\b|(?:u?tree)\s+[^=]+?=)", text):
+        from nwkit.tree_formats import read_container
+
+        _, nexus_trees = read_container(text, "figtree")
         text = "\n".join(nexus_trees if collection else nexus_trees[:1])
     else:
         lines = text.splitlines()
@@ -261,7 +251,6 @@ def read_tsv_preserving_leaf_name(path, *, preserve_columns=()):
         raise ValueError(
             "Failed to preserve the 'leaf_name' column while parsing: {}".format(path)
         )
-    dataframe = dataframe.copy()
     dataframe["leaf_name"] = raw_leaf_names
     return dataframe
 
@@ -314,11 +303,9 @@ def read_tip_table(
                 option_name, ", ".join(missing_columns)
             )
         )
-    dataframe = dataframe.copy()
-    dataframe["leaf_name"] = [
-        str(leaf_name) for leaf_name in dataframe["leaf_name"].tolist()
-    ]
-    if any(leaf_name.strip() == "" for leaf_name in dataframe["leaf_name"].tolist()):
+    leaf_names = [str(leaf_name) for leaf_name in dataframe["leaf_name"].tolist()]
+    dataframe["leaf_name"] = leaf_names
+    if any(leaf_name.strip() == "" for leaf_name in leaf_names):
         raise ValueError(
             "Column 'leaf_name' in '{}' must not contain empty values.".format(
                 option_name
@@ -347,7 +334,7 @@ def read_tip_table(
     if tree_leaf_names is not None:
         tree_leaf_names = [str(name) for name in tree_leaf_names]
         tree_leaf_set = set(tree_leaf_names)
-        table_leaf_set = set(dataframe["leaf_name"])
+        table_leaf_set = set(leaf_names)
         table_only = sorted(table_leaf_set - tree_leaf_set)
         tree_only = sorted(tree_leaf_set - table_leaf_set)
         if unmatched not in ("warn", "error", "ignore"):
@@ -374,12 +361,21 @@ def read_tip_table(
                     )
                 )
     markers = parse_table_missing_values(missing_values)
+    default_markers = markers == set(DEFAULT_TABLE_MISSING_VALUES)
     for column in dataframe.columns:
         if column == "leaf_name":
             continue
+        values = dataframe[column]
+        # A populated numeric column cannot match any default text marker.
+        if (
+            default_markers
+            and pd.api.types.is_numeric_dtype(values)
+            and not values.hasnans
+        ):
+            continue
         dataframe[column] = [
             pd.NA if is_missing_table_value(value, markers) else value
-            for value in dataframe[column].tolist()
+            for value in values.tolist()
         ]
     return dataframe, table_only, tree_only
 
@@ -543,7 +539,8 @@ def _internal_node_label_kinds(newick_text):
     has_numeric = False
     has_other = False
     i = 0
-    while i < len(text):
+    while (match := _INTERNAL_LABEL_SCAN.search(text, i)) is not None:
+        i = match.start()
         char = text[i]
         if char in ("'", '"'):
             quote_char = char
@@ -567,10 +564,6 @@ def _internal_node_label_kinds(newick_text):
                     depth -= 1
                 i += 1
             continue
-        if char != ")":
-            i += 1
-            continue
-
         j = i + 1
         while True:
             while j < len(text) and text[j].isspace():
@@ -860,10 +853,10 @@ def acquire_exclusive_lock(
     poll_seconds=DOWNLOAD_LOCK_POLL_SECONDS,
     timeout_seconds=DOWNLOAD_LOCK_TIMEOUT_SECONDS,
 ):
-    poll_seconds = int(poll_seconds)
+    poll_seconds = float(poll_seconds)
     timeout_seconds = int(timeout_seconds)
-    if poll_seconds <= 0:
-        raise ValueError("poll_seconds must be > 0.")
+    if not math.isfinite(poll_seconds) or poll_seconds <= 0:
+        raise ValueError("poll_seconds must be finite and > 0.")
     if timeout_seconds <= 0:
         raise ValueError("timeout_seconds must be > 0.")
     absolute_lock_path = os.path.abspath(os.fspath(lock_path))
@@ -1389,12 +1382,15 @@ def _tree_output_properties(tree, args, props):
         - ROOTING_PROPERTIES
         - {TREE_FORMAT_PROP}
     )
-    if rooting_needs_serialization(tree):
+    _, nhx = rooting_output_policy(tree, **rooting_output_options(args))
+    if nhx:
         properties.add(ROOTED_PROP)
     return sorted(properties)
 
 
-def write_tree(tree, args, format, quiet=False, props=None, name_quote=None):
+def write_tree(
+    tree, args, format, quiet=False, props=None, name_quote=None, parser=None
+):
     # Writing a descendant subtree must retain the input tree's interpretation.
     if ROOTED_PROP not in tree.props and tree.up is not None:
         tree = copy_tree_iteratively(tree)
@@ -1403,6 +1399,11 @@ def write_tree(tree, args, format, quiet=False, props=None, name_quote=None):
         format = int(format)
     else:
         format = int(format)
+    prefix, nhx = rooting_output_policy(tree, **rooting_output_options(args))
+    if nhx and ROOTED_PROP not in tree.props:
+        info = get_rooting_info(tree)
+        tree = copy_tree_iteratively(tree)
+        set_rooting_info(tree, info.rooted, info.source, info.declared)
     _validate_finite_tree_values(tree)
     if not quiet:
         num_leaves = len(list(tree.leaves()))
@@ -1446,7 +1447,7 @@ def write_tree(tree, args, format, quiet=False, props=None, name_quote=None):
                 node.support = None
         props = _tree_output_properties(tree, args, props)
         write_kwargs = {
-            "parser": format,
+            "parser": format if parser is None else parser,
             "format_root_node": True,
         }
         if props:
@@ -1465,13 +1466,15 @@ def write_tree(tree, args, format, quiet=False, props=None, name_quote=None):
             lambda match: str(node_name_dict[match.group(0)]),
             tree_str,
         )
+    tree_str = prefix + tree_str
     if args.outfile == "-":
         print(tree_str)
     elif hasattr(args.outfile, "write"):
         args.outfile.write(tree_str)
     else:
-        with open(args.outfile, mode="w") as f:
-            f.write(tree_str)
+        from nwkit.output_transaction import write_text_output
+
+        write_text_output(args.outfile, lambda handle: handle.write(tree_str))
 
 
 def split_newick_stream(newick_text):
@@ -1597,7 +1600,7 @@ def iter_tree_strings(infile):
     if infile == "-":
         yield from _iter_tree_handle(sys.stdin)
     elif os.path.isfile(infile):
-        with open(infile) as handle:
+        with open(infile, encoding="utf-8-sig") as handle:
             yield from _iter_tree_handle(handle)
     else:
         yield from split_newick_stream(
@@ -1605,20 +1608,29 @@ def iter_tree_strings(infile):
         )
 
 
-def read_trees(infile, format, quoted_node_names, quiet=False, *, rooted="auto"):
-    tree_text = normalize_phylogenetic_tree_text(
-        read_input_text(infile),
-        collection=True,
-    )
-    tree_strings = split_newick_stream(tree_text)
+def read_trees(
+    infile, format, quoted_node_names, quiet=False, *, rooted="auto", retain=slice(None)
+):
+    """Parse every input tree and retain the requested slice."""
+    tree_strings = read_tree_strings(infile)
     if len(tree_strings) == 0:
         raise Exception("Failed to parse the input trees.")
-    trees = [
-        read_tree(tree_string, format, quoted_node_names, quiet=True, rooted=rooted)
-        for tree_string in tree_strings
-    ]
+    selected = range(len(tree_strings))[retain]
+    trees = []
+    for index, tree_string in enumerate(tree_strings):
+        tree = read_tree(
+            tree_string, format, quoted_node_names, quiet=True, rooted=rooted
+        )
+        if index in selected:
+            trees.append(tree)
+        else:
+            # Break parent-child cycles in trees that the caller will not use.
+            for node in tree.traverse(strategy="preorder"):
+                node.up = None
+    if selected.step < 0:
+        trees.reverse()
     if not quiet:
-        sys.stderr.write("Number of input trees = {:,}\n".format(len(trees)))
+        sys.stderr.write("Number of input trees = {:,}\n".format(len(tree_strings)))
     return trees
 
 
@@ -1696,6 +1708,56 @@ def assign_branch_ids(tree, strategy="levelorder"):
     for branch_id, node in enumerate(tree.traverse(strategy=strategy)):
         node_to_branch_id[node] = branch_id
     return node_to_branch_id
+
+
+def _crown_for_names(tree, names, retained):
+    matched = set()
+    first = last = None
+    for node in tree.traverse("preorder"):
+        name = node.name
+        if name not in retained:
+            continue
+        if name in matched:
+            # Keep ETE's ambiguity diagnostic, including its traversal order.
+            return tree.common_ancestor(names)
+        matched.add(name)
+        if first is None:
+            first = node
+        last = node
+    if first is None or matched != retained:
+        return tree.common_ancestor(names)
+    # The outermost matching nodes in preorder bound the selected crown.
+    return tree.common_ancestor(first, last)
+
+
+def copy_retained_crown(tree, names, branch_id_property):
+    """Copy a trait sample's crown with branch IDs from the original tree."""
+    identifiers = assign_branch_ids(tree)
+    retained = set(names)
+    crown = _crown_for_names(tree, names, retained)
+    keep = set()
+    for node in crown.traverse("postorder"):
+        has_retained_tip = (
+            node.name in retained
+            if node.is_leaf
+            else any(child in keep for child in node.children)
+        )
+        if has_retained_tip:
+            keep.add(node)
+    # ETE deepcopy recurses through child links, even on valid deep trees.
+    copies = {}
+    for node in crown.traverse("preorder"):
+        if node not in keep:
+            continue
+        clone = type(tree)()
+        clone.props.update(node.props)
+        clone.add_prop(branch_id_property, identifiers[node])
+        copies[node] = clone
+        if node is not crown:
+            copies[node.up].add_child(clone)
+    root = copies[crown]
+    set_rooting_info(root, True, source="operation")
+    return root
 
 
 def get_node_class(node):
@@ -2146,10 +2208,10 @@ def get_subtree_leaf_name_sets(tree):
             index = name_to_index[node.name]
             intervals[node] = (index, index + 1)
         else:
-            child_intervals = [intervals[child] for child in node.get_children()]
+            # DFS leaf order makes each child's interval contiguous and ordered.
             intervals[node] = (
-                min(start for start, _ in child_intervals),
-                max(end for _, end in child_intervals),
+                intervals[node.children[0]][0],
+                intervals[node.children[-1]][1],
             )
     return {
         node: _LeafIntervalSet(leaf_names, name_to_index, start, end)
@@ -2174,6 +2236,27 @@ def get_subtree_leaf_bitmasks(tree, leaf_name_to_bit):
     return subtree_leaf_bitmasks
 
 
+def get_subtree_leaf_index_extents(tree, tip_order):
+    """Return inclusive index bounds and tip counts in the given leaf order."""
+    extents = {}
+    for node in tree.traverse(strategy="postorder"):
+        if node.is_leaf:
+            index = tip_order[node.name]
+            extents[node] = (index, index, 1)
+        else:
+            children = iter(node.children)
+            first, last, count = extents[next(children)]
+            for child in children:
+                child_first, child_last, child_count = extents[child]
+                if child_first < first:
+                    first = child_first
+                if child_last > last:
+                    last = child_last
+                count += child_count
+            extents[node] = (first, last, count)
+    return extents
+
+
 def validate_unique_named_leaves(tree, option_name, context=""):
     leaf_names = list(tree.leaf_names())
     if len(leaf_names) != len(set(leaf_names)):
@@ -2195,9 +2278,9 @@ def validate_unique_named_leaves(tree, option_name, context=""):
 
 def read_item_per_line_file(file):
     if file == "-":
-        out = sys.stdin.read().splitlines()
+        out = sys.stdin.read().removeprefix("\ufeff").splitlines()
     else:
-        with open(file, "r") as f:
+        with open(file, encoding="utf-8-sig") as f:
             out = f.read().splitlines()
     out = [o.strip() for o in out if o.strip() != ""]
     return out
@@ -2236,9 +2319,37 @@ def get_subtree_sci_name_sets(tree):
     return subtree_sci_name_sets
 
 
+def _duplication_confidence_score(first, second):
+    overlap = len(first.intersection(second))
+    union = len(first) + len(second) - overlap
+    return overlap / union if union else 0.0
+
+
+def annotate_duplication_confidence_and_count_species(tree):
+    """Annotate internal nodes and return the species count of each subtree."""
+    active: dict[Tree, set[Any]] = {}
+    counts = {}
+    for node in tree.traverse(strategy="postorder"):
+        if node.is_leaf:
+            names = {node.props.get("species_label", node.props.get("sci_name"))}
+        else:
+            groups = [active.pop(child) for child in node.get_children()]
+            score = _duplication_confidence_score(*groups) if len(groups) == 2 else 0.0
+            node.add_props(dup_conf_score=score)
+            # Counts and scores are fixed below this node, so reuse the largest set.
+            names = max(groups, key=len)
+            for group in groups:
+                if group is not names:
+                    names.update(group)
+        active[node] = names
+        counts[node] = len(names)
+    return counts
+
+
 def annotate_duplication_confidence_scores(tree, subtree_sci_name_sets=None):
     if subtree_sci_name_sets is None:
-        subtree_sci_name_sets = get_subtree_sci_name_sets(tree)
+        annotate_duplication_confidence_and_count_species(tree)
+        return tree
     for node in tree.traverse():
         if node.is_leaf:
             continue
@@ -2248,12 +2359,9 @@ def annotate_duplication_confidence_scores(tree, subtree_sci_name_sets=None):
             continue
         sp_child1 = subtree_sci_name_sets[children[0]]
         sp_child2 = subtree_sci_name_sets[children[1]]
-        num_union = len(sp_child1.union(sp_child2))
-        num_intersection = len(sp_child1.intersection(sp_child2))
-        if num_union == 0:
-            node.add_props(dup_conf_score=0.0)
-        else:
-            node.add_props(dup_conf_score=num_intersection / num_union)
+        node.add_props(
+            dup_conf_score=_duplication_confidence_score(sp_child1, sp_child2)
+        )
     return tree
 
 

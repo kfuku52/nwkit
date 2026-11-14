@@ -1,0 +1,40 @@
++ /Users/kf/miniforge3/bin/python -m ruff check nwkit tests setup.py tools
+All checks passed!
++ /Users/kf/miniforge3/bin/python -m ruff format --check nwkit tests setup.py tools
+485 files already formatted
++ /Users/kf/miniforge3/bin/python -m mypy
+Success: no issues found in 220 source files
++ /Users/kf/miniforge3/bin/python -m pytest -q --durations=20 --durations-min=0.05 -m  tests/test_reconciliation_exports.py tests/test_gaussian_whitening.py tests/test_gaussian.py tests/test_gaussian_tree.py tests/test_numerical_invariance.py tests/test_shift_layout_intervals.py tests/test_whitening_levels.py tests/test_shift_screen_blocks.py tests/test_native_optimization_audit.py tests/test_shift_native_bootstrap.py tests/test_shift_native_cli.py tests/test_shift_native_fit.py tests/test_shift_native_heuristic.py tests/test_shift_native_ic.py tests/test_shift_native_identifiability.py tests/test_shift_native_limits.py tests/test_shift_native_model.py tests/test_shift_native_path.py tests/test_shift_native_quick.py tests/test_shift_native_rank.py tests/test_shift_native_search.py
+........................................................................ [ 21%]
+........................................................................ [ 43%]
+........................................................................ [ 64%]
+........................................................................ [ 86%]
+..............................................                           [100%]
+=============================== warnings summary ===============================
+../../../../../../../Users/kf/miniforge3/lib/python3.10/site-packages/requests/__init__.py:113
+  /Users/kf/miniforge3/lib/python3.10/site-packages/requests/__init__.py:113: RequestsDependencyWarning: urllib3 (2.6.3) or chardet (7.5.1)/charset_normalizer (3.4.4) doesn't match a supported version!
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+============================= slowest 20 durations =============================
+15.46s call     tests/test_shift_native_path.py::test_free_alpha_covariance_seed_is_counted_in_refit_budget
+7.48s call     tests/test_shift_native_path.py::test_path_memory_guard_precedes_design_allocation
+1.92s call     tests/test_gaussian_whitening.py::test_gls_matches_dense_mean_covariance_and_likelihood
+1.73s call     tests/test_shift_native_cli.py::test_auto_shift_cap_and_convergent_search_match_explicit_cap
+1.72s call     tests/test_reconciliation_exports.py::test_candidate_export_rejects_non_file_target[-]
+1.60s call     tests/test_shift_native_cli.py::test_native_search_cli_and_resume_reject_changed_input
+1.52s call     tests/test_shift_native_bootstrap.py::test_global_null_gate_rejects_large_gain_and_accepts_small_gain
+1.41s call     tests/test_reconciliation_exports.py::test_candidate_export_rejects_invalid_request_before_replacing_files[same_output]
+1.34s call     tests/test_reconciliation_exports.py::test_candidate_export_rejects_non_file_target[]
+1.33s call     tests/test_reconciliation_exports.py::test_candidate_export_rejects_invalid_request_before_replacing_files[input_overlap]
+1.26s call     tests/test_reconciliation_exports.py::test_all_optimal_roots_are_exported_without_distance_changes
+1.25s call     tests/test_reconciliation_exports.py::test_candidate_export_rejects_invalid_request_before_replacing_files[wrong_method]
+1.24s call     tests/test_reconciliation_exports.py::test_candidate_export_rejects_invalid_request_before_replacing_files[bad_species]
+1.22s call     tests/test_shift_native_cli.py::test_native_support_repeats_global_gate_with_distinct_seeds
+0.93s call     tests/test_native_optimization_audit.py::test_screen_harness_rejects_invalid_sizes_and_colliding_outputs[extra2-.json]
+0.90s call     tests/test_native_optimization_audit.py::test_screen_harness_rejects_invalid_sizes_and_colliding_outputs[extra1-.json]
+0.88s call     tests/test_native_optimization_audit.py::test_screen_harness_rejects_invalid_sizes_and_colliding_outputs[extra0-.npz]
+0.69s call     tests/test_shift_native_bootstrap.py::test_calibration_replays_search_deterministically_and_does_not_discard_failures
+0.68s call     tests/test_shift_native_cli.py::test_native_aic_global_null_gate_cli_and_resume
+0.66s call     tests/test_shift_native_bootstrap.py::test_simulator_matches_independent_dense_covariance_and_original_units[OUrandomRoot-1]
+334 passed, 1 warning in 59.08s

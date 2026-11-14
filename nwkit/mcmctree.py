@@ -2,7 +2,7 @@ import math
 import re
 import sys
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
@@ -13,6 +13,7 @@ from nwkit.time_tree import (
     AGE_PROPERTY_NAMES,
     CALIBRATION_PROPERTY_NAMES,
     annotate_mcmctree_calibrations,
+    node_age_estimates_and_ranges,
     parse_mcmctree_calibration,
     read_mcmctree_posterior,
     summarize_mcmctree_posterior,
@@ -53,7 +54,7 @@ def _finite_number(
 ):
     try:
         number = float(value)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError("{} must be numeric.".format(label)) from exc
     if not math.isfinite(number):
         raise ValueError("{} must be finite.".format(label))
@@ -73,7 +74,8 @@ def _finite_number(
 def _number_text(value):
     if isinstance(value, str):
         return value.strip()
-    return "{:g}".format(float(value))
+    text = repr(float(value))
+    return text[:-2] if text.endswith(".0") else text
 
 
 def _validated_tail_probability(args, side):
@@ -772,18 +774,275 @@ def apply_min_clade_prop(tree, min_clade_prop):
     return tree
 
 
+def _validate_angiocal_options(args, *, vertlife=False):
+    enabled = getattr(args, "angiocal", "no") != "no"
+    if enabled and vertlife:
+        raise ValueError("'--angiocal' and '--vertlife-dataset' cannot be combined.")
+    extra = any(
+        getattr(args, key, None) not in (None, "")
+        for key in ("angiocal_file", "calibration_map_tsv")
+    ) or (not vertlife and getattr(args, "report", None) not in (None, ""))
+    if not enabled:
+        if (
+            extra
+            or getattr(args, "time_unit_ma", 1) != 1
+            or not getattr(args, "angiocal_taxonomy", True)
+        ):
+            raise ValueError(
+                "AngioCal input/report/unit options require '--angiocal v1.0'."
+            )
+        return False
+    if getattr(args, "timetree", "no") != "no":
+        raise ValueError("'--angiocal' and '--timetree' cannot be combined.")
+    if getattr(args, "posterior", None) or any(
+        getattr(args, key, None) is not None
+        for key in ("left_species", "right_species", "lower_bound", "upper_bound")
+    ):
+        raise ValueError(
+            "'--angiocal' cannot be combined with posterior or manual calibration selection."
+        )
+    if getattr(args, "report", None) == "-":
+        raise ValueError("'--report' requires a file path.")
+    if getattr(args, "angiocal_file", None) == "-":
+        raise ValueError("'--angiocal-file' requires an XLS or TSV file path.")
+    if getattr(args, "calibration_map_tsv", None) == "-" and any(
+        getattr(args, key, None) == "-" for key in ("infile", "species_map_tsv")
+    ):
+        raise ValueError("Only one input may read from STDIN.")
+    from nwkit.angiocal import positive_number
+
+    positive_number(getattr(args, "time_unit_ma", 1), "'--time-unit-ma'")
+    _finite_number(args.lower_offset, "'--lower-offset'", minimum=0)
+    _finite_number(
+        args.lower_scale, "'--lower-scale'", minimum=0, minimum_inclusive=False
+    )
+    return True
+
+
+def _mcmctree_internal_name(name):
+    calibration = parse_mcmctree_calibration(name)
+    return "'" + calibration["raw"] + "'" if calibration else ""
+
+
+def _serialize_mcmctree(tree, args):
+    from ete4.parser import newick
+
+    # Omit lengths and placeholder names structurally; preserve quoted tips.
+    name = {"pname": "name", "read": newick.unquote, "write": newick.quote}
+    empty = {"pname": "", "read": str, "write": lambda value: ""}
+    parser = {
+        "leaf": [name, empty],
+        "internal": [{**name, "write": _mcmctree_internal_name}, empty],
+    }
+    nwk_text = tree.write(parser=parser, format_root_node=True)
+    if args.add_header:
+        nwk_text = "{:} 1\n{}".format(len(list(tree.leaves())), nwk_text)
+    return nwk_text
+
+
+def _angiocal_main(tree, args):
+    from nwkit.angiocal import angiocal_protected_paths, load_angiocal
+    from nwkit.angiocal_constraints import (
+        add_angiocal_constraints,
+        validate_angiocal_tree,
+        write_angiocal_report,
+    )
+    from nwkit.file_paths import (
+        validate_distinct_output_paths,
+        validate_outputs_do_not_replace_inputs,
+    )
+    from nwkit.output_transaction import output_transaction, write_text_output
+
+    args._nwkit_angiocal_source = None
+    validate_angiocal_tree(tree)
+    report_path = getattr(args, "report", None)
+    outputs = [("--outfile", args.outfile), ("--report", report_path)]
+    inputs = [
+        ("--infile", args.infile),
+        ("--angiocal-file", getattr(args, "angiocal_file", None)),
+        ("--calibration-map-tsv", getattr(args, "calibration_map_tsv", None)),
+        ("--species-map-tsv", getattr(args, "species_map_tsv", None)),
+    ]
+    inputs.extend(angiocal_protected_paths(args))
+    validate_distinct_output_paths(outputs)
+    validate_outputs_do_not_replace_inputs(inputs, outputs)
+    dataset = load_angiocal(args)
+    if not getattr(args, "angiocal_file", None):
+        args._nwkit_angiocal_source = dataset.path
+    validate_outputs_do_not_replace_inputs(
+        [("AngioCal source/cache", dataset.path)], outputs
+    )
+    rows, node_count = add_angiocal_constraints(tree, dataset, args)
+    if not node_count:
+        if report_path:
+            write_text_output(
+                report_path, lambda handle: write_angiocal_report(handle, rows)
+            )
+        raise ValueError(
+            "No AngioCal constraints could be placed. Inspect '--report'; "
+            "use biological clade labels or '--calibration-map-tsv' for crown nodes."
+        )
+    for node in tree.traverse():
+        if not node.is_leaf:
+            calibration = parse_mcmctree_calibration(node.name)
+            node.name = "'" + calibration["raw"] + "'" if calibration else "NoName"
+    nwk_text = _serialize_mcmctree(tree, args)
+    paths = [path for _, path in outputs if path not in (None, "", "-")]
+    with output_transaction(paths) as staged:
+        if args.outfile != "-":
+            staged.write_text(args.outfile, lambda handle: handle.write(nwk_text))
+        if report_path:
+            staged.write_text(
+                report_path, lambda handle: write_angiocal_report(handle, rows)
+            )
+    if args.outfile == "-":
+        print(nwk_text)
+
+
+def _validate_vertlife_options(args):
+    enabled = getattr(args, "vertlife_dataset", None) is not None
+    if not enabled and getattr(args, "vertlife_file", None) is not None:
+        raise ValueError("'--vertlife-file' requires '--vertlife-dataset'.")
+    if not enabled:
+        return False
+    if getattr(args, "report", None) in (None, "", "-"):
+        raise ValueError("'--vertlife-dataset' requires '--report' with a file path.")
+    if (
+        getattr(args, "timetree", "no") != "no"
+        or getattr(args, "posterior", None)
+        or getattr(args, "add_header", False)
+        or getattr(args, "min_clade_prop", 0) != 0
+        or any(
+            getattr(args, key, None) is not None
+            for key in ("left_species", "right_species", "lower_bound", "upper_bound")
+        )
+    ):
+        raise ValueError(
+            "VertLife age reports cannot be combined with posterior or calibration options."
+        )
+    return True
+
+
+def _vertlife_age_rows(tree, reference):
+    from nwkit.util import assign_branch_ids, get_subtree_leaf_index_extents
+
+    # Reference clades occupy contiguous ranges in their own DFS tip order.
+    # A target with the same bounds and tip count contains exactly that range,
+    # because every tip label occurs once in each tree.
+    tip_order = {name: i for i, name in enumerate(reference.leaf_names())}
+    target_extents = get_subtree_leaf_index_extents(tree, tip_order)
+    source_extents = get_subtree_leaf_index_extents(reference, tip_order)
+    by_extent = {
+        extent: node for node, extent in source_extents.items() if not node.is_leaf
+    }
+    ages, ranges = node_age_estimates_and_ranges(reference)
+    for node, branch_id in assign_branch_ids(tree).items():
+        if node.is_leaf:
+            continue
+        extent = target_extents[node]
+        source = by_extent.get(extent)
+        status = "clade_absent"
+        low = high = age = None
+        if source is not None:
+            status = "child_clades_differ"
+            if {target_extents[child] for child in node.children} == {
+                source_extents[child] for child in source.children
+            }:
+                status = "matched"
+                low, high = ranges[source]
+                age = ages[source]
+        yield branch_id, node.name, extent[2], status, age, low, high
+
+
+def _mcmctree_vertlife_report(tree, args):
+    import pandas as pd
+
+    from nwkit.file_paths import (
+        validate_distinct_output_paths,
+        validate_outputs_do_not_replace_inputs,
+    )
+    from nwkit.tree_outputs import write_tree_with_tables
+    from nwkit.util import (
+        get_tree_property_names,
+        validate_unique_named_leaves,
+    )
+    from nwkit.vertlife import (
+        load_vertlife,
+        match_species,
+        precise_tree_copy_format,
+        subset_reference,
+    )
+
+    outputs = [("--outfile", args.outfile), ("--report", args.report)]
+    validate_distinct_output_paths(outputs)
+    validate_outputs_do_not_replace_inputs(
+        [
+            ("--infile", args.infile),
+            ("--species-map-tsv", getattr(args, "species_map_tsv", None)),
+        ],
+        outputs,
+    )
+    validate_unique_named_leaves(tree, option_name="--infile")
+    labels = list(tree.leaf_names())
+    if len(labels) < 2:
+        raise ValueError("VertLife age reports require at least two species.")
+    dataset, reference = load_vertlife(args)
+    matches = match_species(reference, labels, args)
+    unmatched = [label for label, _, name, _ in matches if name is None]
+    if unmatched:
+        raise ValueError("Unmatched VertLife labels: {}.".format(", ".join(unmatched)))
+    label_counts = Counter(name for _, _, name, _ in matches)
+    duplicates = sorted(name for name, count in label_counts.items() if count > 1)
+    if duplicates:
+        raise ValueError(
+            "VertLife age reports require one tip per species: {}.".format(
+                ", ".join(duplicates)
+            )
+        )
+    reference = subset_reference(reference, label_counts)
+    by_species = {name: label for label, _, name, _ in matches}
+    for leaf in reference.leaves():
+        leaf.name = by_species[leaf.name]
+    report = pd.DataFrame(
+        _vertlife_age_rows(tree, reference),
+        columns=(
+            "branch_id",
+            "node_name",
+            "num_tips",
+            "status",
+            "age_ma",
+            "min_tip_path_myr",
+            "max_tip_path_myr",
+        ),
+    ).assign(dataset=dataset.id, source_doi=dataset.doi, source_sha256=dataset.sha256)
+    format, parser = precise_tree_copy_format(tree)
+    write_tree_with_tables(
+        tree,
+        args,
+        format=format,
+        props=get_tree_property_names(tree) | {"dist", "support"},
+        parser=parser,
+        tables=[(args.report, report)],
+    )
+
+
 def mcmctree_main(args):
+    vertlife_enabled = _validate_vertlife_options(args)
+    angiocal_enabled = _validate_angiocal_options(args, vertlife=vertlife_enabled)
     tree = read_tree(
         args.infile,
         args.format,
         args.quoted_node_names,
         rooted=getattr(args, "input_rooted", "auto"),
     )
-    if len(tree.get_children()) != 2:
+    if not vertlife_enabled and len(tree.get_children()) != 2:
         raise ValueError(
             "The input tree should be rooted with exactly two root children."
         )
     require_rooted(tree, "The input tree should be rooted.")
+    if vertlife_enabled:
+        _mcmctree_vertlife_report(tree, args)
+        return
     posterior_path = getattr(args, "posterior", None)
     if posterior_path not in (None, ""):
         if posterior_path == "-" and args.infile == "-":
@@ -833,6 +1092,9 @@ def mcmctree_main(args):
     )
     _tail_probability(args, "lower")
     _tail_probability(args, "upper")
+    if angiocal_enabled:
+        _angiocal_main(tree, args)
+        return
     for node in tree.traverse():
         if not node.is_leaf:
             if parse_mcmctree_calibration(node.name) is not None:
@@ -861,17 +1123,9 @@ def mcmctree_main(args):
         )
     tree = remove_constraint_equal_upper(tree)
     tree = apply_min_clade_prop(tree, min_clade_prop=args.min_clade_prop)
-    # Use parser=1 and post-process for MCMCtree format
-    nwk_text = tree.write(parser=1, format_root_node=True)
-    nwk_text = re.sub(r":[\d.eE+-]+", "", nwk_text)  # Remove branch lengths
-    nwk_text = nwk_text.replace("'''", "'")  # Clean up triple quotes from ete4
-    nwk_text = nwk_text.replace("NoName", "")
-    nwk_text = nwk_text.replace('"', "")
-    if args.add_header:
-        num_leaf = len(list(tree.leaves()))
-        nwk_text = "{:} 1\n{}".format(num_leaf, nwk_text)
+    nwk_text = _serialize_mcmctree(tree, args)
     if args.outfile == "-":
         print(nwk_text)
     else:
-        with open(args.outfile, mode="w") as f:
+        with open(args.outfile, mode="w", encoding="utf-8") as f:
             f.write(nwk_text)

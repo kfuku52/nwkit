@@ -1,0 +1,18 @@
+{
+  "job": {
+    "kind": "pilot",
+    "traits": 2,
+    "truth": "different",
+    "scenario": "aligned",
+    "replicate": 0,
+    "mode": "shared",
+    "repeats": 3,
+    "timeout": 180
+  },
+  "implementation_sha256": "7f8431b6dda064e71863fbe2a3ef286afe1d6bbda2fa3973c01d836c635edd46",
+  "status": "failed",
+  "error": "ValueError: Joint process covariance must be positive semidefinite.",
+  "stage": "fixture",
+  "elapsed_seconds_not_benchmark": 0.0016531249857507646,
+  "worker_peak_rss_kib": 144000
+}

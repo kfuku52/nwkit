@@ -28,6 +28,7 @@ from nwkit.conventions import (
     regression_bundle_lock_path,
     regression_bundle_paths,
 )
+from nwkit.event_regression import resolve_event_weighting
 from nwkit.evolution import (
     build_evolutionary_covariance,
     build_sparse_evolutionary_model,
@@ -38,7 +39,6 @@ from nwkit.evolution import (
 )
 from nwkit.gaussian import (
     DiagonalLowRankCovariance,
-    draw_from_factor,
     finite_mean,
     is_diagonal,
     sample_standard_errors,
@@ -67,6 +67,7 @@ from nwkit.output_transaction import output_transaction
 from nwkit.phylogenetic_glmm import (
     SCALAR_RESPONSE_FAMILIES,
     fit_phylogenetic_glmm,
+    glmm_inference_metadata,
     summarize_glmm_coefficient,
     summarize_glmm_omnibus,
     summarize_glmm_threshold,
@@ -79,6 +80,7 @@ from nwkit.regress import (
     SENSITIVITY_COLUMNS,
     fit_reconciled_pgls,
 )
+from nwkit.regression_observation import read_censoring_models
 from nwkit.rsc_diagnostics import (
     ORIGIN_DIAGNOSTIC_COLUMNS,
     build_categorical_origin_diagnostics,
@@ -385,6 +387,9 @@ def _effective_raw_args(args: Any) -> SimpleNamespace:
                 "response_within_variance", values.get("within_variance")
             ),
         }
+    )
+    values["event_weighting"] = resolve_event_weighting(
+        values.get("event_weighting"), values.get("regression_estimand")
     )
     defaults = {
         "batch": None,
@@ -1038,6 +1043,13 @@ def _build_species_contrasts(
     )
 
 
+def _is_diagonal_sampling_covariance(covariance):
+    """Recognize exact diagonal sampling matrices without a dense temporary."""
+    diagonal = np.diag(covariance)
+    # Preserve array_equal's rejection of NaNs, including on the diagonal.
+    return is_diagonal(covariance) and np.array_equal(diagonal, diagonal)
+
+
 def _prepare_reconciled_tip_predictors(
     args: Any,
     species_tree,
@@ -1087,7 +1099,7 @@ def _prepare_reconciled_tip_predictors(
         if np.all(sampling_diagonal > 0.0) and (
             isinstance(sampling, DiagonalLowRankCovariance)
             or sampling.ndim == 1
-            or np.array_equal(sampling, np.diag(sampling_diagonal))
+            or _is_diagonal_sampling_covariance(sampling)
         ):
             sparse_prior = build_sparse_evolutionary_model(
                 species_tree,
@@ -1591,8 +1603,8 @@ def _prepare_response_tip_simulator(
                 if sampling_covariance.ndim == 1
                 else np.diag(sampling_covariance)
             )
-            if sampling_covariance.ndim == 1 or np.array_equal(
-                sampling_covariance, np.diag(sampling_diagonal)
+            if sampling_covariance.ndim == 1 or _is_diagonal_sampling_covariance(
+                sampling_covariance
             ):
                 if np.any(sampling_diagonal < 0.0):
                     raise ValueError("Bootstrap tip sampling covariance is not PSD.")
@@ -1621,7 +1633,6 @@ def _simulate_response_tip_values(
     gene_tree,
     fit_state: dict[str, Any],
     simulator: dict[str, Any],
-    contrast_mean: np.ndarray,
     rng: np.random.Generator,
 ) -> dict[str, float]:
     leaf_names = simulator["leaf_names"]
@@ -1646,23 +1657,21 @@ def _simulate_response_tip_values(
     estimate_by_node = {leaf: float(base[index]) for index, leaf in enumerate(leaves)}
     contrast_by_node = {}
     branches = simulator["branches"]
-    for node, numerator, denominator, _, first_weight, second_weight in branches:
+    for node, numerator, denominator, _, first_weight, second_weight, _, _ in branches:
         first = estimate_by_node[numerator]
         second = estimate_by_node[denominator]
         contrast_by_node[node] = first - second
         estimate_by_node[node] = first_weight * first + second_weight * second
 
-    contrast_error = draw_from_factor(
-        fit_state["fitted_covariance_factor"],
-        rng.standard_normal(len(contrast_mean)),
-        rng=rng,
-    )
-    target = contrast_mean + contrast_error
-    for node, value in zip(simulator["selected_nodes"], target, strict=True):
-        contrast_by_node[node] = float(value)
+    contrast_mean = fit_state["design"] @ fit_state["beta"]
+    shared_error = fit_state["sample_shared_effects"](rng)
+    for node, mean, extra in zip(
+        simulator["selected_nodes"], contrast_mean, shared_error, strict=True
+    ):
+        contrast_by_node[node] += float(mean + extra)
 
     reconstructed = {gene_tree: estimate_by_node[gene_tree]}
-    for node, numerator, denominator, _, first_weight, second_weight in reversed(
+    for node, numerator, denominator, _, first_weight, second_weight, _, _ in reversed(
         branches
     ):
         contrast = contrast_by_node[node]
@@ -1684,7 +1693,7 @@ def _bootstrap_shape_refitted_coefficients(
     diagnostics: dict[str, Any],
     fit_state: dict[str, Any],
     seed: int,
-) -> np.ndarray:
+) -> tuple[np.ndarray, np.ndarray]:
     parameter = float(diagnostics["parameter"])
     simulator = _prepare_response_tip_simulator(
         args,
@@ -1696,12 +1705,10 @@ def _bootstrap_shape_refitted_coefficients(
         fit_state["contrast_ids"],
     )
     reconciliation_by_id = simulator["reconciliation_by_id"]
-    contrast_mean = fit_state["design"] @ fit_state["beta"]
     rng = np.random.default_rng(seed)
     coefficients: list[np.ndarray] = []
-    maximum_attempts = max(
-        args.bootstrap_replicates * 3, args.bootstrap_replicates + 10
-    )
+    standard_errors: list[np.ndarray] = []
+    maximum_attempts = args.bootstrap_replicates
     attempts = 0
     while len(coefficients) < args.bootstrap_replicates and attempts < maximum_attempts:
         attempts += 1
@@ -1709,7 +1716,6 @@ def _bootstrap_shape_refitted_coefficients(
             gene_tree,
             fit_state,
             simulator,
-            contrast_mean,
             rng,
         )
         simulated_inputs = _GeneResponseInputs(
@@ -1741,6 +1747,9 @@ def _bootstrap_shape_refitted_coefficients(
         coefficients.append(
             bootstrap_result.loc[predictors, "coefficient"].to_numpy(dtype=float)
         )
+        standard_errors.append(
+            bootstrap_result.loc[predictors, "standard_error"].to_numpy(dtype=float)
+        )
     if len(coefficients) < args.bootstrap_replicates:
         raise ValueError(
             "Shape-parameter-refitted bootstrap produced only {} successful fits "
@@ -1748,7 +1757,9 @@ def _bootstrap_shape_refitted_coefficients(
                 len(coefficients), attempts, response
             )
         )
-    return np.asarray(coefficients, dtype=float)
+    return np.asarray(coefficients, dtype=float), np.asarray(
+        standard_errors, dtype=float
+    )
 
 
 def _apply_shape_refitted_bootstrap(
@@ -1772,7 +1783,7 @@ def _apply_shape_refitted_bootstrap(
         if diagnostics["parameter_status"] != "estimated":
             continue
         fit_state = fit_states[(str(args.tree_id), response)]
-        bootstrap = _bootstrap_shape_refitted_coefficients(
+        bootstrap, bootstrap_standard_errors = _bootstrap_shape_refitted_coefficients(
             args,
             gene_tree,
             reconciliation,
@@ -1797,15 +1808,49 @@ def _apply_shape_refitted_bootstrap(
             row_index = updated.index[selected].item()
             coefficient = float(updated.loc[row_index, "coefficient"])
             samples = bootstrap[:, predictor_index]
-            standard_error = float(standard_errors[predictor_index])
-            updated.loc[row_index, "standard_error"] = standard_error
-            updated.loc[row_index, "confidence_interval_lower"] = float(
-                lower_bounds[predictor_index]
+            studentized = args.inference == "studentized-bootstrap"
+            standard_error = (
+                float(updated.loc[row_index, "standard_error"])
+                if studentized
+                else float(standard_errors[predictor_index])
             )
-            updated.loc[row_index, "confidence_interval_upper"] = float(
-                upper_bounds[predictor_index]
+            if studentized:
+                sample_errors = bootstrap_standard_errors[:, predictor_index]
+                if (
+                    not np.isfinite(standard_error)
+                    or standard_error <= 0.0
+                    or not np.isfinite(sample_errors).all()
+                    or np.any(sample_errors <= 0.0)
+                ):
+                    raise ValueError(
+                        "Studentized shape bootstrap has a non-positive standard error."
+                    )
+                pivot = (samples - coefficient) / sample_errors
+                lower_pivot, upper_pivot = np.quantile(pivot, [alpha, 1.0 - alpha])
+                lower = coefficient - upper_pivot * standard_error
+                upper = coefficient - lower_pivot * standard_error
+            else:
+                lower, upper = (
+                    lower_bounds[predictor_index],
+                    upper_bounds[predictor_index],
+                )
+                updated.loc[row_index, "standard_error"] = standard_error
+            updated.loc[row_index, "confidence_interval_lower"] = float(lower)
+            updated.loc[row_index, "confidence_interval_upper"] = float(upper)
+            updated.loc[row_index, "inference_method"] = args.inference
+            updated.loc[row_index, "p_value_method"] = (
+                "studentized-parametric-bootstrap"
+                if studentized
+                else "centered-parametric-bootstrap"
             )
-            updated.loc[row_index, "inference_method"] = "parametric-bootstrap"
+            updated.loc[row_index, "interval_method"] = (
+                "studentized-parametric-bootstrap"
+                if studentized
+                else "parametric-percentile"
+            )
+            updated.loc[row_index, "bootstrap_attempted"] = args.bootstrap_replicates
+            updated.loc[row_index, "bootstrap_succeeded"] = args.bootstrap_replicates
+            updated.loc[row_index, "bootstrap_failed"] = 0
             updated.loc[row_index, "response_evolution_parameter_bootstrap_refit"] = (
                 "yes"
             )
@@ -1815,10 +1860,15 @@ def _apply_shape_refitted_bootstrap(
                 updated.loc[row_index, "inference_status"] = "zero-model-variance"
             else:
                 updated.loc[row_index, "statistic"] = coefficient / standard_error
-                centered = samples - coefficient
+                centered = pivot if studentized else samples - coefficient
+                observed = coefficient / standard_error if studentized else coefficient
                 updated.loc[row_index, "p_value"] = float(
-                    (1 + np.sum(np.abs(centered) >= abs(coefficient)))
+                    (1 + np.sum(np.abs(centered) >= abs(observed)))
                     / (len(centered) + 1)
+                )
+                probability = float(updated.loc[row_index, "p_value"])
+                updated.loc[row_index, "monte_carlo_se"] = math.sqrt(
+                    probability * (1.0 - probability) / (len(centered) + 1)
                 )
                 updated.loc[row_index, "inference_status"] = "ok"
     return updated
@@ -1971,6 +2021,7 @@ def _reconciled_pglmm_base_row(
         "small_sample_warning": "yes" if n_species < 20 else "no",
         "inference_status": "ok",
         "model": "reconciled-tip-pglmm",
+        **glmm_inference_metadata(fit),
         "inference_method": fit.coefficient_inference,
         "reml": "no",
         "evolutionary_rate": fit.component_variances["phylogenetic"],
@@ -2058,6 +2109,7 @@ def _reconciled_pglmm_rows(
             row = base.copy()
             row.update(
                 {
+                    **glmm_inference_metadata(fit, flat_index),
                     "response_level": level,
                     "term": term.name,
                     "source_term": term.source,
@@ -2159,7 +2211,13 @@ def _reconciled_pglmm_rows(
                 "p_value": omnibus_p_value,
                 "confidence_interval_lower": "",
                 "confidence_interval_upper": "",
-                "inference_method": "wald",
+                "inference_method": "wald" if omnibus_status == "ok" else "none",
+                "p_value_method": "asymptotic-chi-square"
+                if omnibus_status == "ok"
+                else "none",
+                "interval_method": "not-applicable",
+                "coefficient_profile": "",
+                "monte_carlo_se": np.nan,
                 "inference_status": omnibus_status,
             }
         )
@@ -2411,10 +2469,12 @@ def _fit_one_reconciled_categorical_response(
             if response not in response_censor_upper
             else [response_censor_upper[response][name] for name in gene_tip_names]
         ),
+        censoring_model=getattr(args, "censoring_models", {}).get(response),
         dispersion=response_dispersions.get(response),
         zero_probability=response_zero_probabilities.get(response),
         coefficient_penalty=args.coefficient_penalty,
         coefficient_prior_sd=args.coefficient_prior_sd,
+        coefficient_profile_grid=getattr(args, "coefficient_profile_grid", None),
         inference=args.inference,
         confidence_level=args.confidence_level,
         bootstrap_replicates=args.bootstrap_replicates,
@@ -2710,7 +2770,7 @@ def _fit_reconciled_multivariate_responses(
         if isinstance(covariance, DiagonalLowRankCovariance):
             fixed_diagonal[start : start + len(gene_tip_names)] = covariance.diagonal
             fixed_loading_blocks.append(sparse.csr_matrix(covariance.low_rank))
-        elif covariance.ndim == 1 or is_diagonal(covariance):
+        elif covariance.ndim == 1 or _is_diagonal_sampling_covariance(covariance):
             fixed_diagonal[start : start + len(gene_tip_names)] = (
                 covariance if covariance.ndim == 1 else np.diag(covariance)
             )
@@ -2813,9 +2873,10 @@ def _validate_reconciled_response_modes(raw_args, responses, response_specs):
     if continuous and raw_args.inference in {
         "likelihood-ratio",
         "profile-likelihood",
+        "null-bootstrap",
     }:
         raise ValueError(
-            "Gaussian reconciled PGLS supports Wald or parametric-bootstrap inference."
+            "Gaussian reconciled PGLS supports Wald, parametric-bootstrap, or studentized-bootstrap inference."
         )
     return continuous, non_gaussian
 
@@ -2912,6 +2973,8 @@ def _fit_reconciled_gaussian_responses(
             {},
             False,
         )
+    if getattr(raw_args, "coefficient_profile_grid", None) is not None:
+        raise ValueError("Coefficient profile grids require non-Gaussian responses.")
     gene_contrasts, sampling_covariance, response_diagnostics = _build_gene_contrasts(
         raw_args,
         gene_tree,
@@ -2923,7 +2986,10 @@ def _fit_reconciled_gaussian_responses(
         encoded_predictor_names,
         predictor_group_uncertainties,
     )
-    refit_shape = raw_args.inference == "parametric-bootstrap" and any(
+    refit_shape = raw_args.inference in {
+        "parametric-bootstrap",
+        "studentized-bootstrap",
+    } and any(
         diagnostics["parameter_status"] == "estimated"
         for diagnostics in response_diagnostics.values()
     )
@@ -3112,6 +3178,14 @@ def build_regression_pipeline(
         censor_upper=response_upper_columns,
         dispersions=response_dispersions,
         zero_probabilities=response_zero_probabilities,
+    )
+    raw_args.censoring_models = read_censoring_models(
+        raw_args,
+        response_specs,
+        [str(leaf.name) for leaf in gene_tree.leaves()],
+        lambda columns: _read_gene_auxiliary_values(
+            raw_args, gene_tree, columns, allow_missing=True
+        ),
     )
     if raw_args.coefficient_prior_sd <= 0.0:
         raise ValueError("--coefficient-prior-sd must be positive.")

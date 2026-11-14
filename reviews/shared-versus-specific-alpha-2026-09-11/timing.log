@@ -1,0 +1,12 @@
+{"completed": 1, "total": 12, "status": "complete", "job": {"kind": "timing", "traits": 2, "truth": "shared", "scenario": "opposed", "replicate": 0, "mode": "shared", "repeats": 3, "timeout": 120}}
+{"completed": 2, "total": 12, "status": "complete", "job": {"kind": "timing", "traits": 2, "truth": "shared", "scenario": "opposed", "replicate": 0, "mode": "trait-specific", "repeats": 3, "timeout": 120}}
+{"completed": 3, "total": 12, "status": "complete", "job": {"kind": "timing", "traits": 2, "truth": "different", "scenario": "opposed", "replicate": 0, "mode": "trait-specific", "repeats": 3, "timeout": 120}}
+{"completed": 4, "total": 12, "status": "complete", "job": {"kind": "timing", "traits": 2, "truth": "different", "scenario": "opposed", "replicate": 0, "mode": "shared", "repeats": 3, "timeout": 120}}
+{"completed": 5, "total": 12, "status": "timeout", "job": {"kind": "timing", "traits": 5, "truth": "shared", "scenario": "opposed", "replicate": 0, "mode": "trait-specific", "repeats": 3, "timeout": 120}}
+{"completed": 6, "total": 12, "status": "complete", "job": {"kind": "timing", "traits": 5, "truth": "shared", "scenario": "opposed", "replicate": 0, "mode": "shared", "repeats": 3, "timeout": 120}}
+{"completed": 7, "total": 12, "status": "complete", "job": {"kind": "timing", "traits": 5, "truth": "different", "scenario": "opposed", "replicate": 0, "mode": "shared", "repeats": 3, "timeout": 120}}
+{"completed": 8, "total": 12, "status": "timeout", "job": {"kind": "timing", "traits": 5, "truth": "different", "scenario": "opposed", "replicate": 0, "mode": "trait-specific", "repeats": 3, "timeout": 120}}
+{"completed": 9, "total": 12, "status": "complete", "job": {"kind": "timing", "traits": 10, "truth": "shared", "scenario": "opposed", "replicate": 0, "mode": "shared", "repeats": 3, "timeout": 120}}
+{"completed": 10, "total": 12, "status": "timeout", "job": {"kind": "timing", "traits": 10, "truth": "shared", "scenario": "opposed", "replicate": 0, "mode": "trait-specific", "repeats": 3, "timeout": 120}}
+{"completed": 11, "total": 12, "status": "timeout", "job": {"kind": "timing", "traits": 10, "truth": "different", "scenario": "opposed", "replicate": 0, "mode": "trait-specific", "repeats": 3, "timeout": 120}}
+{"completed": 12, "total": 12, "status": "complete", "job": {"kind": "timing", "traits": 10, "truth": "different", "scenario": "opposed", "replicate": 0, "mode": "shared", "repeats": 3, "timeout": 120}}

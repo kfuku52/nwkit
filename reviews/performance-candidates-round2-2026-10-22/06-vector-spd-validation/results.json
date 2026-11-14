@@ -1,0 +1,498 @@
+{
+  "environment": {
+    "python": "3.12.14 (main, Aug 25 2026, 13:50:33) [Clang 22.1.3 ]",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "numpy": "2.5.4",
+    "scipy": "1.17.1",
+    "pandas": "3.0.6",
+    "nwkit": "0.43.55",
+    "nwkit_source": "/tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/__init__.py",
+    "baseline_commit": "86c8f2c537769d852c17e2c789340f6c9de4ef54",
+    "timing_limit": "Exploratory host-local measurements; unrelated CPU jobs are active.",
+    "memory_limit": "tracemalloc peak is not complete RSS or all native allocations."
+  },
+  "source_sha256": "8486d781215b3f86b7530ef20ffbf72a69cb4d5ba6578fd696b174e1e3d42427",
+  "source_scope": "immutable baseline vector_gaussian._propagate",
+  "cases": [
+    {
+      "case": "8tips-2traits-exact-shared",
+      "tips": 8,
+      "traits": 2,
+      "scope": "complete condition_vector_tree including compiled-tree, observation, pruning and smoothing setup",
+      "comparison": {
+        "nodes": "exact",
+        "means": "exact",
+        "covariances": "exact",
+        "log_likelihood": "exact",
+        "conditional_slopes": "exact",
+        "conditional_intercepts": "exact",
+        "conditional_covariances": "exact",
+        "parents": "exact",
+        "seeded_joint_draws": "exact"
+      },
+      "timing": {
+        "loops_per_sample": 11,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.004367443182590333,
+            0.0015444659035314214,
+            0.002427553006617183,
+            0.0015113143652508204,
+            0.0015084772709418428,
+            0.003844340913929045,
+            0.00443753409622745
+          ],
+          "median_seconds": 0.002427553006617183,
+          "min_seconds": 0.0015084772709418428,
+          "max_seconds": 0.00443753409622745
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.0017197045434096997,
+            0.0014516931789165194,
+            0.0019353636307641864,
+            0.002009007635272362,
+            0.0015663900835947557,
+            0.0019167159070176158,
+            0.005276276550086384
+          ],
+          "median_seconds": 0.0019167159070176158,
+          "min_seconds": 0.0014516931789165194,
+          "max_seconds": 0.005276276550086384
+        },
+        "speedup": 1.2665168571561671
+      },
+      "peak_bytes": {
+        "baseline": 32734,
+        "candidate": 29706
+      }
+    },
+    {
+      "case": "64tips-4traits-partial-unique",
+      "tips": 64,
+      "traits": 4,
+      "scope": "complete condition_vector_tree including compiled-tree, observation, pruning and smoothing setup",
+      "comparison": {
+        "nodes": "exact",
+        "means": "exact",
+        "covariances": "exact",
+        "log_likelihood": "exact",
+        "conditional_slopes": "exact",
+        "conditional_intercepts": "exact",
+        "conditional_covariances": "exact",
+        "parents": "exact",
+        "seeded_joint_draws": "exact"
+      },
+      "timing": {
+        "loops_per_sample": 2,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.01890562498010695,
+            0.02063522901153192,
+            0.019926146022044122,
+            0.016810124972835183,
+            0.016743062529712915,
+            0.019899895996786654,
+            0.02268289600033313
+          ],
+          "median_seconds": 0.019899895996786654,
+          "min_seconds": 0.016743062529712915,
+          "max_seconds": 0.02268289600033313
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.015990541491191834,
+            0.021702791505958885,
+            0.02291743748355657,
+            0.019629562506452203,
+            0.01587187498807907,
+            0.01589658297598362,
+            0.01853335404302925
+          ],
+          "median_seconds": 0.01853335404302925,
+          "min_seconds": 0.01587187498807907,
+          "max_seconds": 0.02291743748355657
+        },
+        "speedup": 1.07373419568766
+      },
+      "peak_bytes": {
+        "baseline": 173559,
+        "candidate": 173207
+      }
+    },
+    {
+      "case": "64tips-16traits-noisy-shared",
+      "tips": 64,
+      "traits": 16,
+      "scope": "complete condition_vector_tree including compiled-tree, observation, pruning and smoothing setup",
+      "comparison": {
+        "nodes": "exact",
+        "means": "exact",
+        "covariances": "exact",
+        "log_likelihood": "exact",
+        "conditional_slopes": "exact",
+        "conditional_intercepts": "exact",
+        "conditional_covariances": "exact",
+        "parents": "exact",
+        "seeded_joint_draws": "exact"
+      },
+      "timing": {
+        "loops_per_sample": 2,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.019101042009424418,
+            0.01940829149680212,
+            0.019787333498243243,
+            0.01948810397880152,
+            0.019503729010466486,
+            0.019175437511876225,
+            0.018328145961277187
+          ],
+          "median_seconds": 0.01940829149680212,
+          "min_seconds": 0.018328145961277187,
+          "max_seconds": 0.019787333498243243
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.018281062482856214,
+            0.018092291487846524,
+            0.019740749965421855,
+            0.019114270980935544,
+            0.02171766699757427,
+            0.019376166455913335,
+            0.01728381251450628
+          ],
+          "median_seconds": 0.019114270980935544,
+          "min_seconds": 0.01728381251450628,
+          "max_seconds": 0.02171766699757427
+        },
+        "speedup": 1.015382251102322
+      },
+      "peak_bytes": {
+        "baseline": 1188035,
+        "candidate": 1187499
+      }
+    },
+    {
+      "case": "128tips-32traits-partial-unique",
+      "tips": 128,
+      "traits": 32,
+      "scope": "complete condition_vector_tree including compiled-tree, observation, pruning and smoothing setup",
+      "comparison": {
+        "nodes": "exact",
+        "means": "exact",
+        "covariances": "exact",
+        "log_likelihood": "exact",
+        "conditional_slopes": "exact",
+        "conditional_intercepts": "exact",
+        "conditional_covariances": "exact",
+        "parents": "exact",
+        "seeded_joint_draws": "exact"
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.05898941692430526,
+            0.06079183297697455,
+            0.060695666004903615,
+            0.057428167085163295,
+            0.05748087493702769,
+            0.05665008304640651,
+            0.05683445907197893
+          ],
+          "median_seconds": 0.05748087493702769,
+          "min_seconds": 0.05665008304640651,
+          "max_seconds": 0.06079183297697455
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.06012795807328075,
+            0.057092417031526566,
+            0.05579025007318705,
+            0.055136292008683085,
+            0.05296608293429017,
+            0.052839625044725835,
+            0.052813207963481545
+          ],
+          "median_seconds": 0.055136292008683085,
+          "min_seconds": 0.052813207963481545,
+          "max_seconds": 0.06012795807328075
+        },
+        "speedup": 1.0425234059623627
+      },
+      "peak_bytes": {
+        "baseline": 8811215,
+        "candidate": 8810819
+      }
+    },
+    {
+      "case": "32tips-64traits-noisy-flat",
+      "tips": 32,
+      "traits": 64,
+      "scope": "complete condition_vector_tree including compiled-tree, observation, pruning and smoothing setup",
+      "comparison": {
+        "nodes": "exact",
+        "means": "exact",
+        "covariances": "exact",
+        "log_likelihood": "exact",
+        "conditional_slopes": "exact",
+        "conditional_intercepts": "exact",
+        "conditional_covariances": "exact",
+        "parents": "exact",
+        "seeded_joint_draws": "exact"
+      },
+      "timing": {
+        "loops_per_sample": 2,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.025138312485069036,
+            0.02345481247175485,
+            0.02240506251109764,
+            0.022950979007873684,
+            0.024726208474021405,
+            0.02422000002115965,
+            0.023130042012780905
+          ],
+          "median_seconds": 0.02345481247175485,
+          "min_seconds": 0.02240506251109764,
+          "max_seconds": 0.025138312485069036
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.02732345851836726,
+            0.022303520527202636,
+            0.021297562518157065,
+            0.021716916526202112,
+            0.02202702104113996,
+            0.021329917013645172,
+            0.021201020514126867
+          ],
+          "median_seconds": 0.021716916526202112,
+          "min_seconds": 0.021201020514126867,
+          "max_seconds": 0.02732345851836726
+        },
+        "speedup": 1.0800249862109068
+      },
+      "peak_bytes": {
+        "baseline": 8604820,
+        "candidate": 8604556
+      }
+    },
+    {
+      "case": "64tips-4traits-zero-branch-control",
+      "tips": 64,
+      "traits": 4,
+      "scope": "complete condition_vector_tree including compiled-tree, observation, pruning and smoothing setup",
+      "comparison": {
+        "nodes": "exact",
+        "means": "exact",
+        "covariances": "exact",
+        "log_likelihood": "exact",
+        "conditional_slopes": "exact",
+        "conditional_intercepts": "exact",
+        "conditional_covariances": "exact",
+        "parents": "exact",
+        "seeded_joint_draws": "exact"
+      },
+      "timing": {
+        "loops_per_sample": 7,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.004832160709026668,
+            0.005224428572026747,
+            0.005170642863959074,
+            0.004966779844835401,
+            0.004920267865860036,
+            0.00508263085170516,
+            0.004799458431079984
+          ],
+          "median_seconds": 0.004966779844835401,
+          "min_seconds": 0.004799458431079984,
+          "max_seconds": 0.005224428572026747
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.005291797569952905,
+            0.005162446427025965,
+            0.005065208284317383,
+            0.00516278571116605,
+            0.0054958631517365575,
+            0.005085988136540566,
+            0.004798815435996013
+          ],
+          "median_seconds": 0.005162446427025965,
+          "min_seconds": 0.004798815435996013,
+          "max_seconds": 0.0054958631517365575
+        },
+        "speedup": 0.9620980895479653
+      },
+      "peak_bytes": {
+        "baseline": 162584,
+        "candidate": 162320
+      }
+    }
+  ],
+  "edge_checks": [
+    {
+      "case": "d1-exact-flatFalse",
+      "exact": true
+    },
+    {
+      "case": "d1-exact-flatTrue",
+      "exact": true
+    },
+    {
+      "case": "d1-noisy-flatFalse",
+      "exact": true
+    },
+    {
+      "case": "d1-noisy-flatTrue",
+      "exact": true
+    },
+    {
+      "case": "d1-partial-flatFalse",
+      "exact": true
+    },
+    {
+      "case": "d1-partial-flatTrue",
+      "exact": true
+    },
+    {
+      "case": "d2-exact-flatFalse",
+      "exact": true
+    },
+    {
+      "case": "d2-exact-flatTrue",
+      "exact": true
+    },
+    {
+      "case": "d2-noisy-flatFalse",
+      "exact": true
+    },
+    {
+      "case": "d2-noisy-flatTrue",
+      "exact": true
+    },
+    {
+      "case": "d2-partial-flatFalse",
+      "exact": true
+    },
+    {
+      "case": "d2-partial-flatTrue",
+      "exact": true
+    },
+    {
+      "case": "d8-exact-flatFalse",
+      "exact": true
+    },
+    {
+      "case": "d8-exact-flatTrue",
+      "exact": true
+    },
+    {
+      "case": "d8-noisy-flatFalse",
+      "exact": true
+    },
+    {
+      "case": "d8-noisy-flatTrue",
+      "exact": true
+    },
+    {
+      "case": "d8-partial-flatFalse",
+      "exact": true
+    },
+    {
+      "case": "d8-partial-flatTrue",
+      "exact": true
+    },
+    {
+      "case": "asymmetric",
+      "exception": {
+        "type": "ValueError",
+        "message": "Branch covariance must be symmetric."
+      }
+    },
+    {
+      "case": "indefinite",
+      "exception": {
+        "type": "ValueError",
+        "message": "Branch covariance must be positive definite."
+      }
+    },
+    {
+      "case": "negative",
+      "exception": {
+        "type": "ValueError",
+        "message": "Branch covariance must be positive definite."
+      }
+    },
+    {
+      "case": "singular_nonzero",
+      "exception": {
+        "type": "ValueError",
+        "message": "Branch covariance must be positive definite."
+      }
+    },
+    {
+      "case": "nan_upper",
+      "exception": {
+        "type": "ValueError",
+        "message": "Branch covariance must have shape (2, 2) and finite values."
+      }
+    },
+    {
+      "case": "inf_diagonal",
+      "exception": {
+        "type": "ValueError",
+        "message": "Branch covariance must have shape (2, 2) and finite values."
+      }
+    },
+    {
+      "case": "wrong_shape",
+      "exception": {
+        "type": "ValueError",
+        "message": "Branch covariance must have shape (2, 2) and finite values."
+      }
+    },
+    {
+      "case": "tiny_spd",
+      "result": {
+        "type": null,
+        "finite": true
+      },
+      "exact": true
+    },
+    {
+      "case": "huge_spd",
+      "result": {
+        "type": null,
+        "finite": true
+      },
+      "exact": true
+    },
+    {
+      "case": "nearly_singular_spd",
+      "result": {
+        "type": null,
+        "finite": true
+      },
+      "exact": true
+    },
+    {
+      "case": "within_symmetry_tolerance",
+      "result": {
+        "type": null,
+        "finite": true
+      },
+      "exact": true
+    }
+  ]
+}

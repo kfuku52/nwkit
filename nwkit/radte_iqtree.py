@@ -1,0 +1,652 @@
+"""IQ-TREE likelihood/derivative adapter; reconciliation and dating stay in NWKIT.
+
+Uses unmodified IQ-TREE 3 standard IQ2MC exports for the model prefit. Repeated
+evaluations can use a separately installed library worker. MCMCTree is never
+launched. Exported lengths and bipartitions are verified for both interfaces.
+"""
+
+import gzip
+import re
+import shutil
+import subprocess
+import tempfile
+from collections import OrderedDict
+from itertools import chain, islice
+from pathlib import Path
+
+import numpy as np
+from ete4 import Tree
+
+from nwkit.fasta import parse_fasta
+from nwkit.radte_sequence import read_alignment
+from nwkit.util import get_subtree_leaf_bitmasks
+
+BASES = {
+    "JC": "dna",
+    "HKY": "dna",
+    "GTR": "dna",
+    "F81": "dna",
+    "POISSON": "protein",
+    "LG": "protein",
+    "WAG": "protein",
+    "JTT": "protein",
+    "GY": "codon",
+    "MG": "codon",
+    "ECMK07": "codon",
+    "ECMREST": "codon",
+}
+ALIASES = {"jc69": "JC", "gy94": "GY", "lg-f": "LG+F", "ecmrest": "ECMrest"}
+TOKEN = re.compile(r"([A-Za-z0-9]+)(?:\{([0-9.eE,+-]+)\})?")
+
+
+def model_tokens(model):
+    tokens = TOKEN.findall(model)
+    reconstructed = "+".join(
+        name + ("{" + values + "}" if values else "") for name, values in tokens
+    )
+    if (
+        reconstructed.upper() != model.upper()
+        or not tokens
+        or tokens[0][0].upper() not in BASES
+    ):
+        raise ValueError(
+            "Unsupported IQ-TREE dating model; use a supported reversible single model with +F/+I/+Gk/+Rk."
+        )
+    base, parameters = tokens[0]
+    if parameters:
+        allowed_counts = {"GY": {1, 2}, "MG": {1}, "HKY": {1}, "GTR": {6}}
+        if len(parameters.split(",")) not in allowed_counts.get(base.upper(), set()):
+            raise ValueError("Unsupported IQ-TREE base-model parameter list.")
+    seen = set()
+    for name, parameters in tokens[1:]:
+        name = name.upper()
+        kind = "F" if name in {"F", "FQ", "F1X4", "F3X4"} else name[:1]
+        if (
+            kind not in {"F", "I", "G", "R"}
+            or kind in seen
+            or (kind in {"G", "R"} and not re.fullmatch(r"[GR][2-9][0-9]*", name))
+            or (kind == "I" and name != "I")
+            or (kind == "F" and name not in {"F", "FQ", "F1X4", "F3X4"})
+        ):
+            raise ValueError("Unsupported or repeated IQ-TREE model modifier: " + name)
+        if kind == "F" and parameters:
+            raise ValueError(
+                "Explicit frequency vectors are not supported by this IQ-TREE adapter."
+            )
+        seen.add(kind)
+    if {"G", "R"} <= seen:
+        raise ValueError("Choose Gamma or FreeRate, not both.")
+    return tokens
+
+
+def requested_model(args):
+    if getattr(args, "iqtree_model", None):
+        controls = (
+            "kappa",
+            "omega",
+            "codon_frequencies",
+            "gtr_exchangeabilities",
+            "gamma_shape",
+            "gamma_categories",
+        )
+        if any(getattr(args, key, None) is not None for key in controls):
+            raise ValueError(
+                "--iqtree-model specifies the complete model; omit separate frequency/rate/model-parameter controls."
+            )
+        model_tokens(args.iqtree_model)
+        return args.iqtree_model
+    from nwkit.radte_sequence_fit import default_sequence_model
+
+    base = args.substitution_model or default_sequence_model(args.alignment)
+    model = ALIASES.get(base, base.upper())
+    if base == "gy94":
+        if (args.omega is None) != (args.kappa is None):
+            raise ValueError(
+                "IQ-TREE GY94 requires both --omega and --kappa fixed, or neither."
+            )
+        if args.omega is not None:
+            model += f"{{{args.omega},{args.kappa}}}"
+    elif args.omega is not None:
+        raise ValueError("--omega requires GY94.")
+    if args.kappa is not None and base != "gy94":
+        if base != "hky":
+            raise ValueError("--kappa applies only to HKY or GY94.")
+        model += f"{{{args.kappa}}}"
+    if args.gtr_exchangeabilities is not None:
+        if base != "gtr":
+            raise ValueError("--gtr-exchangeabilities requires GTR.")
+        model += "{" + args.gtr_exchangeabilities + "}"
+    codon = base in {"gy94", "ecmk07", "ecmrest"}
+    if codon:
+        freq = args.codon_frequencies or ("f3x4" if base == "gy94" else "model")
+        if freq != "model":
+            model += "+" + freq.upper()
+    elif args.codon_frequencies is not None or args.genetic_code is not None:
+        raise ValueError("Codon controls require a codon model.")
+    categories = args.gamma_categories if args.gamma_categories is not None else 4
+    if categories < 1:
+        raise ValueError("Gamma categories must be positive.")
+    if categories > 1:
+        model += f"+G{categories}"
+        if args.gamma_shape is not None:
+            model += f"{{{args.gamma_shape}}}"
+    model_tokens(model)
+    return model
+
+
+def checkpoint(path):
+    """Read only the scalar/array fields needed from IQ-TREE's checkpoint."""
+    result = {}
+    section = ""
+    with gzip.open(path, "rt") as handle:
+        for line in handle:
+            if line.startswith(" ") and ": " in line:
+                key, value = line.lstrip().rstrip("\n").split(": ", 1)
+                result[section + "." + key] = value
+            elif line.rstrip().endswith(":"):
+                section = line.strip()[:-1]
+    return result
+
+
+def freeze_model(model, data):
+    tokens = model_tokens(model)
+    base, values = tokens[0]
+    upper = base.upper()
+    if upper == "GY":
+        # Even a user-fixed omega alone leaves kappa free in IQ-TREE.
+        values = data["ModelCodon.omega"] + "," + data["ModelCodon.kappa"]
+    if not values:
+        if upper in {"GY", "MG"}:
+            values = data["ModelCodon.omega"]
+            if upper == "GY":
+                values += "," + data["ModelCodon.kappa"]
+        elif upper in {"GTR", "HKY"}:
+            rates = [float(x) for x in data["ModelDNA.rates"].split(",")]
+            values = (
+                ",".join(format(x, ".12g") for x in rates)
+                if upper == "GTR"
+                else format(rates[1] / rates[0], ".12g")
+            )
+
+    def rate_value(field):
+        matches = [
+            value
+            for key, value in data.items()
+            if key.startswith("Rate") and key.endswith("." + field)
+        ]
+        if len(matches) != 1:
+            raise ValueError("Unsupported IQ-TREE rate checkpoint: " + field)
+        return matches[0]
+
+    frozen = base + ("{" + values + "}" if values else "")
+    for name, values in tokens[1:]:
+        if not values and name.upper().startswith("G"):
+            values = rate_value("gamma_shape")
+        elif not values and name.upper().startswith("R"):
+            props = rate_value("prop").split(",")
+            rates = rate_value("rates").split(",")
+            values = ",".join(
+                x.strip() for pair in zip(props, rates, strict=True) for x in pair
+            )
+        elif not values and name.upper() == "I":
+            values = rate_value("p_invar")
+        frozen += "+" + name + ("{" + values + "}" if values else "")
+    return frozen
+
+
+def split_key(node, names: frozenset[str]):
+    side = frozenset(str(n.name) for n in node.leaves())
+    other: frozenset[str] = names - side
+    first, second = tuple(sorted(side)), tuple(sorted(other))
+    return min((first, second), key=lambda value: (len(value), value))
+
+
+def _canonical_split_mask(side, all_tips):
+    return min(side, all_tips ^ side)
+
+
+def _match_split_masks(keys, expected, edge_keys, error):
+    index_by_split = {key: index for index, key in enumerate(keys)}
+    if len(index_by_split) != len(keys) or index_by_split.keys() != expected:
+        raise ValueError(error)
+    return np.array([index_by_split[key] for key in edge_keys])
+
+
+def read_export(prefix, *, single_tip_root=False, derivatives=True):
+    export = Path(str(prefix) + ".mcmctree.hessian")
+    if not export.is_file():
+        raise ValueError(
+            "IQ-TREE did not produce its required IQ2MC derivative export."
+        )
+    layout_error = "Unsupported IQ-TREE Hessian export layout."
+    with export.open() as handle:
+        stripped = (line.strip() for line in handle)
+        lines = (line for line in stripped if line)
+        header = list(islice(lines, 6))
+        if len(header) < 6:
+            raise ValueError("Incomplete IQ-TREE derivative export.")
+        tree = Tree(header[1], parser=1)
+        nodes = [node for node in tree.traverse("preorder") if node is not tree]
+        if single_tip_root:
+            # IQ2MC puts the first root-tip edge last in its derivative vectors,
+            # while leaving that tip first in the accompanying Newick.
+            nodes = nodes[1:] + nodes[:1]
+        count = 2 * int(header[0]) - 3
+        lengths = np.fromstring(header[2], sep=" ")
+        gradient = np.fromstring(header[3], sep=" ")
+        if (
+            len(nodes) != count
+            or lengths.shape != (count,)
+            or gradient.shape != (count,)
+            or header[4] != "Hessian"
+        ):
+            raise ValueError(layout_error)
+        hessian = np.empty((count, count))
+        rows = chain(header[5:], lines)
+        for index in range(count):
+            line = next(rows, None)
+            if line is None:
+                raise ValueError(layout_error)
+            row = np.fromstring(line, sep=" ")
+            if row.shape != (count,):
+                raise ValueError(layout_error)
+            hessian[index] = row
+        if next(rows, None) is not None:
+            raise ValueError(layout_error)
+    if not np.allclose(lengths, [n.dist for n in nodes], rtol=1e-5, atol=1e-9):
+        raise ValueError("IQ-TREE Hessian branch order does not match its tree.")
+    if not np.isfinite(lengths).all():
+        raise ValueError("Nonfinite IQ-TREE lengths export.")
+    if derivatives:
+        validate_derivatives(lengths, gradient, hessian)
+    data = checkpoint(str(prefix) + ".ckp.gz")
+    score = float(data["CandidateSet.0"].split()[0])
+    if not np.isfinite(score):
+        raise ValueError("Nonfinite IQ-TREE likelihood export.")
+    np.negative(gradient, out=gradient)
+    np.negative(hessian, out=hessian)
+    return tree, nodes, lengths, -score, gradient, hessian, data
+
+
+def validate_derivatives(lengths, gradient, hessian):
+    for label, array in (("gradient", gradient), ("Hessian", hessian)):
+        if not np.isfinite(array).all():
+            raise ValueError(
+                f"Nonfinite IQ-TREE {label} export at lengths {lengths.tolist()}."
+            )
+
+
+class IQTreeLikelihood:
+    def __init__(
+        self,
+        chronology,
+        alignment,
+        model,
+        *,
+        executable="iqtree3",
+        threads=1,
+        seed=1,
+        genetic_code=1,
+        interface="auto",
+        worker=None,
+    ):
+        from nwkit.iqtree_library import select_worker
+
+        if genetic_code != 1:
+            raise ValueError("IQ-TREE dating currently supports genetic code 1 only.")
+        if threads < 1:
+            raise ValueError("IQ-TREE threads must be positive.")
+        self.worker_info = select_worker(interface, worker)
+        self.interface = (
+            "library-worker-v1" if self.worker_info else "standard-cli-iq2mc"
+        )
+        self.worker = None
+        self.executable = shutil.which(executable)
+        if not self.executable:
+            raise ValueError("IQ-TREE executable not found: " + executable)
+        self.chronology = chronology
+        self.edges = chronology.edges
+        self.edge_id = {node: i for i, node in enumerate(self.edges)}
+        self.model = model
+        self.alphabet = BASES[model_tokens(model)[0][0].upper()]
+        self.names = [str(n.name) for n in chronology.gene.leaves()]
+        if len(self.names) < 3:
+            raise ValueError(
+                "IQ-TREE sequence dating requires at least three gene sequences."
+            )
+        read_alignment(alignment, self.names, self.alphabet)
+        with open(alignment, encoding="utf-8") as handle:
+            records = parse_fasta(handle)
+        self.sequences = {
+            r.name: "".join("".join(r.raw.splitlines()[1:]).split()).upper()
+            for r in records
+        }
+        self.aliases = {name: f"T{i}" for i, name in enumerate(self.names)}
+        self.all_aliases = frozenset(self.aliases.values())
+        self._alias_positions = {
+            alias: index for index, alias in enumerate(self.aliases.values())
+        }
+        self._full_alias_mask = (1 << len(self._alias_positions)) - 1
+        source_positions = {
+            tip.name: self._alias_positions[self.aliases[str(tip.name)]]
+            for tip in chronology.gene.leaves()
+        }
+        source_keys = {
+            node: _canonical_split_mask(mask, self._full_alias_mask)
+            for node, mask in get_subtree_leaf_bitmasks(
+                chronology.gene, source_positions
+            ).items()
+            if node is not chronology.gene
+        }
+        self._source_split_keys = set(source_keys.values())
+        self._edge_split_keys = tuple(source_keys[node] for node in self.edges)
+        self.threads, self.seed = threads, seed
+        self._temporary = tempfile.TemporaryDirectory(prefix="nwkit-iqtree-")
+        self.directory = Path(self._temporary.name)
+        self.alignment = self.directory / "alignment.fa"
+        self.alignment.write_text(
+            "".join(
+                f">{self.aliases[name]}\n{self.sequences[name]}\n"
+                for name in self.names
+            )
+        )
+        self.cache = OrderedDict()
+        self.evaluations = 0
+        self.version = self._command(["--version"]).splitlines()[0]
+        version = re.search(r"version\s+(\d+)\.", self.version, re.IGNORECASE)
+        if version is None or int(version.group(1)) < 3:
+            self._temporary.cleanup()
+            raise ValueError("IQ-TREE 3 or later is required: " + self.version)
+        self.initial_lengths = np.array([node.dist for node in self.edges])
+        # Model prefit and its frozen-model check consume lengths, model
+        # parameters and likelihood only, not the IQ2MC derivative export.
+        fitted = self._evaluate(
+            self.initial_lengths, model, fixed=False, derivatives=False
+        )
+        try:
+            self.frozen_model = freeze_model(model, fitted[-1])
+        except KeyError as exc:
+            raise ValueError(
+                "IQ-TREE checkpoint lacks required model parameters."
+            ) from exc
+        self.initial_lengths = fitted[0]
+        try:
+            if self.worker_info:
+                self._start_worker()
+                checked = self._worker_evaluate(self.initial_lengths)
+            else:
+                checked = self._evaluate(
+                    self.initial_lengths,
+                    self.frozen_model,
+                    fixed=True,
+                    derivatives=False,
+                )
+        except BaseException:
+            self.close()
+            raise
+        if abs(checked[1] - fitted[1]) > 1e-4:
+            self.close()
+            raise ValueError(
+                "IQ-TREE frozen-model likelihood does not reproduce the fitted model."
+            )
+        self.prefit_nll = checked[1]
+        self.fitted_checkpoint = fitted[-1]
+
+    def close(self):
+        if self.worker is not None:
+            self.worker.close()
+        self._temporary.cleanup()
+
+    def _start_worker(self):
+        from nwkit.iqtree_worker import IQTreeWorker
+
+        treepath = self.directory / "worker.nwk"
+        treepath.write_text(self._newick(self.initial_lengths))
+        self.worker = IQTreeWorker(
+            [
+                self.worker_info["executable"],
+                "-s",
+                str(self.alignment),
+                "--seqtype",
+                {"dna": "DNA", "protein": "AA", "codon": "CODON"}[self.alphabet],
+                "-m",
+                self.frozen_model,
+                "-te",
+                str(treepath),
+                "-blfix",
+                "--prefix",
+                str(self.directory / "worker"),
+                "-T",
+                str(self.threads),
+                "--seed",
+                str(self.seed),
+                "-keep-ident",
+                "--safe",
+                "-prec",
+                "50",
+                "-blmin",
+                "1e-12",
+            ]
+        )
+
+        error = "IQ-TREE library worker changed the fixed topology or sequence set."
+        keys = []
+        for side in self.worker.splits:
+            if not side <= self.all_aliases:
+                raise ValueError(error)
+            mask = sum(1 << self._alias_positions[alias] for alias in side)
+            keys.append(_canonical_split_mask(mask, self._full_alias_mask))
+        self.worker_mapping = _match_split_masks(
+            keys, set(self._edge_split_keys), self._edge_split_keys, error
+        )
+        combined = np.bincount(self.worker_mapping, weights=self.initial_lengths)
+        if not np.allclose(combined, self.worker.lengths, rtol=1e-7, atol=1e-12):
+            raise ValueError(
+                "IQ-TREE library worker changed fixed initial branch lengths."
+            )
+
+    def _worker_evaluate(self, lengths):
+        assert self.worker is not None
+        combined = np.bincount(self.worker_mapping, weights=lengths)
+        nll, gradient, diagonal = self.worker.evaluate(combined)
+        self.evaluations += 1
+        return lengths.copy(), nll, gradient, diagonal, self.worker_mapping, {}
+
+    def _command(self, args):
+        result = subprocess.run(
+            [self.executable, *args],
+            text=True,
+            capture_output=True,
+            timeout=600,
+            check=False,
+        )
+        if result.returncode:
+            raise ValueError(
+                "IQ-TREE failed: " + (result.stdout + result.stderr)[-6000:]
+            )
+        return result.stdout
+
+    def _newick(self, lengths):
+        root = self.chronology.gene
+        parts = []
+        for is_post, node in root.iter_prepostorder():
+            if is_post:
+                parts.append(")")
+            else:
+                if node is not root and node is not node.up.children[0]:
+                    parts.append(",")
+                if not node.is_leaf:
+                    parts.append("(")
+                    continue
+                parts.append(self.aliases[str(node.name)])
+            index = self.edge_id.get(node)
+            if index is not None:
+                parts.append(":" + format(lengths[index], ".17g"))
+        parts.append(";")
+        return "".join(parts)
+
+    def _export_edge_mapping(self, tree, nodes):
+        """Map rooted input edges to the export's unrooted derivative order."""
+        error = "IQ-TREE changed the sequence set or fixed topology."
+        if set(tree.leaf_names()) != self.all_aliases:
+            raise ValueError(error)
+        masks = get_subtree_leaf_bitmasks(tree, self._alias_positions)
+        keys = [
+            _canonical_split_mask(masks[node], self._full_alias_mask) for node in nodes
+        ]
+        return _match_split_masks(
+            keys, self._source_split_keys, self._edge_split_keys, error
+        )
+
+    def _evaluate(self, lengths, model, *, fixed, derivatives=True):
+        with tempfile.TemporaryDirectory(dir=self.directory) as scratch:
+            prefix = Path(scratch) / "run"
+            treepath = Path(scratch) / "tree.nwk"
+            treepath.write_text(self._newick(lengths))
+            command = [
+                "-s",
+                str(self.alignment),
+                "--seqtype",
+                {"dna": "DNA", "protein": "AA", "codon": "CODON"}[self.alphabet],
+                "-m",
+                model,
+                "-te",
+                str(treepath),
+                "--dating",
+                "mcmctree",
+                "--prefix",
+                str(prefix),
+                "-T",
+                str(self.threads),
+                "--seed",
+                str(self.seed),
+                "-keep-ident",
+                "--safe",
+                # IQ-TREE serializes internal trees with fixed decimal places.
+                # Preserve the tiny positive lengths explored by the clock fit.
+                "-prec",
+                "50",
+                "-blmin",
+                "1e-12",
+            ]
+            if fixed:
+                command += ["-blfix"]
+            self._command(command)
+            tree, nodes, exported, nll, gradient, hessian, data = read_export(
+                prefix,
+                single_tip_root=self.chronology.gene.children[0].is_leaf,
+                derivatives=derivatives,
+            )
+        mapping = self._export_edge_mapping(tree, nodes)
+        combined = np.bincount(mapping, weights=lengths)
+        # Newick has more precision except when tiny lengths round to zero.
+        exported = np.array(
+            [
+                node.dist if node.dist > 1e-8 else length
+                for node, length in zip(nodes, exported, strict=True)
+            ]
+        )
+        if fixed and not np.allclose(combined, exported, rtol=1e-7, atol=1e-9):
+            raise ValueError("IQ-TREE changed fixed branch lengths.")
+        fitted_lengths = exported[mapping] * lengths / combined[mapping]
+        self.evaluations += 1
+        return fitted_lengths, nll, gradient, hessian, mapping, data
+
+    def evaluate(self, lengths, *, derivatives=True):
+        lengths = np.asarray(lengths, dtype=float)
+        if not np.isfinite(lengths).all() or np.any(lengths <= 0):
+            raise ValueError(
+                "Sequence likelihood requires finite positive branch lengths."
+            )
+        key = lengths.tobytes()
+        if key not in self.cache:
+            self.cache[key] = (
+                self._worker_evaluate(lengths)
+                if self.worker is not None
+                else self._evaluate(
+                    lengths, self.frozen_model, fixed=True, derivatives=derivatives
+                )
+            )
+            if len(self.cache) > 32:
+                self.cache.popitem(last=False)
+        result = self.cache[key]
+        if derivatives:
+            validate_derivatives(result[0], result[2], result[3])
+        return result
+
+    def value(self, lengths):
+        # A rejected line-search trial needs only the likelihood. IQ2MC can
+        # export a finite score but nonfinite derivatives at tiny positive
+        # lengths; never pass those derivatives to the optimizer.
+        return self.evaluate(lengths, derivatives=False)[1]
+
+    def value_gradient(self, lengths):
+        _, nll, gradient, _, mapping, _ = self.evaluate(lengths)
+        return nll, gradient[mapping]
+
+    def bootstrap(self, rng):
+        width = 3 if self.alphabet == "codon" else 1
+        count = len(self.sequences[self.names[0]]) // width
+        columns = rng.integers(0, count, count)
+        path = self.directory / "bootstrap.fa"
+        path.write_text(
+            "".join(
+                f">{name}\n"
+                + "".join(
+                    self.sequences[name][i * width : (i + 1) * width] for i in columns
+                )
+                + "\n"
+                for name in self.names
+            )
+        )
+        return IQTreeLikelihood(
+            self.chronology,
+            path,
+            self.model,
+            executable=self.executable,
+            threads=self.threads,
+            seed=self.seed,
+            interface="library" if self.worker_info else "cli",
+            worker=self.worker_info["executable"] if self.worker_info else None,
+        )
+
+
+def prepare_iqtree(c, args):
+    from nwkit.radte import _hash_file
+
+    model = requested_model(args)
+    exact = IQTreeLikelihood(
+        c,
+        args.alignment,
+        model,
+        executable=getattr(args, "iqtree_executable", None) or "iqtree3",
+        threads=args.iqtree_threads
+        if getattr(args, "iqtree_threads", None) is not None
+        else 1,
+        seed=args.seed,
+        interface=getattr(args, "iqtree_interface", None) or "auto",
+        worker=getattr(args, "iqtree_worker", None),
+        genetic_code=args.genetic_code if args.genetic_code is not None else 1,
+    )
+    return exact, dict(
+        engine="iqtree",
+        model=model,
+        frozen_model=exact.frozen_model,
+        iqtree_version=exact.version,
+        iqtree_interface=exact.interface,
+        iqtree_library=exact.worker_info,
+        iqtree_binary_sha256=_hash_file(exact.executable),
+        derivative_method="iqtree-score; finite-difference-log-length-hessian",
+        alignment_sites=len(exact.sequences[exact.names[0]])
+        // (3 if exact.alphabet == "codon" else 1),
+        genetic_code=args.genetic_code if args.genetic_code is not None else 1,
+        branch_length_unit="iqtree_substitutions_per_site",
+        prefit=dict(
+            status="estimated-unclocked-conditional-model", objective=exact.prefit_nll
+        ),
+        fitted_parameters={
+            key: value
+            for key, value in exact.fitted_checkpoint.items()
+            if key.startswith(("Model", "Rate"))
+        },
+    )

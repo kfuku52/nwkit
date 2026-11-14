@@ -1,0 +1,30 @@
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m ruff check nwkit tests setup.py tools
+All checks passed!
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m ruff format --check nwkit tests setup.py tools
+589 files already formatted
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m mypy
+Success: no issues found in 260 source files
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m pytest -q --durations=20 --durations-min=0.05 -m not slow tests/test_asr.py tests/test_discrete_asr_models.py tests/test_stochastic_history.py tests/test_stochastic_history_audit.py -rs
+........................................................................ [ 50%]
+......................................................................   [100%]
+============================= slowest 20 durations =============================
+4.27s call     tests/test_discrete_asr_models.py::test_frequency_model_cli_fits_stationary_root_and_reports_equilibrium[GTR]
+3.23s call     tests/test_stochastic_history.py::test_extended_models_preserve_legacy_counts[HRM]
+2.03s call     tests/test_asr.py::TestAsrMain::test_sym_and_ard_models_estimate_rates
+1.99s call     tests/test_discrete_asr_models.py::test_frequency_model_cli_fits_stationary_root_and_reports_equilibrium[F81]
+0.94s call     tests/test_discrete_asr_models.py::test_mk_multistart_handles_penalty_regions_on_long_branches
+0.83s call     tests/test_stochastic_history.py::test_thread_workers_are_reproducible
+0.72s call     tests/test_discrete_asr_models.py::test_mk_fit_recovers_from_scipy_bound_roundoff
+0.69s call     tests/test_stochastic_history.py::test_extended_models_preserve_legacy_counts[MK-REGIME]
+0.65s call     tests/test_discrete_asr_models.py::test_directed_ard_multistart_avoids_single_start_local_optimum
+0.64s call     tests/test_stochastic_history.py::test_extended_models_preserve_legacy_counts[COVARION]
+0.59s call     tests/test_stochastic_history.py::test_extended_models_preserve_legacy_counts[PAGEL-INDEPENDENT]
+0.31s call     tests/test_stochastic_history.py::test_cli_all_outputs_and_figure[png]
+0.18s call     tests/test_stochastic_history_audit.py::test_asymmetric_three_state_bridge_matches_independent_integrals
+0.16s call     tests/test_stochastic_history.py::test_cli_all_outputs_and_figure[pdf]
+0.10s call     tests/test_stochastic_history.py::test_conditional_bridge_against_matrix_exponential
+0.09s call     tests/test_asr.py::test_structured_er_is_limited_to_large_fixed_rate_posterior[32-None]
+0.08s call     tests/test_stochastic_history.py::test_cli_all_outputs_and_figure[svg]
+
+(3 durations < 0.05s hidden.)
+142 passed in 18.41s

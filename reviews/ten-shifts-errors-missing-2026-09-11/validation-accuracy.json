@@ -1,0 +1,10 @@
+{
+  "accuracy": {
+    "outcomes": 20,
+    "retained_fits_checked": 234
+  },
+  "kernel": {
+    "cases": 16,
+    "maximum_output_error": 4.547473508864641e-13
+  }
+}

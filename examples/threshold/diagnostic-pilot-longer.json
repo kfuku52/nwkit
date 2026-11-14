@@ -1,0 +1,578 @@
+{
+  "scope": "Small fixed-threshold prior-predictive pilot; not a precise coverage or convergence guarantee",
+  "settings": {
+    "replicates": 2,
+    "samples": 2000,
+    "burnin": 1000,
+    "seed": 20260910
+  },
+  "source_sha256": {
+    "nwkit/threshold_asr.py": "16f95489e9bb7667a8b9f4e8d02dc25f55a16a2ed33d70effa0256057cd2e740",
+    "nwkit/mcmc_diagnostics.py": "799f0d36006292f92eb49e6536058b36eafa00be132401166bf4a188aff83f08",
+    "nwkit/threshold_diagnostics.py": "060c3651456da3a9f2780e32ec101de905dccbcba2a63f5f423e00a9fb901815",
+    "tools/validate_threshold_asr.py": "cb566aac7913e8380fc6cbfc2ed2c324262228c319a240bd061271c8b1904a4c"
+  },
+  "summary": {
+    "balanced": {
+      "runs": 2,
+      "failed": 0,
+      "diagnostics_passed": 2,
+      "root_coverage_all_returned": {
+        "covered": 2,
+        "available": 2,
+        "binomial_95_interval": [
+          0.15811388300841897,
+          1.0
+        ]
+      },
+      "root_coverage_diagnostics_passed": {
+        "covered": 2,
+        "available": 2,
+        "binomial_95_interval": [
+          0.15811388300841897,
+          1.0
+        ]
+      }
+    },
+    "pectinate": {
+      "runs": 2,
+      "failed": 0,
+      "diagnostics_passed": 1,
+      "root_coverage_all_returned": {
+        "covered": 2,
+        "available": 2,
+        "binomial_95_interval": [
+          0.15811388300841897,
+          1.0
+        ]
+      },
+      "root_coverage_diagnostics_passed": {
+        "covered": 1,
+        "available": 1,
+        "binomial_95_interval": [
+          0.025,
+          1.0
+        ]
+      }
+    },
+    "short_tips": {
+      "runs": 2,
+      "failed": 0,
+      "diagnostics_passed": 0,
+      "root_coverage_all_returned": {
+        "covered": 2,
+        "available": 2,
+        "binomial_95_interval": [
+          0.15811388300841897,
+          1.0
+        ]
+      },
+      "root_coverage_diagnostics_passed": {
+        "covered": 0,
+        "available": 0,
+        "binomial_95_interval": null
+      }
+    },
+    "polytomy": {
+      "runs": 2,
+      "failed": 0,
+      "diagnostics_passed": 2,
+      "root_coverage_all_returned": {
+        "covered": 2,
+        "available": 2,
+        "binomial_95_interval": [
+          0.15811388300841897,
+          1.0
+        ]
+      },
+      "root_coverage_diagnostics_passed": {
+        "covered": 2,
+        "available": 2,
+        "binomial_95_interval": [
+          0.15811388300841897,
+          1.0
+        ]
+      }
+    },
+    "rare_ordinal": {
+      "runs": 2,
+      "failed": 0,
+      "diagnostics_passed": 1,
+      "root_coverage_all_returned": {
+        "covered": 2,
+        "available": 2,
+        "binomial_95_interval": [
+          0.15811388300841897,
+          1.0
+        ]
+      },
+      "root_coverage_diagnostics_passed": {
+        "covered": 1,
+        "available": 1,
+        "binomial_95_interval": [
+          0.025,
+          1.0
+        ]
+      }
+    },
+    "missing_tip": {
+      "runs": 2,
+      "failed": 0,
+      "diagnostics_passed": 2,
+      "root_coverage_all_returned": {
+        "covered": 2,
+        "available": 2,
+        "binomial_95_interval": [
+          0.15811388300841897,
+          1.0
+        ]
+      },
+      "root_coverage_diagnostics_passed": {
+        "covered": 2,
+        "available": 2,
+        "binomial_95_interval": [
+          0.15811388300841897,
+          1.0
+        ]
+      }
+    }
+  },
+  "replicates": [
+    {
+      "case": "balanced",
+      "replicate": 0,
+      "observed": {
+        "A": "1",
+        "B": "0",
+        "C": "0",
+        "D": "0"
+      },
+      "status": "ok",
+      "nodes": [
+        {
+          "name": "R",
+          "truth": 0.03730432040582891,
+          "lower": -1.848492605647945,
+          "upper": 0.9393677800713002,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.7535
+        },
+        {
+          "name": "I",
+          "truth": -0.405840601118973,
+          "lower": -1.6744257950942982,
+          "upper": 1.2561329425927963,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.3935
+        },
+        {
+          "name": "J",
+          "truth": 0.3399710666618575,
+          "lower": -2.9805919950850472,
+          "upper": 0.446257730222531,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.9655
+        }
+      ],
+      "rhat_max": 1.0017135982075915,
+      "ess_min": 1602.890079395992
+    },
+    {
+      "case": "balanced",
+      "replicate": 1,
+      "observed": {
+        "A": "1",
+        "B": "1",
+        "C": "0",
+        "D": "1"
+      },
+      "status": "ok",
+      "nodes": [
+        {
+          "name": "R",
+          "truth": 0.4213988519442376,
+          "lower": -0.952628616679306,
+          "upper": 1.8836699028577117,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.48975
+        },
+        {
+          "name": "I",
+          "truth": 0.9842757632490289,
+          "lower": -0.4991606284227611,
+          "upper": 3.011654147717281,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.449875
+        },
+        {
+          "name": "J",
+          "truth": -0.5706074216533719,
+          "lower": -1.2556036437812756,
+          "upper": 1.707182143102686,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.1455
+        }
+      ],
+      "rhat_max": 1.002251539703257,
+      "ess_min": 1567.907351801427
+    },
+    {
+      "case": "pectinate",
+      "replicate": 0,
+      "observed": {
+        "A": "1",
+        "B": "0",
+        "C": "1",
+        "D": "0"
+      },
+      "status": "ok",
+      "nodes": [
+        {
+          "name": "R",
+          "truth": -0.6948527231312157,
+          "lower": -1.275542463438372,
+          "upper": 1.5200135809746376,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.1265
+        },
+        {
+          "name": "J",
+          "truth": 0.4979807093229217,
+          "lower": -0.6612533352196374,
+          "upper": 1.9226677769961695,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.471875
+        },
+        {
+          "name": "I",
+          "truth": 0.2640207534243353,
+          "lower": -0.48989501391341406,
+          "upper": 1.9765911431957015,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.3165
+        }
+      ],
+      "rhat_max": 1.0047408564020697,
+      "ess_min": 1034.5629481046262
+    },
+    {
+      "case": "pectinate",
+      "replicate": 1,
+      "observed": {
+        "A": "0",
+        "B": "0",
+        "C": "1",
+        "D": "0"
+      },
+      "status": "mcmc_probability_precision",
+      "nodes": [
+        {
+          "name": "R",
+          "truth": -0.3937581645898782,
+          "lower": -1.8284384550248722,
+          "upper": 0.9911176443804177,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.496375
+        },
+        {
+          "name": "J",
+          "truth": -0.5821841698612181,
+          "lower": -1.7186846057641916,
+          "upper": 0.8869103148279349,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.367875
+        },
+        {
+          "name": "I",
+          "truth": -1.1496523423575815,
+          "lower": -2.1479933854948934,
+          "upper": 0.4128788056748288,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.21875
+        }
+      ],
+      "rhat_max": 1.001892146126013,
+      "ess_min": 780.9965511823025
+    },
+    {
+      "case": "short_tips",
+      "replicate": 0,
+      "observed": {
+        "A": "0",
+        "B": "0",
+        "C": "1",
+        "D": "1"
+      },
+      "status": "mcmc_low_ess+mcmc_probability_precision+mcmc_rhat",
+      "nodes": [
+        {
+          "name": "R",
+          "truth": 0.020727602630198686,
+          "lower": -1.0831535697476553,
+          "upper": 1.073785998276862,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.515625
+        },
+        {
+          "name": "I",
+          "truth": -0.7618496100398416,
+          "lower": -1.914802052996202,
+          "upper": -0.020852217981896567,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.368875
+        },
+        {
+          "name": "J",
+          "truth": 0.333219241666613,
+          "lower": 0.03711403531225529,
+          "upper": 1.8532154942096455,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.290625
+        }
+      ],
+      "rhat_max": 1.0825367924399332,
+      "ess_min": 40.06573454525964
+    },
+    {
+      "case": "short_tips",
+      "replicate": 1,
+      "observed": {
+        "A": "0",
+        "B": "0",
+        "C": "0",
+        "D": "0"
+      },
+      "status": "mcmc_low_ess+mcmc_probability_precision+mcmc_rhat+unresolved_rare_category",
+      "nodes": [
+        {
+          "name": "R",
+          "truth": 0.14497694190613555,
+          "lower": -2.2845483564958955,
+          "upper": 0.24488434646413976,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.959625
+        },
+        {
+          "name": "I",
+          "truth": -0.48947092512688817,
+          "lower": -2.6033049710878013,
+          "upper": -0.10440122794621018,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.788
+        },
+        {
+          "name": "J",
+          "truth": -0.31644202405743405,
+          "lower": -2.694048501539429,
+          "upper": -0.1204904815421634,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.912
+        }
+      ],
+      "rhat_max": 1.2074012747912513,
+      "ess_min": 14.340887653568979
+    },
+    {
+      "case": "polytomy",
+      "replicate": 0,
+      "observed": {
+        "A": "0",
+        "B": "0",
+        "C": "0",
+        "D": "1"
+      },
+      "status": "ok",
+      "nodes": [
+        {
+          "name": "R",
+          "truth": -0.335433932422552,
+          "lower": -2.1059413808887157,
+          "upper": 0.23683996810964641,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.782375
+        }
+      ],
+      "rhat_max": 1.003779569136816,
+      "ess_min": 1469.557956221056
+    },
+    {
+      "case": "polytomy",
+      "replicate": 1,
+      "observed": {
+        "A": "0",
+        "B": "0",
+        "C": "0",
+        "D": "0"
+      },
+      "status": "ok",
+      "nodes": [
+        {
+          "name": "R",
+          "truth": -1.0315734824490848,
+          "lower": -2.5884289352620415,
+          "upper": 0.04011743820161782,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.536
+        }
+      ],
+      "rhat_max": 1.003588031875698,
+      "ess_min": 1059.9516826974675
+    },
+    {
+      "case": "rare_ordinal",
+      "replicate": 0,
+      "observed": {
+        "A": "1",
+        "B": "1",
+        "C": "1",
+        "D": "1"
+      },
+      "status": "ok",
+      "nodes": [
+        {
+          "name": "R",
+          "truth": 1.4854530694317112,
+          "lower": -0.32787323595543366,
+          "upper": 1.791346367410562,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.922
+        },
+        {
+          "name": "I",
+          "truth": 0.942870573464528,
+          "lower": -0.062050895630724814,
+          "upper": 1.8669536935086861,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.55425
+        },
+        {
+          "name": "J",
+          "truth": 1.3855906915740324,
+          "lower": -0.0426904155285215,
+          "upper": 1.891999794238764,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.83125
+        }
+      ],
+      "rhat_max": 1.0042389163363497,
+      "ess_min": 1044.891718036057
+    },
+    {
+      "case": "rare_ordinal",
+      "replicate": 1,
+      "observed": {
+        "A": "0",
+        "B": "0",
+        "C": "0",
+        "D": "0"
+      },
+      "status": "unresolved_rare_category",
+      "nodes": [
+        {
+          "name": "R",
+          "truth": -1.4371022662567543,
+          "lower": -2.4335828934386834,
+          "upper": 0.23307632098584755,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.234875
+        },
+        {
+          "name": "I",
+          "truth": -2.0181948814305373,
+          "lower": -2.8874606978807846,
+          "upper": -0.018195026607675184,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.155
+        },
+        {
+          "name": "J",
+          "truth": -0.46474968784928194,
+          "lower": -2.979868526333751,
+          "upper": -0.04788731579113708,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.8585
+        }
+      ],
+      "rhat_max": 1.00481265214266,
+      "ess_min": 439.45619300860216
+    },
+    {
+      "case": "missing_tip",
+      "replicate": 0,
+      "observed": {
+        "A": "1",
+        "B": "1",
+        "C": "1",
+        "D": null
+      },
+      "status": "ok",
+      "nodes": [
+        {
+          "name": "R",
+          "truth": 1.6610525227318873,
+          "lower": -0.6299274551988067,
+          "upper": 2.4999916590003375,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.8385
+        },
+        {
+          "name": "I",
+          "truth": 2.459601094993409,
+          "lower": -0.2899853663300079,
+          "upper": 3.5638022922769648,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.85725
+        },
+        {
+          "name": "J",
+          "truth": 2.0584013296480537,
+          "lower": -0.6547233953610284,
+          "upper": 3.4288052665922693,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.79025
+        }
+      ],
+      "rhat_max": 1.0050028967792997,
+      "ess_min": 948.9127552978151
+    },
+    {
+      "case": "missing_tip",
+      "replicate": 1,
+      "observed": {
+        "A": "1",
+        "B": "0",
+        "C": "0",
+        "D": null
+      },
+      "status": "ok",
+      "nodes": [
+        {
+          "name": "R",
+          "truth": -0.683004485590313,
+          "lower": -1.8175456959885634,
+          "upper": 1.0892175166410183,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.32975
+        },
+        {
+          "name": "I",
+          "truth": 0.6829033143200713,
+          "lower": -1.6000326389296664,
+          "upper": 1.3255698975955494,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.87525
+        },
+        {
+          "name": "J",
+          "truth": -0.708096693108435,
+          "lower": -2.959684605975513,
+          "upper": 0.9728990107295125,
+          "covered": true,
+          "posterior_cdf_at_truth": 0.559375
+        }
+      ],
+      "rhat_max": 1.0032089427942485,
+      "ess_min": 1190.3215136309266
+    }
+  ]
+}

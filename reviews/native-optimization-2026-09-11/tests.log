@@ -1,0 +1,39 @@
++ /Users/kf/miniforge3/bin/python -m ruff check nwkit tests setup.py tools
+All checks passed!
++ /Users/kf/miniforge3/bin/python -m ruff format --check nwkit tests setup.py tools
+481 files already formatted
++ /Users/kf/miniforge3/bin/python -m mypy
+Success: no issues found in 220 source files
++ /Users/kf/miniforge3/bin/python -m pytest -q --durations=20 --durations-min=0.05 -m not slow tests/test_shift_screen_blocks.py tests/test_shift_native_bootstrap.py tests/test_shift_native_cli.py tests/test_shift_native_fit.py tests/test_shift_native_heuristic.py tests/test_shift_native_ic.py tests/test_shift_native_identifiability.py tests/test_shift_native_limits.py tests/test_shift_native_model.py tests/test_shift_native_path.py tests/test_shift_native_quick.py tests/test_shift_native_rank.py tests/test_shift_native_search.py tests/test_gaussian_whitening.py
+........................................................................ [ 33%]
+........................................................................ [ 66%]
+........................................................................ [ 99%]
+..                                                                       [100%]
+=============================== warnings summary ===============================
+../../miniforge3/lib/python3.10/site-packages/requests/__init__.py:113
+  /Users/kf/miniforge3/lib/python3.10/site-packages/requests/__init__.py:113: RequestsDependencyWarning: urllib3 (2.6.3) or chardet (7.5.1)/charset_normalizer (3.4.4) doesn't match a supported version!
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+============================= slowest 20 durations =============================
+13.35s call     tests/test_shift_native_path.py::test_free_alpha_covariance_seed_is_counted_in_refit_budget
+6.49s call     tests/test_shift_native_path.py::test_path_memory_guard_precedes_design_allocation
+1.76s call     tests/test_shift_native_fit.py::test_estimated_noise_with_fixed_process_matches_dense_scalar_fit[False]
+0.91s call     tests/test_shift_native_bootstrap.py::test_global_null_gate_rejects_large_gain_and_accepts_small_gain
+0.77s call     tests/test_shift_native_cli.py::test_native_support_repeats_global_gate_with_distinct_seeds
+0.54s call     tests/test_shift_native_cli.py::test_native_aic_global_null_gate_cli_and_resume
+0.54s call     tests/test_shift_native_bootstrap.py::test_global_null_aic_gate_replays_search_and_preserves_ungated_winner
+0.51s call     tests/test_shift_native_bootstrap.py::test_calibration_replays_search_deterministically_and_does_not_discard_failures
+0.50s call     tests/test_shift_native_bootstrap.py::test_simulator_matches_independent_dense_covariance_and_original_units[OUrandomRoot-1]
+0.50s call     tests/test_shift_native_bootstrap.py::test_simulator_matches_independent_dense_covariance_and_original_units[OUfixedRoot-1]
+0.47s call     tests/test_shift_native_bootstrap.py::test_simulator_matches_independent_dense_covariance_and_original_units[OUrandomRoot-inf]
+0.46s call     tests/test_shift_native_bootstrap.py::test_simulator_matches_independent_dense_covariance_and_original_units[OUfixedRoot-0]
+0.44s call     tests/test_shift_native_fit.py::test_joint_process_and_noise_fit_matches_independent_dense_optimization[True]
+0.44s call     tests/test_shift_native_fit.py::test_joint_process_and_noise_fit_matches_independent_dense_optimization[False]
+0.37s call     tests/test_shift_native_cli.py::test_native_search_cli_and_resume_reject_changed_input
+0.33s call     tests/test_shift_native_cli.py::test_auto_shift_cap_and_convergent_search_match_explicit_cap
+0.32s call     tests/test_shift_native_path.py::test_all_branch_path_does_not_require_unused_beam_pool_to_cover_cap
+0.19s call     tests/test_shift_native_heuristic.py::test_cached_candidate_likelihood_matches_refit_for_nested_shared_regimes[0.7]
+0.19s call     tests/test_shift_native_path.py::test_native_path_supports_aicc_and_reports_valid_minimum
+0.18s call     tests/test_shift_native_cli.py::test_native_aic_strategy_dispatch_and_support_replay[AICc-lasso-group_lasso_beam]
+218 passed, 1 warning in 34.32s

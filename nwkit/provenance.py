@@ -18,18 +18,55 @@ from nwkit.util import (
     is_rooted,
     normalize_phylogenetic_tree_text,
     normalized_missing_path_key,
+    paths_identify_same_file,
     read_tree,
     split_newick_stream,
     validate_distinct_output_paths,
+    validate_outputs_do_not_replace_inputs,
 )
 
 OUTPUT_ARGUMENTS = frozenset(
     (
+        "document_out",
+        "view_out",
+        "branch_models_out",
+        "bootstrap_intervals_out",
+        "bootstrap_out",
+        "candidates_out",
+        "covariance_out",
+        "cross_validation_out",
+        "check_out",
+        "node_out",
+        "locus_calibration_out",
+        "msc_profile_out",
+        "process_out",
         "outfile",
+        "loadings_out",
+        "eigenvalues_out",
+        "ancestral_out",
+        "individual_out",
+        "summary_out",
+        "clades_out",
+        "simulations_out",
+        "map_history_out",
+        "map_summary_out",
+        "map_time_out",
+        "map_probabilities_out",
+        "map_figure_out",
         "report",
+        "report_out",
+        "sets_out",
         "tree_out",
         "model_out",
+        "fit_out",
+        "latent_history_out",
+        "layout_report",
+        "liability_diagnostics_out",
+        "liability_out",
+        "effects_out",
+        "regime_parameters_out",
         "model_comparison_out",
+        "model_average_out",
         "gene_contrasts_out",
         "random_effects_out",
         "reconciliation_out",
@@ -42,35 +79,69 @@ OUTPUT_ARGUMENTS = frozenset(
         "stochastic_map_out",
         "tip_summary_out",
         "output_table",
+        "posterior_predictive_out",
+        "posterior_samples_out",
         "seqout",
         "out_dir",
         "manifest_out",
         "attribution_out",
         "group_table_prefix",
         "figure_out",
+        "sensitivity_out",
         "audit",
+        "truth_out",
+        "latent_out",
+        "trait_origins_out",
+        "tree_ensemble_out",
     )
 )
 
 INPUT_PATH_ARGUMENTS = frozenset(
     (
+        "document",
+        "comparison",
+        "view_config",
+        "angiocal_file",
+        "calibration_map_tsv",
+        "branch_fit",
+        "parameters",
+        "model_in",
+        "locus_model",
+        "branch_models",
+        "branch_regimes",
+        "regime_models",
+        "folds",
+        "predictor_file",
         "infile",
         "infile2",
         "data",
         "expression",
         "evolution_covariance",
         "gene_tree",
+        "generax_nhx",
+        "reconciliation_species_tree",
+        "notung_parsable",
+        "species_node_bounds_tsv",
+        "species_node_intervals_tsv",
+        "species_tree_ensemble",
+        "alignment",
+        "likelihood_summary",
+        "latent_regime_config",
         "gene_tree_ensemble",
         "length_source",
         "manifest",
         "mcmctree_posterior",
         "name_source",
         "name_tsv",
+        "measurement_covariance",
+        "misclassification_matrix",
+        "posterior",
         "property_source",
         "predictor_contrasts",
         "predictor_sampling_covariance",
         "rate_design",
         "rate_matrix",
+        "replicate_observations",
         "reconciliation",
         "reconciliation_tree",
         "reference",
@@ -89,9 +160,12 @@ INPUT_PATH_ARGUMENTS = frozenset(
         "table",
         "taxid_tsv",
         "tip_image_manifest",
+        "tip_likelihoods",
         "trait",
         "transition_graph",
         "tree",
+        "tree_ensemble",
+        "vertlife_file",
         "weight_tsv",
         "densitree_trees",
     )
@@ -285,6 +359,17 @@ def _path_candidates_from_value(value):
 
 
 def _skip_declared_input_argument(args, argument):
+    if argument == "comparison" and getattr(args, "command", None) != "draw":
+        return True
+    if argument == "infile" and (
+        getattr(args, "radte_prefix", None)
+        or getattr(args, "document", None)
+        or (
+            getattr(args, "command", None) == "draw"
+            and getattr(args, "comparison", None)
+        )
+    ):
+        return True
     return (
         argument in ("manifest", "attribution")
         and getattr(args, "command", None) == "image"
@@ -314,6 +399,45 @@ def _declared_input_path_candidates(args):
 
 def _input_path_candidates(args):
     candidates = _declared_input_path_candidates(args)
+    if getattr(args, "command", None) == "draw" and getattr(args, "comparison", None):
+        from nwkit.reconciliation_view import read_comparison
+
+        _, _, panel_paths = read_comparison(args.comparison)
+        candidates.extend(
+            (f"comparison_panel_{i}", path) for i, path in enumerate(panel_paths)
+        )
+
+    if (
+        getattr(args, "command", None) == "mcmctree"
+        and getattr(args, "angiocal", "no") == "v1.0"
+        and not getattr(args, "angiocal_file", None)
+    ):
+        from nwkit.angiocal import angiocal_input_path
+
+        candidates.append(("angiocal_cache", str(angiocal_input_path(args))))
+    if getattr(args, "vertlife_dataset", None) is not None and not getattr(
+        args, "vertlife_file", None
+    ):
+        from nwkit.vertlife import vertlife_input_path
+
+        candidates.append(("vertlife_cache", str(vertlife_input_path(args))))
+    if getattr(args, "radte_prefix", None):
+        from nwkit.result_plot_data import radte_plot_protected_paths
+
+        candidates.extend(
+            ("radte:" + key, path)
+            for key, path in radte_plot_protected_paths(args.radte_prefix).items()
+        )
+    if getattr(args, "command", None) == "radte-compare":
+        from nwkit.result_plot_data import radte_plot_protected_paths
+
+        for mode in ("fixed", "bounded", "ensemble"):
+            candidates.extend(
+                (mode + ":" + key, path)
+                for key, path in radte_plot_protected_paths(
+                    getattr(args, mode + "_prefix")
+                ).items()
+            )
     if getattr(args, "command", None) == "compose":
         manifest_path = getattr(args, "manifest", None)
         if manifest_path not in (None, "") and os.path.isfile(manifest_path):
@@ -432,15 +556,29 @@ def _input_file_records(args, input_candidates=None):
     return sorted(records, key=lambda record: (record["argument"], record["path"]))
 
 
+def _selection_output_values(args):
+    if getattr(args, "command", None) != "regress-select":
+        return {}
+    from nwkit.regression_selection_cli import selection_output_paths
+
+    return {
+        "out_prefix:" + key: value
+        for key, value in selection_output_paths(args.out_prefix).items()
+    }
+
+
 def _output_file_records(args):
     records_by_path: dict[str, dict[str, Any]] = {}
     output_arguments = set(OUTPUT_ARGUMENTS)
     if getattr(args, "command", None) == "image":
         output_arguments.update(("manifest", "attribution"))
-    for argument in output_arguments:
+    output_values = {
+        argument: getattr(args, argument, None) for argument in output_arguments
+    }
+    output_values.update(_selection_output_values(args))
+    for argument, value in output_values.items():
         if argument == "audit":
             continue
-        value = getattr(args, argument, None)
         if (
             argument == "group_table_prefix"
             and value in (None, "")
@@ -495,10 +633,13 @@ def _output_file_records(args):
 
 def _planned_output_records(args):
     records_by_path: dict[str, dict[str, Any]] = {}
-    for argument in OUTPUT_ARGUMENTS:
+    output_values = {
+        argument: getattr(args, argument, None) for argument in OUTPUT_ARGUMENTS
+    }
+    output_values.update(_selection_output_values(args))
+    for argument, value in output_values.items():
         if argument == "audit":
             continue
-        value = getattr(args, argument, None)
         candidates = _path_candidates_from_value(value)
         if argument == "group_table_prefix":
             candidates = [
@@ -532,7 +673,7 @@ def _primary_input_text(args, stdin_text):
     ordinary_tree = getattr(args, "tree", None)
     primary_input = (
         ordinary_tree
-        if getattr(args, "command", None) == "regress"
+        if getattr(args, "command", None) in {"regress", "regress-select"}
         and ordinary_tree not in (None, "")
         else (
             gene_tree
@@ -656,6 +797,7 @@ def _external_context(args):
         "species_parser",
         "species_regex",
         "species_map_tsv",
+        "vertlife_dataset",
     )
     return {
         key: _json_value(getattr(args, key))
@@ -751,6 +893,36 @@ def _image_output_collision_candidates(args):
     return candidates
 
 
+def _prefix_output_collision_candidates(args):
+    prefix = getattr(args, "out_prefix", None)
+    if prefix in (None, ""):
+        return []
+    if getattr(args, "command", None) == "radte":
+        from nwkit.radte import radte_paths
+
+        return [
+            ("--out-prefix " + key, path) for key, path in radte_paths(prefix).items()
+        ]
+    if getattr(args, "command", None) == "radte-compare":
+        from nwkit.radte_compare import comparison_paths
+
+        return [
+            ("--out-prefix " + key, path)
+            for key, path in comparison_paths(prefix).items()
+        ]
+    if getattr(args, "command", None) == "regress-select":
+        return [
+            ("--out-prefix " + key, value)
+            for key, value in _selection_output_values(args).items()
+        ]
+    from nwkit.conventions import regression_bundle_lock_path, regression_bundle_paths
+
+    return [
+        ("--out-prefix " + key, path)
+        for key, path in regression_bundle_paths(prefix).items()
+    ] + [("--out-prefix transaction lock", regression_bundle_lock_path(prefix))]
+
+
 def _audit_collision_candidates(args, audit_path):
     candidates = [("--audit", audit_path)]
     for argument in OUTPUT_ARGUMENTS:
@@ -781,22 +953,86 @@ def _audit_collision_candidates(args, audit_path):
                 candidates.append(
                     ("--{}".format(argument.replace("_", "-")), candidate)
                 )
-    out_prefix = getattr(args, "out_prefix", None)
-    if out_prefix not in (None, ""):
-        from nwkit.conventions import (
-            regression_bundle_lock_path,
-            regression_bundle_paths,
-        )
-
-        candidates.extend(
-            ("--out-prefix {}".format(argument), path)
-            for argument, path in regression_bundle_paths(out_prefix).items()
-        )
-        candidates.append(
-            ("--out-prefix transaction lock", regression_bundle_lock_path(out_prefix))
-        )
+    candidates.extend(_prefix_output_collision_candidates(args))
     candidates.extend(_image_output_collision_candidates(args))
     return candidates
+
+
+_IN_PLACE_TREE_COMMANDS = frozenset(
+    (
+        "annotate",
+        "collapse",
+        "compose",
+        "constrain",
+        "convert",
+        "drop",
+        "intersection",
+        "label",
+        "mark",
+        "nhx2nwk",
+        "prune",
+        "rename",
+        "rescale",
+        "root",
+        "sample",
+        "sanitize",
+        "shuffle",
+        "skim",
+        "subtree",
+        "transfer",
+    )
+)
+
+
+def validate_command_path_roles(args):
+    """Protect declared input files from outputs before a CLI handler runs.
+
+    A tree editor may intentionally replace its primary tree. Its other inputs
+    (and every companion output) still need independent paths.
+    """
+    if args.command == "regress":
+        # Regression already validates its raw, precomputed and bundle paths.
+        # Keep its established input-overwrite diagnostics at the CLI boundary.
+        return
+    if args.command == "mcmctree" and getattr(args, "angiocal", "no") == "v1.0":
+        from nwkit.angiocal import angiocal_protected_paths
+
+        validate_outputs_do_not_replace_inputs(
+            angiocal_protected_paths(args),
+            _audit_collision_candidates(args, getattr(args, "audit", None)),
+        )
+    if getattr(args, "vertlife_dataset", None) is not None and not getattr(
+        args, "vertlife_file", None
+    ):
+        from nwkit.vertlife import vertlife_cache_lock_paths
+
+        validate_outputs_do_not_replace_inputs(
+            vertlife_cache_lock_paths(args),
+            _audit_collision_candidates(args, getattr(args, "audit", None)),
+        )
+    inputs = _input_path_candidates(args)
+    outputs = _audit_collision_candidates(args, None)
+    allows_in_place_tree = args.command in _IN_PLACE_TREE_COMMANDS and not (
+        args.command == "root" and getattr(args, "method", None) == "reconciliation"
+    )
+    for input_name, input_path in inputs:
+        if input_path in (None, "", "-"):
+            continue
+        protected_outputs = outputs
+        if allows_in_place_tree and input_name == "infile":
+            protected_outputs = [
+                (name, path)
+                for name, path in outputs
+                if not (
+                    name == "--outfile"
+                    and path not in (None, "", "-")
+                    and paths_identify_same_file(input_path, path)
+                )
+            ]
+        validate_outputs_do_not_replace_inputs(
+            [("--" + input_name.replace("_", "-"), input_path)],
+            protected_outputs,
+        )
 
 
 def _validate_audit_input_collision(audit_path, input_candidates):
@@ -882,6 +1118,16 @@ def _spool_stdin(stream):
 
 
 def _runtime_input_file_records(args):
+    angiocal_source = getattr(args, "_nwkit_angiocal_source", None)
+    if angiocal_source:
+        return _input_file_records(
+            args, input_candidates=[("angiocal_cache", angiocal_source)]
+        )
+    vertlife_source = getattr(args, "_nwkit_vertlife_cache", None)
+    if vertlife_source:
+        return _input_file_records(
+            args, input_candidates=[("vertlife_cache", vertlife_source)]
+        )
     if getattr(args, "command", None) != "draw":
         return []
     records = []

@@ -1,0 +1,426 @@
+"""Gaussian branch-likelihood integration with a one-dimensional root integral.
+
+For a reversible model the two root edges have only one observable length.
+Condition on their log-rate difference z. All identifiable log lengths are then
+affine in the remaining Gaussian log rates, so those rates integrate exactly.
+Only z needs Gauss-Hermite quadrature. This is an approximation to the sequence
+likelihood, not an approximation that treats a sum of lognormals as lognormal.
+"""
+
+from dataclasses import dataclass
+from functools import lru_cache
+
+import numpy as np
+from scipy import sparse
+from scipy.linalg import cho_factor, cho_solve
+from scipy.optimize import Bounds, LinearConstraint
+from scipy.special import exprel, logsumexp, roots_hermitenorm
+
+from nwkit.radte_model import DatingProblem
+
+
+def _rate_covariance(chronology, rho, root_edges):
+    """Construct the stationary AR(1) covariance and root-contrast slope."""
+    count = len(chronology.edges)
+    slope = np.zeros(count)
+    slope[root_edges] = [0.5, -0.5]
+    if rho == 0.0:
+        return np.eye(count), slope, 2.0
+
+    edge_index = {node: index for index, node in enumerate(chronology.edges)}
+    earlier = np.empty(count, dtype=int)
+    covariance = np.eye(count)
+    depth = np.empty(count, dtype=int)
+    for i, node in enumerate(chronology.gene.descendants("preorder")):
+        index = edge_index[node]
+        visited = earlier[:i]
+        if node.up is chronology.gene:
+            depth[index] = 1
+            # The other root edge connects to these branches via the root.
+            correlations = rho ** (1 + depth[visited])
+        else:
+            parent = edge_index[node.up]
+            depth[index] = 1 + depth[parent]
+            slope[index] = rho * slope[parent]
+            correlations = rho * covariance[parent, visited]
+        covariance[index, visited] = covariance[visited, index] = correlations
+        earlier[i] = index
+
+    # The two root-edge rates have correlation rho**2. Computing their
+    # contrast analytically avoids subtracting nearly equal covariances.
+    contrast_variance = 2 * (1 - rho) * (1 + rho)
+    return covariance, slope, contrast_variance
+
+
+@dataclass(frozen=True)
+class _MarginalStructure:
+    """Immutable model/edge quantities shared across constrained age fits."""
+
+    key: tuple
+    root_edges: np.ndarray
+    root_row: int
+    rows_to_edges: np.ndarray
+    contrast_variance: float
+    conditional_slope: np.ndarray
+    conditional_covariance: np.ndarray
+    projected_covariance: np.ndarray
+    measurement_covariance: np.ndarray
+    observation: np.ndarray
+    kernel_minimum: float
+    measurement_logdet: float
+
+
+@lru_cache(maxsize=8)
+def _normal_quadrature(points):
+    nodes, weights = roots_hermitenorm(points)
+    nodes = nodes[weights > 0]
+    log_weights = np.log(weights[weights > 0]) - 0.5 * np.log(2 * np.pi)
+    nodes.setflags(write=False)
+    log_weights.setflags(write=False)
+    return nodes, log_weights
+
+
+def _root_contrast_variance_score(z, sd, root_weight, slope, root, v, inverse, weights):
+    """Differentiate the finite quadrature using symmetric node pairs."""
+    half = len(z) // 2
+    positive, negative = slice(-half, None), slice(half - 1, None, -1)
+    gap = 2 * z[positive]
+    root_plus, root_minus = root_weight[positive], root_weight[negative]
+    v_plus, v_minus = v[positive], v[negative]
+
+    # The ratio of the root lengths is 1 + w(-z) * expm1(2z).
+    root_log_slope = np.log1p(root_minus * np.expm1(gap)) / gap
+    root_weight_slope = root_plus * (1 - root_minus) * exprel(-gap)
+
+    # Each slope below is a divided difference across the pair. The
+    # conditional residual changes only along the base and root directions.
+    base_inverse = inverse @ slope
+    root_inverse = inverse[root]
+    base_delta = slope @ base_inverse + root_log_slope * base_inverse[root]
+    root_delta = root_inverse @ slope + root_log_slope * root_inverse[root]
+    score_delta = (
+        base_delta + root_plus * root_delta + v_minus[:, root] * root_weight_slope
+    )
+    score_minus = v_minus @ slope + root_minus * v_minus[:, root]
+
+    v_sum = v_plus + v_minus
+    log_kernel_slope = -0.5 * (v_sum @ slope + root_log_slope * v_sum[:, root])
+    w_plus, w_minus = weights[positive], weights[negative]
+    # For a pair with log weight ratio g, w(+) - w(-) is
+    # max(w(+), w(-)) * sign(g) * -expm1(-abs(g)).
+    weight_slope = (
+        np.maximum(w_plus, w_minus)
+        * exprel(-abs(gap * log_kernel_slope))
+        * log_kernel_slope
+    )
+    return (z[positive] / sd) ** 2 @ (w_plus * score_delta + weight_slope * score_minus)
+
+
+class MarginalDatingProblem(DatingProblem):
+    marginal = True
+
+    def __init__(
+        self,
+        chronology,
+        *,
+        rho=0.0,
+        likelihood=None,
+        rate_sd=None,
+        quadrature_points=32,
+        shared_structure=None,
+    ):
+        super().__init__(chronology, rho=rho, likelihood=likelihood, rate_sd=rate_sd)
+        self.quadrature_points = quadrature_points
+        self.fixed_sd = rate_sd
+        self.normal_nodes, self.log_weights = _normal_quadrature(quadrature_points)
+        # Include array contents: callers can mutate a QuadraticLikelihood in
+        # place. Bounds/initial ages are deliberately absent from this key.
+        key = (
+            rho,
+            tuple(chronology.edges),
+            tuple(chronology.parent),
+            tuple(chronology.child),
+            id(likelihood),
+            likelihood.center.tobytes(),
+            likelihood.gradient.tobytes(),
+            likelihood.hessian.tobytes(),
+            likelihood.mapping.tobytes(),
+            likelihood.nll,
+        )
+        if shared_structure is None or shared_structure.key != key:
+            shared_structure = self._build_structure(key)
+        self.shared_structure = shared_structure
+        self.root_edges = shared_structure.root_edges
+        self.root_row = shared_structure.root_row
+        self.rows_to_edges = shared_structure.rows_to_edges
+        self.contrast_variance = shared_structure.contrast_variance
+        self.conditional_slope = shared_structure.conditional_slope
+        self.conditional_covariance = shared_structure.conditional_covariance
+        self.projected_covariance = shared_structure.projected_covariance
+        self.measurement_covariance = shared_structure.measurement_covariance
+        self.observation = shared_structure.observation
+        self.kernel_minimum = shared_structure.kernel_minimum
+        self.measurement_logdet = shared_structure.measurement_logdet
+        self._cached_sd = None
+        self._cached_covariance = None
+        self._cached_inverse = None
+
+    def _build_structure(self, key):
+        likelihood = self.likelihood
+        root_edges = np.array(
+            [
+                i
+                for i, n in enumerate(self.chronology.edges)
+                if n.up is self.chronology.gene
+            ]
+        )
+        root_row = int(likelihood.mapping[root_edges[0]])
+        rows_to_edges = np.array(
+            [
+                np.flatnonzero(likelihood.mapping == row)[-1]
+                for row in range(len(likelihood.center))
+            ]
+        )
+        # Choose the second root edge as the Gaussian base; the first enters
+        # through log(dt_first * exp(z) + dt_second).
+        rows_to_edges[root_row] = root_edges[1]
+        covariance, conditional_slope, contrast_variance = _rate_covariance(
+            self.chronology, self.rho, root_edges
+        )
+        conditional_covariance = (
+            covariance
+            - np.outer(conditional_slope, conditional_slope) * contrast_variance
+        )
+        projected_covariance = conditional_covariance[
+            np.ix_(rows_to_edges, rows_to_edges)
+        ]
+        measurement_covariance = np.linalg.inv(likelihood.hessian)
+        observation = likelihood.center - measurement_covariance @ likelihood.gradient
+        kernel_minimum = (
+            likelihood.nll
+            - 0.5 * likelihood.gradient @ measurement_covariance @ likelihood.gradient
+        )
+        measurement_logdet = np.linalg.slogdet(measurement_covariance)[1]
+        for array in (
+            root_edges,
+            rows_to_edges,
+            conditional_slope,
+            conditional_covariance,
+            projected_covariance,
+            measurement_covariance,
+            observation,
+        ):
+            array.setflags(write=False)
+        return _MarginalStructure(
+            key,
+            root_edges,
+            root_row,
+            rows_to_edges,
+            contrast_variance,
+            conditional_slope,
+            conditional_covariance,
+            projected_covariance,
+            measurement_covariance,
+            observation,
+            kernel_minimum,
+            measurement_logdet,
+        )
+
+    def _covariance(self, sd):
+        if sd != self._cached_sd:
+            covariance = self.measurement_covariance + sd**2 * self.projected_covariance
+            factor = cho_factor(covariance, lower=True)
+            logdet = float(2 * np.log(np.diag(factor[0])).sum())
+            self._cached_sd, self._cached_covariance = sd, (factor, logdet)
+            self._cached_inverse = None
+        return self._cached_covariance
+
+    def components(self, x, *, include_inverse=True):
+        ages = self.unpack_ages(x)
+        duration = self.chronology.durations(ages)
+        mu = x[len(self.free)]
+        sd = np.sqrt(x[-1]) if self.fixed_sd is None else self.fixed_sd
+        z = self.normal_nodes * sd * np.sqrt(self.contrast_variance)
+        log_duration = np.log(duration)
+        means = (
+            mu
+            + log_duration[self.rows_to_edges][None, :]
+            + z[:, None] * self.conditional_slope[self.rows_to_edges][None, :]
+        )
+        first, second = self.root_edges
+        root_terms = np.stack(
+            [log_duration[first] + z, np.full_like(z, log_duration[second])], axis=1
+        )
+        log_total = logsumexp(root_terms, axis=1)
+        means[:, self.root_row] += log_total - log_duration[second]
+        root_weight = np.exp(root_terms[:, 0] - log_total)
+        factor, logdet = self._covariance(sd)
+        inverse = None
+        if include_inverse:
+            if self._cached_inverse is None:
+                self._cached_inverse = cho_solve(factor, np.eye(len(factor[0])))
+            inverse = self._cached_inverse
+        residual = means - self.observation[None, :]
+        precision_residual = cho_solve(factor, residual.T).T
+        log_kernels = self.log_weights - 0.5 * np.sum(
+            residual * precision_residual, axis=1
+        )
+        log_normalizer = logsumexp(log_kernels)
+        weights = np.exp(log_kernels - log_normalizer)
+        value = (
+            self.kernel_minimum
+            + 0.5 * (logdet - self.measurement_logdet)
+            - log_normalizer
+        )
+        return value, duration, sd, z, root_weight, precision_residual, inverse, weights
+
+    def value(self, x):
+        return self.value_gradient(x)[0]
+
+    def value_gradient(self, x):
+        duration = self.chronology.durations(self.unpack_ages(x))
+        if np.any(duration <= 0):
+            violation = np.minimum(duration - self.chronology.min_duration, 0)
+            gradient = np.zeros_like(x)
+            gradient[: len(self.free)] = self.age_gradient_design @ (2e12 * violation)
+            return float(1e12 * (1 + violation @ violation)), gradient
+        value, duration, sd, z, root_weight, v, inverse, weights = self.components(
+            x, include_inverse=self.fixed_sd is None
+        )
+        root = self.root_row
+        edge_gradient = np.zeros(len(duration))
+        edge_gradient[self.rows_to_edges] = weights @ v / duration[self.rows_to_edges]
+        first, second = self.root_edges
+        edge_gradient[first] = weights @ (v[:, root] * root_weight) / duration[first]
+        edge_gradient[second] = (
+            weights @ (v[:, root] * (1 - root_weight)) / duration[second]
+        )
+        gradient = np.concatenate(
+            [self.age_gradient_design @ edge_gradient, [weights @ v.sum(axis=1)]]
+        )
+        if self.fixed_sd is None:
+            assert inverse is not None
+            covariance_derivative = self.projected_covariance
+            slope = self.conditional_slope[self.rows_to_edges]
+            covariance_score = 0.5 * (
+                np.einsum("ij,ji->", inverse, covariance_derivative)
+                - np.einsum("ki,ki->k", v @ covariance_derivative, v)
+            )
+            if len(z) == 1:
+                # A single quadrature node lies at zero for every variance.
+                variance_score = covariance_score[0]
+            elif sd == 0:
+                # d E[f(sqrt(k*tau)*Z)] / d tau at zero = k*f''(0)/2.
+                # This right derivative includes the root log-sum curvature;
+                # dividing the log-SD score by tau would lose it at zero.
+                slope[root] += root_weight[0]
+                second = root_weight[0] * (1 - root_weight[0])
+                score = slope @ v[0]
+                variance_score = covariance_score[0] + 0.5 * self.contrast_variance * (
+                    slope @ inverse @ slope + second * v[0, root] - score**2
+                )
+            elif z[-1] < 1e-3:
+                # The two sides of the normal integral nearly cancel before
+                # division by the rate variance.
+                contrast_score = _root_contrast_variance_score(
+                    z, sd, root_weight, slope, root, v, inverse, weights
+                )
+                variance_score = weights @ covariance_score + contrast_score
+            else:
+                score = v @ slope + root_weight * v[:, root]
+                contrast_score = weights @ (z * score) / (2 * sd**2)
+                variance_score = weights @ covariance_score + contrast_score
+            gradient = np.append(gradient, variance_score)
+        return float(value), np.asarray(gradient)
+
+    def initial_parameters(self, initial_ages=None):
+        ages = self.chronology.initial if initial_ages is None else initial_ages
+        _, mu, _, _, sse = self.branch_statistics(ages)
+        initial = np.concatenate([ages[self.free], [mu]])
+        if self.fixed_sd is None:
+            sd = max(0.1, np.sqrt(sse / len(self.observed)))
+            initial = np.append(initial, sd**2)
+        return initial
+
+    def bounds_and_constraint(self):
+        lower = self.age_lower.tolist() + [-30.0]
+        upper = self.age_upper.tolist() + [30.0]
+        if self.fixed_sd is None:
+            lower.append(0.0)
+            upper.append(float(np.exp(4.0)))
+        extras = len(lower) - len(self.free)
+        matrix = sparse.hstack(
+            [
+                self.free_constraints,
+                sparse.csr_matrix((len(self.constraint_lower), extras)),
+            ]
+        ).toarray()
+        return Bounds(lower, upper), LinearConstraint(
+            matrix, self.constraint_lower, np.inf
+        )
+
+    def rate_posterior(self, x):
+        _, _, sd, z, _, precision_residual, inverse, weights = self.components(x)
+        assert inverse is not None
+        cross = sd**2 * self.conditional_covariance[:, self.rows_to_edges]
+        means = (
+            z[:, None] * self.conditional_slope[None, :] - precision_residual @ cross.T
+        )
+        covariance = sd**2 * self.conditional_covariance - cross @ inverse @ cross.T
+        covariance = (covariance + covariance.T) / 2
+        return means, covariance, weights
+
+    def posterior_rates(self, x):
+        means, covariance, weights = self.rate_posterior(x)
+        mu = x[len(self.free)]
+        return weights @ np.exp(mu + means + 0.5 * np.diag(covariance)[None, :])
+
+    def approximation_checks(self, x):
+        """Check the approximation at high-posterior-weight log-rate states."""
+        means, covariance, weights = self.rate_posterior(x)
+        selected = np.argsort(weights)[-min(3, len(weights)) :]
+        states = [means[i] for i in selected]
+        eigen, vectors = np.linalg.eigh(covariance)
+        if eigen[-1] > 0:
+            displacement = np.sqrt(eigen[-1]) * vectors[:, -1]
+            mode = means[np.argmax(weights)]
+            states.extend([mode + displacement, mode - displacement])
+        duration = self.chronology.durations(self.unpack_ages(x))
+        mu = x[len(self.free)]
+        return [
+            self.likelihood.check(duration * np.exp(mu + state)) for state in states
+        ]
+
+
+def refine_quadrature(problem, x, *, starts, maxiter, seed):
+    from nwkit.radte_model import DatingOptimizationError, solve_problem
+
+    attempts: list[dict] = []
+    for points in [64, 128, 256, 512]:
+        refined = MarginalDatingProblem(
+            problem.chronology,
+            rho=problem.rho,
+            likelihood=problem.likelihood,
+            rate_sd=problem.fixed_sd,
+            quadrature_points=points,
+            shared_structure=problem.shared_structure,
+        )
+        value, gradient = problem.value_gradient(x)
+        check_value, check_gradient = refined.value_gradient(x)
+        if (
+            abs(value - check_value) < 1e-5
+            and np.max(abs(gradient - check_gradient)) < 1e-4
+        ):
+            return problem, x, attempts
+        try:
+            x, new_attempts = solve_problem(
+                refined, starts=starts, maxiter=maxiter, seed=seed, initial_parameters=x
+            )
+        except DatingOptimizationError as exc:
+            exc.attempts = attempts + exc.attempts
+            raise
+        attempts.extend(new_attempts)
+        problem = refined
+    raise ValueError(
+        "Root-rate quadrature did not converge through 512 points; use joint-map/exact or MCMCTree for this family."
+    )

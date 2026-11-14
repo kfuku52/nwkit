@@ -1,0 +1,652 @@
+"""Signal formulas, independent R references and real CLI contracts."""
+
+from io import StringIO
+
+import numpy as np
+import pandas as pd
+import pytest
+from scipy.optimize import minimize
+from scipy.stats import multivariate_normal
+
+from nwkit import signal_stats
+from nwkit.cli import main
+from nwkit.evolution import build_evolutionary_covariance
+from nwkit.signal_stats import (
+    bh_adjust,
+    k_fit,
+    k_statistic,
+    lambda_fit,
+    lambda_parametric_bootstrap,
+    rate_fit,
+)
+from nwkit.util import read_tree
+
+TREE = "(((A:0.7,B:0.7):0.8,(C:0.9,D:0.9):0.6):0.5,((E:0.8,F:0.8):0.7,(G:1.1,H:1.1):0.4):0.5);"
+VALUES = np.array([1, 1.5, 2, 1.8, 4, 4.2, 3.8, 4.5])
+ERRORS = np.array([0.1, 0.2] * 4)
+
+
+def covariance():
+    return build_evolutionary_covariance(read_tree(TREE, 0, False), list("ABCDEFGH"))
+
+
+def test_exact_lambda_spectrum_matches_independent_gaussian_profiles(monkeypatch):
+    c = covariance()
+    calls = []
+    original = signal_stats.eigh
+
+    def counted(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(signal_stats, "eigh", counted)
+    profile = signal_stats._zero_error_lambda_profile(c, VALUES, np.zeros(8))
+    for value in np.linspace(0, 1, 11):
+        matrix = value * c + (1 - value) * np.diag(np.diag(c))
+        likelihood, rate, mean = profile(value)
+        reference = rate_fit(matrix, VALUES, np.zeros(8))
+        assert (likelihood, rate, mean) == pytest.approx(reference, abs=1e-7)
+        assert likelihood == pytest.approx(
+            multivariate_normal.logpdf(
+                VALUES, mean=np.full(8, mean), cov=rate * matrix
+            ),
+            abs=1e-7,
+        )
+    assert len(calls) == 1
+
+
+def test_lambda_spectrum_retains_error_constant_and_resolution_guards(monkeypatch):
+    c = covariance()
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("Sampling-error and constant profiles must not diagonalize C")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(signal_stats, "eigh", forbidden)
+        assert signal_stats._zero_error_lambda_profile(c, VALUES, ERRORS) is None
+        assert (
+            signal_stats._zero_error_lambda_profile(c, np.ones(8), np.zeros(8)) is None
+        )
+    unresolved = (1 - 1e-14) * np.ones((8, 8)) + 1e-14 * np.eye(8)
+    assert (
+        signal_stats._zero_error_lambda_profile(unresolved, VALUES, np.zeros(8)) is None
+    )
+    with pytest.raises(np.linalg.LinAlgError):
+        lambda_fit(np.ones((8, 8)), VALUES, np.zeros(8))
+
+
+def test_exact_lambda_bootstrap_preserves_draws_against_cholesky(monkeypatch):
+    c = covariance()
+    original = signal_stats.eigh
+    calls = []
+
+    def counted(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(signal_stats, "eigh", counted)
+    first = np.random.default_rng(443)
+    second = np.random.default_rng(443)
+    actual = lambda_parametric_bootstrap(c, VALUES, np.zeros(8), 2.0, 19, first)
+    assert len(calls) == 1
+    monkeypatch.setattr(signal_stats, "_zero_error_lambda_profile", lambda *args: None)
+    expected = lambda_parametric_bootstrap(c, VALUES, np.zeros(8), 2.0, 19, second)
+    assert actual == expected
+    assert first.bit_generator.state == second.bit_generator.state
+
+
+@pytest.mark.parametrize("gap", [1e-8, 1e-10])
+def test_lambda_spectrum_preserves_near_boundary_ill_conditioned_profiles(
+    gap, monkeypatch
+):
+    matrix = np.zeros((32, 32))
+    matrix[:16, :16] = matrix[16:, 16:] = 1.0
+    matrix += gap * np.eye(32)
+    values = np.r_[np.zeros(16), np.ones(16)]
+    values += np.random.default_rng(314).normal(size=32) * np.sqrt(gap)
+    errors = np.zeros(32)
+    assert signal_stats._zero_error_lambda_profile(matrix, values, errors) is None
+    actual = lambda_fit(matrix, values, errors)
+    monkeypatch.setattr(signal_stats, "_zero_error_lambda_profile", lambda *args: None)
+    assert actual == lambda_fit(matrix, values, errors)
+
+
+def test_phytools_reference_k():
+    # R phytools 2.3.0, using examples/signal; no R dependency at runtime.
+    # Error-aware rate reoptimized with optimize(..., tol=1e-12).
+    c = covariance()
+    assert k_statistic(c, VALUES) == pytest.approx(2.16451564383, rel=1e-10)
+    k, _ = k_fit(c, VALUES - VALUES[0], ERRORS)
+    assert k == pytest.approx(2.141105106703, rel=1e-8)
+    assert k_statistic(c * 17, VALUES * -3 + 200) == pytest.approx(
+        k_statistic(c, VALUES)
+    )
+
+
+@pytest.mark.parametrize("errors", [np.zeros(8), ERRORS, np.array([0.0, 0.2] * 4)])
+def test_k_permutations_preserve_refits_rng_and_covariance_lifetime(
+    errors, monkeypatch
+):
+    from nwkit import signal_stats
+
+    c = covariance()
+    for scale in (1.0, 2.0):
+        current = c * scale
+        observed, _ = k_fit(current, VALUES, errors)
+        reference_rng = np.random.default_rng(391)
+        exceed = 0
+        for _ in range(19):
+            order = reference_rng.permutation(len(VALUES))
+            value, _ = k_fit(current, VALUES[order], errors[order])
+            exceed += value >= observed - 1e-12 * max(1.0, abs(observed))
+        calls = []
+        original = np.linalg.cholesky
+
+        def counted(matrix, calls=calls, original=original):
+            calls.append(matrix.shape)
+            return original(matrix)
+
+        rng = np.random.default_rng(391)
+        with monkeypatch.context() as patch:
+            patch.setattr(np.linalg, "cholesky", counted)
+            actual = signal_stats.permutation_test(
+                current, VALUES, errors, observed, 19, rng
+            )
+        assert actual == (1 + exceed) / 20
+        assert rng.bit_generator.state == reference_rng.bit_generator.state
+        assert len(calls) == (1 if not np.any(errors) else 2 * 19)
+
+
+def test_zero_k_permutations_do_not_factor_invalid_covariance():
+    from nwkit.signal_stats import permutation_test
+
+    rng = np.random.default_rng(391)
+    state = rng.bit_generator.state
+    assert permutation_test(np.zeros((8, 8)), VALUES, ERRORS, 1, 0, rng) == 1
+    assert permutation_test(np.zeros((8, 8)), VALUES, np.zeros(8), 1, 0, rng) == 1
+    assert rng.bit_generator.state == state
+    assert permutation_test(None, None, None, None, 0, None) == 1
+
+
+def test_k_permutation_p_value_matches_refits_for_larger_covariance():
+    from nwkit.signal_stats import permutation_test
+
+    generator = np.random.default_rng(385)
+    n = 48
+    effects = generator.normal(size=(n, 5))
+    matrix = effects @ effects.T + np.diag(np.linspace(0.3, 1.7, n))
+    values = generator.normal(size=n)
+    errors = np.zeros(n)
+    observed = k_statistic(matrix, values)
+    reference = np.random.default_rng(601)
+    actual = np.random.default_rng(601)
+    limit = observed - 1e-12 * max(1.0, abs(observed))
+    exceedances = sum(
+        k_statistic(matrix, values[reference.permutation(n)]) >= limit
+        for _ in range(47)
+    )
+    assert 0 < exceedances < 47
+    assert permutation_test(matrix, values, errors, observed, 47, actual) == (
+        (1 + exceedances) / 48
+    )
+    assert actual.bit_generator.state == reference.bit_generator.state
+
+
+@pytest.mark.parametrize("scale", [1e-200, 1e200])
+def test_blomberg_k_retains_ratio_at_extreme_response_scale(scale):
+    base = np.array([-1.0, 0.0, 0.25, 1.0])
+    matrix = np.diag([1.0, 2.0, 3.0, 4.0])
+    inverse = 1 / matrix.diagonal()
+    residual = base - inverse @ base / inverse.sum()
+    expected = (residual @ residual) / (residual**2 @ inverse)
+    expected /= (matrix.trace() - len(base) / inverse.sum()) / (len(base) - 1)
+    assert k_statistic(matrix, base * scale) == pytest.approx(expected)
+    rng = np.random.default_rng(45)
+    reference = np.random.default_rng(45)
+    assert signal_stats.permutation_test(
+        matrix, base * scale, np.zeros(4), expected, 19, rng
+    ) == (
+        signal_stats.permutation_test(
+            matrix, base, np.zeros(4), expected, 19, reference
+        )
+    )
+    assert rng.bit_generator.state == reference.bit_generator.state
+
+
+@pytest.mark.parametrize("singular", [False, True])
+def test_failed_k_permutation_retains_the_consumed_random_draw(singular):
+    from nwkit.signal_stats import permutation_test
+
+    rng = np.random.default_rng(391)
+    reference = np.random.default_rng(391)
+    reference.permutation(8)
+    c = np.zeros((8, 8)) if singular else np.eye(8)
+    values = VALUES if singular else np.ones(8)
+    with pytest.raises(np.linalg.LinAlgError if singular else ValueError):
+        permutation_test(c, values, np.zeros(8), 1.0, 19, rng)
+    assert rng.bit_generator.state == reference.bit_generator.state
+
+
+@pytest.mark.parametrize("errors", [ERRORS, np.zeros(8), np.array([0.0, 0.2] * 4)])
+def test_likelihood_against_independent_direct_optimization(errors):
+    c = covariance()
+    y = VALUES - VALUES[0]
+    likelihood, rate, mean = rate_fit(c, y, errors)
+
+    def objective(params):
+        return -multivariate_normal.logpdf(
+            y,
+            mean=np.full(8, params[0]),
+            cov=np.exp(params[1]) * c + np.diag(errors**2),
+        )
+
+    independent = minimize(objective, [2, -1], method="BFGS", tol=1e-8)
+    assert likelihood == pytest.approx(-independent.fun, abs=1e-7)
+    assert rate == pytest.approx(np.exp(independent.x[1]), rel=1e-5)
+    assert mean == pytest.approx(independent.x[0], abs=1e-5)
+
+
+def test_lambda_boundary_and_profile():
+    fit = lambda_fit(covariance(), VALUES, np.zeros(8))
+    assert fit["estimate"] == 1
+    assert fit["status"] == "boundary"
+    assert fit["log_likelihood"] == pytest.approx(-10.2136362027)
+    assert fit["null_log_likelihood"] == pytest.approx(-13.5439938997)
+    assert fit["ci_lower"] == pytest.approx(0.395258805358)
+    assert fit["ci_upper"] == 1
+    assert fit["p_value"] == pytest.approx(0.00985613398069)
+
+
+def test_lambda_bootstrap_matches_independent_null_draws():
+    c = covariance()
+    diagonal = np.diag(c)
+    weights = 1 / diagonal
+    mean = np.sum(weights * VALUES) / np.sum(weights)
+    rate = np.sum(weights * (VALUES - mean) ** 2) / len(VALUES)
+    observed = lambda_fit(c, VALUES, np.zeros(8))["likelihood_ratio"]
+    rng = np.random.default_rng(37)
+    exceed = 0
+    for _ in range(12):
+        draw = mean + np.sqrt(rate * diagonal) * rng.standard_normal(8)
+        fit = lambda_fit(c, draw, np.zeros(8), ci_level=None)
+        exceed += fit.get("likelihood_ratio", 0) >= observed - 1e-12 * max(1, observed)
+    actual = lambda_parametric_bootstrap(
+        c, VALUES, np.zeros(8), observed, 12, np.random.default_rng(37)
+    )
+    assert actual == (1 + exceed) / 13
+
+
+def test_zero_lambda_ratio_has_exact_bootstrap_tail_without_draws(monkeypatch):
+    class NoDraws:
+        def standard_normal(self, size):
+            raise AssertionError("zero likelihood ratio needs no bootstrap draw")
+
+    c = covariance()
+    monkeypatch.setattr(
+        "nwkit.signal_stats.lambda_fit",
+        lambda *args, **kwargs: pytest.fail("zero ratio must not refit simulations"),
+    )
+    assert lambda_parametric_bootstrap(c, VALUES, ERRORS, 0.0, 999, NoDraws()) == 1.0
+
+
+def test_lambda_bootstrap_cli_metadata_and_order(tmp_path, capsys):
+    frame = pd.DataFrame({"leaf_name": list("ABCDEFGH"), "x": VALUES, "se": ERRORS})
+    options = [
+        "--method",
+        "lambda",
+        "--standard-error-column",
+        "se",
+        "--lambda-test",
+        "bootstrap",
+        "--seed",
+        "37",
+        "--n-sim",
+        "3",
+    ]
+    first = run_cli(tmp_path, capsys, options, frame)
+    second = run_cli(tmp_path, capsys, options, frame.iloc[::-1])
+    pd.testing.assert_frame_equal(first, second)
+    both = run_cli(tmp_path, capsys, options[:1] + ["both"] + options[2:], frame)
+    assert first.iloc[0].p_value == both.iloc[1].p_value
+    assert first.iloc[0].test_method == "parametric_bootstrap"
+    assert first.iloc[0].num_simulations == 3
+    assert first.iloc[0].seed == 37
+    assert first.iloc[0].p_value * 4 == pytest.approx(round(first.iloc[0].p_value * 4))
+    default = run_cli(tmp_path, capsys, ["--method", "lambda"], frame)
+    assert default.iloc[0].test_method == "likelihood_ratio_chi2_1"
+    assert np.isnan(default.iloc[0].num_simulations)
+
+
+def test_lambda_bootstrap_missing_and_zero_rate(tmp_path, capsys):
+    frame = pd.DataFrame(
+        {
+            "leaf_name": list("ABCDEFGH"),
+            "x": [*VALUES[:7], np.nan],
+            "se": [*ERRORS[:7], np.nan],
+        }
+    )
+    options = [
+        "--method",
+        "lambda",
+        "--standard-error-column",
+        "se",
+        "--lambda-test",
+        "bootstrap",
+        "--n-sim",
+        "3",
+    ]
+    result = run_cli(tmp_path, capsys, options, frame)
+    assert result.iloc[0].num_taxa == 7
+    assert result.iloc[0].num_missing_taxa == 1
+    assert result.iloc[0].test_method == "parametric_bootstrap"
+    frame.loc[:6, "se"] = 100.0
+    zero_rate = run_cli(tmp_path, capsys, options, frame)
+    assert zero_rate.iloc[0].status == "unidentifiable_lambda"
+    assert np.isnan(zero_rate.iloc[0].p_value)
+
+
+def test_star_has_no_identifiable_lambda():
+    assert (
+        lambda_fit(np.eye(4), np.arange(4), np.zeros(4))["status"]
+        == "unidentifiable_lambda"
+    )
+    assert k_statistic(np.eye(4), np.arange(4)) == pytest.approx(1)
+
+
+def test_bh():
+    assert bh_adjust([0.04, 0.001, 0.03]) == pytest.approx([0.04, 0.003, 0.04])
+    assert len(bh_adjust([])) == 0
+
+
+def run_cli(tmp_path, capsys, extra=(), frame=None, tree=TREE):
+    path = tmp_path / "traits.tsv"
+    if frame is None:
+        frame = pd.DataFrame({"leaf_name": list("ABCDEFGH"), "x": VALUES, "se": ERRORS})
+    frame.to_csv(path, sep="\t", index=False)
+    main(
+        [
+            "signal",
+            "-i",
+            tree,
+            "--trait",
+            str(path),
+            "--columns",
+            "x",
+            "--n-sim",
+            "9",
+            *extra,
+        ]
+    )
+    return pd.read_csv(StringIO(capsys.readouterr().out), sep="\t")
+
+
+def test_cli_se_and_reproducible_permutations(tmp_path, capsys):
+    result = run_cli(tmp_path, capsys, ["--standard-error-column", "se"])
+    again = run_cli(tmp_path, capsys, ["--standard-error-column", "se"])
+    pd.testing.assert_frame_equal(result, again)
+    assert result.iloc[0].estimate == pytest.approx(2.141105106703, rel=1e-8)
+    assert result.p_value.between(0.1, 1).iloc[0]
+    assert result.measurement_error.tolist() == ["yes", "yes"]
+
+
+def test_missing_constant_and_trait_order(tmp_path, capsys):
+    frame = pd.DataFrame(
+        {"leaf_name": list("ABCDEFGH"), "x": VALUES, "constant": 1, "missing": np.nan}
+    )
+    first = run_cli(tmp_path, capsys, ["--columns", "x,constant,missing"], frame)
+    assert (
+        first.status.tolist()[2:] == ["constant_trait"] * 2 + ["insufficient_taxa"] * 2
+    )
+    second = run_cli(tmp_path, capsys, ["--columns", "missing,x"], frame)
+    assert first.iloc[0].p_value == second.iloc[2].p_value
+    assert first.iloc[0].num_tests == 1
+
+
+@pytest.mark.parametrize("stem", ["0.7", "1e120"])
+def test_missing_uses_retained_mrca(tmp_path, capsys, stem):
+    frame = pd.DataFrame(
+        {"leaf_name": list("ABCDEFGH"), "x": [1, 2, 3, 4, None, None, None, None]}
+    )
+    result = run_cli(
+        tmp_path,
+        capsys,
+        ["--test", "no"],
+        frame,
+        f"(((A:0.7,B:0.7):0.8,(C:0.9,D:0.9):0.6):{stem},(E:1,F:1,G:1,H:1):1);",
+    )
+    reduced = run_cli(
+        tmp_path,
+        capsys,
+        ["--test", "no"],
+        frame.iloc[:4],
+        "((A:0.7,B:0.7):0.8,(C:0.9,D:0.9):0.6);",
+    )
+    assert result.estimate.tolist() == pytest.approx(reduced.estimate.tolist())
+    assert result.num_taxa.tolist() == [4, 4]
+    assert result.p_value.isna().all()
+
+
+def test_singular_covariance_and_root_polytomy(tmp_path, capsys):
+    frame = pd.DataFrame({"leaf_name": list("ABC"), "x": [1, 2, 3]})
+    result = run_cli(
+        tmp_path, capsys, ["--input-rooted", "yes"], frame, "((A:0,B:0):1,C:1);"
+    )
+    assert set(result.status) == {"singular_covariance"}
+    result = run_cli(
+        tmp_path, capsys, ["--input-rooted", "yes"], frame, "(A:1,B:1,C:1);"
+    )
+    assert result.iloc[0].estimate == pytest.approx(1)
+    assert result.iloc[0].p_value == 1
+    assert result.iloc[1].status == "unidentifiable_lambda"
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        ["--ci-level", "nan"],
+        ["--n-sim", "0"],
+        ["--seed", "-1"],
+        ["--columns", "x,x"],
+        ["--input-rooted", "no"],
+    ],
+)
+def test_invalid_options(tmp_path, capsys, extra):
+    with pytest.raises(ValueError):
+        run_cli(tmp_path, capsys, extra)
+
+
+def test_output_cannot_replace_input(tmp_path):
+    path = tmp_path / "traits.tsv"
+    text = "leaf_name\tx\nA\t1\nB\t2\nC\t3\n"
+    path.write_text(text)
+    with pytest.raises(ValueError):
+        main(
+            [
+                "signal",
+                "-i",
+                "((A:1,B:1):1,C:2);",
+                "--trait",
+                str(path),
+                "--columns",
+                "x",
+                "-o",
+                str(path),
+            ]
+        )
+    assert path.read_text() == text
+
+
+def test_interior_lambda_with_errors_independent_optimization():
+    c = covariance()
+    y = (VALUES + np.array([1, 4, 2, 3, 1.5, 4.2, 1.8, 3.8])) / 2
+    y -= y[0]
+    diagonal = np.diag(np.diag(c))
+    fit = lambda_fit(c, y, ERRORS)
+
+    def objective(params):
+        matrix = np.exp(params[1]) * (diagonal + params[2] * (c - diagonal)) + np.diag(
+            ERRORS**2
+        )
+        return -multivariate_normal.logpdf(y, mean=np.full(8, params[0]), cov=matrix)
+
+    oracle = minimize(
+        objective,
+        [1, -1, 0.5],
+        method="L-BFGS-B",
+        bounds=[(None, None), (None, None), (0, 1)],
+        options={"ftol": 1e-14, "gtol": 1e-8},
+    )
+    assert fit["status"] == "ok"
+    assert fit["estimate"] == pytest.approx(oracle.x[2], abs=1e-5)
+    assert fit["log_likelihood"] == pytest.approx(-oracle.fun, abs=1e-7)
+    assert fit["ci_lower"] <= fit["estimate"] <= fit["ci_upper"]
+
+
+def test_zero_rate_and_singular_zero_rate():
+    c = covariance()
+    fit = lambda_fit(c, VALUES, np.full(8, 100.0))
+    assert fit["status"] == "unidentifiable_lambda"
+    assert fit["sigma2"] == 0
+    assert "p_value" not in fit
+    with pytest.raises(ValueError, match="Unbounded"):
+        rate_fit(c, VALUES, np.array([0.0] + [1.0] * 7))
+
+
+def test_signal_stdin_and_audit(tmp_path, capsys, monkeypatch):
+    import json
+
+    audit = tmp_path / "audit.json"
+    monkeypatch.setattr("sys.stdin", StringIO("leaf_name\tx\nA\t1\nB\t2\nC\t3\n"))
+    main(
+        [
+            "signal",
+            "-i",
+            "((A:1,B:1):1,C:2);",
+            "--trait",
+            "-",
+            "--columns",
+            "x",
+            "--n-sim",
+            "3",
+            "--audit",
+            str(audit),
+        ]
+    )
+    result = pd.read_csv(StringIO(capsys.readouterr().out), sep="\t")
+    assert len(result) == 2
+    assert json.loads(audit.read_text())["status"] == "ok"
+    with pytest.raises(ValueError, match="only one input"):
+        main(["signal", "-i", "-", "--trait", "-", "--columns", "x"])
+
+
+@pytest.mark.parametrize(
+    "values,errors",
+    [
+        ([1, 2, 3], [0.1, -1, 0.1]),
+        ([1, 2, 3], [0.1, None, 0.1]),
+        ([1, "oops", 3], [0.1] * 3),
+        ([1, np.inf, 3], [0.1] * 3),
+    ],
+)
+def test_invalid_observations(tmp_path, capsys, values, errors):
+    frame = pd.DataFrame({"leaf_name": list("ABC"), "x": values, "se": errors})
+    with pytest.raises(ValueError):
+        run_cli(
+            tmp_path,
+            capsys,
+            ["--standard-error-column", "se"],
+            frame,
+            "((A:1,B:1):1,C:2);",
+        )
+
+
+def test_rate_far_below_noisy_observation_scale():
+    y = np.array([1e-10, -1e-10, 1, -1, 2, -2, 3, -3])
+    se = np.array([0, 0, 10, 10, 10, 10, 10, 10])
+    likelihood, rate, mean = rate_fit(np.eye(8), y, se)
+    assert rate == pytest.approx(1e-20, rel=1e-5, abs=0)
+    assert likelihood == pytest.approx(23.744683036279252, abs=1e-8)
+    assert mean == pytest.approx(0, abs=1e-20)
+
+
+def test_extreme_finite_trait_ranges_do_not_produce_false_significance(
+    tmp_path, capsys
+):
+    values = np.array([-1, -0.5, 0.5, 1, -0.8, -0.4, 0.4, 0.8]) * 1e308
+    frame = pd.DataFrame({"leaf_name": list("ABCDEFGH"), "x": values})
+    with np.errstate(all="raise"):
+        result = run_cli(tmp_path, capsys, ["--method", "K"], frame)
+    assert result.iloc[0].estimate == pytest.approx(
+        k_statistic(covariance(), values / 1e308)
+    )
+    assert result.iloc[0].status == "ok"
+
+
+def test_rate_units_avoid_intermediate_square_overflow():
+    from nwkit.signal import _restore_units
+
+    result = _restore_units({"sigma2": 0.5}, 1e200, 1e200, 0, 8)
+    assert result["sigma2"] == pytest.approx(0.5e200)
+    result = _restore_units({"sigma2": 0.5}, 1e-200, 1e-200, 0, 8)
+    assert result["sigma2"] == pytest.approx(0.5e-200, rel=1e-15, abs=0)
+
+
+@pytest.mark.parametrize("magnitude", [8e153, 1e154])
+def test_exact_diffusion_likelihood_retains_large_finite_rate(magnitude):
+    import math
+
+    values = np.array([-magnitude, 0.0, magnitude, 0.0])
+    expected = (magnitude * 0.5) * magnitude
+    with np.errstate(over="raise", invalid="raise"):
+        likelihood, rate, mean = rate_fit(np.eye(4), values, np.zeros(4))
+    assert rate == pytest.approx(expected)
+    assert mean == 0
+    assert likelihood == pytest.approx(
+        -2 * (1 + math.log(2 * math.pi) + math.log(expected))
+    )
+
+
+@pytest.mark.parametrize("seed", range(4))
+def test_error_rate_stress_against_direct_covariance(seed):
+    from scipy.linalg import cho_solve
+    from scipy.optimize import minimize_scalar
+
+    rng = np.random.default_rng(seed)
+    c = covariance()
+    values = rng.normal(size=8)
+    se = 10.0 ** rng.uniform(-3, 1, 8)
+    if seed % 2:
+        se[:2] = 0
+    actual, rate, _ = rate_fit(c, values, se)
+
+    def independent(lograte):
+        matrix = np.exp(lograte) * c + np.diag(se**2)
+        lower = np.linalg.cholesky(matrix)
+        ones = cho_solve((lower, True), np.ones(8))
+        mean = ones @ values / ones.sum()
+        delta = values - mean
+        return 0.5 * (
+            8 * np.log(2 * np.pi)
+            + 2 * np.log(np.diag(lower)).sum()
+            + delta @ cho_solve((lower, True), delta)
+        )
+
+    grid = np.linspace(-25, 5, 80)
+    best = int(np.argmin([independent(x) for x in grid]))
+    reference = minimize_scalar(
+        independent,
+        bounds=(grid[max(0, best - 1)], grid[min(79, best + 1)]),
+        method="bounded",
+    )
+    assert actual == pytest.approx(-reference.fun, abs=1e-7)
+    assert rate == pytest.approx(np.exp(reference.x), rel=1e-4)
+
+
+def test_k_permutations_invariant_to_input_order(tmp_path, capsys):
+    frame = pd.DataFrame({"leaf_name": list("ABCDEFGH"), "x": VALUES})
+    first = run_cli(tmp_path, capsys, ["--method", "K"], frame)
+    reverse_tree = "(((H:1.1,G:1.1):0.4,(F:0.8,E:0.8):0.7):0.5,((D:0.9,C:0.9):0.6,(B:0.7,A:0.7):0.8):0.5);"
+    second = run_cli(
+        tmp_path, capsys, ["--method", "K"], frame.iloc[::-1], reverse_tree
+    )
+    pd.testing.assert_frame_equal(first, second)

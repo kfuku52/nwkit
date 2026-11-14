@@ -1,0 +1,902 @@
+{
+  "accuracy": {
+    "retained_fits_verified": 260,
+    "comparisons": [
+      {
+        "job": {
+          "truth": "different",
+          "mode": "shared",
+          "replicate": 0,
+          "traits": 2,
+          "missing_rate": 0.2,
+          "timeout": 1800,
+          "part": "accuracy"
+        },
+        "before_status": "complete",
+        "after_status": "complete",
+        "before_seconds": 965.3760503139929,
+        "after_seconds": 32.72594059898984,
+        "before_peak_rss_kib": 146836,
+        "after_peak_rss_kib": 148776,
+        "after_f1": {
+          "AIC": 0.6363636363636364,
+          "BIC": 0.75
+        },
+        "before_f1": {
+          "AIC": 0.6363636363636364,
+          "BIC": 0.75
+        },
+        "same_selected_branches": {
+          "AIC": true,
+          "BIC": true
+        },
+        "selected_likelihood_delta": {
+          "AIC": 3.47313289239537e-11,
+          "BIC": -1.7053025658242404e-13
+        }
+      },
+      {
+        "job": {
+          "truth": "shared",
+          "mode": "shared",
+          "replicate": 0,
+          "traits": 2,
+          "missing_rate": 0.2,
+          "timeout": 1800,
+          "part": "accuracy"
+        },
+        "before_status": "complete",
+        "after_status": "complete",
+        "before_seconds": 1070.0233068210073,
+        "after_seconds": 34.561772975022905,
+        "before_peak_rss_kib": 146820,
+        "after_peak_rss_kib": 148556,
+        "after_f1": {
+          "AIC": 0.7272727272727273,
+          "BIC": 0.7272727272727273
+        },
+        "before_f1": {
+          "AIC": 0.7272727272727273,
+          "BIC": 0.7272727272727273
+        },
+        "same_selected_branches": {
+          "AIC": true,
+          "BIC": true
+        },
+        "selected_likelihood_delta": {
+          "AIC": 0.00020905104392454632,
+          "BIC": 0.00020905104392454632
+        }
+      },
+      {
+        "job": {
+          "truth": "different",
+          "mode": "shared",
+          "replicate": 1,
+          "traits": 2,
+          "missing_rate": 0.2,
+          "timeout": 1800,
+          "part": "accuracy"
+        },
+        "before_status": "complete",
+        "after_status": "complete",
+        "before_seconds": 1321.741784185986,
+        "after_seconds": 40.94578206096776,
+        "before_peak_rss_kib": 146940,
+        "after_peak_rss_kib": 148768,
+        "after_f1": {
+          "AIC": 0.36363636363636365,
+          "BIC": 0.42857142857142855
+        },
+        "before_f1": {
+          "AIC": 0.36363636363636365,
+          "BIC": 0.42857142857142855
+        },
+        "same_selected_branches": {
+          "AIC": true,
+          "BIC": true
+        },
+        "selected_likelihood_delta": {
+          "AIC": 2.4880638136437483e-06,
+          "BIC": 2.901856532844249e-11
+        }
+      },
+      {
+        "job": {
+          "truth": "different",
+          "mode": "trait-specific",
+          "replicate": 0,
+          "traits": 2,
+          "missing_rate": 0.2,
+          "timeout": 1800,
+          "part": "accuracy"
+        },
+        "before_status": "failed",
+        "after_status": "complete",
+        "before_seconds": null,
+        "after_seconds": 43.461257062037475,
+        "before_peak_rss_kib": 146044,
+        "after_peak_rss_kib": 150292,
+        "after_f1": {
+          "AIC": 0.6363636363636364,
+          "BIC": 0.75
+        }
+      },
+      {
+        "job": {
+          "truth": "shared",
+          "mode": "shared",
+          "replicate": 1,
+          "traits": 2,
+          "missing_rate": 0.2,
+          "timeout": 1800,
+          "part": "accuracy"
+        },
+        "before_status": "complete",
+        "after_status": "complete",
+        "before_seconds": 1454.3151190779754,
+        "after_seconds": 45.74495264701545,
+        "before_peak_rss_kib": 146540,
+        "after_peak_rss_kib": 148452,
+        "after_f1": {
+          "AIC": 0.5454545454545454,
+          "BIC": 0.625
+        },
+        "before_f1": {
+          "AIC": 0.5454545454545454,
+          "BIC": 0.625
+        },
+        "same_selected_branches": {
+          "AIC": true,
+          "BIC": true
+        },
+        "selected_likelihood_delta": {
+          "AIC": 0.00015841579104858283,
+          "BIC": 0.0002071743194562714
+        }
+      },
+      {
+        "job": {
+          "truth": "shared",
+          "mode": "trait-specific",
+          "replicate": 0,
+          "traits": 2,
+          "missing_rate": 0.2,
+          "timeout": 1800,
+          "part": "accuracy"
+        },
+        "before_status": "complete",
+        "after_status": "complete",
+        "before_seconds": 1603.983703105012,
+        "after_seconds": 47.80378993897466,
+        "before_peak_rss_kib": 147116,
+        "after_peak_rss_kib": 148584,
+        "after_f1": {
+          "AIC": 0.7272727272727273,
+          "BIC": 0.7272727272727273
+        },
+        "before_f1": {
+          "AIC": 0.7272727272727273,
+          "BIC": 0.7272727272727273
+        },
+        "same_selected_branches": {
+          "AIC": true,
+          "BIC": true
+        },
+        "selected_likelihood_delta": {
+          "AIC": 0.0006076319530734509,
+          "BIC": 0.0006076319530734509
+        }
+      },
+      {
+        "job": {
+          "truth": "different",
+          "mode": "trait-specific",
+          "replicate": 1,
+          "traits": 2,
+          "missing_rate": 0.2,
+          "timeout": 1800,
+          "part": "accuracy"
+        },
+        "before_status": "complete",
+        "after_status": "complete",
+        "before_seconds": 1732.83639545599,
+        "after_seconds": 53.544827357982285,
+        "before_peak_rss_kib": 147064,
+        "after_peak_rss_kib": 148560,
+        "after_f1": {
+          "AIC": 0.36363636363636365,
+          "BIC": 0.5333333333333333
+        },
+        "before_f1": {
+          "AIC": 0.36363636363636365,
+          "BIC": 0.5333333333333333
+        },
+        "same_selected_branches": {
+          "AIC": false,
+          "BIC": true
+        },
+        "selected_likelihood_delta": {
+          "AIC": -1.0351444359457673e-06,
+          "BIC": -6.536993168992922e-13
+        }
+      },
+      {
+        "job": {
+          "truth": "shared",
+          "mode": "trait-specific",
+          "replicate": 1,
+          "traits": 2,
+          "missing_rate": 0.2,
+          "timeout": 1800,
+          "part": "accuracy"
+        },
+        "before_status": "timeout",
+        "after_status": "complete",
+        "before_seconds": null,
+        "after_seconds": 59.02623486099765,
+        "before_peak_rss_kib": 146812,
+        "after_peak_rss_kib": 148456,
+        "after_f1": {
+          "AIC": 0.5454545454545454,
+          "BIC": 0.625
+        }
+      },
+      {
+        "job": {
+          "truth": "shared",
+          "mode": "shared",
+          "replicate": 2,
+          "traits": 2,
+          "missing_rate": 0.2,
+          "timeout": 1800,
+          "part": "accuracy"
+        },
+        "before_status": "complete",
+        "after_status": "complete",
+        "before_seconds": 1014.8546045470284,
+        "after_seconds": 34.28387522499543,
+        "before_peak_rss_kib": 149192,
+        "after_peak_rss_kib": 150992,
+        "after_f1": {
+          "AIC": 0.45454545454545453,
+          "BIC": 0.46153846153846156
+        },
+        "before_f1": {
+          "AIC": 0.45454545454545453,
+          "BIC": 0.46153846153846156
+        },
+        "same_selected_branches": {
+          "AIC": true,
+          "BIC": true
+        },
+        "selected_likelihood_delta": {
+          "AIC": 3.6075506670840696e-06,
+          "BIC": -2.2737367544323206e-13
+        }
+      },
+      {
+        "job": {
+          "truth": "shared",
+          "mode": "trait-specific",
+          "replicate": 2,
+          "traits": 2,
+          "missing_rate": 0.2,
+          "timeout": 1800,
+          "part": "accuracy"
+        },
+        "before_status": "complete",
+        "after_status": "complete",
+        "before_seconds": 1498.1460138090188,
+        "after_seconds": 41.343701103003696,
+        "before_peak_rss_kib": 147492,
+        "after_peak_rss_kib": 149772,
+        "after_f1": {
+          "AIC": 0.45454545454545453,
+          "BIC": 0.46153846153846156
+        },
+        "before_f1": {
+          "AIC": 0.45454545454545453,
+          "BIC": 0.46153846153846156
+        },
+        "same_selected_branches": {
+          "AIC": true,
+          "BIC": true
+        },
+        "selected_likelihood_delta": {
+          "AIC": 3.8258463064266834e-10,
+          "BIC": -2.2737367544323206e-13
+        }
+      },
+      {
+        "job": {
+          "truth": "different",
+          "mode": "shared",
+          "replicate": 2,
+          "traits": 2,
+          "missing_rate": 0.2,
+          "timeout": 1800,
+          "part": "accuracy"
+        },
+        "before_status": "complete",
+        "after_status": "complete",
+        "before_seconds": 1198.1012466710526,
+        "after_seconds": 33.481353764014784,
+        "before_peak_rss_kib": 149340,
+        "after_peak_rss_kib": 150876,
+        "after_f1": {
+          "AIC": 0.5454545454545454,
+          "BIC": 0.46153846153846156
+        },
+        "before_f1": {
+          "AIC": 0.5454545454545454,
+          "BIC": 0.46153846153846156
+        },
+        "same_selected_branches": {
+          "AIC": true,
+          "BIC": true
+        },
+        "selected_likelihood_delta": {
+          "AIC": 1.1937117960769683e-12,
+          "BIC": 4.774847184307873e-12
+        }
+      },
+      {
+        "job": {
+          "truth": "different",
+          "mode": "trait-specific",
+          "replicate": 2,
+          "traits": 2,
+          "missing_rate": 0.2,
+          "timeout": 1800,
+          "part": "accuracy"
+        },
+        "before_status": "complete",
+        "after_status": "complete",
+        "before_seconds": 1568.026125007018,
+        "after_seconds": 40.206207642972004,
+        "before_peak_rss_kib": 147364,
+        "after_peak_rss_kib": 149536,
+        "after_f1": {
+          "AIC": 0.5454545454545454,
+          "BIC": 0.46153846153846156
+        },
+        "before_f1": {
+          "AIC": 0.5454545454545454,
+          "BIC": 0.46153846153846156
+        },
+        "same_selected_branches": {
+          "AIC": true,
+          "BIC": true
+        },
+        "selected_likelihood_delta": {
+          "AIC": 4.948749960931309e-07,
+          "BIC": -1.9610979506978765e-12
+        }
+      },
+      {
+        "job": {
+          "truth": "shared",
+          "mode": "shared",
+          "replicate": 3,
+          "traits": 2,
+          "missing_rate": 0.2,
+          "timeout": 1800,
+          "part": "accuracy"
+        },
+        "before_status": "complete",
+        "after_status": "complete",
+        "before_seconds": 1429.5205101959873,
+        "after_seconds": 44.73579606198473,
+        "before_peak_rss_kib": 147084,
+        "after_peak_rss_kib": 148732,
+        "after_f1": {
+          "AIC": 0.6363636363636364,
+          "BIC": 0.625
+        },
+        "before_f1": {
+          "AIC": 0.6363636363636364,
+          "BIC": 0.625
+        },
+        "same_selected_branches": {
+          "AIC": true,
+          "BIC": true
+        },
+        "selected_likelihood_delta": {
+          "AIC": 0.00012903048136081452,
+          "BIC": 1.2452765929538145e-06
+        }
+      },
+      {
+        "job": {
+          "truth": "shared",
+          "mode": "trait-specific",
+          "replicate": 3,
+          "traits": 2,
+          "missing_rate": 0.2,
+          "timeout": 1800,
+          "part": "accuracy"
+        },
+        "before_status": "complete",
+        "after_status": "complete",
+        "before_seconds": 1715.9340283269994,
+        "after_seconds": 48.53115864697611,
+        "before_peak_rss_kib": 147364,
+        "after_peak_rss_kib": 148964,
+        "after_f1": {
+          "AIC": 0.6363636363636364,
+          "BIC": 0.625
+        },
+        "before_f1": {
+          "AIC": 0.6363636363636364,
+          "BIC": 0.625
+        },
+        "same_selected_branches": {
+          "AIC": true,
+          "BIC": true
+        },
+        "selected_likelihood_delta": {
+          "AIC": -2.1081055479044153e-06,
+          "BIC": 1.0813989774760557e-06
+        }
+      },
+      {
+        "job": {
+          "truth": "different",
+          "mode": "shared",
+          "replicate": 3,
+          "traits": 2,
+          "missing_rate": 0.2,
+          "timeout": 1800,
+          "part": "accuracy"
+        },
+        "before_status": "complete",
+        "after_status": "complete",
+        "before_seconds": 1408.6344268950052,
+        "after_seconds": 44.30109101999551,
+        "before_peak_rss_kib": 147168,
+        "after_peak_rss_kib": 149080,
+        "after_f1": {
+          "AIC": 0.5714285714285714,
+          "BIC": 0.625
+        },
+        "before_f1": {
+          "AIC": 0.5714285714285714,
+          "BIC": 0.625
+        },
+        "same_selected_branches": {
+          "AIC": true,
+          "BIC": true
+        },
+        "selected_likelihood_delta": {
+          "AIC": 0.05491665209638086,
+          "BIC": 6.848182465546415e-09
+        }
+      },
+      {
+        "job": {
+          "truth": "different",
+          "mode": "trait-specific",
+          "replicate": 3,
+          "traits": 2,
+          "missing_rate": 0.2,
+          "timeout": 1800,
+          "part": "accuracy"
+        },
+        "before_status": "complete",
+        "after_status": "complete",
+        "before_seconds": 1798.1836584460107,
+        "after_seconds": 48.72741814702749,
+        "before_peak_rss_kib": 147236,
+        "after_peak_rss_kib": 149084,
+        "after_f1": {
+          "AIC": 0.5714285714285714,
+          "BIC": 0.625
+        },
+        "before_f1": {
+          "AIC": 0.5714285714285714,
+          "BIC": 0.625
+        },
+        "same_selected_branches": {
+          "AIC": true,
+          "BIC": true
+        },
+        "selected_likelihood_delta": {
+          "AIC": 2.7364781232108726e-05,
+          "BIC": 6.848182465546415e-09
+        }
+      },
+      {
+        "job": {
+          "truth": "shared",
+          "mode": "shared",
+          "replicate": 4,
+          "traits": 2,
+          "missing_rate": 0.2,
+          "timeout": 1800,
+          "part": "accuracy"
+        },
+        "before_status": "complete",
+        "after_status": "complete",
+        "before_seconds": 1218.031089474971,
+        "after_seconds": 43.52940414403565,
+        "before_peak_rss_kib": 147492,
+        "after_peak_rss_kib": 150888,
+        "after_f1": {
+          "AIC": 0.9523809523809523,
+          "BIC": 0.9523809523809523
+        },
+        "before_f1": {
+          "AIC": 0.9523809523809523,
+          "BIC": 0.9523809523809523
+        },
+        "same_selected_branches": {
+          "AIC": true,
+          "BIC": true
+        },
+        "selected_likelihood_delta": {
+          "AIC": -9.215229397341318e-07,
+          "BIC": -9.215229397341318e-07
+        }
+      },
+      {
+        "job": {
+          "truth": "different",
+          "mode": "shared",
+          "replicate": 4,
+          "traits": 2,
+          "missing_rate": 0.2,
+          "timeout": 1800,
+          "part": "accuracy"
+        },
+        "before_status": "complete",
+        "after_status": "complete",
+        "before_seconds": 811.7664537039818,
+        "after_seconds": 32.344075514993165,
+        "before_peak_rss_kib": 147484,
+        "after_peak_rss_kib": 149096,
+        "after_f1": {
+          "AIC": 0.9090909090909091,
+          "BIC": 0.9523809523809523
+        },
+        "before_f1": {
+          "AIC": 0.9090909090909091,
+          "BIC": 0.9523809523809523
+        },
+        "same_selected_branches": {
+          "AIC": true,
+          "BIC": true
+        },
+        "selected_likelihood_delta": {
+          "AIC": 0.00028850403640490185,
+          "BIC": 0.0005878007570458976
+        }
+      },
+      {
+        "job": {
+          "truth": "different",
+          "mode": "trait-specific",
+          "replicate": 4,
+          "traits": 2,
+          "missing_rate": 0.2,
+          "timeout": 1800,
+          "part": "accuracy"
+        },
+        "before_status": "complete",
+        "after_status": "complete",
+        "before_seconds": 1015.3032572150114,
+        "after_seconds": 44.0395439779968,
+        "before_peak_rss_kib": 149476,
+        "after_peak_rss_kib": 150912,
+        "after_f1": {
+          "AIC": 0.9523809523809523,
+          "BIC": 0.9523809523809523
+        },
+        "before_f1": {
+          "AIC": 0.9523809523809523,
+          "BIC": 0.9523809523809523
+        },
+        "same_selected_branches": {
+          "AIC": true,
+          "BIC": true
+        },
+        "selected_likelihood_delta": {
+          "AIC": 0.00019694776284495674,
+          "BIC": 0.00019694776284495674
+        }
+      },
+      {
+        "job": {
+          "truth": "shared",
+          "mode": "trait-specific",
+          "replicate": 4,
+          "traits": 2,
+          "missing_rate": 0.2,
+          "timeout": 1800,
+          "part": "accuracy"
+        },
+        "before_status": "complete",
+        "after_status": "complete",
+        "before_seconds": 1234.465539480967,
+        "after_seconds": 48.864177606010344,
+        "before_peak_rss_kib": 147492,
+        "after_peak_rss_kib": 150812,
+        "after_f1": {
+          "AIC": 0.9523809523809523,
+          "BIC": 0.9523809523809523
+        },
+        "before_f1": {
+          "AIC": 0.9523809523809523,
+          "BIC": 0.9523809523809523
+        },
+        "same_selected_branches": {
+          "AIC": true,
+          "BIC": true
+        },
+        "selected_likelihood_delta": {
+          "AIC": 0.0004694647234373406,
+          "BIC": 0.0004694647234373406
+        }
+      }
+    ]
+  },
+  "timing": {
+    "retained_fits_verified": 52,
+    "comparisons": [
+      {
+        "job": {
+          "truth": "shared",
+          "mode": "shared",
+          "replicate": 0,
+          "traits": 2,
+          "missing_rate": 0.2,
+          "timeout": 1800,
+          "part": "timing"
+        },
+        "before_status": "complete",
+        "after_status": "complete",
+        "before_seconds": 842.493005634984,
+        "after_seconds": 37.434572559955996,
+        "before_peak_rss_kib": 147236,
+        "after_peak_rss_kib": 151332,
+        "after_f1": {
+          "AIC": 0.7272727272727273,
+          "BIC": 0.7272727272727273
+        },
+        "before_f1": {
+          "AIC": 0.7272727272727273,
+          "BIC": 0.7272727272727273
+        },
+        "same_selected_branches": {
+          "AIC": true,
+          "BIC": true
+        },
+        "selected_likelihood_delta": {
+          "AIC": 0.00020905104392454632,
+          "BIC": 0.00020905104392454632
+        }
+      },
+      {
+        "job": {
+          "truth": "shared",
+          "mode": "trait-specific",
+          "replicate": 0,
+          "traits": 2,
+          "missing_rate": 0.2,
+          "timeout": 1800,
+          "part": "timing"
+        },
+        "before_status": "complete",
+        "after_status": "complete",
+        "before_seconds": 1189.2310061239987,
+        "after_seconds": 42.152478226984385,
+        "before_peak_rss_kib": 149204,
+        "after_peak_rss_kib": 150976,
+        "after_f1": {
+          "AIC": 0.7272727272727273,
+          "BIC": 0.7272727272727273
+        },
+        "before_f1": {
+          "AIC": 0.7272727272727273,
+          "BIC": 0.7272727272727273
+        },
+        "same_selected_branches": {
+          "AIC": true,
+          "BIC": true
+        },
+        "selected_likelihood_delta": {
+          "AIC": 0.0006076319530734509,
+          "BIC": 0.0006076319530734509
+        }
+      },
+      {
+        "job": {
+          "truth": "different",
+          "mode": "trait-specific",
+          "replicate": 0,
+          "traits": 2,
+          "missing_rate": 0.2,
+          "timeout": 1800,
+          "part": "timing"
+        },
+        "before_status": "failed",
+        "after_status": "complete",
+        "before_seconds": null,
+        "after_seconds": 35.877279724983964,
+        "before_peak_rss_kib": 148340,
+        "after_peak_rss_kib": 150688,
+        "after_f1": {
+          "AIC": 0.6363636363636364,
+          "BIC": 0.75
+        }
+      },
+      {
+        "job": {
+          "truth": "different",
+          "mode": "shared",
+          "replicate": 0,
+          "traits": 2,
+          "missing_rate": 0.2,
+          "timeout": 1800,
+          "part": "timing"
+        },
+        "before_status": "complete",
+        "after_status": "complete",
+        "before_seconds": 735.6041277519544,
+        "after_seconds": 26.991611137986183,
+        "before_peak_rss_kib": 149160,
+        "after_peak_rss_kib": 150520,
+        "after_f1": {
+          "AIC": 0.6363636363636364,
+          "BIC": 0.75
+        },
+        "before_f1": {
+          "AIC": 0.6363636363636364,
+          "BIC": 0.75
+        },
+        "same_selected_branches": {
+          "AIC": true,
+          "BIC": true
+        },
+        "selected_likelihood_delta": {
+          "AIC": 3.47313289239537e-11,
+          "BIC": -1.7053025658242404e-13
+        }
+      }
+    ]
+  },
+  "kernels": [
+    {
+      "tips": 100,
+      "traits": 2,
+      "root": "OUfixedRoot",
+      "engine": "dense_observed_gls",
+      "errors": {
+        "log_likelihood": 1.8474111129762605e-13,
+        "coefficients": 1.5543122344752192e-15,
+        "coefficient_covariance": 2.498001805406602e-16,
+        "predicted": 1.1102230246251565e-15
+      },
+      "before_median_seconds": 0.008986141602508723,
+      "after_median_seconds": 0.00134742499794811,
+      "median_ratio": 6.669121929749728
+    },
+    {
+      "tips": 100,
+      "traits": 2,
+      "root": "OUrandomRoot",
+      "engine": "dense_observed_gls",
+      "errors": {
+        "log_likelihood": 1.4210854715202004e-13,
+        "coefficients": 1.0547118733938987e-15,
+        "coefficient_covariance": 8.326672684688674e-17,
+        "predicted": 6.938893903907228e-16
+      },
+      "before_median_seconds": 0.008288424997590482,
+      "after_median_seconds": 0.0007205749978311359,
+      "median_ratio": 11.502515383600421
+    },
+    {
+      "tips": 100,
+      "traits": 5,
+      "root": "OUfixedRoot",
+      "engine": "vector_tree_pruning",
+      "errors": {
+        "log_likelihood": 0.0,
+        "coefficients": 0.0,
+        "coefficient_covariance": 0.0,
+        "predicted": 0.0
+      },
+      "before_median_seconds": 0.008810066606383771,
+      "after_median_seconds": 0.009863191598560661,
+      "median_ratio": 0.893226753059266
+    },
+    {
+      "tips": 100,
+      "traits": 5,
+      "root": "OUrandomRoot",
+      "engine": "vector_tree_pruning",
+      "errors": {
+        "log_likelihood": 0.0,
+        "coefficients": 0.0,
+        "coefficient_covariance": 0.0,
+        "predicted": 0.0
+      },
+      "before_median_seconds": 0.010771283193025737,
+      "after_median_seconds": 0.008862591802608222,
+      "median_ratio": 1.2153649217891087
+    },
+    {
+      "tips": 1000,
+      "traits": 2,
+      "root": "OUfixedRoot",
+      "engine": "vector_tree_pruning",
+      "errors": {
+        "log_likelihood": 0.0,
+        "coefficients": 0.0,
+        "coefficient_covariance": 0.0,
+        "predicted": 0.0
+      },
+      "before_median_seconds": 0.08010161680867896,
+      "after_median_seconds": 0.07627104159910232,
+      "median_ratio": 1.050223192567777
+    },
+    {
+      "tips": 1000,
+      "traits": 2,
+      "root": "OUrandomRoot",
+      "engine": "vector_tree_pruning",
+      "errors": {
+        "log_likelihood": 0.0,
+        "coefficients": 0.0,
+        "coefficient_covariance": 0.0,
+        "predicted": 0.0
+      },
+      "before_median_seconds": 0.08627045840257778,
+      "after_median_seconds": 0.07530074180103838,
+      "median_ratio": 1.1456787322298083
+    },
+    {
+      "tips": 1000,
+      "traits": 5,
+      "root": "OUfixedRoot",
+      "engine": "vector_tree_pruning",
+      "errors": {
+        "log_likelihood": 0.0,
+        "coefficients": 0.0,
+        "coefficient_covariance": 0.0,
+        "predicted": 0.0
+      },
+      "before_median_seconds": 0.08403594999108463,
+      "after_median_seconds": 0.09509027519961818,
+      "median_ratio": 0.8837491511584358
+    },
+    {
+      "tips": 1000,
+      "traits": 5,
+      "root": "OUrandomRoot",
+      "engine": "vector_tree_pruning",
+      "errors": {
+        "log_likelihood": 0.0,
+        "coefficients": 0.0,
+        "coefficient_covariance": 0.0,
+        "predicted": 0.0
+      },
+      "before_median_seconds": 0.08541420840192586,
+      "after_median_seconds": 0.08176434999331832,
+      "median_ratio": 1.0446387503711068
+    }
+  ],
+  "immediate_baseline_pair": {
+    "before_seconds": 760.7258710929891,
+    "after_seconds": 37.434572559955996,
+    "ratio": 20.321478758027613,
+    "before_peak_rss_kib": 146920,
+    "after_peak_rss_kib": 151332,
+    "same_selected_branches": true,
+    "likelihood_delta": {
+      "AIC": 0.00020905104392454632,
+      "BIC": 0.00020905104392454632
+    }
+  }
+}

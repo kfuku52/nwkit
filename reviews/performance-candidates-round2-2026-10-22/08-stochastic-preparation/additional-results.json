@@ -1,0 +1,281 @@
+{
+  "environment": {
+    "python": "3.12.14 (main, Aug 25 2026, 13:50:33) [Clang 22.1.3 ]",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "numpy": "2.5.4",
+    "scipy": "1.17.1",
+    "pandas": "3.0.6",
+    "nwkit": "0.43.55",
+    "nwkit_source": "/tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/__init__.py",
+    "baseline_commit": "86c8f2c537769d852c17e2c789340f6c9de4ef54",
+    "timing_limit": "Exploratory host-local measurements; unrelated CPU jobs are active.",
+    "memory_limit": "tracemalloc peak is not complete RSS or all native allocations."
+  },
+  "default_draw_operations": [
+    {
+      "case": "unique-count-default100",
+      "scope": "complete count-table operation",
+      "draws": 100,
+      "branches": 62,
+      "states": 3,
+      "comparison": {
+        "all_fields_exact": true,
+        "rows": 372
+      },
+      "uniformization_calls": {
+        "baseline": 124,
+        "candidate": 62
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.3316752089885995,
+            0.33407737500965595,
+            0.3399498750222847,
+            0.3383653749478981,
+            0.3358142500510439,
+            0.3362963330000639,
+            0.3352742079878226
+          ],
+          "median_seconds": 0.3358142500510439,
+          "min_seconds": 0.3316752089885995,
+          "max_seconds": 0.3399498750222847
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.33579270797781646,
+            0.3314958330010995,
+            0.33233345800545067,
+            0.3319987090071663,
+            0.32894470798783004,
+            0.3367985419463366,
+            0.3377034160075709
+          ],
+          "median_seconds": 0.33233345800545067,
+          "min_seconds": 0.32894470798783004,
+          "max_seconds": 0.3377034160075709
+        },
+        "speedup": 1.0104737936002104
+      },
+      "peak_bytes": {
+        "baseline": 652334,
+        "candidate": 644928
+      }
+    },
+    {
+      "case": "unique-history-default100",
+      "scope": "complete conditional-history sample",
+      "draws": 100,
+      "branches": 62,
+      "states": 3,
+      "comparison": {
+        "all_fields_exact": true,
+        "draws": 100,
+        "history_rows": 8916
+      },
+      "uniformization_calls": {
+        "baseline": 186,
+        "candidate": 62
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.36101054202299565,
+            0.35744599997997284,
+            0.36266470805276185,
+            0.36535458406433463,
+            0.3618168749380857,
+            0.3612495840061456,
+            0.3588374579558149
+          ],
+          "median_seconds": 0.3612495840061456,
+          "min_seconds": 0.35744599997997284,
+          "max_seconds": 0.36535458406433463
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.3564593329792842,
+            0.3588348750490695,
+            0.35702516604214907,
+            0.3497535000788048,
+            0.34887104108929634,
+            0.3614939160179347,
+            0.3577529580798
+          ],
+          "median_seconds": 0.35702516604214907,
+          "min_seconds": 0.34887104108929634,
+          "max_seconds": 0.3614939160179347
+        },
+        "speedup": 1.0118322694470725
+      },
+      "peak_bytes": {
+        "baseline": 2003766,
+        "candidate": 2003511
+      }
+    }
+  ],
+  "streams": [
+    {
+      "histories": false,
+      "regime_projection": false,
+      "comparison": {
+        "all_fields_exact": true,
+        "rows": 372
+      },
+      "generator_count": 4,
+      "all_final_rng_states_exact": true
+    },
+    {
+      "histories": false,
+      "regime_projection": true,
+      "comparison": {
+        "all_fields_exact": true,
+        "rows": 60
+      },
+      "generator_count": 4,
+      "all_final_rng_states_exact": true
+    },
+    {
+      "histories": true,
+      "regime_projection": false,
+      "comparison": {
+        "all_fields_exact": true,
+        "draws": 4,
+        "history_rows": 363
+      },
+      "generator_count": 8,
+      "all_final_rng_states_exact": true
+    },
+    {
+      "histories": true,
+      "regime_projection": true,
+      "comparison": {
+        "all_fields_exact": true,
+        "draws": 4,
+        "history_rows": 185
+      },
+      "generator_count": 8,
+      "all_final_rng_states_exact": true
+    }
+  ],
+  "guard_order": {
+    "count_work": {
+      "same_exception": true,
+      "exception": [
+        "ValueError",
+        "Stochastic mapping would require more than 1 bounded uniformization steps; reduce --n-sim, the rate/time scale, or fitted rate bounds."
+      ],
+      "contexts_before_failure": 0
+    },
+    "history_work": {
+      "same_exception": true,
+      "exception": [
+        "ValueError",
+        "Stochastic mapping would require more than 1 bounded uniformization steps; reduce --n-sim, the rate/time scale, or fitted rate bounds."
+      ],
+      "contexts_before_failure": 0
+    },
+    "history_segments": {
+      "same_exception": true,
+      "exception": [
+        "ValueError",
+        "Stochastic-map histories exceed the 1,000,000-segment storage budget; reduce --n-sim or the rate/time scale."
+      ],
+      "contexts_before_failure": 0
+    },
+    "history_records": {
+      "same_exception": true,
+      "exception": [
+        "ValueError",
+        "Map histories exceed 100,000 draw/node records; reduce --n-sim."
+      ],
+      "contexts_before_failure": 0
+    },
+    "history_dense_bytes": {
+      "same_exception": true,
+      "exception": [
+        "ValueError",
+        "Map simulation arrays exceed 256 MiB before histories; reduce tree or expanded-state size."
+      ],
+      "contexts_before_failure": 0
+    }
+  },
+  "metadata_mutation_lifetime": [
+    {
+      "mutation_step": 0,
+      "histories": false,
+      "all_prepared_spec_fields_exact": true
+    },
+    {
+      "mutation_step": 0,
+      "histories": true,
+      "all_prepared_spec_fields_exact": true
+    },
+    {
+      "mutation_step": 1,
+      "histories": false,
+      "all_prepared_spec_fields_exact": true
+    },
+    {
+      "mutation_step": 1,
+      "histories": true,
+      "all_prepared_spec_fields_exact": true
+    },
+    {
+      "mutation_step": 2,
+      "histories": false,
+      "all_prepared_spec_fields_exact": true
+    },
+    {
+      "mutation_step": 2,
+      "histories": true,
+      "all_prepared_spec_fields_exact": true
+    }
+  ],
+  "edges": [
+    {
+      "case": "zero_rate_zero_length",
+      "histories": false,
+      "comparison": {
+        "all_fields_exact": true,
+        "rows": 2
+      },
+      "rng_exact": true
+    },
+    {
+      "case": "zero_rate_zero_length",
+      "histories": true,
+      "comparison": {
+        "all_fields_exact": true,
+        "draws": 2,
+        "history_rows": 2
+      },
+      "rng_exact": true
+    },
+    {
+      "case": "rare_endpoint_chain",
+      "histories": false,
+      "comparison": {
+        "all_fields_exact": true,
+        "rows": 4160
+      },
+      "rng_exact": true
+    },
+    {
+      "case": "rare_endpoint_chain",
+      "histories": true,
+      "comparison": {
+        "all_fields_exact": true,
+        "draws": 2,
+        "history_rows": 128
+      },
+      "rng_exact": true
+    }
+  ],
+  "default_guard_returns_none": true
+}

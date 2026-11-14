@@ -1,0 +1,63 @@
++ /Users/kf/miniforge3-arm64/bin/python -m pytest -q --durations=20 --durations-min=0.05 tests/test_native_optimization_audit.py::test_screen_harness_rejects_invalid_sizes_and_colliding_outputs tests/test_discrete_asr_models.py::test_mk_multistart_handles_penalty_regions_on_long_branches
+...F                                                                     [100%]
+=================================== FAILURES ===================================
+_________ test_mk_multistart_handles_penalty_regions_on_long_branches __________
+
+    def test_mk_multistart_handles_penalty_regions_on_long_branches():
+        tree = tree_from("[&R]((a:0.3,b:0.7):0.5,(c:50,d:0.9):0.25)R;")
+        states = ["x", "y", "z"]
+        observed = {"a": "x", "b": "y", "c": "z", "d": "x"}
+        likelihood = {
+            name: np.array([state == item for item in states], dtype=float)
+            for name, state in observed.items()
+        }
+        _, fit = asr.compute_mk_marginals(
+            tree,
+            states,
+            observed,
+            likelihood,
+            model="SYM",
+        )
+        assert fit["log_likelihood"] == pytest.approx(-3.666938522, abs=2e-7)
+        assert fit["optimizer_converged_starts"] == fit["optimizer_starts"]
+>       assert fit["fit_status"] == "ok"
+E       AssertionError: assert 'rate_lower_boundary' == 'ok'
+E         
+E         - ok
+E         + rate_lower_boundary
+
+tests/test_discrete_asr_models.py:539: AssertionError
+============================= slowest 20 durations =============================
+1.54s call     tests/test_discrete_asr_models.py::test_mk_multistart_handles_penalty_regions_on_long_branches
+0.68s call     tests/test_native_optimization_audit.py::test_screen_harness_rejects_invalid_sizes_and_colliding_outputs[extra1-.json]
+0.68s call     tests/test_native_optimization_audit.py::test_screen_harness_rejects_invalid_sizes_and_colliding_outputs[extra0-.npz]
+0.67s call     tests/test_native_optimization_audit.py::test_screen_harness_rejects_invalid_sizes_and_colliding_outputs[extra2-.json]
+
+(8 durations < 0.05s hidden.)
+=========================== short test summary info ============================
+FAILED tests/test_discrete_asr_models.py::test_mk_multistart_handles_penalty_regions_on_long_branches
+1 failed, 3 passed in 5.67s
+Traceback (most recent call last):
+  File "/Users/kf/repos/nwkit/tools/check.py", line 150, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "/Users/kf/repos/nwkit/tools/check.py", line 135, in main
+    run_tests(pytest_args)
+    ~~~~~~~~~^^^^^^^^^^^^^
+  File "/Users/kf/repos/nwkit/tools/check.py", line 45, in run_tests
+    run(
+    ~~~^
+        PYTHON,
+        ^^^^^^^
+    ...<6 lines>...
+        *pytest_args,
+        ^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/kf/repos/nwkit/tools/check.py", line 20, in run
+    subprocess.run(command, cwd=PROJECT_ROOT, check=True, env=env)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kf/miniforge3-arm64/lib/python3.14/subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '('/Users/kf/miniforge3-arm64/bin/python', '-m', 'pytest', '-q', '--durations=20', '--durations-min=0.05', 'tests/test_native_optimization_audit.py::test_screen_harness_rejects_invalid_sizes_and_colliding_outputs', 'tests/test_discrete_asr_models.py::test_mk_multistart_handles_penalty_regions_on_long_branches')' returned non-zero exit status 1.

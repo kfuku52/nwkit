@@ -1,0 +1,584 @@
+{
+  "schema_version": 7,
+  "selection": "calibrated",
+  "backend": "nwkit",
+  "nwkit_version": "0.43.15",
+  "trait": "value",
+  "root_model": "OUfixedRoot",
+  "effective_root_model": "root_mean_removed_by_contrasts",
+  "time_scale": "original",
+  "tree_normalized": false,
+  "max_shifts": 1,
+  "convergence_searched": false,
+  "model_family": {
+    "finite_alpha": "OU_with_regime_optima",
+    "zero_alpha": "scaled_effect_drift_limit_not_finite_OU_optima",
+    "infinite_alpha": "independent_tip_process_with_regime_means",
+    "root_mean": "removed_by_fixed_orthonormal_contrasts"
+  },
+  "shift_branch_ids": [
+    1
+  ],
+  "parameters": {
+    "alpha": null,
+    "alpha_height": null,
+    "alpha_status": "independent_limit",
+    "alpha_limit_supported": true,
+    "sigma2": null,
+    "process_tip_variance": 0.03357142857142855,
+    "intercept": 6.025000000000001,
+    "contrast_log_likelihood": 1.9467099661938145
+  },
+  "alpha_profile": [
+    {
+      "alpha_height": 0.0,
+      "limit": null,
+      "log_likelihood": 0.13261158811760576,
+      "supported": true
+    },
+    {
+      "alpha_height": null,
+      "limit": "infinity",
+      "log_likelihood": 1.9467099661938145,
+      "supported": true
+    },
+    {
+      "alpha_height": 0.001,
+      "limit": null,
+      "log_likelihood": 0.13347273624552192,
+      "supported": true
+    },
+    {
+      "alpha_height": 0.0017782794100389228,
+      "limit": null,
+      "log_likelihood": 0.13414279168787657,
+      "supported": true
+    },
+    {
+      "alpha_height": 0.0031622776601683794,
+      "limit": null,
+      "log_likelihood": 0.13533399485093645,
+      "supported": true
+    },
+    {
+      "alpha_height": 0.005623413251903491,
+      "limit": null,
+      "log_likelihood": 0.13745120295678626,
+      "supported": true
+    },
+    {
+      "alpha_height": 0.01,
+      "limit": null,
+      "log_likelihood": 0.14121276025686558,
+      "supported": true
+    },
+    {
+      "alpha_height": 0.01778279410038923,
+      "limit": null,
+      "log_likelihood": 0.14789099849944165,
+      "supported": true
+    },
+    {
+      "alpha_height": 0.03162277660168379,
+      "limit": null,
+      "log_likelihood": 0.15973234530780767,
+      "supported": true
+    },
+    {
+      "alpha_height": 0.05623413251903491,
+      "limit": null,
+      "log_likelihood": 0.18068026026536943,
+      "supported": true
+    },
+    {
+      "alpha_height": 0.1,
+      "limit": null,
+      "log_likelihood": 0.21758340276120047,
+      "supported": true
+    },
+    {
+      "alpha_height": 0.1778279410038923,
+      "limit": null,
+      "log_likelihood": 0.28209341556018663,
+      "supported": true
+    },
+    {
+      "alpha_height": 0.31622776601683794,
+      "limit": null,
+      "log_likelihood": 0.3932172556960425,
+      "supported": true
+    },
+    {
+      "alpha_height": 0.5623413251903491,
+      "limit": null,
+      "log_likelihood": 0.5791260007311847,
+      "supported": true
+    },
+    {
+      "alpha_height": 1.0,
+      "limit": null,
+      "log_likelihood": 0.8714802966884669,
+      "supported": true
+    },
+    {
+      "alpha_height": 1.7782794100389228,
+      "limit": null,
+      "log_likelihood": 1.2711808675367706,
+      "supported": true
+    },
+    {
+      "alpha_height": 3.1622776601683795,
+      "limit": null,
+      "log_likelihood": 1.6708651443535938,
+      "supported": true
+    },
+    {
+      "alpha_height": 5.623413251903491,
+      "limit": null,
+      "log_likelihood": 1.893420420810256,
+      "supported": true
+    },
+    {
+      "alpha_height": 10.0,
+      "limit": null,
+      "log_likelihood": 1.9438391120516572,
+      "supported": true
+    },
+    {
+      "alpha_height": 17.78279410038923,
+      "limit": null,
+      "log_likelihood": 1.946693949888666,
+      "supported": true
+    },
+    {
+      "alpha_height": 31.622776601683793,
+      "limit": null,
+      "log_likelihood": 1.9467099646180996,
+      "supported": true
+    },
+    {
+      "alpha_height": 56.23413251903491,
+      "limit": null,
+      "log_likelihood": 1.9467099661938145,
+      "supported": true
+    },
+    {
+      "alpha_height": 100.0,
+      "limit": null,
+      "log_likelihood": 1.9467099661938145,
+      "supported": true
+    },
+    {
+      "alpha_height": 177.82794100389228,
+      "limit": null,
+      "log_likelihood": 1.9467099661938145,
+      "supported": true
+    },
+    {
+      "alpha_height": 316.22776601683796,
+      "limit": null,
+      "log_likelihood": 1.9467099661938145,
+      "supported": true
+    },
+    {
+      "alpha_height": 562.341325190349,
+      "limit": null,
+      "log_likelihood": 1.9467099661938145,
+      "supported": true
+    },
+    {
+      "alpha_height": 1000.0,
+      "limit": null,
+      "log_likelihood": 1.9467099661938145,
+      "supported": true
+    }
+  ],
+  "alpha_profile_note": "1.920729 log-likelihood support cutoff is diagnostic, not a post-selection confidence interval. Null alpha_height with limit=infinity is the exact independent limit.",
+  "calibration": {
+    "replicates": 199,
+    "level": 0.05,
+    "seed": 1,
+    "tests": [
+      {
+        "stage": 0,
+        "candidate_count": 1,
+        "statistic": 27.97959240593726,
+        "p_value": 0.005,
+        "p_value_kind": "grid_supremum",
+        "p_value_lower_bound": 0.005,
+        "null_alpha_evaluations": [
+          {
+            "alpha_height": 0.0,
+            "p_value": 0.005
+          },
+          {
+            "alpha_height": null,
+            "p_value": 0.005
+          },
+          {
+            "alpha_height": 0.001,
+            "p_value": 0.005
+          },
+          {
+            "alpha_height": 0.0017782794100389228,
+            "p_value": 0.005
+          },
+          {
+            "alpha_height": 0.0031622776601683794,
+            "p_value": 0.005
+          },
+          {
+            "alpha_height": 0.005623413251903491,
+            "p_value": 0.005
+          },
+          {
+            "alpha_height": 0.01,
+            "p_value": 0.005
+          },
+          {
+            "alpha_height": 0.01778279410038923,
+            "p_value": 0.005
+          },
+          {
+            "alpha_height": 0.03162277660168379,
+            "p_value": 0.005
+          },
+          {
+            "alpha_height": 0.05623413251903491,
+            "p_value": 0.005
+          },
+          {
+            "alpha_height": 0.1,
+            "p_value": 0.005
+          },
+          {
+            "alpha_height": 0.1778279410038923,
+            "p_value": 0.005
+          },
+          {
+            "alpha_height": 0.31622776601683794,
+            "p_value": 0.005
+          },
+          {
+            "alpha_height": 0.5623413251903491,
+            "p_value": 0.005
+          },
+          {
+            "alpha_height": 1.0,
+            "p_value": 0.005
+          },
+          {
+            "alpha_height": 1.7782794100389228,
+            "p_value": 0.005
+          },
+          {
+            "alpha_height": 3.1622776601683795,
+            "p_value": 0.005
+          },
+          {
+            "alpha_height": 5.623413251903491,
+            "p_value": 0.005
+          },
+          {
+            "alpha_height": 10.0,
+            "p_value": 0.005
+          },
+          {
+            "alpha_height": 17.78279410038923,
+            "p_value": 0.005
+          },
+          {
+            "alpha_height": 31.622776601683793,
+            "p_value": 0.005
+          },
+          {
+            "alpha_height": 56.23413251903491,
+            "p_value": 0.005
+          },
+          {
+            "alpha_height": 100.0,
+            "p_value": 0.005
+          },
+          {
+            "alpha_height": 177.82794100389228,
+            "p_value": 0.005
+          },
+          {
+            "alpha_height": 316.22776601683796,
+            "p_value": 0.005
+          },
+          {
+            "alpha_height": 562.341325190349,
+            "p_value": 0.005
+          },
+          {
+            "alpha_height": 1000.0,
+            "p_value": 0.005
+          }
+        ]
+      }
+    ],
+    "method": "sequential_complete_search_parametric_bootstrap",
+    "null_calibration": "alpha_grid_envelope",
+    "null_hypothesis": "no_effective_shift",
+    "later_stage_interpretation": "family_selection_not_individual_branch_or_convergence_tests",
+    "likelihood_process_scale": "profile_ML",
+    "plugin_generation_process_scale": "RSS_over_residual_degrees_of_freedom",
+    "replicate_failure_policy": "fail_entire_run",
+    "note": "Without measurement error, the first test covers every fitted alpha grid point; early acceptance reports p_value=1 as an explicit upper bound. Later stages and known-error fits use plug-in calibration. This is not a uniform guarantee over continuous nuisance parameters. Every replicate repeats the candidate and nuisance-grid search."
+  },
+  "search": {
+    "strategy": "exhaustive",
+    "evaluated_candidates": 15,
+    "likelihood": "Gaussian_orthonormal_contrast_density",
+    "profile": "finite_grid_including_exact_alpha_limits",
+    "continuous_global_optimum_certified": false,
+    "process_variance_grid": null
+  },
+  "standard_error_column": null,
+  "effective_observation_error": "none",
+  "optimum_convention": "root_mean_equals_baseline_optimum; suppressed if alpha limit is supported",
+  "optimum_identifiability_rule": "diagnostic_only: finite_grid_maximum, positive_process_variance, and neither_alpha_limit_in_profile_support_set",
+  "shift_effects": [
+    {
+      "branch_id": 1,
+      "regime": "shift_1",
+      "parent_regime": "baseline",
+      "mean_effect": -4.9,
+      "optimum_effect": null,
+      "optimum_identifiable": false
+    }
+  ],
+  "regime_parameters": [
+    {
+      "regime": "baseline",
+      "branch_id": 0,
+      "optimum": null,
+      "optimum_identifiable": false
+    },
+    {
+      "regime": "shift_1",
+      "branch_id": 1,
+      "optimum": null,
+      "optimum_identifiable": false
+    }
+  ],
+  "tip_predictions": [
+    {
+      "leaf_name": "A",
+      "branch_id": 7,
+      "regime": "shift_1",
+      "standard_error": 0.0,
+      "observation_variance": 0.0,
+      "observed": 1.0,
+      "predicted": 1.1250000000000009,
+      "residual": -0.1250000000000009,
+      "optimum": null,
+      "optimum_identifiable": false
+    },
+    {
+      "leaf_name": "B",
+      "branch_id": 8,
+      "regime": "shift_1",
+      "standard_error": 0.0,
+      "observation_variance": 0.0,
+      "observed": 1.2,
+      "predicted": 1.1250000000000009,
+      "residual": 0.07499999999999907,
+      "optimum": null,
+      "optimum_identifiable": false
+    },
+    {
+      "leaf_name": "C",
+      "branch_id": 9,
+      "regime": "shift_1",
+      "standard_error": 0.0,
+      "observation_variance": 0.0,
+      "observed": 0.9,
+      "predicted": 1.1250000000000009,
+      "residual": -0.22500000000000087,
+      "optimum": null,
+      "optimum_identifiable": false
+    },
+    {
+      "leaf_name": "D",
+      "branch_id": 10,
+      "regime": "shift_1",
+      "standard_error": 0.0,
+      "observation_variance": 0.0,
+      "observed": 1.4,
+      "predicted": 1.1250000000000009,
+      "residual": 0.274999999999999,
+      "optimum": null,
+      "optimum_identifiable": false
+    },
+    {
+      "leaf_name": "E",
+      "branch_id": 11,
+      "regime": "baseline",
+      "standard_error": 0.0,
+      "observation_variance": 0.0,
+      "observed": 6.0,
+      "predicted": 6.025000000000001,
+      "residual": -0.025000000000001243,
+      "optimum": null,
+      "optimum_identifiable": false
+    },
+    {
+      "leaf_name": "F",
+      "branch_id": 12,
+      "regime": "baseline",
+      "standard_error": 0.0,
+      "observation_variance": 0.0,
+      "observed": 6.2,
+      "predicted": 6.025000000000001,
+      "residual": 0.17499999999999893,
+      "optimum": null,
+      "optimum_identifiable": false
+    },
+    {
+      "leaf_name": "G",
+      "branch_id": 13,
+      "regime": "baseline",
+      "standard_error": 0.0,
+      "observation_variance": 0.0,
+      "observed": 5.8,
+      "predicted": 6.025000000000001,
+      "residual": -0.22500000000000142,
+      "optimum": null,
+      "optimum_identifiable": false
+    },
+    {
+      "leaf_name": "H",
+      "branch_id": 14,
+      "regime": "baseline",
+      "standard_error": 0.0,
+      "observation_variance": 0.0,
+      "observed": 6.1,
+      "predicted": 6.025000000000001,
+      "residual": 0.0749999999999984,
+      "optimum": null,
+      "optimum_identifiable": false
+    }
+  ],
+  "tip_tokens": {
+    "t0": "A",
+    "t1": "B",
+    "t2": "C",
+    "t3": "D",
+    "t4": "E",
+    "t5": "F",
+    "t6": "G",
+    "t7": "H"
+  },
+  "analysis_tree_tokens": "(((t0:1,t1:1):1,(t2:1,t3:1):1):1,((t4:1,t5:1):1,(t6:1,t7:1):1):1);",
+  "analysis_input_sha256": "5d7c7b77b8b6acf35e59aa6691bdb6993eaf5eaaa135b6128d38fcf390a49ece",
+  "branches": [
+    {
+      "branch_id": 0,
+      "parent": -1,
+      "name": null,
+      "dist": null,
+      "regime": "baseline"
+    },
+    {
+      "branch_id": 1,
+      "parent": 0,
+      "name": null,
+      "dist": 1.0,
+      "regime": "shift_1"
+    },
+    {
+      "branch_id": 2,
+      "parent": 0,
+      "name": null,
+      "dist": 1.0,
+      "regime": "baseline"
+    },
+    {
+      "branch_id": 3,
+      "parent": 1,
+      "name": null,
+      "dist": 1.0,
+      "regime": "shift_1"
+    },
+    {
+      "branch_id": 4,
+      "parent": 1,
+      "name": null,
+      "dist": 1.0,
+      "regime": "shift_1"
+    },
+    {
+      "branch_id": 5,
+      "parent": 2,
+      "name": null,
+      "dist": 1.0,
+      "regime": "baseline"
+    },
+    {
+      "branch_id": 6,
+      "parent": 2,
+      "name": null,
+      "dist": 1.0,
+      "regime": "baseline"
+    },
+    {
+      "branch_id": 7,
+      "parent": 3,
+      "name": "A",
+      "dist": 1.0,
+      "regime": "shift_1"
+    },
+    {
+      "branch_id": 8,
+      "parent": 3,
+      "name": "B",
+      "dist": 1.0,
+      "regime": "shift_1"
+    },
+    {
+      "branch_id": 9,
+      "parent": 4,
+      "name": "C",
+      "dist": 1.0,
+      "regime": "shift_1"
+    },
+    {
+      "branch_id": 10,
+      "parent": 4,
+      "name": "D",
+      "dist": 1.0,
+      "regime": "shift_1"
+    },
+    {
+      "branch_id": 11,
+      "parent": 5,
+      "name": "E",
+      "dist": 1.0,
+      "regime": "baseline"
+    },
+    {
+      "branch_id": 12,
+      "parent": 5,
+      "name": "F",
+      "dist": 1.0,
+      "regime": "baseline"
+    },
+    {
+      "branch_id": 13,
+      "parent": 6,
+      "name": "G",
+      "dist": 1.0,
+      "regime": "baseline"
+    },
+    {
+      "branch_id": 14,
+      "parent": 6,
+      "name": "H",
+      "dist": 1.0,
+      "regime": "baseline"
+    }
+  ],
+  "asr_note": "Regime map only. ASR refits parameters; alpha-limit and selection uncertainty are not propagated. At the Brownian limit, group labels describe scaled-effect constraints, not identified finite OU optima."
+}

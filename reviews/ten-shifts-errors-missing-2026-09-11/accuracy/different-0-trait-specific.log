@@ -1,0 +1,7 @@
+{"branches": [], "status": "complete", "seconds": 42.47175251902081}
+{"branches": [16], "status": "complete", "seconds": 50.90767473197775}
+{"branches": [16, 27], "status": "complete", "seconds": 54.94907306699315}
+{"branches": [16, 17], "status": "complete", "seconds": 44.84835277003003}
+{"branches": [16, 17, 27], "status": "complete", "seconds": 40.515820810047444}
+{"branches": [16, 20, 27], "status": "complete", "seconds": 70.06114761502249}
+{"job": {"truth": "different", "mode": "trait-specific", "replicate": 0, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "accuracy"}, "status": "failed", "elapsed": 303.9058770959964, "error": "ValueError: A native search covariance mode failed; complete the fit before selection: {'alpha_mode': 'finite', 'success': False, 'message': \"Joint covariance optimizer failed checked convergence: [{'success': False, 'message': 'ABNORMAL: ', 'projected_score': 9.74154090726123e-07}, {'success': False, 'message': 'ABNORMAL: ', 'projected_score': 1.2093437362624812e-06}, {'success': False, 'message': 'ABNORMAL: ', 'projected_score': 4.871854509963347e-06}]\"}"}

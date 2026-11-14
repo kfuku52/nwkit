@@ -1,0 +1,14 @@
+{
+  "status": "passed",
+  "datasets": 12000,
+  "fits": 24000,
+  "source_snapshots": "matched",
+  "inputs": "exactly_regenerated",
+  "independent_winner_likelihood_max_error": 7.37543359718984e-12,
+  "independent_predictions": "matched",
+  "complete_search_replays": 24,
+  "cellwise_counts_and_bounds": "matched",
+  "all_cells_meet_acceptance": true,
+  "record_sha256": "02d84a13d09103268aa7d77b0fce0118badf2848427f262f29d9be32208531c1",
+  "verifier_sha256": "e28784071a0a69833cda34bc36b407a29914d8d6368fde87df7d0f953d6fb9a4"
+}

@@ -1,0 +1,36 @@
+{
+  "internal_postfix": {
+    "families": 20,
+    "point_successes": 20,
+    "intervals_returned": 20,
+    "truth_covered": 19,
+    "coverage_among_returned": 0.95,
+    "correct_return_fraction": 0.95,
+    "availability": 1.0,
+    "bias": 0.15097595074118697,
+    "rmse": 0.7984117220107042,
+    "median_width": 3.2968683930533063,
+    "statuses": {
+      "complete": 20
+    },
+    "interval_statuses": {
+      "conditional-profile": 12,
+      "conditional-profile-calibration-limited": 8
+    },
+    "estimators": {
+      "sequence-empirical-bayes-map": 20
+    },
+    "coverage_wilson95": [
+      0.763868806553258,
+      0.9911185511992047
+    ],
+    "availability_wilson95": [
+      0.8388748419471808,
+      1.0
+    ],
+    "correct_return_wilson95": [
+      0.763868806553258,
+      0.9911185511992047
+    ]
+  }
+}

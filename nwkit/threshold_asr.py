@@ -26,6 +26,11 @@ from nwkit.gaussian_tree import (
     brownian_transition,
 )
 from nwkit.rooting_state import require_rooted
+from nwkit.threshold_diagnostics import (
+    diagnose_threshold_draws,
+    summarize_diagnostics,
+    trace_storage,
+)
 from nwkit.util import assign_branch_ids, get_node_class, validate_unique_named_leaves
 
 _ndtri_exp = getattr(special, "ndtri_exp", None)
@@ -45,6 +50,10 @@ class ThresholdFit:
     ess_min: float
     fit_status: str
     liability_marginals: dict
+    diagnostics: pd.DataFrame
+    ess_bulk_min: float
+    ess_tail_min: float
+    probability_mcse_max: float
 
 
 def parse_thresholds(value, num_states):
@@ -155,6 +164,325 @@ def _allowed_intervals(allowed, thresholds):
     upper = math.inf if previous == len(thresholds) else float(thresholds[previous])
     intervals.append((lower, upper))
     return intervals
+
+
+def _truncated_draw(mean, sd, bounds, rng, *, thresholds=None):
+    if not math.isfinite(mean):
+        raise ValueError("An ordinal liability conditional mean is not finite.")
+    if thresholds is not None:
+        bounds = _allowed_intervals(bounds, thresholds)
+    if len(bounds) == 1:
+        lower, upper = bounds[0]
+        a, b = (lower - mean) / sd, (upper - mean) / sd
+    else:
+        intervals = [
+            ((lower - mean) / sd, (upper - mean) / sd) for lower, upper in bounds
+        ]
+        log_masses = _disjoint_interval_log_masses(bounds, intervals, mean, sd)
+        largest = float(np.max(log_masses))
+        if not math.isfinite(largest):
+            raise ValueError(
+                "Could not resolve the allowed ordinal liability intervals."
+            )
+        weights = np.exp(log_masses - largest)
+        index = int(rng.choice(len(intervals), p=weights / weights.sum()))
+        a, b = intervals[index]
+        lower, upper = bounds[index]
+    location = _interval_draw(lower, upper, a, b, mean, sd, rng)
+    # Ordinal categories use (lower, upper]. A continuous tail draw can
+    # round onto its excluded endpoint when projected back into trait units.
+    first_allowed = math.nextafter(lower, math.inf)
+    if not math.isfinite(location) or not math.isfinite(first_allowed):
+        raise ValueError("A sampled ordinal liability exceeds floating-point range.")
+    return min(upper, max(location, first_allowed))
+
+
+def _conditional_parameters(index, values, compiled, process):
+    node = compiled.nodes[index]
+    if index == 0:
+        assert process.root.variance is not None
+        precision = 1.0 / process.root.variance
+        numerator = process.root.mean / process.root.variance
+    else:
+        transition = process.transitions[node]
+        parent = compiled.parents[index]
+        precision = 1.0 / transition.variance
+        numerator = (
+            transition.slope * values[parent] + transition.intercept
+        ) / transition.variance
+    for child in compiled.children[index]:
+        transition = process.transitions[compiled.nodes[child]]
+        precision += transition.slope * transition.slope / transition.variance
+        numerator += (
+            transition.slope
+            * (values[child] - transition.intercept)
+            / transition.variance
+        )
+    variance = 1.0 / precision
+    return numerator * variance, math.sqrt(variance)
+
+
+def _initialize_values(compiled, constraints, thresholds, rng):
+    values = rng.normal(0.0, 2.0, len(compiled.nodes))
+    for index, allowed in constraints.items():
+        category = int(rng.choice(allowed))
+        lower, upper = _category_interval(category, thresholds)
+        if math.isfinite(lower) and math.isfinite(upper):
+            fraction = rng.random()
+            value = (1.0 - fraction) * lower + fraction * upper
+        elif math.isfinite(lower):
+            value = lower + rng.exponential(2.0)
+        elif math.isfinite(upper):
+            value = upper - rng.exponential(2.0)
+        else:
+            continue
+        values[index] = min(upper, max(value, math.nextafter(lower, math.inf)))
+    return values
+
+
+def _update_thresholds(values, allowed_categories, thresholds, rng):
+    if len(thresholds) <= 1:
+        return
+    for threshold_index in range(1, len(thresholds)):
+        previous = float(thresholds[threshold_index - 1])
+        following = (
+            float(thresholds[threshold_index + 1])
+            if threshold_index + 1 < len(thresholds)
+            else math.inf
+        )
+        # Categories are (lower, upper]. Preserve every representable
+        # admissible cut, including a singleton between adjacent floats.
+        relevant = (values > previous) & (values <= following)
+        allowed_lower = allowed_categories[threshold_index]
+        allowed_upper = allowed_categories[threshold_index + 1]
+        if np.any(relevant & ~allowed_lower & ~allowed_upper):
+            raise ValueError(
+                "Ordinal threshold constraints are internally inconsistent."
+            )
+        lower = float(
+            np.max(
+                values,
+                where=relevant & allowed_lower & ~allowed_upper,
+                initial=previous,
+            )
+        )
+        upper = float(
+            np.min(
+                values,
+                where=relevant & allowed_upper & ~allowed_lower,
+                initial=following,
+            )
+        )
+        if math.isfinite(upper):
+            upper = math.nextafter(upper, -math.inf)
+        lower = max(lower, math.nextafter(previous, math.inf))
+        if lower > upper:
+            raise ValueError(
+                "Ordinal threshold update collapsed; increase MCMC burn-in or fix --thresholds."
+            )
+        thresholds[threshold_index] = rng.uniform(lower, upper)
+
+
+def compute_threshold_marginals(
+    tree,
+    states,
+    observed_state_by_leaf,
+    likelihood_by_leaf,
+    *,
+    thresholds=None,
+    num_samples=1000,
+    burnin=500,
+    thin=1,
+    chains=4,
+    seed=None,
+    _tree_validated=False,
+):
+    """Sample posterior liabilities and return category probabilities."""
+
+    states = tuple(str(state) for state in states)
+    if len(states) < 2:
+        raise ValueError("Threshold ASR requires at least two ordered states.")
+    if len(states) != len(set(states)):
+        raise ValueError("Threshold ASR states must be unique.")
+    if not _tree_validated:
+        validate_unique_named_leaves(tree, option_name="--infile", context=" for 'asr'")
+        require_rooted(tree, "ASR requires a rooted tree.")
+    num_samples = _positive_integer(num_samples, "--liability-samples")
+    burnin = _nonnegative_integer(burnin, "--liability-burnin")
+    thin = _positive_integer(thin, "--liability-thin")
+    chains = _positive_integer(chains, "--liability-chains")
+    fixed_thresholds = parse_thresholds(thresholds, len(states))
+    compiled = CompiledTree.from_tree(tree)
+    constraints = {}
+    observed_categories = []
+    for name, node_index in compiled.leaf_index_by_name.items():
+        if observed_state_by_leaf.get(name) is None:
+            continue
+        likelihood = np.asarray(likelihood_by_leaf[name], dtype=float)
+        allowed = np.flatnonzero(likelihood > 0.0)
+        if not len(allowed):
+            raise ValueError(f"Threshold observation for '{name}' allows no state.")
+        constraints[node_index] = allowed
+        if len(allowed) != 1:
+            continue
+        observed_categories.append(int(allowed[0]))
+    if len(observed_categories) < 2:
+        raise ValueError(
+            "Threshold ASR requires at least two unambiguous observations."
+        )
+    observed_categories_array = np.asarray(observed_categories, dtype=int)
+    if fixed_thresholds is None and len(states) > 2:
+        missing_states = [
+            states[index]
+            for index in range(len(states))
+            if index not in set(observed_categories)
+        ]
+        if missing_states:
+            raise ValueError(
+                "Estimating ordinal thresholds requires every state to be observed; "
+                "missing: " + ", ".join(missing_states)
+            )
+    initial_thresholds = (
+        np.asarray(fixed_thresholds, dtype=float)
+        if fixed_thresholds is not None
+        else _initial_thresholds(observed_categories_array, len(states))
+    )
+    estimate_thresholds = fixed_thresholds is None and len(states) > 2
+    process = build_threshold_process(tree)
+    conditionals = _liability_conditionals(compiled, process)
+    bounds = _liability_bounds(constraints, initial_thresholds, estimate_thresholds)
+    constrained_indices = np.asarray(tuple(constraints), dtype=int)
+    allowed_by_constraint = _allowed_categories_by_constraint(constraints, len(states))
+    seed_sequences = np.random.SeedSequence(seed).spawn(chains)
+    probability_counts = np.zeros((len(compiled.nodes), len(states)), dtype=float)
+    liability_mean = np.zeros(len(compiled.nodes), dtype=float)
+    liability_m2 = np.zeros(len(compiled.nodes), dtype=float)
+    total_draws = chains * num_samples
+    moment_limit, moment_exponents = _liability_moment_units(
+        compiled, process, initial_thresholds, total_draws
+    )
+    threshold_mean = initial_thresholds.copy()
+    retained_draws = 0
+    total_sweeps = burnin + num_samples * thin
+    shape = (chains, num_samples, len(compiled.nodes) + len(states) - 1)
+    with trace_storage(shape) as diagnostic_traces:
+        for chain_index, child_seed in enumerate(seed_sequences):
+            rng = np.random.default_rng(child_seed)
+            current_thresholds = initial_thresholds.copy()
+            if estimate_thresholds:
+                gaps = np.diff(current_thresholds) * rng.lognormal(
+                    0.0, 0.5, len(current_thresholds) - 1
+                )
+                current_thresholds[1:] = np.cumsum(gaps)
+            values = _initialize_values(compiled, constraints, current_thresholds, rng)
+            retained = 0
+            for sweep in range(total_sweeps):
+                for node_index in rng.permutation(len(compiled.nodes)):
+                    neighbors, sd = conditionals[node_index]
+                    mean = math.fsum(
+                        float(values[neighbor]) * weight
+                        for neighbor, weight in neighbors
+                    )
+                    allowed = bounds.get(int(node_index))
+                    values[node_index] = (
+                        rng.normal(mean, sd)
+                        if allowed is None
+                        else _truncated_draw(
+                            mean,
+                            sd,
+                            allowed,
+                            rng,
+                            thresholds=current_thresholds
+                            if estimate_thresholds
+                            else None,
+                        )
+                    )
+                if estimate_thresholds:
+                    _update_thresholds(
+                        values[constrained_indices],
+                        allowed_by_constraint,
+                        current_thresholds,
+                        rng,
+                    )
+                if sweep < burnin or (sweep - burnin) % thin:
+                    continue
+                categories = np.searchsorted(current_thresholds, values, side="left")
+                probability_counts[np.arange(len(values)), categories] += 1.0
+                retained_draws += 1
+                moment_values = _scaled_liability_values(
+                    values, liability_mean, liability_m2, moment_limit, moment_exponents
+                )
+                centered = moment_values - liability_mean
+                liability_mean += centered / retained_draws
+                liability_m2 += centered * (moment_values - liability_mean)
+                _accumulate_threshold_mean(
+                    threshold_mean,
+                    current_thresholds,
+                    retained_draws,
+                    estimate_thresholds,
+                )
+                diagnostic_traces[chain_index, retained, : len(values)] = values
+                diagnostic_traces[chain_index, retained, len(values) :] = (
+                    current_thresholds
+                )
+                retained += 1
+        diagnostics = diagnose_threshold_draws(
+            tree,
+            compiled.nodes,
+            states,
+            constraints,
+            diagnostic_traces,
+            estimated=estimate_thresholds,
+        )
+    total_draws = chains * num_samples
+    posterior = {
+        node: probability_counts[index] / total_draws
+        for index, node in enumerate(compiled.nodes)
+    }
+    means, variances = _liability_moments(
+        liability_mean, liability_m2, total_draws, moment_exponents
+    )
+    liabilities = {
+        node: GaussianMarginal(float(means[index]), float(variances[index]))
+        for index, node in enumerate(compiled.nodes)
+    }
+    fitted_thresholds = tuple(float(value) for value in threshold_mean)
+    summary = summarize_diagnostics(diagnostics)
+    fit = ThresholdFit(
+        thresholds=fitted_thresholds,
+        thresholds_estimated=estimate_thresholds,
+        num_samples=num_samples,
+        burnin=burnin,
+        thin=thin,
+        chains=chains,
+        seed=seed,
+        **summary,
+        diagnostics=diagnostics,
+        liability_marginals=liabilities,
+    )
+    return posterior, fit
+
+
+def threshold_liability_table(tree, fit):
+    """Return per-node posterior liability moments."""
+
+    ids = assign_branch_ids(tree)
+    rows = []
+    for node in tree.traverse():
+        marginal = fit.liability_marginals[node]
+        rows.append(
+            {
+                "branch_id": ids[node],
+                "parent": -1 if node.is_root else ids[node.up],
+                "node_class": get_node_class(node),
+                "name": "" if node.name in (None, "") else str(node.name),
+                "liability_mean": marginal.mean,
+                "liability_variance": marginal.variance,
+                "liability_sd": math.sqrt(marginal.variance),
+                "num_posterior_draws": fit.num_samples * fit.chains,
+            }
+        )
+    return pd.DataFrame(rows)
 
 
 def _normal_interval_log_mass(lower, upper):
@@ -304,37 +632,6 @@ def _tail_interval_draw(lower, upper, standardized_lower, mean, sd, rng):
             return lower + excess
 
 
-def _truncated_draw(mean, sd, bounds, rng, *, thresholds=None):
-    if not math.isfinite(mean):
-        raise ValueError("An ordinal liability conditional mean is not finite.")
-    if thresholds is not None:
-        bounds = _allowed_intervals(bounds, thresholds)
-    if len(bounds) == 1:
-        lower, upper = bounds[0]
-        a, b = (lower - mean) / sd, (upper - mean) / sd
-    else:
-        intervals = [
-            ((lower - mean) / sd, (upper - mean) / sd) for lower, upper in bounds
-        ]
-        log_masses = _disjoint_interval_log_masses(bounds, intervals, mean, sd)
-        largest = float(np.max(log_masses))
-        if not math.isfinite(largest):
-            raise ValueError(
-                "Could not resolve the allowed ordinal liability intervals."
-            )
-        weights = np.exp(log_masses - largest)
-        index = int(rng.choice(len(intervals), p=weights / weights.sum()))
-        a, b = intervals[index]
-        lower, upper = bounds[index]
-    location = _interval_draw(lower, upper, a, b, mean, sd, rng)
-    # Ordinal categories use (lower, upper]. A continuous tail draw can
-    # round onto its excluded endpoint when projected back into trait units.
-    first_allowed = math.nextafter(lower, math.inf)
-    if not math.isfinite(location) or not math.isfinite(first_allowed):
-        raise ValueError("A sampled ordinal liability exceeds floating-point range.")
-    return min(upper, max(location, first_allowed))
-
-
 def _liability_conditionals(compiled, process):
     """Cache unit-Brownian conditional weights and standard deviations."""
 
@@ -362,70 +659,6 @@ def _liability_conditionals(compiled, process):
             (tuple(zip(neighbors, weights, strict=True)), standard_deviation)
         )
     return conditionals
-
-
-def _initialize_values(compiled, constraints, thresholds):
-    values = np.zeros(len(compiled.nodes), dtype=float)
-    for index, allowed in constraints.items():
-        candidates = []
-        for category in allowed:
-            lower, upper = _category_interval(int(category), thresholds)
-            if math.isfinite(lower) and math.isfinite(upper):
-                candidate = 0.5 * lower + 0.5 * upper
-            elif math.isfinite(lower):
-                candidate = lower + 1.0
-            elif math.isfinite(upper):
-                candidate = upper - 1.0
-            else:
-                candidate = 0.0
-            candidates.append(
-                min(upper, max(candidate, math.nextafter(lower, math.inf)))
-            )
-        values[index] = min(candidates, key=abs)
-    return values
-
-
-def _update_thresholds(values, allowed_categories, thresholds, rng):
-    if len(thresholds) <= 1:
-        return
-    for threshold_index in range(1, len(thresholds)):
-        previous = float(thresholds[threshold_index - 1])
-        following = (
-            float(thresholds[threshold_index + 1])
-            if threshold_index + 1 < len(thresholds)
-            else math.inf
-        )
-        # Categories are (lower, upper]. Preserve every representable
-        # admissible cut, including a singleton between adjacent floats.
-        relevant = (values > previous) & (values <= following)
-        allowed_lower = allowed_categories[threshold_index]
-        allowed_upper = allowed_categories[threshold_index + 1]
-        if np.any(relevant & ~allowed_lower & ~allowed_upper):
-            raise ValueError(
-                "Ordinal threshold constraints are internally inconsistent."
-            )
-        lower = float(
-            np.max(
-                values,
-                where=relevant & allowed_lower & ~allowed_upper,
-                initial=previous,
-            )
-        )
-        upper = float(
-            np.min(
-                values,
-                where=relevant & allowed_upper & ~allowed_lower,
-                initial=following,
-            )
-        )
-        if math.isfinite(upper):
-            upper = math.nextafter(upper, -math.inf)
-        lower = max(lower, math.nextafter(previous, math.inf))
-        if lower > upper:
-            raise ValueError(
-                "Ordinal threshold update collapsed; increase MCMC burn-in or fix --thresholds."
-            )
-        thresholds[threshold_index] = rng.uniform(lower, upper)
 
 
 def _effective_sample_size(centered, pooled):
@@ -545,193 +778,3 @@ def _liability_moments(mean, m2, draws, exponents):
     if not np.isfinite(mean).all() or not np.isfinite(variance).all():
         raise ValueError("An ordinal liability summary exceeds floating-point range.")
     return mean, variance
-
-
-def compute_threshold_marginals(
-    tree,
-    states,
-    observed_state_by_leaf,
-    likelihood_by_leaf,
-    *,
-    thresholds=None,
-    num_samples=1000,
-    burnin=500,
-    thin=1,
-    chains=4,
-    seed=None,
-    _tree_validated=False,
-):
-    """Sample posterior liabilities and return category probabilities."""
-
-    states = tuple(str(state) for state in states)
-    if len(states) < 2:
-        raise ValueError("Threshold ASR requires at least two ordered states.")
-    if len(states) != len(set(states)):
-        raise ValueError("Threshold ASR states must be unique.")
-    if not _tree_validated:
-        validate_unique_named_leaves(tree, option_name="--infile", context=" for 'asr'")
-        require_rooted(tree, "ASR requires a rooted tree.")
-    num_samples = _positive_integer(num_samples, "--liability-samples")
-    burnin = _nonnegative_integer(burnin, "--liability-burnin")
-    thin = _positive_integer(thin, "--liability-thin")
-    chains = _positive_integer(chains, "--liability-chains")
-    fixed_thresholds = parse_thresholds(thresholds, len(states))
-    compiled = CompiledTree.from_tree(tree)
-    constraints = {}
-    observed_categories = []
-    for name, node_index in compiled.leaf_index_by_name.items():
-        if observed_state_by_leaf.get(name) is None:
-            continue
-        likelihood = np.asarray(likelihood_by_leaf[name], dtype=float)
-        allowed = np.flatnonzero(likelihood > 0.0)
-        if not len(allowed):
-            raise ValueError(f"Threshold observation for '{name}' allows no state.")
-        constraints[node_index] = allowed
-        if len(allowed) != 1:
-            continue
-        observed_categories.append(int(allowed[0]))
-    if len(observed_categories) < 2:
-        raise ValueError(
-            "Threshold ASR requires at least two unambiguous observations."
-        )
-    observed_categories_array = np.asarray(observed_categories, dtype=int)
-    if fixed_thresholds is None and len(states) > 2:
-        missing_states = [
-            states[index]
-            for index in range(len(states))
-            if index not in set(observed_categories)
-        ]
-        if missing_states:
-            raise ValueError(
-                "Estimating ordinal thresholds requires every state to be observed; "
-                "missing: " + ", ".join(missing_states)
-            )
-    initial_thresholds = (
-        np.asarray(fixed_thresholds, dtype=float)
-        if fixed_thresholds is not None
-        else _initial_thresholds(observed_categories_array, len(states))
-    )
-    estimate_thresholds = fixed_thresholds is None and len(states) > 2
-    process = build_threshold_process(tree)
-    conditionals = _liability_conditionals(compiled, process)
-    bounds = _liability_bounds(constraints, initial_thresholds, estimate_thresholds)
-    constrained_indices = np.asarray(tuple(constraints), dtype=int)
-    allowed_by_constraint = _allowed_categories_by_constraint(constraints, len(states))
-    seed_sequences = np.random.SeedSequence(seed).spawn(chains)
-    probability_counts = np.zeros((len(compiled.nodes), len(states)), dtype=float)
-    liability_mean = np.zeros(len(compiled.nodes), dtype=float)
-    liability_m2 = np.zeros(len(compiled.nodes), dtype=float)
-    total_draws = chains * num_samples
-    moment_limit, moment_exponents = _liability_moment_units(
-        compiled, process, initial_thresholds, total_draws
-    )
-    threshold_mean = initial_thresholds.copy()
-    diagnostic_traces = np.empty(
-        (chains, num_samples, 1 + max(0, len(states) - 2)), dtype=float
-    )
-    total_sweeps = burnin + num_samples * thin
-    retained_draws = 0
-    for chain_index, child_seed in enumerate(seed_sequences):
-        rng = np.random.default_rng(child_seed)
-        current_thresholds = initial_thresholds.copy()
-        moving_thresholds = current_thresholds if estimate_thresholds else None
-        values = _initialize_values(compiled, constraints, current_thresholds)
-        retained = 0
-        for sweep in range(total_sweeps):
-            for node_index in rng.permutation(len(compiled.nodes)):
-                neighbors, sd = conditionals[node_index]
-                mean = math.fsum(
-                    float(values[neighbor]) * weight for neighbor, weight in neighbors
-                )
-                intervals = bounds.get(int(node_index))
-                values[node_index] = (
-                    rng.normal(mean, sd)
-                    if intervals is None
-                    else _truncated_draw(
-                        mean, sd, intervals, rng, thresholds=moving_thresholds
-                    )
-                )
-            if estimate_thresholds:
-                _update_thresholds(
-                    values[constrained_indices],
-                    allowed_by_constraint,
-                    current_thresholds,
-                    rng,
-                )
-            if sweep < burnin or (sweep - burnin) % thin:
-                continue
-            categories = np.searchsorted(current_thresholds, values, side="left")
-            probability_counts[np.arange(len(values)), categories] += 1.0
-            retained_draws += 1
-            moment_values = _scaled_liability_values(
-                values, liability_mean, liability_m2, moment_limit, moment_exponents
-            )
-            centered = moment_values - liability_mean
-            liability_mean += centered / retained_draws
-            liability_m2 += centered * (moment_values - liability_mean)
-            _accumulate_threshold_mean(
-                threshold_mean, current_thresholds, retained_draws, estimate_thresholds
-            )
-            diagnostic_traces[chain_index, retained, 0] = values[0]
-            if len(current_thresholds) > 1:
-                diagnostic_traces[chain_index, retained, 1:] = current_thresholds[1:]
-            retained += 1
-    posterior = {
-        node: probability_counts[index] / total_draws
-        for index, node in enumerate(compiled.nodes)
-    }
-    liability_mean, variances = _liability_moments(
-        liability_mean, liability_m2, total_draws, moment_exponents
-    )
-    liabilities = {
-        node: GaussianMarginal(float(liability_mean[index]), float(variances[index]))
-        for index, node in enumerate(compiled.nodes)
-    }
-    fitted_thresholds = tuple(float(value) for value in threshold_mean)
-    rhat, ess = _rhat_and_ess(diagnostic_traces)
-    available_rhat = rhat[~np.isnan(rhat)]
-    rhat_max = float(np.max(available_rhat)) if len(available_rhat) else math.nan
-    ess_min = float(np.min(ess))
-    statuses = []
-    if math.isnan(rhat_max):
-        statuses.append("mcmc_rhat_unavailable")
-    elif rhat_max > 1.05:
-        statuses.append("mcmc_rhat")
-    if ess_min < max(100.0, 0.1 * total_draws):
-        statuses.append("mcmc_low_ess")
-    fit = ThresholdFit(
-        thresholds=fitted_thresholds,
-        thresholds_estimated=estimate_thresholds,
-        num_samples=num_samples,
-        burnin=burnin,
-        thin=thin,
-        chains=chains,
-        seed=seed,
-        rhat_max=rhat_max,
-        ess_min=ess_min,
-        fit_status="+".join(statuses) if statuses else "ok",
-        liability_marginals=liabilities,
-    )
-    return posterior, fit
-
-
-def threshold_liability_table(tree, fit):
-    """Return per-node posterior liability moments."""
-
-    ids = assign_branch_ids(tree)
-    rows = []
-    for node in tree.traverse():
-        marginal = fit.liability_marginals[node]
-        rows.append(
-            {
-                "branch_id": ids[node],
-                "parent": -1 if node.is_root else ids[node.up],
-                "node_class": get_node_class(node),
-                "name": "" if node.name in (None, "") else str(node.name),
-                "liability_mean": marginal.mean,
-                "liability_variance": marginal.variance,
-                "liability_sd": math.sqrt(marginal.variance),
-                "num_posterior_draws": fit.num_samples * fit.chains,
-            }
-        )
-    return pd.DataFrame(rows)

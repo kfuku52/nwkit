@@ -1,0 +1,2 @@
+model	trait	root_prior	log_likelihood	likelihood_rank	num_observed	num_observed_positions
+branch-heterogeneous	x	gaussian	-5.4879906175736339	3	3	3

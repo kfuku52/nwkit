@@ -1,0 +1,410 @@
+{
+  "balanced128-2-est": {
+    "all_candidate_records_and_search_metadata_exactly_equal": true,
+    "before": {
+      "median_wall_seconds": 6.571986541035585,
+      "peak_rss_bytes": [
+        107995136,
+        104497152,
+        104964096
+      ],
+      "wall_seconds": [
+        6.463875583023764,
+        6.571986541035585,
+        6.674584124993999
+      ]
+    },
+    "after": {
+      "median_wall_seconds": 4.419682333013043,
+      "peak_rss_bytes": [
+        109232128,
+        103272448,
+        106795008
+      ],
+      "wall_seconds": [
+        4.419682333013043,
+        4.48714199999813,
+        4.401169250020757
+      ]
+    }
+  },
+  "pectinate128-2-est": {
+    "all_candidate_records_and_search_metadata_exactly_equal": true,
+    "before": {
+      "median_wall_seconds": 12.301117166003678,
+      "peak_rss_bytes": [
+        105656320,
+        103260160,
+        106168320
+      ],
+      "wall_seconds": [
+        12.301117166003678,
+        12.398912083997857,
+        12.096428541000932
+      ]
+    },
+    "after": {
+      "median_wall_seconds": 8.981856584025081,
+      "peak_rss_bytes": [
+        106532864,
+        105467904,
+        105185280
+      ],
+      "wall_seconds": [
+        8.981856584025081,
+        8.832086333015468,
+        9.065055165963713
+      ]
+    }
+  },
+  "balanced512-4-est": {
+    "all_candidate_records_and_search_metadata_exactly_equal": true,
+    "before": {
+      "median_wall_seconds": 34.022036875016056,
+      "peak_rss_bytes": [
+        198963200,
+        188407808,
+        212148224
+      ],
+      "wall_seconds": [
+        34.21517495904118,
+        34.022036875016056,
+        33.569424667046405
+      ]
+    },
+    "after": {
+      "median_wall_seconds": 19.9600424169912,
+      "peak_rss_bytes": [
+        177864704,
+        176844800,
+        152133632
+      ],
+      "wall_seconds": [
+        20.473072624998167,
+        19.72400024998933,
+        19.9600424169912
+      ]
+    }
+  },
+  "balanced1000-1-fixed": {
+    "all_candidate_records_and_search_metadata_exactly_equal": true,
+    "before": {
+      "median_wall_seconds": 1.0831105000106618,
+      "peak_rss_bytes": [
+        271339520,
+        261672960,
+        264544256
+      ],
+      "wall_seconds": [
+        1.0656194160110317,
+        1.0831105000106618,
+        1.085023291001562
+      ]
+    },
+    "after": {
+      "median_wall_seconds": 1.015869750001002,
+      "peak_rss_bytes": [
+        222404608,
+        177713152,
+        208617472
+      ],
+      "wall_seconds": [
+        1.015869750001002,
+        0.9739291250007227,
+        1.0247358749620616
+      ]
+    }
+  },
+  "screen-balanced-standardized": {
+    "maximum_absolute_difference": 0.0,
+    "before": {
+      "scope": "screening matrix setup only; excludes lasso/search/calibration",
+      "configuration": {
+        "tips": 1000,
+        "traits": 4,
+        "shape": "balanced",
+        "optimum_increments": false,
+        "source": null,
+        "output": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-screen-matrices-dxo39g5j/screen-balanced-standardized-before.json"
+      },
+      "measurements": [
+        {
+          "warmup": true,
+          "wall_seconds": 0.1896226250100881
+        },
+        {
+          "warmup": false,
+          "wall_seconds": 0.14171179197728634
+        },
+        {
+          "warmup": false,
+          "wall_seconds": 0.11842904199147597
+        },
+        {
+          "warmup": false,
+          "wall_seconds": 0.10540141595993191
+        }
+      ],
+      "peak_rss_bytes": 449110016,
+      "input_sha256": "598e87ea3fa19565a0f245a447a31ebf7d94cb4dabaa4ee8e30168e9fb95bc7a",
+      "source_sha256": "58773dc48f954f0bc8e3cf0016cee3a905fc9468dd3101a8f980d50cc6681138",
+      "python": "3.10.14",
+      "numpy": "1.26.4",
+      "platform": "macOS-26.6.2-x86_64-i386-64bit"
+    },
+    "after": {
+      "scope": "screening matrix setup only; excludes lasso/search/calibration",
+      "configuration": {
+        "tips": 1000,
+        "traits": 4,
+        "shape": "balanced",
+        "optimum_increments": false,
+        "source": null,
+        "output": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-screen-matrices-dxo39g5j/screen-balanced-standardized-after.json"
+      },
+      "measurements": [
+        {
+          "warmup": true,
+          "wall_seconds": 0.1515162080177106
+        },
+        {
+          "warmup": false,
+          "wall_seconds": 0.11395225004525855
+        },
+        {
+          "warmup": false,
+          "wall_seconds": 0.10491837497102097
+        },
+        {
+          "warmup": false,
+          "wall_seconds": 0.12236200005281717
+        }
+      ],
+      "peak_rss_bytes": 394682368,
+      "input_sha256": "598e87ea3fa19565a0f245a447a31ebf7d94cb4dabaa4ee8e30168e9fb95bc7a",
+      "source_sha256": "d079e845896b56dca72a59191ffd10da1040930c93a1adc61639c73546e423e3",
+      "python": "3.10.14",
+      "numpy": "1.26.4",
+      "platform": "macOS-26.6.2-x86_64-i386-64bit"
+    }
+  },
+  "screen-balanced-increments": {
+    "maximum_absolute_difference": 0.0,
+    "before": {
+      "scope": "screening matrix setup only; excludes lasso/search/calibration",
+      "configuration": {
+        "tips": 1000,
+        "traits": 4,
+        "shape": "balanced",
+        "optimum_increments": true,
+        "source": null,
+        "output": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-screen-matrices-dxo39g5j/screen-balanced-increments-before.json"
+      },
+      "measurements": [
+        {
+          "warmup": true,
+          "wall_seconds": 0.24696804204722866
+        },
+        {
+          "warmup": false,
+          "wall_seconds": 0.16253366600722075
+        },
+        {
+          "warmup": false,
+          "wall_seconds": 0.14949999999953434
+        },
+        {
+          "warmup": false,
+          "wall_seconds": 0.1483732499764301
+        }
+      ],
+      "peak_rss_bytes": 436543488,
+      "input_sha256": "598e87ea3fa19565a0f245a447a31ebf7d94cb4dabaa4ee8e30168e9fb95bc7a",
+      "source_sha256": "58773dc48f954f0bc8e3cf0016cee3a905fc9468dd3101a8f980d50cc6681138",
+      "python": "3.10.14",
+      "numpy": "1.26.4",
+      "platform": "macOS-26.6.2-x86_64-i386-64bit"
+    },
+    "after": {
+      "scope": "screening matrix setup only; excludes lasso/search/calibration",
+      "configuration": {
+        "tips": 1000,
+        "traits": 4,
+        "shape": "balanced",
+        "optimum_increments": true,
+        "source": null,
+        "output": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-screen-matrices-dxo39g5j/screen-balanced-increments-after.json"
+      },
+      "measurements": [
+        {
+          "warmup": true,
+          "wall_seconds": 0.21472512499894947
+        },
+        {
+          "warmup": false,
+          "wall_seconds": 0.1542477909824811
+        },
+        {
+          "warmup": false,
+          "wall_seconds": 0.15389825002057478
+        },
+        {
+          "warmup": false,
+          "wall_seconds": 0.1991457080002874
+        }
+      ],
+      "peak_rss_bytes": 385130496,
+      "input_sha256": "598e87ea3fa19565a0f245a447a31ebf7d94cb4dabaa4ee8e30168e9fb95bc7a",
+      "source_sha256": "d079e845896b56dca72a59191ffd10da1040930c93a1adc61639c73546e423e3",
+      "python": "3.10.14",
+      "numpy": "1.26.4",
+      "platform": "macOS-26.6.2-x86_64-i386-64bit"
+    }
+  },
+  "screen-pectinate-standardized": {
+    "maximum_absolute_difference": 0.0,
+    "before": {
+      "scope": "screening matrix setup only; excludes lasso/search/calibration",
+      "configuration": {
+        "tips": 1000,
+        "traits": 4,
+        "shape": "pectinate",
+        "optimum_increments": false,
+        "source": null,
+        "output": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-screen-matrices-dxo39g5j/screen-pectinate-standardized-before.json"
+      },
+      "measurements": [
+        {
+          "warmup": true,
+          "wall_seconds": 0.2020126249990426
+        },
+        {
+          "warmup": false,
+          "wall_seconds": 0.1595276670414023
+        },
+        {
+          "warmup": false,
+          "wall_seconds": 0.12845854100305587
+        },
+        {
+          "warmup": false,
+          "wall_seconds": 0.12924858299084008
+        }
+      ],
+      "peak_rss_bytes": 273747968,
+      "input_sha256": "9d24b1d4a27031de86ceec7439689a9c4a58f84e79b07305f9512b33b09e11ef",
+      "source_sha256": "58773dc48f954f0bc8e3cf0016cee3a905fc9468dd3101a8f980d50cc6681138",
+      "python": "3.10.14",
+      "numpy": "1.26.4",
+      "platform": "macOS-26.6.2-x86_64-i386-64bit"
+    },
+    "after": {
+      "scope": "screening matrix setup only; excludes lasso/search/calibration",
+      "configuration": {
+        "tips": 1000,
+        "traits": 4,
+        "shape": "pectinate",
+        "optimum_increments": false,
+        "source": null,
+        "output": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-screen-matrices-dxo39g5j/screen-pectinate-standardized-after.json"
+      },
+      "measurements": [
+        {
+          "warmup": true,
+          "wall_seconds": 0.2896734999958426
+        },
+        {
+          "warmup": false,
+          "wall_seconds": 0.2505287079839036
+        },
+        {
+          "warmup": false,
+          "wall_seconds": 0.2526709159719758
+        },
+        {
+          "warmup": false,
+          "wall_seconds": 0.24154595797881484
+        }
+      ],
+      "peak_rss_bytes": 352571392,
+      "input_sha256": "9d24b1d4a27031de86ceec7439689a9c4a58f84e79b07305f9512b33b09e11ef",
+      "source_sha256": "d079e845896b56dca72a59191ffd10da1040930c93a1adc61639c73546e423e3",
+      "python": "3.10.14",
+      "numpy": "1.26.4",
+      "platform": "macOS-26.6.2-x86_64-i386-64bit"
+    }
+  },
+  "screen-pectinate-increments": {
+    "maximum_absolute_difference": 0.0,
+    "before": {
+      "scope": "screening matrix setup only; excludes lasso/search/calibration",
+      "configuration": {
+        "tips": 1000,
+        "traits": 4,
+        "shape": "pectinate",
+        "optimum_increments": true,
+        "source": null,
+        "output": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-screen-matrices-dxo39g5j/screen-pectinate-increments-before.json"
+      },
+      "measurements": [
+        {
+          "warmup": true,
+          "wall_seconds": 0.22793079196708277
+        },
+        {
+          "warmup": false,
+          "wall_seconds": 0.18853074999060482
+        },
+        {
+          "warmup": false,
+          "wall_seconds": 0.18212870799470693
+        },
+        {
+          "warmup": false,
+          "wall_seconds": 0.18484083301154897
+        }
+      ],
+      "peak_rss_bytes": 313610240,
+      "input_sha256": "9d24b1d4a27031de86ceec7439689a9c4a58f84e79b07305f9512b33b09e11ef",
+      "source_sha256": "58773dc48f954f0bc8e3cf0016cee3a905fc9468dd3101a8f980d50cc6681138",
+      "python": "3.10.14",
+      "numpy": "1.26.4",
+      "platform": "macOS-26.6.2-x86_64-i386-64bit"
+    },
+    "after": {
+      "scope": "screening matrix setup only; excludes lasso/search/calibration",
+      "configuration": {
+        "tips": 1000,
+        "traits": 4,
+        "shape": "pectinate",
+        "optimum_increments": true,
+        "source": null,
+        "output": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-screen-matrices-dxo39g5j/screen-pectinate-increments-after.json"
+      },
+      "measurements": [
+        {
+          "warmup": true,
+          "wall_seconds": 0.3620056250365451
+        },
+        {
+          "warmup": false,
+          "wall_seconds": 0.29558433301281184
+        },
+        {
+          "warmup": false,
+          "wall_seconds": 0.307699125027284
+        },
+        {
+          "warmup": false,
+          "wall_seconds": 0.30548725003609434
+        }
+      ],
+      "peak_rss_bytes": 349306880,
+      "input_sha256": "9d24b1d4a27031de86ceec7439689a9c4a58f84e79b07305f9512b33b09e11ef",
+      "source_sha256": "d079e845896b56dca72a59191ffd10da1040930c93a1adc61639c73546e423e3",
+      "python": "3.10.14",
+      "numpy": "1.26.4",
+      "platform": "macOS-26.6.2-x86_64-i386-64bit"
+    }
+  }
+}

@@ -1,0 +1,7 @@
+/tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python tools/check.py test -- tests/test_regress.py tests/test_numerical_invariance.py -k profile or low_rank or sparse_precision or gaussian_fit or dense_gaussian -rs
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m pytest -q --durations=20 --durations-min=0.05 tests/test_regress.py tests/test_numerical_invariance.py -k profile or low_rank or sparse_precision or gaussian_fit or dense_gaussian -rs
+...........                                                              [100%]
+============================= slowest 20 durations =============================
+
+(20 durations < 0.05s hidden.)
+11 passed, 111 deselected in 0.39s

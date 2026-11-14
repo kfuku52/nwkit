@@ -1,0 +1,7 @@
+('balanced', 8, 2, 4) speedup 1.5348154527045978
+('balanced', 64, 2, 128) speedup 4.149918721723878
+('balanced', 256, 3, 128) speedup 4.362266901918292
+('ladder', 128, 1, 96) speedup 4.7066047532995965
+('star', 128, 2, 96) speedup 4.968254948797727
+('polytomy', 81, 4, 96) speedup 4.217986569696473
+('balanced', 64, 2, 1) speedup 1.0388606447116007

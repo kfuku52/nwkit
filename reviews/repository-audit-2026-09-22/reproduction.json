@@ -1,0 +1,24 @@
+{
+  "optimizer": {
+    "selected_x": 9.0,
+    "selected_objective": -3.75,
+    "success": true,
+    "known_optimal_x": 9.25,
+    "known_optimal_objective": -10.0
+  },
+  "duplicate_headers": {
+    "A": "C"
+  },
+  "annotation_input_replaced": true,
+  "existing_output_after_write_failure": "(A:1,",
+  "simulation_audit": {
+    "inputs": [
+      "infile"
+    ],
+    "outputs": [
+      "outfile"
+    ]
+  },
+  "audit_collision_parameters_remains_valid_json": false,
+  "audit_collision_truth_remains_valid_json": false
+}

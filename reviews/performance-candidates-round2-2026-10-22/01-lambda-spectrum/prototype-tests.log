@@ -1,0 +1,17 @@
+Prototype scoped monkeypatch; cwd=/tmp/nwkit-perf-round2-20261022-rkzoGe/baseline
+/tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python tools/check.py test -- -p candidate01_plugin tests/test_signal.py tests/test_signal_calibration.py -rs
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m pytest -q --durations=20 --durations-min=0.05 -p candidate01_plugin tests/test_signal.py tests/test_signal_calibration.py -rs
+.................................................                        [100%]
+============================= slowest 20 durations =============================
+30.27s call     tests/test_signal.py::test_lambda_bootstrap_cli_metadata_and_order
+9.11s call     tests/test_signal.py::test_lambda_bootstrap_missing_and_zero_rate
+4.46s call     tests/test_signal.py::test_cli_se_and_reproducible_permutations
+2.62s call     tests/test_signal.py::test_interior_lambda_with_errors_independent_optimization
+1.44s call     tests/test_signal.py::test_zero_rate_and_singular_zero_rate
+0.52s call     tests/test_signal.py::test_k_permutations_preserve_refits_rng_and_covariance_lifetime[errors1]
+0.13s call     tests/test_signal.py::test_lambda_bootstrap_matches_independent_null_draws
+0.10s call     tests/test_signal.py::test_k_permutations_preserve_refits_rng_and_covariance_lifetime[errors2]
+0.05s call     tests/test_signal_calibration.py::test_signal_study_replays_independently_of_scenario_order
+
+(11 durations < 0.05s hidden.)
+49 passed in 50.97s

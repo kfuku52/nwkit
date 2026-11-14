@@ -1,37 +1,98 @@
-<!-- BEGIN KF AGENT POLICY: source=https://github.com/kfuku52/kf-agent-policy; version=8; sha256=74c7b7e2e0f64f6dbdac0aec9acab92873fbcf7011eee38fedefd261fcd43d35 -->
+<!-- BEGIN KF AGENT POLICY: source=https://github.com/kfuku52/kf-agent-policy; version=12; sha256=d38271eaba87f3f2c5c92b6c4ea821eca662d38f6f0db388fda5270edb5e9afa -->
 # Common agent policy
 
 Repository-specific instructions override these defaults.
 
-- Before edits, inspect the worktree and preserve unrelated user changes. When
-  remote state matters, update from the default branch without discarding local
-  work.
-- Use the default branch unless the user explicitly requests another existing
-  one. Never create or switch branches solely for a commit, push, release, or
-  pull request.
-- Change or recommend branch protection only when explicitly asked. If it
-  blocks a requested direct push, report it; never bypass it or create a branch
-  or pull request.
-- In library metadata, exact pins or upper bounds require demonstrated
-  incompatibility. Keep reproducibility locks separate; prefer fixing and
-  testing compatibility.
-- Interface, option, format, filename, or schema changes must update all
-  producers, consumers, tests, examples, and documentation.
-- Keep top-level READMEs concise and retain useful visuals inline. Put
-  feature-specific guides and extended examples in dedicated documentation or
-  the wiki, linking only as needed.
-- Proactively use visuals when they improve understanding.
-- Changes confined to unpushed local commits need no backward compatibility.
-- Prefer verified root-cause fixes to fallbacks or relaxed validation that only
-  hide failures. Document unavoidable workarounds and their removal conditions.
-- When changing GitHub Actions, preserve required coverage and never execute
-  untrusted pull-request code on self-hosted runners.
-- Run focused checks and, when practical, the standard suite. Directly exercise
-  affected behavior or rendered artifacts; report exactly what did and did not
-  run.
-- Performance claims require representative before-and-after measurements and
-  equivalent output.
-- Individual local commits need no version bump. Before GitHub pushes, bump the
-  version even if unrequested, using the repository's scheme or Semantic
-  Versioning (`MAJOR.MINOR.PATCH`) if absent.
+- Follow the user's task scope within higher-priority instructions and execution
+  permissions. Complete implementation through affected verification and a result
+  report; a plan or investigation ends with its requested deliverable. Continue
+  authorized work without repeated approval; identify actual blocking boundaries.
+- Inspect the worktree and preserve unrelated changes. Refresh remote information
+  when needed; do not merge, rebase, or switch branches merely to inspect it.
+- Prefer the default branch when starting work without an established branch.
+  Preserve an existing task branch; follow explicit user branch instructions.
+  Never create or switch branches solely for a commit, push, release, or PR.
+- Change or recommend branch protection only when explicitly asked. Honor explicit
+  repository-specific direct-push exceptions; otherwise report a rejected push
+  without bypassing protection or inventing a branch or PR.
+- Prefer the simplest design that meets established requirements. Avoid
+  complexity for speculative needs; extract helpers when they improve clarity
+  or enable reuse.
+- Unpublished implementation details may be redesigned; preserve existing public
+  APIs, file formats, and saved-data compatibility unless a breaking change is
+  authorized. Update affected producers, consumers, tests, examples, and docs.
+- Validate untrusted input at the responsible boundary; rely on established
+  invariants internally. Revalidate when mutation or a new trust boundary
+  invalidates those guarantees.
+- Fix verified root causes; do not hide failures with fallbacks or weaker checks.
+  Document unavoidable workarounds and their removal conditions.
+- Read relevant docs and run the repository's check entrypoint for the change and
+  phase. Verify affected behavior; report checks run and omitted. Repeat or broaden
+  successful checks only for new changes, failures, or unresolved concerns.
+- For library metadata, require demonstrated incompatibility for exact pins or
+  upper bounds; keep reproducibility locks separate.
+- When editing READMEs, keep them concise with useful visuals inline; put extended
+  guides in linked documentation.
+- For GitHub push/release work, use `prepare-github-push` in `.agents/skills/`.
+  Local-only commits need no version bump; GitHub pushes require one.
+- Optimize bottlenecks in RAM usage or CPU time whenever found. For software
+  performance work, use `benchmark-performance` in `.agents/skills/`.
+  Performance claims require comparable measurements and equivalent output.
+- For GitHub Actions edits, use `optimize-github-actions` in `.agents/skills/`.
+  Preserve required coverage; never run untrusted PR code on self-hosted runners.
 <!-- END KF AGENT POLICY -->
+
+# Working in NWKIT
+
+## Start here
+
+- Read [DEVELOPMENT.md](DEVELOPMENT.md) for environment setup and the
+  change-to-test table. [README.md](README.md) describes the command surface;
+  [docs/README.md](docs/README.md) routes to command guides and research evidence.
+- For CLI, tree I/O, or table changes, read
+  [CLI/TSV conventions](docs/guides/CLI_TSV_CONVENTIONS.md) first.
+- `nwkit/cli.py` defines parsing and dispatch; command modules expose
+  `*_main` handlers. Shared tree/table I/O is in `nwkit/util.py`, conventions in
+  `nwkit/conventions.py`, and staged writes in `nwkit/output_transaction.py`.
+  Follow imports into the numerical model modules for scientific changes.
+- Before a push, read [RELEASING.md](RELEASING.md) and use
+  `.agents/skills/prepare-github-push/SKILL.md`. For selecting affected checks,
+  use `.agents/skills/validate-change/SKILL.md`.
+
+## Run and verify
+
+Run from the repository root with an activated Python >=3.10 environment.
+Use the setup/import preflight in DEVELOPMENT.md before trusting an existing
+`.venv`; do not replace someone else's environment to repair it.
+
+```sh
+python -m nwkit --help
+python tools/check.py quick -- tests/test_cli.py tests/test_cli_contracts.py tests/test_interface_conventions.py
+```
+
+The second command runs lint, formatting checks, incremental mypy, and small
+offline CLI/interface cases using temporary test outputs. It is a starting
+check, not sufficient validation for every change. Select affected tests from
+DEVELOPMENT.md; `test` runs only pytest, `quick` adds static checks, and `release`
+is the delivery gate. Report skipped optional backends separately from passes.
+
+## Preserve scientific and output contracts
+
+- Consult the affected guide before changing root assumptions, time/trait
+  units, ML/REML likelihoods, missing-data handling, uncertainty interpretation,
+  or random-seed behavior. ASR and native SHIFT have different tree requirements;
+  do not apply one model's assumptions to another.
+- Preserve documented CLI/Python interfaces, Newick/NHX properties, TSV columns,
+  saved-model schemas and original-unit parameters. Include relevant consumer,
+  round-trip and failure/rollback tests when changing shared serialization.
+- Treat `examples/`, `reviews/`, and `docs/validation/` as evidence with their own
+  inputs, seeds and protocols. Do not regenerate results or adjust scientific
+  parameters/tolerances merely to make a check pass. Read the local study guide
+  before intentionally revising an experiment.
+- Keep bundled reference data in `nwkit/data_*` intact unless the task requires
+  it. Avoid hand-editing build outputs, caches, `.venv`, `*.egg-info`, or local
+  `output/` and `tmp/` contents. Put trial outputs in a fresh temporary directory;
+  `dist`/`release` clear build directories, so preserve existing artifacts first.
+
+At completion, review the diff and report changed behavior, exact checks and
+results, skipped/unrun checks with reasons, and any remaining limitations.

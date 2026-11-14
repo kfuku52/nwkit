@@ -67,11 +67,12 @@ def _mapping_key(node_class, taxa, shared_taxa, match_basis):
     return _projected_split_from_taxa(taxa, shared_taxa)
 
 
-def _projected_masks(tree, taxon_to_bit):
+def _projected_masks(tree, taxon_to_bit, *, stringify_names=True):
     masks = dict()
     for node in tree.traverse(strategy="postorder"):
         if node.is_leaf:
-            masks[node] = taxon_to_bit.get(str(node.name), 0)
+            name = str(node.name) if stringify_names else node.name
+            masks[node] = taxon_to_bit.get(name, 0)
         else:
             mask = 0
             for child in node.get_children():
@@ -89,7 +90,7 @@ def _mask_mapping_key(node_class, mask, all_mask, match_basis):
     return (min(mask, complement), max(mask, complement))
 
 
-def build_clade_mapping(target, source, taxon_mode="exact", match_basis="clade"):
+def validate_mapping_taxa(target, source, taxon_mode, match_basis="clade"):
     if taxon_mode not in SUPPORTED_TAXON_MODES:
         raise ValueError(
             "Unsupported taxon mode '{}'. Choose from: {}.".format(
@@ -128,7 +129,13 @@ def build_clade_mapping(target, source, taxon_mode="exact", match_basis="clade")
     shared_taxa = target_leaf_set & source_leaf_set
     if not shared_taxa:
         raise ValueError("The input trees do not share any uniquely named tips.")
+    return target_leaf_set, source_leaf_set, shared_taxa
 
+
+def build_clade_mapping(target, source, taxon_mode="exact", match_basis="clade"):
+    target_leaf_set, source_leaf_set, shared_taxa = validate_mapping_taxa(
+        target, source, taxon_mode, match_basis
+    )
     target_taxa_by_node = _node_taxon_sets(target)
     source_taxa_by_node = _node_taxon_sets(source)
     same_leaf_set = target_leaf_set == source_leaf_set
@@ -252,8 +259,10 @@ def projected_root_split(tree, shared_taxa):
     children = tree.get_children()
     if len(children) != 2:
         return None
-    taxon_sets = _node_taxon_sets(tree)
-    sides = [frozenset(taxon_sets[child] & shared_taxa) for child in children]
+    sides = [
+        frozenset(name for name in child.leaf_names() if name in shared_taxa)
+        for child in children
+    ]
     if (not sides[0]) or (not sides[1]) or ((sides[0] | sides[1]) != shared_taxa):
         return None
     return canonical_split(sides[0], sides[1])
@@ -284,6 +293,58 @@ def canonical_split(side_a, side_b):
     return frozenset(side_b), frozenset(side_a)
 
 
+def physical_edge_lookup(tree, *, available_edges=None):
+    """Look up the endpoints of a canonical split, ordered from side A to B."""
+    taxa = sorted(_leaf_set(tree))
+    tip_count = len(taxa)
+    bits = {name: 1 << index for index, name in enumerate(taxa)}
+    all_mask = (1 << tip_count) - 1
+    masks = _projected_masks(tree, bits)
+    nodes_by_split: dict[int, list[Any]] = {}
+    for node in tree.traverse():
+        if node.is_root or (
+            available_edges is not None and node not in available_edges
+        ):
+            continue
+        side = masks[node]
+        size = side.bit_count()
+        complement_size = tip_count - size
+        # For equally sized sides the one containing the first taxon sorts first.
+        if size > complement_size or (size == complement_size and not side & 1):
+            side = all_mask ^ side
+        nodes_by_split.setdefault(side, []).append(node)
+
+    endpoints = {}
+    root_child_ids = {id(child) for child in tree.children}
+    for side, nodes in nodes_by_split.items():
+        if len(nodes) == 1:
+            node = nodes[0]
+            endpoints[side] = (
+                (node, node.up) if masks[node] == side else (node.up, node)
+            )
+        elif len(nodes) == 2 and {id(node) for node in nodes} == root_child_ids:
+            side_a = next(node for node in nodes if masks[node] == side)
+            side_b = nodes[0] if nodes[1] is side_a else nodes[1]
+            endpoints[side] = (side_a, side_b)
+
+    def lookup(split):
+        side_a, side_b = split
+        if len(side_a) + len(side_b) != tip_count:
+            return None
+        try:
+            first = sum(bits[name] for name in side_a)
+            edge = endpoints.get(first)
+            if edge is not None and sum(bits[name] for name in side_b) == (
+                all_mask ^ first
+            ):
+                return edge
+        except KeyError:
+            return None
+        return None
+
+    return lookup
+
+
 def node_projected_split(node, shared_taxa, taxon_sets=None):
     if node.is_root:
         return None
@@ -312,10 +373,31 @@ def find_root_split_candidates(target, source, taxon_mode="exact"):
         raise ValueError(
             "The source root does not define a usable bipartition on shared tips."
         )
-    target_taxa_by_node = _node_taxon_sets(target)
-    candidates = list()
-    for node in target.traverse():
-        split = node_projected_split(node, shared_taxa, taxon_sets=target_taxa_by_node)
-        if split == source_split:
-            candidates.append(node)
+    left, right = source_split
+    if not left.isdisjoint(right):
+        return shared_taxa, source_split, []
+    side_by_name = {name: 1 for name in left}
+    side_by_name.update((name, 2) for name in right)
+    required_sizes = {1: len(left), 2: len(right)}
+    pending: dict[Any, tuple[set, int]] = {}
+    matches = set()
+    for node in target.traverse(strategy="postorder"):
+        members = set()
+        sides = 0
+        if node.is_leaf:
+            sides = side_by_name.get(node.name, 0)
+            if sides:
+                members.add(node.name)
+        else:
+            for child in node.children:
+                child_members, child_sides = pending.pop(child)
+                # Reuse the larger set once the child's match is recorded.
+                if len(members) < len(child_members):
+                    members, child_members = child_members, members
+                members.update(child_members)
+                sides |= child_sides
+        if not node.is_root and len(members) == required_sizes.get(sides):
+            matches.add(node)
+        pending[node] = members, sides
+    candidates = [node for node in target.traverse() if node in matches]
     return shared_taxa, source_split, candidates

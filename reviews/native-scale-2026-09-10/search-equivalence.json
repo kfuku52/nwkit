@@ -1,0 +1,8 @@
+{
+  "input_sha256": true,
+  "best_log_likelihood": true,
+  "selected_shifts_without_penalty_or_calibration": true,
+  "largest_fitted_shift_count": true,
+  "metadata": true,
+  "candidates": true
+}

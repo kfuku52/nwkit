@@ -8,12 +8,14 @@ input branch-length unit; no tip-variance normalization is applied.
 
 import math
 from dataclasses import dataclass, replace
+from sys import float_info
 from typing import Any
 
 import numpy as np
 from scipy.optimize import minimize_scalar
 
 from nwkit.continuous_asr_optimize import minimize_brownian_rate
+from nwkit.gaussian_tree import _mean_at_tiny_variance_ratio
 from nwkit.rooting_state import require_rooted
 from nwkit.util import validate_unique_named_leaves
 
@@ -127,13 +129,18 @@ def _merge(first, second_mean, second_variance, half_quadratic=False):
                 "zero-length branches or under sigma2=0."
             )
         return first, 0.0, 0.0, 0
-    ratio = min(first.variance, second_variance) / larger
+    smaller = min(first.variance, second_variance)
+    ratio = smaller / larger
     denominator = 1.0 + ratio
     first_weight = (second_variance / larger) / denominator
     second_weight = (first.variance / larger) / denominator
     mean = first_weight * first.mean + second_weight * second_mean
-    variance = min(first.variance, second_variance) / denominator
-    if min(first.variance, second_variance) > 0.0 and variance == 0.0:
+    if 0.0 < smaller and ratio < float_info.min:
+        mean = _mean_at_tiny_variance_ratio(
+            first.mean, second_mean, first.variance, second_variance
+        )
+    variance = smaller / denominator
+    if smaller > 0.0 and variance == 0.0:
         raise ValueError(
             "A positive conditional variance underflowed; rescale the input units."
         )
@@ -251,14 +258,21 @@ def _scales(grouped, lengths, sigma2, trait_exponent_ceiling=None):
     time_exponent = math.frexp(maximum_length)[1] - 1 if maximum_length > 0.0 else 0
     if time_exponent > 0:
         minimum_length = min(length for length in lengths if length > 0.0)
-        # Scaling the longest edge towards one must not erase a representable
-        # subnormal short edge before its compensating rate scale is applied.
-        while time_exponent > 0 and math.ldexp(minimum_length, -time_exponent) == 0.0:
-            time_exponent -= 1
+        # Keep short normal edges out of the subnormal range before the
+        # compensating rate scale is applied. Preserve existing subnormals.
+        max_shift = math.frexp(minimum_length)[1] - float_info.min_exp
+        time_exponent = min(time_exponent, max(0, max_shift))
     size = max(spread, error)
     trait_exponent = math.frexp(size)[1] - 1 if size > 0.0 else 0
     if sigma2 is not None and sigma2 > 0.0:
         process_exponent = (math.frexp(sigma2)[1] + time_exponent + 1) // 2
+        if maximum_length > 0.0:
+            # Time normalization may be capped to preserve the shortest edge.
+            # Still allow room for the largest scaled evolutionary variance.
+            variance_exponent = math.frexp(sigma2)[1] + math.frexp(maximum_length)[1]
+            process_exponent = max(
+                process_exponent, (variance_exponent - float_info.max_exp + 1) // 2
+            )
         trait_exponent = max(trait_exponent, process_exponent)
     if trait_exponent_ceiling is not None:
         trait_exponent = min(trait_exponent, trait_exponent_ceiling)
@@ -377,13 +391,18 @@ def _prune(
         if not math.isfinite(variance):
             raise ValueError("An ancestral variance exceeds floating-point range.")
         parent = parents[index]
+        parent_message = inside[parent]
+        if parent_message is None:
+            inside[parent] = GaussianMarginal(message.mean, variance)
+            continue
         merged, log_variance, quadratic, df = _merge(
             inside[parent], message.mean, variance, half_quadratic
         )
         inside[parent] = merged
-        log_variances.append(log_variance)
-        quadratics.append(quadratic)
-        residual_df += df
+        if df:
+            log_variances.append(log_variance)
+            quadratics.append(quadratic)
+            residual_df += df
     return _PruningResult(
         tuple(inside) if collect_inside else (),
         math.fsum(log_variances),

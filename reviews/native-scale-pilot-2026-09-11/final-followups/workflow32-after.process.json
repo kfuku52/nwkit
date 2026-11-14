@@ -1,0 +1,23 @@
+{
+  "returncode": 0,
+  "command": [
+    "/Users/kf/miniforge3/bin/python",
+    "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-scale-pilot-vorx95ng-after-qr-numpy-cutoff16-exact-final/tools/benchmark_scale_pilot.py",
+    "--mode",
+    "workflow",
+    "--shifts",
+    "1",
+    "--shared",
+    "--pool",
+    "8",
+    "--refits",
+    "8",
+    "--screening",
+    "200",
+    "--tips",
+    "32",
+    "--output",
+    "/Users/kf/repos/nwkit/reviews/native-scale-pilot-2026-09-11/final-followups/workflow32-after.json"
+  ],
+  "process_seconds": 19.674407667014748
+}

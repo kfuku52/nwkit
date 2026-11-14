@@ -1,0 +1,182 @@
+{
+  "case": "signal",
+  "baseline": "/private/tmp/nwkit-performance-adoption-20261022/baseline",
+  "checkout": "/Users/kf/repos/nwkit",
+  "environment": "macOS-27.0.1-arm64-arm-64bit",
+  "summary": {
+    "baseline": {
+      "median_seconds": 0.09760004107374698,
+      "min_seconds": 0.09615004109218717,
+      "max_seconds": 0.10226195794530213
+    },
+    "current": {
+      "median_seconds": 0.02075450000120327,
+      "min_seconds": 0.019039749982766807,
+      "max_seconds": 0.032498084008693695
+    }
+  },
+  "records": {
+    "baseline": [
+      {
+        "seconds": 0.09723262500483543,
+        "loops": 1,
+        "peak_python_bytes": 1066568,
+        "python": "3.12.14",
+        "numpy": "2.5.4",
+        "scipy": "1.17.1",
+        "nwkit": "0.43.54"
+      },
+      {
+        "seconds": 0.09760004107374698,
+        "loops": 1,
+        "peak_python_bytes": 1066385,
+        "python": "3.12.14",
+        "numpy": "2.5.4",
+        "scipy": "1.17.1",
+        "nwkit": "0.43.54"
+      },
+      {
+        "seconds": 0.10226195794530213,
+        "loops": 1,
+        "peak_python_bytes": 1067353,
+        "python": "3.12.14",
+        "numpy": "2.5.4",
+        "scipy": "1.17.1",
+        "nwkit": "0.43.54"
+      },
+      {
+        "seconds": 0.0982886659912765,
+        "loops": 1,
+        "peak_python_bytes": 1066199,
+        "python": "3.12.14",
+        "numpy": "2.5.4",
+        "scipy": "1.17.1",
+        "nwkit": "0.43.54"
+      },
+      {
+        "seconds": 0.09615004109218717,
+        "loops": 1,
+        "peak_python_bytes": 1066892,
+        "python": "3.12.14",
+        "numpy": "2.5.4",
+        "scipy": "1.17.1",
+        "nwkit": "0.43.54"
+      },
+      {
+        "seconds": 0.09689979196991771,
+        "loops": 1,
+        "peak_python_bytes": 1066849,
+        "python": "3.12.14",
+        "numpy": "2.5.4",
+        "scipy": "1.17.1",
+        "nwkit": "0.43.54"
+      },
+      {
+        "seconds": 0.10110916697885841,
+        "loops": 1,
+        "peak_python_bytes": 1078575,
+        "python": "3.12.14",
+        "numpy": "2.5.4",
+        "scipy": "1.17.1",
+        "nwkit": "0.43.54"
+      }
+    ],
+    "current": [
+      {
+        "seconds": 0.02083299995865673,
+        "loops": 2,
+        "peak_python_bytes": 1064147,
+        "python": "3.12.14",
+        "numpy": "2.5.4",
+        "scipy": "1.17.1",
+        "nwkit": "0.43.54"
+      },
+      {
+        "seconds": 0.032498084008693695,
+        "loops": 1,
+        "peak_python_bytes": 1064061,
+        "python": "3.12.14",
+        "numpy": "2.5.4",
+        "scipy": "1.17.1",
+        "nwkit": "0.43.54"
+      },
+      {
+        "seconds": 0.021136541501618922,
+        "loops": 2,
+        "peak_python_bytes": 1064101,
+        "python": "3.12.14",
+        "numpy": "2.5.4",
+        "scipy": "1.17.1",
+        "nwkit": "0.43.54"
+      },
+      {
+        "seconds": 0.02051681251032278,
+        "loops": 2,
+        "peak_python_bytes": 1064147,
+        "python": "3.12.14",
+        "numpy": "2.5.4",
+        "scipy": "1.17.1",
+        "nwkit": "0.43.54"
+      },
+      {
+        "seconds": 0.02075450000120327,
+        "loops": 2,
+        "peak_python_bytes": 1063871,
+        "python": "3.12.14",
+        "numpy": "2.5.4",
+        "scipy": "1.17.1",
+        "nwkit": "0.43.54"
+      },
+      {
+        "seconds": 0.019039749982766807,
+        "loops": 2,
+        "peak_python_bytes": 1064193,
+        "python": "3.12.14",
+        "numpy": "2.5.4",
+        "scipy": "1.17.1",
+        "nwkit": "0.43.54"
+      },
+      {
+        "seconds": 0.020295937487389892,
+        "loops": 2,
+        "peak_python_bytes": 1064147,
+        "python": "3.12.14",
+        "numpy": "2.5.4",
+        "scipy": "1.17.1",
+        "nwkit": "0.43.54"
+      }
+    ]
+  },
+  "comparisons": [
+    {
+      "exact": true,
+      "maximum_scaled_numeric_difference": 0.0
+    },
+    {
+      "exact": true,
+      "maximum_scaled_numeric_difference": 0.0
+    },
+    {
+      "exact": true,
+      "maximum_scaled_numeric_difference": 0.0
+    },
+    {
+      "exact": true,
+      "maximum_scaled_numeric_difference": 0.0
+    },
+    {
+      "exact": true,
+      "maximum_scaled_numeric_difference": 0.0
+    },
+    {
+      "exact": true,
+      "maximum_scaled_numeric_difference": 0.0
+    },
+    {
+      "exact": true,
+      "maximum_scaled_numeric_difference": 0.0
+    }
+  ],
+  "median_speedup": 4.702596596790503,
+  "contention": "Other user-owned CPU jobs may remain outside the measurement lock"
+}

@@ -1,0 +1,314 @@
+"""Joint native shift likelihood with diagonal attraction and correlated noise.
+
+The covariance coordinate S is a variance-scaled diffusion matrix: its diagonal
+is the marginal process variance at normalized tree height 1. For shared alpha
+it equals the tip covariance; for unequal alpha its off-diagonals do not.
+Parameterizing S as PSD guarantees a valid diffusion and every branch innovation.
+"""
+
+import math
+from dataclasses import dataclass
+
+import numpy as np
+from scipy.linalg import solve_triangular
+
+from nwkit.gaussian_whitening import TreeWhitening
+from nwkit.shift_native_model import covariance_geometry
+from nwkit.vector_whitening import VectorTreeWhitening, _mean_design_qr, vector_gls
+
+
+def integral_decay(rate, duration):
+    """Integral of exp(-rate*s) from 0 to duration, including the zero limit."""
+    rate, duration = np.broadcast_arrays(
+        np.asarray(rate, float), np.asarray(duration, float)
+    )
+    exponent = np.zeros_like(rate)
+    np.multiply(-rate, duration, out=exponent, where=rate != 0)
+    # The correction rounds away at subnormal exponents. Dividing a rounded
+    # subnormal product by its rate can lose a representable duration.
+    result = duration.copy()
+    np.divide(
+        -np.expm1(exponent),
+        rate,
+        out=result,
+        where=~(np.abs(exponent) < np.finfo(float).tiny),
+    )
+    return result
+
+
+def joint_covariance_geometry(
+    tree, alpha, covariance, root_model, *, _include_branches=True
+):
+    """Return diagonal slopes, innovations, root, tip, and diffusion covariance.
+
+    Callers using their own tree factor can omit the branch arrays.
+    """
+    alpha = np.asarray(alpha, float)
+    covariance = np.asarray(covariance, float)
+    p = len(alpha)
+    if alpha.shape != (p,) or np.isnan(alpha).any() or (alpha < 0).any():
+        raise ValueError("Joint alpha must be a nonnegative vector.")
+    if covariance.shape != (p, p) or not np.isfinite(covariance).all():
+        raise ValueError(
+            "Joint process covariance must be a finite trait-square matrix."
+        )
+    if not np.allclose(covariance, covariance.T, atol=1e-13, rtol=1e-10):
+        raise ValueError("Joint process covariance must be symmetric.")
+    eigenvalues = np.linalg.eigvalsh(covariance)
+    if eigenvalues.min() < -1e-12 * max(1.0, np.max(np.abs(eigenvalues))):
+        raise ValueError("Joint process covariance must be positive semidefinite.")
+    if root_model not in {"OUfixedRoot", "OUrandomRoot"}:
+        raise ValueError("Unknown native root model.")
+    if np.isinf(alpha).any():
+        if not np.isinf(alpha).all():
+            if not np.any(covariance - np.diag(np.diag(covariance))):
+                entries = [
+                    covariance_geometry(
+                        tree, float(a), float(covariance[j, j]), root_model
+                    )
+                    for j, a in enumerate(alpha)
+                ]
+                slopes = np.column_stack([entry[0] for entry in entries])
+                innovations = np.zeros((len(tree.times), p, p))
+                for j, entry in enumerate(entries):
+                    innovations[:, j, j] = entry[1]
+                return (
+                    slopes,
+                    innovations,
+                    np.diag([entry[2] for entry in entries]),
+                    covariance.copy(),
+                    None,
+                )
+            raise ValueError(
+                "Joint covariance does not define mixed finite/infinite alpha limits."
+            )
+        if not _include_branches:
+            return None, None, None, covariance.copy(), None
+        innovations = np.broadcast_to(covariance, (len(tree.times), p, p)).copy()
+        root = covariance.copy() if root_model == "OUrandomRoot" else np.zeros((p, p))
+        return (
+            np.zeros((len(tree.times), p)),
+            innovations,
+            root,
+            covariance.copy(),
+            None,
+        )
+    if root_model == "OUrandomRoot" and (alpha == 0).any():
+        raise ValueError("Stationary-root OU is undefined at alpha zero.")
+    marginal_integrals = (
+        1 / (2 * alpha)
+        if root_model == "OUrandomRoot"
+        else integral_decay(2 * alpha, 1.0)
+    )
+    scale = np.sqrt(marginal_integrals)
+    diffusion = covariance / scale[:, None] / scale[None, :]
+    sums = alpha[:, None] + alpha[None, :]
+    root = diffusion / sums if root_model == "OUrandomRoot" else np.zeros((p, p))
+    tip = (
+        root.copy()
+        if root_model == "OUrandomRoot"
+        else diffusion * integral_decay(sums, 1.0)
+    )
+    if not _include_branches:
+        return None, None, root, tip, diffusion
+    innovations = diffusion[None] * integral_decay(
+        sums[None], tree.times[:, None, None]
+    )
+    slopes = np.exp(-tree.times[:, None] * alpha[None])
+    return slopes, innovations, root, tip, diffusion
+
+
+def original_diffusion_coordinate(tree, alpha, diffusion, root_model):
+    """Convert a physical-time diffusion matrix to the internal S coordinate."""
+    diffusion = np.asarray(diffusion, float) * tree.height
+    integral = (
+        1 / (2 * np.asarray(alpha))
+        if root_model == "OUrandomRoot"
+        else integral_decay(2 * np.asarray(alpha), 1.0)
+    )
+    scales = np.sqrt(integral)
+    return diffusion * (scales[:, None] * scales[None])
+
+
+@dataclass(frozen=True)
+class NativeJointFit:
+    alpha_height: np.ndarray
+    covariance_coordinate: np.ndarray
+    process_tip_covariance: np.ndarray
+    diffusion_covariance: np.ndarray | None
+    measurement_variance: np.ndarray
+    coefficients: np.ndarray
+    coefficient_covariance: np.ndarray
+    predicted: np.ndarray
+    log_likelihood: float
+    quadratic: float
+    num_observations: int
+    root_model: str
+    engine: str
+
+
+def _trait_designs(data, layout, alpha):
+    node_groups = layout.node_groups(data.tree)
+    by_rate: dict[float, np.ndarray] = {}
+    designs = []
+    for trait in range(len(data.trait_names)):
+        rate = float(alpha[trait])
+        if rate not in by_rate:
+            by_rate[rate] = layout.design(data.tree, rate, node_groups=node_groups)
+        designs.append(by_rate[rate])
+    return designs
+
+
+def joint_design(data, layout, alpha):
+    """Trait-major coefficients and tip-major observed coordinates."""
+    designs = _trait_designs(data, layout, alpha)
+    p, n, q = len(designs), len(data.values), len(layout.groups)
+    matrix = np.zeros((n, p, p * q))
+    for trait, design in enumerate(designs):
+        matrix[:, trait, trait * q : (trait + 1) * q] = design
+    return matrix
+
+
+def _joint_observed_design(data, layout, alpha, observed):
+    designs = _trait_designs(data, layout, alpha)
+    p, q = len(designs), len(layout.groups)
+    tips, traits = np.nonzero(observed)
+    matrix = np.zeros((len(tips), p * q))
+    for trait, design in enumerate(designs):
+        rows = traits == trait
+        matrix[rows, trait * q : (trait + 1) * q] = design[tips[rows]]
+    return matrix, designs
+
+
+def _joint_predictions(designs, coefficients):
+    by_trait = coefficients.reshape(len(designs), -1)
+    return np.column_stack(
+        [
+            np.einsum("ij,j->i", design, beta)
+            for design, beta in zip(designs, by_trait, strict=True)
+        ]
+    )
+
+
+def joint_factor(data, alpha, covariance, noise, *, root_model, plan=None):
+    slopes, innovations, root, tip, diffusion = joint_covariance_geometry(
+        data.tree, alpha, covariance, root_model
+    )
+    variances = data.variances + noise[None]
+    errors = np.zeros((*variances.shape, variances.shape[1]))
+    indices = np.arange(variances.shape[1])
+    errors[:, indices, indices] = variances
+    factor = VectorTreeWhitening.build(
+        data.tree.compiled,
+        np.isfinite(data.values),
+        slopes,
+        innovations,
+        errors,
+        root_covariance=root,
+        plan=plan,
+    )
+    return factor, tip, diffusion
+
+
+def evaluate_joint(
+    data, layout, alpha, covariance, noise, *, root_model="OUfixedRoot", _plan=None
+):
+    """General exact GLS at specified normalized covariance parameters."""
+    alpha = np.broadcast_to(np.asarray(alpha, float), (len(data.trait_names),)).copy()
+    noise = np.broadcast_to(np.asarray(noise, float), (len(alpha),)).copy()
+    if not np.isfinite(noise).all() or (noise < 0).any():
+        raise ValueError(
+            "Additional measurement variance must be finite and nonnegative."
+        )
+    factor, tip, diffusion = joint_factor(
+        data, alpha, covariance, noise, root_model=root_model, plan=_plan
+    )
+    observed = np.isfinite(data.values)
+    design, trait_designs = _joint_observed_design(data, layout, alpha, observed)
+    coefficients, loglik, quadratic, coefficient_covariance = vector_gls(
+        factor, data.values[observed], design
+    )
+    p, q = len(alpha), len(layout.groups)
+    return NativeJointFit(
+        alpha,
+        np.asarray(covariance).copy(),
+        tip,
+        diffusion,
+        noise,
+        coefficients.reshape(p, q).T,
+        coefficient_covariance,
+        _joint_predictions(trait_designs, coefficients),
+        loglik,
+        quadratic,
+        int(observed.sum()),
+        root_model,
+        "vector_tree_pruning",
+    )
+
+
+def evaluate_separable(
+    data, layout, alpha, *, root_model="OUfixedRoot", diagonal=False, factor=None
+):
+    """Profile free covariance exactly for shared alpha, complete error-free data."""
+    if not np.isfinite(data.values).all() or np.any(data.variances):
+        raise ValueError(
+            "Separable covariance profiling requires complete error-free observations."
+        )
+    n, p = data.values.shape
+    design = layout.design(data.tree, float(alpha))
+    q = design.shape[1]
+    if n - q < (1 if diagonal else p):
+        raise ValueError(
+            "Insufficient residual rank for a finite full covariance ML estimate."
+        )
+    if factor is None:
+        slopes, innovations, root = covariance_geometry(
+            data.tree, alpha, 1.0, root_model
+        )
+        factor = TreeWhitening.build(
+            data.tree.compiled,
+            data.tree.compiled.leaf_indices,
+            slopes,
+            innovations,
+            np.zeros(n),
+            root_variance=root,
+        )
+    white = factor.apply(np.column_stack((data.values, design)))
+    y, x = white[:, :p], white[:, p:]
+    basis, r, norms = _mean_design_qr(x)
+    coefficients = solve_triangular(r, basis.T @ y, check_finite=False) / norms[:, None]
+    residual = y - basis @ (basis.T @ y)
+    covariance = residual.T @ residual / n
+    if diagonal:
+        covariance = np.diag(np.diag(covariance))
+    try:
+        chol = np.linalg.cholesky(covariance)
+    except np.linalg.LinAlgError as exc:
+        raise ValueError(
+            "Residual covariance is singular; no finite covariance ML estimate."
+        ) from exc
+    inverse = solve_triangular(r, np.eye(q), check_finite=False) / norms[:, None]
+    coefficient_covariance = np.kron(covariance, inverse @ inverse.T)
+    loglik = -0.5 * (
+        n * (p * (math.log(2 * math.pi) + 1) + 2 * np.log(np.diag(chol)).sum())
+        + p * factor.log_determinant
+    )
+    alphas = np.full(p, alpha)
+    _, _, _, tip, diffusion = joint_covariance_geometry(
+        data.tree, alphas, covariance, root_model, _include_branches=False
+    )
+    return NativeJointFit(
+        alphas,
+        covariance,
+        tip,
+        diffusion,
+        np.zeros(p),
+        coefficients,
+        coefficient_covariance,
+        design @ coefficients,
+        float(loglik),
+        float(n * p),
+        n * p,
+        root_model,
+        "separable_profile",
+    )

@@ -1,0 +1,280 @@
+"""Input validation and batch reporting for phylogenetic signal."""
+
+import hashlib
+import math
+import sys
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+from nwkit.evolution import build_evolutionary_process
+from nwkit.file_paths import validate_outputs_do_not_replace_inputs
+from nwkit.output_transaction import output_transaction, validate_output_targets
+from nwkit.rooting_state import require_rooted
+from nwkit.signal_stats import (
+    bh_adjust,
+    k_fit,
+    lambda_fit,
+    lambda_parametric_bootstrap,
+    permutation_test,
+)
+from nwkit.trait_input import numeric_trait_value as _number
+from nwkit.trait_input import parse_trait_columns as _columns
+from nwkit.util import (
+    parse_table_missing_values,
+    read_tip_table,
+    read_tree,
+    validate_unique_named_leaves,
+)
+
+COLUMNS = [
+    "trait",
+    "method",
+    "num_taxa",
+    "num_missing_taxa",
+    "estimate",
+    "status",
+    "message",
+    "measurement_error",
+    "sigma2",
+    "root_mean",
+    "log_likelihood",
+    "null_log_likelihood",
+    "likelihood_ratio",
+    "test_method",
+    "p_value",
+    "p_adjusted",
+    "p_adjust",
+    "num_tests",
+    "num_simulations",
+    "seed",
+    "ci_level",
+    "ci_lower",
+    "ci_upper",
+    "lambda_lower",
+    "lambda_upper",
+]
+
+
+def _inputs(args):
+    columns = _columns(args.columns)
+    se_columns = (
+        _columns(args.standard_error_column) if args.standard_error_column else []
+    )
+    if se_columns and (
+        len(se_columns) != len(columns) or set(se_columns) & set(columns)
+    ):
+        raise ValueError("Provide one distinct SE column per trait, in matching order.")
+    if args.n_sim < 1 or args.seed < 0:
+        raise ValueError("--n-sim must be positive and --seed non-negative.")
+    if not np.isfinite(args.ci_level) or not 0 < args.ci_level < 1:
+        raise ValueError("--ci-level must be finite and between zero and one.")
+    tree = read_tree(
+        args.infile, args.format, args.quoted_node_names, rooted=args.input_rooted
+    )
+    require_rooted(tree, "Phylogenetic signal requires a rooted tree.")
+    validate_unique_named_leaves(tree, "--infile")
+    names = sorted(node.name for node in tree.leaves())
+    process = build_evolutionary_process(
+        tree, model="brownian", root_mode="fixed", allow_zero=True
+    )
+    table, _, _ = read_tip_table(
+        args.trait,
+        tree_leaf_names=names,
+        required_columns=columns + se_columns,
+        missing_values=args.missing_values,
+        unmatched=args.unmatched,
+    )
+    table = table.set_index("leaf_name").reindex(names)
+    missing_values = parse_table_missing_values(args.missing_values)
+    data = []
+    for index, column in enumerate(columns):
+        values = np.array([_number(x, column, missing_values) for x in table[column]])
+        errors = np.zeros(len(names))
+        if se_columns:
+            errors = np.array(
+                [
+                    _number(x, se_columns[index], missing_values)
+                    for x in table[se_columns[index]]
+                ]
+            )
+            observed = np.isfinite(values)
+            if np.any(~np.isfinite(errors[observed])) or np.any(errors[observed] < 0):
+                raise ValueError(
+                    f"Observed trait '{column}' requires finite, non-negative SEs."
+                )
+        data.append((column, values, errors))
+    return process, names, data
+
+
+def _trait_rows(covariance_for, column, values, errors, args):
+    observed = np.isfinite(values)
+    n = int(observed.sum())
+    methods = ["K", "lambda"] if args.method == "both" else [args.method]
+    base = {
+        "trait": column,
+        "num_taxa": n,
+        "num_missing_taxa": len(values) - n,
+        "measurement_error": "yes" if args.standard_error_column else "no",
+    }
+    status = "insufficient_taxa" if n < 3 else None
+    values, errors = values[observed], errors[observed]
+    if not status and np.all(values == values[0]):
+        status = "constant_trait"
+    if status:
+        return [dict(base, method=method, status=status) for method in methods]
+    covariance = covariance_for(observed)
+    try:
+        np.linalg.cholesky(covariance)
+    except np.linalg.LinAlgError:
+        return [
+            dict(base, method=method, status="singular_covariance")
+            for method in methods
+        ]
+    offset = float(values[0])
+    magnitude = max(float(np.max(np.abs(values))), float(np.max(errors)))
+    scale = math.ldexp(1.0, math.frexp(magnitude)[1] - 1)
+    values = values / scale - offset / scale
+    time_scale = float(np.max(np.diag(covariance)))
+    errors = errors / scale
+    covariance /= time_scale
+    digest = int.from_bytes(hashlib.sha256(column.encode()).digest()[:8], "little")
+    rows = []
+    for method in methods:
+        # Preserve K's historical stream while isolating lambda from K draws.
+        entropy = [args.seed, digest] if method == "K" else [args.seed, digest, 1]
+        rng = np.random.default_rng(np.random.SeedSequence(entropy))
+        try:
+            result = _method_result(method, covariance, values, errors, args, rng)
+            result = _restore_units(result, scale, time_scale, offset, n)
+        except (
+            ValueError,
+            np.linalg.LinAlgError,
+            OverflowError,
+            FloatingPointError,
+        ) as exc:
+            result = {"status": "fit_failed", "message": str(exc)}
+        rows.append(dict(base, method=method, **result))
+    return rows
+
+
+def _restore_units(result, scale, time_scale, offset, n):
+    if result.get("sigma2") is not None and result["sigma2"] != 0:
+        rate, rate_exponent = math.frexp(result["sigma2"])
+        unit, unit_exponent = math.frexp(scale)
+        time, time_exponent = math.frexp(time_scale)
+        result["sigma2"] = math.ldexp(
+            rate * unit**2 / time, rate_exponent + 2 * unit_exponent - time_exponent
+        )
+        if result["sigma2"] == 0:
+            raise ValueError(
+                "Estimated diffusion rate underflows in original units; rescale units."
+            )
+    if result.get("root_mean") is not None:
+        result["root_mean"] = (offset / scale + result["root_mean"]) * scale
+    for key in ("log_likelihood", "null_log_likelihood"):
+        if key in result:
+            result[key] -= n * np.log(scale)
+    if any(
+        isinstance(value, (float, np.floating)) and not np.isfinite(value)
+        for value in result.values()
+    ):
+        raise ValueError(
+            "Non-finite signal result; rescale units or inspect numerical conditioning."
+        )
+    return result
+
+
+def _method_result(method, covariance, values, errors, args, rng):
+    if method == "lambda":
+        result = lambda_fit(covariance, values, errors, args.ci_level)
+        result.update(lambda_lower=0.0, lambda_upper=1.0)
+        if "ci_lower" in result:
+            result["ci_level"] = args.ci_level
+        if args.test == "no":
+            result.pop("p_value", None)
+        elif "p_value" in result:
+            if args.lambda_test == "bootstrap":
+                result["p_value"] = lambda_parametric_bootstrap(
+                    covariance,
+                    values,
+                    errors,
+                    result["likelihood_ratio"],
+                    args.n_sim,
+                    rng,
+                )
+                result.update(
+                    test_method="parametric_bootstrap",
+                    num_simulations=args.n_sim,
+                    seed=args.seed,
+                )
+            else:
+                result["test_method"] = "likelihood_ratio_chi2_1"
+        return result
+    estimate, rate = k_fit(covariance, values, errors)
+    result = {"estimate": estimate, "sigma2": rate, "status": "ok"}
+    if args.test == "yes":
+        result.update(
+            p_value=permutation_test(
+                covariance, values, errors, estimate, args.n_sim, rng
+            ),
+            test_method="upper_tail_permutation",
+            num_simulations=args.n_sim,
+            seed=args.seed,
+        )
+    return result
+
+
+def _observed_covariance(process, names, observed):
+    tips = process.ordered_leaves(
+        [name for name, keep in zip(names, observed, strict=True) if keep]
+    )
+    # Start at the retained MRCA. Subtracting a shared stem from absolute
+    # root depths would lose short paths when the stem is much longer.
+    ancestor = process.tree.common_ancestor(tips)
+    if ancestor is process.tree:
+        return process.covariance(tips)
+    local = build_evolutionary_process(
+        ancestor, model="brownian", root_mode="fixed", allow_zero=True
+    )
+    return local.covariance(tips)
+
+
+def signal_main(args):
+    outputs = [] if args.outfile == "-" else [args.outfile]
+    validate_outputs_do_not_replace_inputs(
+        [("--infile", args.infile), ("--trait", args.trait)],
+        [("--outfile", path) for path in outputs],
+    )
+    validate_output_targets(outputs)
+    process, names, data = _inputs(args)
+    previous_mask = previous_covariance = None
+
+    def covariance_for(observed):
+        nonlocal previous_mask, previous_covariance
+        mask = observed.tobytes()
+        if previous_covariance is None or mask != previous_mask:
+            previous_covariance = _observed_covariance(process, names, observed)
+            previous_mask = mask
+        return previous_covariance.copy()
+
+    rows = []
+    for column, values, errors in data:
+        rows.extend(_trait_rows(covariance_for, column, values, errors, args))
+    for method in ("K", "lambda"):
+        tested = [row for row in rows if row["method"] == method and "p_value" in row]
+        p_values = [row["p_value"] for row in tested]
+        adjusted = bh_adjust(p_values) if args.p_adjust == "bh" else p_values
+        for row, value in zip(tested, adjusted, strict=True):
+            row.update(p_adjusted=value, p_adjust=args.p_adjust, num_tests=len(tested))
+    text = (
+        pd.DataFrame(rows)
+        .reindex(columns=COLUMNS)
+        .to_csv(sep="\t", index=False, na_rep="", float_format="%.12g")
+    )
+    with output_transaction(outputs) as staged:
+        if outputs:
+            Path(staged[args.outfile]).write_text(text, encoding="utf-8")
+        else:
+            sys.stdout.write(text)

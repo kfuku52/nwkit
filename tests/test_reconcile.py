@@ -1,6 +1,9 @@
+import json
+
 import pytest
 from ete4 import Tree
 
+from nwkit.clade_index import CladeIndex
 from nwkit.reconcile import (
     _report_unmatched_species,
     build_reconciliation_table,
@@ -46,6 +49,39 @@ def test_lca_duplication_loss_contribution_counts_species_edges():
         (node for node in [species_tree, nodes["A"]]),
         depths,
     ) == (1, 2)
+
+
+@pytest.mark.parametrize(
+    ("gene_newick", "lost_taxa"),
+    [
+        ("(A_a_1:1,C_c_1:1);", [("B_b",)]),
+        ("((A_a_1:1,C_c_1:1):1,A_a_2:1);", [("B_b",), ("B_b",), ("C_c",)]),
+        ("(A_a_1:1,A_a_2:1);", []),
+        ("(A_a_1:1,B_b_1:1);", []),
+    ],
+)
+def test_lca_loss_locations_follow_missing_sister_edges(gene_newick, lost_taxa):
+    species = Tree(SPECIES_TREE, parser=1)
+    genes = Tree(gene_newick, parser=1)
+    index = CladeIndex(species)
+    names = {
+        index.names_for_node(node): index.clade_id_for_node(node)
+        for node in species.traverse()
+    }
+    table = build_reconciliation_table(genes, species, _species_mapping(genes))
+    locations = [
+        value
+        for cell in table.implied_loss_species_clade_ids
+        for value in json.loads(cell)
+    ]
+    assert sorted(locations) == sorted(names[taxa] for taxa in lost_taxa)
+    assert len(locations) == table.implied_losses.sum()
+    assert all(
+        json.loads(cell) == []
+        for cell in table.loc[
+            table.node_class == "leaf", "implied_loss_species_clade_ids"
+        ]
+    )
 
 
 def test_lca_reconciliation_keeps_parallel_speciation_events_as_separate_rows():

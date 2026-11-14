@@ -12,6 +12,7 @@ from nwkit.gaussian_inference import (
     condition_gaussian_tree,
     prepare_gaussian_single_draw,
     sample_gaussian_posterior,
+    simulate_gaussian_process,
 )
 from nwkit.util import assign_branch_ids, get_node_class
 
@@ -100,7 +101,50 @@ def _tip_bootstrap_simulator(process, observed, errors):
     return simulate
 
 
+def _simulated_tip_data(process, observed, errors, seed, *, include_latent=False):
+    seed_sequence = np.random.SeedSequence(seed)
+    process_seed, error_seed = seed_sequence.spawn(2)
+    conditioned = condition_gaussian_tree(process, observed, standard_errors=errors)
+    root_values = (
+        conditioned.marginals[process.tree].mean
+        if process.root.mode == "flat"
+        else None
+    )
+    simulated = simulate_gaussian_process(
+        process,
+        num_samples=1,
+        seed=int(process_seed.generate_state(1)[0]),
+        root_values=root_values,
+        compiled_tree=conditioned.compiled_tree,
+    )
+    node_index = {node: index for index, node in enumerate(simulated.nodes)}
+    error_rng = np.random.default_rng(error_seed)
+    result = dict.fromkeys(observed)
+    for leaf in process.tree.leaves():
+        name = str(leaf.name)
+        if observed.get(name) is None:
+            continue
+        value = float(simulated.values[0, node_index[leaf]])
+        error = 0.0 if errors is None else float(errors[name])
+        if error > 0.0:
+            value += float(error_rng.normal(0.0, error))
+        result[name] = value
+    return (result, simulated) if include_latent else result
+
+
 def _refit(tree, simulated, errors, args, settings, original_fit, regime_assignment):
+    if settings.model == "BRANCH-GAUSSIAN":
+        from nwkit.branch_gaussian_asr import compute_branch_marginals
+
+        return compute_branch_marginals(
+            tree,
+            simulated,
+            errors,
+            assignment=original_fit.branch_assignment,
+            fit_spec=original_fit.fit_spec,
+            root=original_fit.process.root,
+            compute_posterior=False,
+        )[1]
     model = settings.model
     if model == "BM":
         from nwkit.continuous_asr import compute_bm_marginals
@@ -296,11 +340,44 @@ def write_continuous_diagnostics(
 ):
     """Write each requested scalar Gaussian diagnostic."""
 
+    if settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG", "MV-OU-FULL"}:
+        from nwkit.asr_multivariate_diagnostics import write_multivariate_diagnostics
+
+        write_multivariate_diagnostics(tree, observed, errors, args, settings, fit)
+        return
+
     sample_out = getattr(args, "posterior_samples_out", None)
     predictive_out = getattr(args, "posterior_predictive_out", None)
     bootstrap_out = getattr(args, "bootstrap_out", None)
+    cross_validation_out = getattr(args, "cross_validation_out", None)
+    interval_out = getattr(args, "bootstrap_intervals_out", None)
+
+    def refit_process(training):
+        refitted = _refit(
+            tree, training, errors, args, settings, fit, regime_assignment
+        )
+        return fitted_scalar_process(
+            tree,
+            settings.model,
+            refitted,
+            root_prior=settings.root_prior,
+            regime_assignment=regime_assignment,
+        )
+
+    if cross_validation_out not in (None, ""):
+        from nwkit.asr_cross_validation import gaussian_cross_validation
+
+        gaussian_cross_validation(
+            tree,
+            observed,
+            refit_process,
+            errors=errors,
+            mode=getattr(args, "cross_validation_unit", None) or "tip",
+            level=getattr(args, "ci_level", None) or 0.95,
+        ).to_csv(cross_validation_out, sep="\t", index=False)
     if all(
-        value in (None, "") for value in (sample_out, predictive_out, bootstrap_out)
+        value in (None, "")
+        for value in (sample_out, predictive_out, bootstrap_out, interval_out)
     ):
         return
     process = fitted_scalar_process(
@@ -312,6 +389,25 @@ def write_continuous_diagnostics(
     )
     seed_sequence = np.random.SeedSequence(getattr(args, "seed", None))
     sample_seed, predictive_seed, bootstrap_seed = seed_sequence.spawn(3)
+    if interval_out not in (None, ""):
+        from nwkit.asr_bootstrap_intervals import bootstrap_prediction_intervals
+
+        bootstrap_prediction_intervals(
+            process,
+            observed,
+            lambda seed: _simulated_tip_data(
+                process, observed, errors, seed, include_latent=True
+            ),
+            refit_process,
+            errors=errors,
+            num_simulations=_positive_count(
+                getattr(args, "bootstrap_interval_simulations", None),
+                "--bootstrap-interval-simulations",
+                100,
+            ),
+            seed=int(seed_sequence.spawn(1)[0].generate_state(1)[0]),
+            level=getattr(args, "ci_level", None) or 0.95,
+        ).to_csv(interval_out, sep="\t", index=False)
     if sample_out not in (None, ""):
         draws = _positive_count(
             getattr(args, "posterior_samples", None), "--posterior-samples", 1000

@@ -1,0 +1,18 @@
+COMMAND: /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python tools/check.py test -- -p candidate03_plugin tests/test_wgd_count_model.py tests/test_wgd_count.py -rs
+CWD: /tmp/nwkit-perf-round2-20261022-rkzoGe/baseline
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m pytest -q --durations=20 --durations-min=0.05 -p candidate03_plugin tests/test_wgd_count_model.py tests/test_wgd_count.py -rs
+........................................................................ [ 70%]
+..............................                                           [100%]
+============================= slowest 20 durations =============================
+6.37s call     tests/test_wgd_count.py::test_real_bootstrap_cli_respects_seed_and_search
+1.57s call     tests/test_wgd_count.py::test_real_cli_and_metadata_no_uncalibrated_probability
+1.08s call     tests/test_wgd_count.py::test_single_stdin_owner_and_stdout_primary
+0.78s call     tests/test_wgd_count_model.py::test_simulated_frequency_matches_conditional_probability
+0.25s call     tests/test_wgd_count_model.py::test_pruning_matches_brute_force_and_ascertainment
+0.19s call     tests/test_wgd_count_model.py::test_root_clade_simulation_observation_and_missingness_selection
+0.15s call     tests/test_wgd_count_model.py::test_high_copy_low_birth_likelihood_remains_finite_against_yule_law
+0.10s call     tests/test_wgd_count_model.py::test_high_copy_rare_pulse_likelihood_matches_independent_yule_sum
+0.07s call     tests/test_wgd_count_model.py::test_zero_retention_state_check_cannot_hide_split_edge_truncation
+
+(11 durations < 0.05s hidden.)
+102 passed in 11.80s

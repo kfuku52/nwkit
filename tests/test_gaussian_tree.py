@@ -1,23 +1,26 @@
 """Cross-consumer contracts for the shared tree-Gaussian process layer."""
 
 import math
+from decimal import Decimal, localcontext
 
 import numpy as np
 import pytest
 
+from nwkit import gaussian_tree
 from nwkit.continuous_asr import compute_bm_marginals
 from nwkit.continuous_asr_process import fitted_scalar_process
 from nwkit.evolution import (
     build_evolutionary_covariance,
     build_evolutionary_process,
-    evolutionary_covariance_factory,
 )
 from nwkit.gaussian_tree import (
     GaussianRootPrior,
     GaussianTransition,
     GaussianTreeProcess,
     _build_sparse_precision,
+    exponential_rate_edge_variance,
     ou_transition,
+    ou_transition_from_root_variance,
 )
 from nwkit.nonstationary_continuous_asr import compute_eb_marginals
 from nwkit.ordinary_regression import _fit_ordinary_gaussian
@@ -53,6 +56,72 @@ def test_reconstructed_stationary_ou_uses_fitted_variance():
     for leaf in tree.leaves():
         expected = fit.root_variance * -math.expm1(-2.0 * fit.alpha * leaf.dist)
         assert process.transitions[leaf].variance == expected
+
+
+@pytest.mark.parametrize(
+    "start,length,rate",
+    [
+        (0.0, 8e-298, 1e300),
+        (8e-298, 1e-315, 1e300),
+        (8e302, 1e303, -1e-300),
+        (0.0, 1e-15, 1e-310),
+    ],
+)
+def test_rate_change_branch_variance_avoids_unrepresentable_intermediates(
+    start, length, rate
+):
+    with localcontext() as context:
+        context.prec = 400
+        a, b, r = map(Decimal.from_float, (start, length, rate))
+        expected = float((r * a).exp() * ((r * b).exp() - 1) / r)
+    assert exponential_rate_edge_variance(start, length, rate) == pytest.approx(
+        expected, rel=3e-13, abs=0
+    )
+
+
+@pytest.mark.parametrize(
+    "length,alpha,stationary,optimum",
+    [(1e-200, 1e-150, 1e250, -1e200), (1e200, 1e150, 3.0, 2.0)],
+)
+def test_ou_stationary_variance_transition_keeps_extreme_products(
+    length, alpha, stationary, optimum
+):
+    with localcontext() as context:
+        context.prec = 420
+        t, a, s, theta = map(Decimal.from_float, (length, alpha, stationary, optimum))
+        decay = (-a * t).exp()
+        expected = [float(decay), float((1 - decay) * theta), float(s * (1 - decay**2))]
+    result = ou_transition_from_root_variance(length, alpha, stationary, optimum)
+    np.testing.assert_allclose(
+        [result.slope, result.intercept, result.variance], expected, rtol=2e-15, atol=0
+    )
+
+
+def test_ou_diffusion_preserves_stationary_variance_with_large_attraction():
+    transition, stationary = ou_transition(1e-306, 1e308, 1e308, 2.0)
+    assert stationary == 0.5
+    assert transition.variance == 0.5
+    assert transition.intercept == 2.0
+    assert transition.slope == pytest.approx(math.exp(-100), rel=2e-14, abs=0)
+
+
+@pytest.mark.parametrize(
+    "slope,root_variance", [(1e-200, 1e300), (3e-162, 1e300), (1e200, 1e-300)]
+)
+def test_tree_moments_and_covariance_keep_representable_variance(slope, root_variance):
+    tree = tree_from("(A:1,B:1);")
+    process = GaussianTreeProcess(
+        tree,
+        {node: GaussianTransition(slope, 0.0, 0.0) for node in tree.leaves()},
+        GaussianRootPrior("gaussian", 0.0, root_variance),
+        "test",
+    )
+    expected = float(Decimal.from_float(root_variance) * Decimal.from_float(slope) ** 2)
+    _, variances = process.marginal_moments()
+    assert variances[tree["A"]] == pytest.approx(expected, rel=2e-15, abs=0)
+    np.testing.assert_allclose(
+        process.tip_covariance(["A", "B"]), expected, rtol=2e-13, atol=0
+    )
 
 
 def test_brownian_asr_and_intercept_only_regression_share_reml_fit():
@@ -350,9 +419,32 @@ def test_flat_root_process_refuses_finite_covariance_views():
         process.sparse_tip_model(["A", "B", "C"])
 
 
-def test_covariance_factory_exposes_its_shared_process():
-    tree = tree_from("((A:1,B:1):1,(C:1,D:1):1)R;")
-    names = [str(leaf.name) for leaf in tree.leaves()]
-    factory = evolutionary_covariance_factory(tree, names, model="ou")
-    process = factory.process(0.6)
-    np.testing.assert_allclose(process.tip_covariance(names), factory(0.6))
+@pytest.mark.parametrize("slopes", ["unit", "signed", "zero"])
+@pytest.mark.parametrize("workspace", [24, 4 * 1024**2])
+@pytest.mark.parametrize("root_variance", [0.6, 0.0, -0.0])
+def test_large_covariance_blocks_preserve_arbitrary_duplicate_node_order(
+    slopes, workspace, root_variance, monkeypatch
+):
+    tree = tree_from("((A:1,B:2)I:0.5,(C:3,D:0.25)J:0.4)R;")
+    nodes = list(tree.traverse("preorder"))
+    rng = np.random.default_rng(7128)
+    transitions = {}
+    for index, node in enumerate(nodes[1:]):
+        slope = float(rng.uniform(0.7, 1.2)) * (-1 if index % 2 else 1)
+        if slopes == "unit":
+            slope = 1.0
+        elif slopes == "zero" and index % 3 == 0:
+            slope = 0.0
+        transitions[node] = GaussianTransition(slope, 0, float(rng.uniform(0.1, 2)))
+    root = GaussianRootPrior("gaussian" if root_variance else "fixed", 0, root_variance)
+    process = GaussianTreeProcess(tree, transitions, root, "custom")
+    requested = [nodes[i] for i in rng.integers(0, len(nodes), 64)]
+    expected = np.empty((64, 64))
+    expected[:63, :63] = process.covariance(requested[:63])
+    for i, node in enumerate(requested):
+        pair = process.covariance([node, requested[-1]])
+        expected[i, -1] = expected[-1, i] = pair[0, 1] if i < 63 else pair[1, 1]
+    monkeypatch.setattr(gaussian_tree, "_COVARIANCE_WORKSPACE_BYTES", workspace)
+    actual = process.covariance(requested)
+    np.testing.assert_array_equal(actual, expected)
+    np.testing.assert_array_equal(np.signbit(actual), np.signbit(expected))

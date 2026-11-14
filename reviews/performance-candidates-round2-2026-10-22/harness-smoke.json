@@ -1,0 +1,8 @@
+{
+  "result": "passed",
+  "grid_points": 11,
+  "maximum_independent_logpdf_difference": 1.4210854715202004e-14,
+  "existing_reference_absolute_tolerance": 1e-07,
+  "source": "/tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/signal_stats.py",
+  "change_scope": "Final research harness import/style/closure normalization only; spectral algorithm unchanged."
+}

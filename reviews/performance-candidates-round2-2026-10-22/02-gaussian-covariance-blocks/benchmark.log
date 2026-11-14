@@ -1,0 +1,52 @@
+[
+  {
+    "case": "brownian_balanced",
+    "size": 16,
+    "speedup": 0.9939791588814166
+  },
+  {
+    "case": "brownian_balanced",
+    "size": 64,
+    "speedup": 1.4734282675168278
+  },
+  {
+    "case": "brownian_balanced",
+    "size": 128,
+    "speedup": 2.642619939323639
+  },
+  {
+    "case": "brownian_balanced",
+    "size": 512,
+    "speedup": 9.724497201107296
+  },
+  {
+    "case": "ou_balanced",
+    "size": 512,
+    "speedup": 7.745285242658013
+  },
+  {
+    "case": "brownian_pectinate",
+    "size": 256,
+    "speedup": 6.791620683705741
+  },
+  {
+    "case": "ou_pectinate",
+    "size": 256,
+    "speedup": 5.004920040453961
+  },
+  {
+    "case": "brownian_star",
+    "size": 512,
+    "speedup": 7.949599248676355
+  },
+  {
+    "case": "whole_ordinary_brownian_fit",
+    "size": 64,
+    "speedup": 1.2422973385485947
+  },
+  {
+    "case": "whole_ordinary_brownian_fit",
+    "size": 256,
+    "speedup": 3.399369418177984
+  }
+]

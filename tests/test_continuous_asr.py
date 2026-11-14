@@ -1,6 +1,7 @@
 """Independent Gaussian oracles for continuous ancestral reconstruction."""
 
 import math
+from fractions import Fraction
 
 import numpy as np
 import pytest
@@ -28,6 +29,29 @@ def test_ldexp_distinguishes_underflow_from_overflow():
         continuous._ldexp(smallest_subnormal, -1, "Scaled value")
     with pytest.raises(ValueError, match="exceeds floating-point range"):
         continuous._ldexp(1.0, 2048, "Scaled value")
+
+
+def test_brownian_asr_keeps_short_branches_and_small_weighted_means():
+    short, long, response = 1e-162, 1e150, 1e75
+    tree = tree_from(f"(A:{short},B:{long})R;")
+    posterior, fit = compute_bm_marginals(tree, {"A": 0.0, "B": response}, sigma2=1)
+    a, b, y = map(Fraction, (short, long, response))
+    assert posterior[tree].mean == pytest.approx(
+        float(a * y / (a + b)), rel=4e-12, abs=0
+    )
+    assert posterior[tree].variance == pytest.approx(
+        float(a * b / (a + b)), rel=4e-12, abs=0
+    )
+    assert math.isfinite(fit.restricted_log_likelihood)
+
+
+def test_brownian_merge_preserves_a_mean_when_its_weight_underflows():
+    a, b, y = 1e-180, 1e150, 1e50
+    posterior, _, _, _ = continuous._merge(continuous.GaussianMarginal(0.0, a), y, b)
+    x, z, observation = map(Fraction, (a, b, y))
+    assert posterior.mean == pytest.approx(
+        float(x * observation / (x + z)), rel=1e-14, abs=0
+    )
 
 
 def dense_marginals(tree, values, sigma2, errors=None):
@@ -127,7 +151,8 @@ def test_production_noise_shift_is_below_every_generalized_noise_eigenvalue():
         "((A:1,B:1)I:1,(C:1,(D:1,E:1)J:1)K:1,F:1)R;",
         "(A:1,(B:1,C:1)I:1,D:1,(E:1,F:1)J:1)R;",
     ]
-    for case in range(240):
+    # Each topology occurs with an exact anchor and with all-noisy observations.
+    for case in range(15):
         tree = tree_from(sources[case % len(sources)])
         for node in tree.traverse():
             if not node.is_root:

@@ -1,0 +1,18 @@
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m ruff check nwkit tests setup.py tools
+All checks passed!
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m ruff format --check nwkit tests setup.py tools
+589 files already formatted
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m mypy
+Success: no issues found in 260 source files
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m pytest -q --durations=20 --durations-min=0.05 -m not slow tests/test_gaussian_tree.py tests/test_evolution.py tests/test_numerical_invariance.py -rs
+........................................................................ [ 75%]
+........................                                                 [100%]
+============================= slowest 20 durations =============================
+0.77s call     tests/test_evolution.py::test_conditioned_sparse_model_supports_exact_reusable_sampling
+0.08s call     tests/test_evolution.py::test_new_evolution_model_parameters_can_be_estimated[acdc]
+0.08s call     tests/test_numerical_invariance.py::test_explicit_dense_opt_in_keeps_the_full_lambda_search
+0.07s call     tests/test_gaussian_tree.py::test_large_covariance_blocks_preserve_arbitrary_duplicate_node_order[24-signed]
+0.05s call     tests/test_numerical_invariance.py::test_latent_predictor_is_invariant_to_an_intercept_shift[factor]
+
+(15 durations < 0.05s hidden.)
+96 passed in 1.91s

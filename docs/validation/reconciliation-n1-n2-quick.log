@@ -1,0 +1,38 @@
++ /Users/kf/.codex/worktrees/reconciliation-viewer-pnxjotzn/venv/bin/python -m ruff check nwkit tests setup.py tools
+All checks passed!
++ /Users/kf/.codex/worktrees/reconciliation-viewer-pnxjotzn/venv/bin/python -m ruff format --check nwkit tests setup.py tools
+597 files already formatted
++ /Users/kf/.codex/worktrees/reconciliation-viewer-pnxjotzn/venv/bin/python -m mypy
+Success: no issues found in 267 source files
++ /Users/kf/.codex/worktrees/reconciliation-viewer-pnxjotzn/venv/bin/python -m pytest -q --durations=20 --durations-min=0.05 -m not slow tests/test_reconciliation_document.py tests/test_reconciliation_scene.py tests/test_cli.py tests/test_cli_contracts.py tests/test_interface_conventions.py tests/test_draw.py tests/test_draw_robustness.py tests/test_draw_branch_ids.py tests/test_result_plot.py tests/test_output_transaction.py tests/test_reconcile.py tests/test_reconciliation_exports.py tests/test_util_tree_io.py tests/test_tree_outputs.py tests/test_rooting_state.py -rs
+........................................................................ [ 12%]
+........................................................................ [ 24%]
+........................................................................ [ 36%]
+........................................................................ [ 49%]
+........................................................................ [ 61%]
+........................................................................ [ 73%]
+........................................................................ [ 86%]
+........................................................................ [ 98%]
+..........                                                               [100%]
+============================= slowest 20 durations =============================
+1.74s call     tests/test_rooting_state.py::test_collection_override_reaches_every_worker[2]
+1.12s call     tests/test_cli_contracts.py::test_command_parser_reaches_its_real_handler[wgd-count]
+0.98s call     tests/test_reconciliation_exports.py::test_all_optimal_roots_are_exported_without_distance_changes
+0.96s call     tests/test_reconciliation_exports.py::test_candidate_export_rejects_invalid_request_before_replacing_files[bad_species]
+0.96s call     tests/test_reconciliation_exports.py::test_candidate_export_rejects_invalid_request_before_replacing_files[same_output]
+0.96s call     tests/test_reconciliation_exports.py::test_candidate_export_rejects_invalid_request_before_replacing_files[wrong_method]
+0.96s call     tests/test_reconciliation_exports.py::test_candidate_export_rejects_non_file_target[-]
+0.95s call     tests/test_reconciliation_exports.py::test_candidate_export_rejects_non_file_target[]
+0.69s call     tests/test_reconciliation_exports.py::test_candidate_export_rejects_invalid_request_before_replacing_files[input_overlap]
+0.56s call     tests/test_cli_contracts.py::test_command_parser_reaches_its_real_handler[asrcompare]
+0.30s call     tests/test_draw.py::TestDrawMain::test_support_names_and_pies_follow_every_layout[spiral-standard-360.0]
+0.29s call     tests/test_draw.py::TestDrawMain::test_support_names_and_pies_follow_every_layout[spiral-tidy-360.0]
+0.24s call     tests/test_draw.py::TestDrawMain::test_support_names_and_pies_follow_every_layout[slanted-standard-360.0]
+0.24s call     tests/test_draw.py::TestDrawMain::test_support_names_and_pies_follow_every_layout[rectangular-standard-360.0]
+0.24s call     tests/test_draw.py::TestDrawMain::test_support_names_and_pies_follow_every_layout[rectangular-tidy-360.0]
+0.23s call     tests/test_reconciliation_scene.py::test_cli_real_vector_outputs_and_normalized_document[pdf]
+0.22s call     tests/test_draw.py::TestDrawMain::test_support_names_and_pies_follow_every_layout[cladogram-standard-360.0]
+0.20s call     tests/test_draw_robustness.py::test_collision_audit_remains_complete_above_500_artists
+0.20s call     tests/test_result_plot.py::test_direct_commands_publish_vector_report_with_results[pdf-radte]
+0.19s call     tests/test_result_plot.py::test_reordered_species_and_gene_children_keep_clade_mapping
+586 passed in 21.69s

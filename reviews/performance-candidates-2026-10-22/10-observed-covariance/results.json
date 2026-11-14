@@ -1,0 +1,985 @@
+{
+  "baseline_commit": "d7116f80b9979739c69a5431a5e34b822795408b",
+  "environment": {
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "python": "3.12.14",
+    "numpy": "2.5.4",
+    "scipy": "1.17.1",
+    "nwkit": "0.43.54",
+    "threads": 1
+  },
+  "full_fits": [
+    {
+      "tips": 32,
+      "traits": 2,
+      "missing_fraction_requested": 0.0,
+      "missing_fraction_actual": 0.0,
+      "reml": true,
+      "fixed_noise": false,
+      "multiple_components": false,
+      "equivalence": {
+        "coefficients": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            2,
+            2
+          ]
+        },
+        "coefficient_covariance": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            4,
+            4
+          ]
+        },
+        "component_trait_covariances": {
+          "tree": {
+            "max_absolute": 0.0,
+            "exact": true,
+            "shape": [
+              2,
+              2
+            ]
+          }
+        },
+        "fitted_covariance": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            64,
+            64
+          ]
+        },
+        "evolution_parameter": {
+          "exact": true,
+          "value": null
+        },
+        "evolution_parameter_status": {
+          "exact": true,
+          "value": "fixed"
+        },
+        "log_likelihood": {
+          "absolute_difference": 0.0,
+          "exact": true
+        },
+        "optimizer_converged": {
+          "exact": true,
+          "value": true
+        },
+        "optimizer_message": {
+          "exact": true,
+          "value": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+        },
+        "boundary_warning": {
+          "exact": true,
+          "value": false
+        },
+        "n_observations": {
+          "exact": true,
+          "value": 64
+        },
+        "reml": {
+          "exact": true,
+          "value": true
+        }
+      },
+      "batch_calls": 5,
+      "timings": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.0053873165976256136,
+            0.005255391611717642,
+            0.00591909158974886,
+            0.00588155840523541,
+            0.006022524996660649,
+            0.006904900004155934,
+            0.00676352500449866
+          ],
+          "median_seconds": 0.00591909158974886,
+          "min_seconds": 0.005255391611717642,
+          "max_seconds": 0.006904900004155934,
+          "relative_range": 0.2786759365736185
+        },
+        "candidate": {
+          "samples_seconds_per_call": [
+            0.005177941801957786,
+            0.005337508395314217,
+            0.005297474982216954,
+            0.006402516597881913,
+            0.018718733382411302,
+            0.011044983193278313,
+            0.00635129997972399
+          ],
+          "median_seconds": 0.00635129997972399,
+          "min_seconds": 0.005177941801957786,
+          "max_seconds": 0.018718733382411302,
+          "relative_range": 2.131971663073921
+        }
+      },
+      "speedup": 0.9319496179750727,
+      "peak_python_bytes": {
+        "baseline": 204556,
+        "candidate": 206783
+      }
+    },
+    {
+      "tips": 64,
+      "traits": 2,
+      "missing_fraction_requested": 0.5,
+      "missing_fraction_actual": 0.265625,
+      "reml": true,
+      "fixed_noise": false,
+      "multiple_components": false,
+      "equivalence": {
+        "coefficients": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            2,
+            2
+          ]
+        },
+        "coefficient_covariance": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            4,
+            4
+          ]
+        },
+        "component_trait_covariances": {
+          "tree": {
+            "max_absolute": 0.0,
+            "exact": true,
+            "shape": [
+              2,
+              2
+            ]
+          }
+        },
+        "fitted_covariance": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            128,
+            128
+          ]
+        },
+        "evolution_parameter": {
+          "exact": true,
+          "value": null
+        },
+        "evolution_parameter_status": {
+          "exact": true,
+          "value": "fixed"
+        },
+        "log_likelihood": {
+          "absolute_difference": 0.0,
+          "exact": true
+        },
+        "optimizer_converged": {
+          "exact": true,
+          "value": true
+        },
+        "optimizer_message": {
+          "exact": true,
+          "value": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+        },
+        "boundary_warning": {
+          "exact": true,
+          "value": false
+        },
+        "n_observations": {
+          "exact": true,
+          "value": 94
+        },
+        "reml": {
+          "exact": true,
+          "value": true
+        }
+      },
+      "batch_calls": 3,
+      "timings": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.010248638999958834,
+            0.011222263992143175,
+            0.008250444351385037,
+            0.00987976366498818,
+            0.009827166679315269,
+            0.010574166662991047,
+            0.008704555647758147
+          ],
+          "median_seconds": 0.00987976366498818,
+          "min_seconds": 0.008250444351385037,
+          "max_seconds": 0.011222263992143175,
+          "relative_range": 0.3007986568838328
+        },
+        "candidate": {
+          "samples_seconds_per_call": [
+            0.010158805681082109,
+            0.009577083323771754,
+            0.0100835693301633,
+            0.010090263676829636,
+            0.009755666678150495,
+            0.00893680565059185,
+            0.010461791651323438
+          ],
+          "median_seconds": 0.0100835693301633,
+          "min_seconds": 0.00893680565059185,
+          "max_seconds": 0.010461791651323438,
+          "relative_range": 0.15123474146896065
+        }
+      },
+      "speedup": 0.9797883409632074,
+      "peak_python_bytes": {
+        "baseline": 482741,
+        "candidate": 478495
+      }
+    },
+    {
+      "tips": 64,
+      "traits": 3,
+      "missing_fraction_requested": 0.75,
+      "missing_fraction_actual": 0.5364583333333334,
+      "reml": true,
+      "fixed_noise": false,
+      "multiple_components": false,
+      "equivalence": {
+        "coefficients": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            3,
+            2
+          ]
+        },
+        "coefficient_covariance": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            6,
+            6
+          ]
+        },
+        "component_trait_covariances": {
+          "tree": {
+            "max_absolute": 0.0,
+            "exact": true,
+            "shape": [
+              3,
+              3
+            ]
+          }
+        },
+        "fitted_covariance": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            192,
+            192
+          ]
+        },
+        "evolution_parameter": {
+          "exact": true,
+          "value": null
+        },
+        "evolution_parameter_status": {
+          "exact": true,
+          "value": "fixed"
+        },
+        "log_likelihood": {
+          "absolute_difference": 0.0,
+          "exact": true
+        },
+        "optimizer_converged": {
+          "exact": true,
+          "value": true
+        },
+        "optimizer_message": {
+          "exact": true,
+          "value": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+        },
+        "boundary_warning": {
+          "exact": true,
+          "value": false
+        },
+        "n_observations": {
+          "exact": true,
+          "value": 89
+        },
+        "reml": {
+          "exact": true,
+          "value": true
+        }
+      },
+      "batch_calls": 1,
+      "timings": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.04154229199048132,
+            0.024971999926492572,
+            0.023332833079621196,
+            0.02348891703877598,
+            0.023065874935127795,
+            0.023103624931536615,
+            0.02761983301024884
+          ],
+          "median_seconds": 0.02348891703877598,
+          "min_seconds": 0.023065874935127795,
+          "max_seconds": 0.04154229199048132,
+          "relative_range": 0.7866014863457638
+        },
+        "candidate": {
+          "samples_seconds_per_call": [
+            0.029176458017900586,
+            0.023722875048406422,
+            0.01901170890778303,
+            0.019197665969841182,
+            0.019902125000953674,
+            0.02174466708675027,
+            0.02643333305604756
+          ],
+          "median_seconds": 0.02174466708675027,
+          "min_seconds": 0.01901170890778303,
+          "max_seconds": 0.029176458017900586,
+          "relative_range": 0.4674594037041508
+        }
+      },
+      "speedup": 1.0802150681390996,
+      "peak_python_bytes": {
+        "baseline": 798796,
+        "candidate": 791713
+      }
+    },
+    {
+      "tips": 192,
+      "traits": 2,
+      "missing_fraction_requested": 0.75,
+      "missing_fraction_actual": 0.3723958333333333,
+      "reml": true,
+      "fixed_noise": false,
+      "multiple_components": false,
+      "equivalence": {
+        "coefficients": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            2,
+            2
+          ]
+        },
+        "coefficient_covariance": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            4,
+            4
+          ]
+        },
+        "component_trait_covariances": {
+          "tree": {
+            "max_absolute": 0.0,
+            "exact": true,
+            "shape": [
+              2,
+              2
+            ]
+          }
+        },
+        "fitted_covariance": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            384,
+            384
+          ]
+        },
+        "evolution_parameter": {
+          "exact": true,
+          "value": null
+        },
+        "evolution_parameter_status": {
+          "exact": true,
+          "value": "fixed"
+        },
+        "log_likelihood": {
+          "absolute_difference": 0.0,
+          "exact": true
+        },
+        "optimizer_converged": {
+          "exact": true,
+          "value": true
+        },
+        "optimizer_message": {
+          "exact": true,
+          "value": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+        },
+        "boundary_warning": {
+          "exact": true,
+          "value": false
+        },
+        "n_observations": {
+          "exact": true,
+          "value": 241
+        },
+        "reml": {
+          "exact": true,
+          "value": true
+        }
+      },
+      "batch_calls": 1,
+      "timings": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.049390166997909546,
+            0.04188604198861867,
+            0.08523808396421373,
+            0.05237275001127273,
+            0.050689290976151824,
+            0.03849137504585087,
+            0.04521949996706098
+          ],
+          "median_seconds": 0.049390166997909546,
+          "min_seconds": 0.03849137504585087,
+          "max_seconds": 0.08523808396421373,
+          "relative_range": 0.9464780493724879
+        },
+        "candidate": {
+          "samples_seconds_per_call": [
+            0.050187958986498415,
+            0.04326183395460248,
+            0.06852704100310802,
+            0.043579624965786934,
+            0.04315874993335456,
+            0.04709624999668449,
+            0.04186474997550249
+          ],
+          "median_seconds": 0.043579624965786934,
+          "min_seconds": 0.04186474997550249,
+          "max_seconds": 0.06852704100310802,
+          "relative_range": 0.6118063441008799
+        }
+      },
+      "speedup": 1.1333316208362119,
+      "peak_python_bytes": {
+        "baseline": 3387804,
+        "candidate": 3384737
+      }
+    },
+    {
+      "tips": 24,
+      "traits": 2,
+      "missing_fraction_requested": 0.5,
+      "missing_fraction_actual": 0.2916666666666667,
+      "reml": false,
+      "fixed_noise": true,
+      "multiple_components": true,
+      "equivalence": {
+        "coefficients": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            2,
+            2
+          ]
+        },
+        "coefficient_covariance": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            4,
+            4
+          ]
+        },
+        "component_trait_covariances": {
+          "tree": {
+            "max_absolute": 0.0,
+            "exact": true,
+            "shape": [
+              2,
+              2
+            ]
+          },
+          "independent": {
+            "max_absolute": 0.0,
+            "exact": true,
+            "shape": [
+              2,
+              2
+            ]
+          }
+        },
+        "fitted_covariance": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            48,
+            48
+          ]
+        },
+        "evolution_parameter": {
+          "exact": true,
+          "value": null
+        },
+        "evolution_parameter_status": {
+          "exact": true,
+          "value": "fixed"
+        },
+        "log_likelihood": {
+          "absolute_difference": 0.0,
+          "exact": true
+        },
+        "optimizer_converged": {
+          "exact": true,
+          "value": true
+        },
+        "optimizer_message": {
+          "exact": true,
+          "value": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+        },
+        "boundary_warning": {
+          "exact": true,
+          "value": false
+        },
+        "n_observations": {
+          "exact": true,
+          "value": 34
+        },
+        "reml": {
+          "exact": true,
+          "value": false
+        }
+      },
+      "batch_calls": 1,
+      "timings": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.061377499951049685,
+            0.030623583937995136,
+            0.09564416692592204,
+            0.03629037505015731,
+            0.033077667001634836,
+            0.03290412505157292,
+            0.030211750068701804
+          ],
+          "median_seconds": 0.033077667001634836,
+          "min_seconds": 0.030211750068701804,
+          "max_seconds": 0.09564416692592204,
+          "relative_range": 1.9781448568904902
+        },
+        "candidate": {
+          "samples_seconds_per_call": [
+            0.03736629197373986,
+            0.03045670804567635,
+            0.07190254190936685,
+            0.05717862502206117,
+            0.029043000075034797,
+            0.03690137492958456,
+            0.02935937501024455
+          ],
+          "median_seconds": 0.03690137492958456,
+          "min_seconds": 0.029043000075034797,
+          "max_seconds": 0.07190254190936685,
+          "relative_range": 1.161461921571131
+        }
+      },
+      "speedup": 0.8963803398858132,
+      "peak_python_bytes": {
+        "baseline": 135001,
+        "candidate": 127162
+      }
+    }
+  ],
+  "covariance_kernels": [
+    {
+      "tips": 256,
+      "traits": 4,
+      "observed": 659,
+      "missing_fraction_actual": 0.3564453125,
+      "equivalence": {
+        "max_absolute": 0.0,
+        "exact": true,
+        "shape": [
+          659,
+          659
+        ]
+      },
+      "batch_calls": 12,
+      "timings": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.0021563264211484543,
+            0.0021987534128129482,
+            0.0022446979128289968,
+            0.002183138916734606,
+            0.0021394722474118075,
+            0.0022316320003786436,
+            0.0025153749932845435
+          ],
+          "median_seconds": 0.0021987534128129482,
+          "min_seconds": 0.0021394722474118075,
+          "max_seconds": 0.0025153749932845435,
+          "relative_range": 0.17096175664001786
+        },
+        "candidate": {
+          "samples_seconds_per_call": [
+            0.0027582916663959622,
+            0.0030302014104866735,
+            0.0028717951596869775,
+            0.0027701180855122707,
+            0.002785767331564178,
+            0.0028908229141961783,
+            0.003106770833255723
+          ],
+          "median_seconds": 0.0028717951596869775,
+          "min_seconds": 0.0027582916663959622,
+          "max_seconds": 0.003106770833255723,
+          "relative_range": 0.12134541200972869
+        }
+      },
+      "speedup": 0.7656372723507933,
+      "peak_python_bytes": {
+        "baseline": 16909984,
+        "candidate": 10552720
+      }
+    },
+    {
+      "tips": 256,
+      "traits": 4,
+      "observed": 290,
+      "missing_fraction_actual": 0.716796875,
+      "equivalence": {
+        "max_absolute": 0.0,
+        "exact": true,
+        "shape": [
+          290,
+          290
+        ]
+      },
+      "batch_calls": 46,
+      "timings": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.0012801766304461205,
+            0.0014909384139489544,
+            0.0018579864130436401,
+            0.0014319420442916453,
+            0.0020769003490188525,
+            0.0011675624991767108,
+            0.0012821177597684057
+          ],
+          "median_seconds": 0.0014319420442916453,
+          "min_seconds": 0.0011675624991767108,
+          "max_seconds": 0.0020769003490188525,
+          "relative_range": 0.6350381661514617
+        },
+        "candidate": {
+          "samples_seconds_per_call": [
+            0.0005717327838520641,
+            0.0005569637616407936,
+            0.0012996639352818222,
+            0.0008746557818401767,
+            0.0006359148689586183,
+            0.0006664384121034781,
+            0.0005473632178188342
+          ],
+          "median_seconds": 0.0006359148689586183,
+          "min_seconds": 0.0005473632178188342,
+          "max_seconds": 0.0012996639352818222,
+          "relative_range": 1.1830211152240622
+        }
+      },
+      "speedup": 2.251782611462774,
+      "peak_python_bytes": {
+        "baseline": 16909984,
+        "candidate": 2151768
+      }
+    },
+    {
+      "tips": 512,
+      "traits": 4,
+      "observed": 588,
+      "missing_fraction_actual": 0.712890625,
+      "equivalence": {
+        "max_absolute": 0.0,
+        "exact": true,
+        "shape": [
+          588,
+          588
+        ]
+      },
+      "batch_calls": 12,
+      "timings": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.004765878499407942,
+            0.004998857669609909,
+            0.004862864579384525,
+            0.004763565996351342,
+            0.004818906250875443,
+            0.0048670555018664645,
+            0.004744222164542104
+          ],
+          "median_seconds": 0.004818906250875443,
+          "min_seconds": 0.004744222164542104,
+          "max_seconds": 0.004998857669609909,
+          "relative_range": 0.052840933566936615
+        },
+        "candidate": {
+          "samples_seconds_per_call": [
+            0.002397576414902384,
+            0.002270736159213508,
+            0.0023089687553389617,
+            0.0022375346646488956,
+            0.002249954918321843,
+            0.002297947920548419,
+            0.0023032395887033394
+          ],
+          "median_seconds": 0.002297947920548419,
+          "min_seconds": 0.0022375346646488956,
+          "max_seconds": 0.002397576414902384,
+          "relative_range": 0.06964550798666204
+        }
+      },
+      "speedup": 2.097047634450037,
+      "peak_python_bytes": {
+        "baseline": 67241696,
+        "candidate": 8423608
+      }
+    }
+  ],
+  "edge_checks": [
+    {
+      "case": "callable_estimated_shape",
+      "equivalence": {
+        "coefficients": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            2,
+            2
+          ]
+        },
+        "coefficient_covariance": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            4,
+            4
+          ]
+        },
+        "component_trait_covariances": {
+          "tree": {
+            "max_absolute": 0.0,
+            "exact": true,
+            "shape": [
+              2,
+              2
+            ]
+          }
+        },
+        "fitted_covariance": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            40,
+            40
+          ]
+        },
+        "evolution_parameter": {
+          "absolute_difference": 0.0,
+          "exact": true
+        },
+        "evolution_parameter_status": {
+          "exact": true,
+          "value": "estimated"
+        },
+        "log_likelihood": {
+          "absolute_difference": 0.0,
+          "exact": true
+        },
+        "optimizer_converged": {
+          "exact": true,
+          "value": true
+        },
+        "optimizer_message": {
+          "exact": true,
+          "value": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+        },
+        "boundary_warning": {
+          "exact": true,
+          "value": true
+        },
+        "n_observations": {
+          "exact": true,
+          "value": 34
+        },
+        "reml": {
+          "exact": true,
+          "value": false
+        }
+      }
+    },
+    {
+      "case": "independent_observed_likelihood",
+      "absolute_difference": 0.0
+    },
+    {
+      "case": "all_missing_tip",
+      "outcomes": [
+        {
+          "exception": "ValueError",
+          "message": "Every retained tip needs at least one observed response."
+        },
+        {
+          "exception": "ValueError",
+          "message": "Every retained tip needs at least one observed response."
+        }
+      ]
+    },
+    {
+      "case": "unidentified_response",
+      "outcomes": [
+        {
+          "exception": "ValueError",
+          "message": "Each multivariate response needs more observed tips than coefficients."
+        },
+        {
+          "exception": "ValueError",
+          "message": "Each multivariate response needs more observed tips than coefficients."
+        }
+      ]
+    },
+    {
+      "case": "singular_covariance",
+      "outcomes": [
+        {
+          "exception": "LinAlgError",
+          "message": "Matrix is not positive definite"
+        },
+        {
+          "exception": "LinAlgError",
+          "message": "Matrix is not positive definite"
+        }
+      ]
+    }
+  ],
+  "additional_high_missing_fit": {
+    "tips": 128,
+    "traits": 4,
+    "missing_fraction_requested": 0.95,
+    "missing_fraction_actual": 0.7109375,
+    "reml": true,
+    "fixed_noise": false,
+    "multiple_components": false,
+    "equivalence": {
+      "coefficients": {
+        "max_absolute": 0.0,
+        "exact": true,
+        "shape": [
+          4,
+          2
+        ]
+      },
+      "coefficient_covariance": {
+        "max_absolute": 0.0,
+        "exact": true,
+        "shape": [
+          8,
+          8
+        ]
+      },
+      "component_trait_covariances": {
+        "tree": {
+          "max_absolute": 0.0,
+          "exact": true,
+          "shape": [
+            4,
+            4
+          ]
+        }
+      },
+      "fitted_covariance": {
+        "max_absolute": 0.0,
+        "exact": true,
+        "shape": [
+          512,
+          512
+        ]
+      },
+      "evolution_parameter": {
+        "exact": true,
+        "value": null
+      },
+      "evolution_parameter_status": {
+        "exact": true,
+        "value": "fixed"
+      },
+      "log_likelihood": {
+        "absolute_difference": 0.0,
+        "exact": true
+      },
+      "optimizer_converged": {
+        "exact": true,
+        "value": true
+      },
+      "optimizer_message": {
+        "exact": true,
+        "value": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+      },
+      "boundary_warning": {
+        "exact": true,
+        "value": false
+      },
+      "n_observations": {
+        "exact": true,
+        "value": 148
+      },
+      "reml": {
+        "exact": true,
+        "value": true
+      }
+    },
+    "batch_calls": 1,
+    "timings": {
+      "baseline": {
+        "samples_seconds_per_call": [
+          0.14110341691412032,
+          0.09429979091510177,
+          0.08908033405896276,
+          0.11071912501938641,
+          0.13012112490832806,
+          0.139390290947631,
+          0.10058533400297165
+        ],
+        "median_seconds": 0.11071912501938641,
+        "min_seconds": 0.08908033405896276,
+        "max_seconds": 0.14110341691412032,
+        "relative_range": 0.46986537191337585
+      },
+      "candidate": {
+        "samples_seconds_per_call": [
+          0.08195633394643664,
+          0.1068379160715267,
+          0.060063499957323074,
+          0.06175366695970297,
+          0.061206999933347106,
+          0.06435495801270008,
+          0.06255387491546571
+        ],
+        "median_seconds": 0.06255387491546571,
+        "min_seconds": 0.060063499957323074,
+        "max_seconds": 0.1068379160715267,
+        "relative_range": 0.7477461016989565
+      }
+    },
+    "speedup": 1.7699802797030628,
+    "peak_python_bytes": {
+      "baseline": 4537802,
+      "candidate": 4530457
+    }
+  }
+}

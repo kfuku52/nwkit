@@ -33,6 +33,11 @@ def regression_bundle_lock_path(prefix: str) -> str:
 
 
 STDIN_INPUT_DESTS = (
+    "calibration_map_tsv",
+    "branch_fit",
+    "branch_models",
+    "branch_regimes",
+    "regime_models",
     "infile",
     "infile2",
     "data",
@@ -40,6 +45,11 @@ STDIN_INPUT_DESTS = (
     "tree",
     "seqin",
     "trait",
+    "counts",
+    "count_model",
+    "ks_tsv",
+    "detection_tsv",
+    "rate_groups_tsv",
     "table",
     "taxid_tsv",
     "weight_tsv",
@@ -73,6 +83,17 @@ def get_stdin_input_options(args: Any) -> list[tuple[str, str]]:
         (dest, "--{}".format(dest.replace("_", "-")))
         for dest in STDIN_INPUT_DESTS
         if getattr(args, dest, None) == "-"
+        and not (
+            dest == "infile"
+            and (
+                getattr(args, "radte_prefix", None)
+                or getattr(args, "document", None)
+                or (
+                    getattr(args, "command", None) == "constrain"
+                    and getattr(args, "backbone", None) == "vertlife"
+                )
+            )
+        )
     ]
     options.extend(
         ("property_source", "--property-source")

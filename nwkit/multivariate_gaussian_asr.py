@@ -2,6 +2,7 @@
 
 import math
 from dataclasses import dataclass, replace
+from functools import cached_property
 
 import numpy as np
 from scipy.linalg import cho_factor, cho_solve, solve_triangular
@@ -98,6 +99,13 @@ def _restore_diagonal_ou_diffusion(data, covariance, alpha):
     return restored
 
 
+def _needs_vector_pruning(values_by_leaf):
+    return (
+        sum(value is not None for vector in values_by_leaf.values() for value in vector)
+        > _MAX_DENSE_OBSERVATIONS
+    )
+
+
 @dataclass(frozen=True)
 class DenseMultivariateFit:
     trait_names: tuple[str, ...]
@@ -122,6 +130,12 @@ class DenseMultivariateFit:
     diffusion_sigma: np.ndarray | None = None
     theta: np.ndarray | None = None
     theta_estimated: bool = False
+    measurement_covariances: dict[str, np.ndarray] | None = None
+    attraction_matrix: np.ndarray | None = None
+    attraction_estimated: bool = False
+    identifiability_status: str | None = None
+    identifiability_rank: int | None = None
+    identifiability_ratio: float | None = None
 
 
 @dataclass(frozen=True)
@@ -139,6 +153,12 @@ class _ObservationData:
     num_effective_positions: int
     contracted_positions: np.ndarray
     exact_by_position: dict[int, dict[int, float]]
+
+    @cached_property
+    def covariance_scale_exponents(self):
+        """Binary exponents for converting covariance to original trait units."""
+        exponents = np.frexp(self.scales)[1] - 1
+        return exponents[:, None] + exponents[None, :]
 
 
 @dataclass(frozen=True)
@@ -216,7 +236,7 @@ def _contracted_positions(compiled):
 
 
 def _prepare_observations(
-    tree, values_by_leaf, trait_names, standard_errors=None
+    tree, values_by_leaf, trait_names, standard_errors=None, *, dense_limit=True
 ) -> _ObservationData:
     trait_names = tuple(str(value) for value in trait_names)
     dimension = len(trait_names)
@@ -269,7 +289,7 @@ def _prepare_observations(
             observed_positions.add(int(contracted_positions[node_index]))
     if not raw_records:
         raise ValueError("A multivariate model requires at least one observed value.")
-    if len(raw_records) > _MAX_DENSE_OBSERVATIONS:
+    if dense_limit and len(raw_records) > _MAX_DENSE_OBSERVATIONS:
         raise ValueError(
             "Incomplete/noisy multivariate ASR would require a dense covariance "
             f"larger than {_MAX_DENSE_OBSERVATIONS} observed coordinates; this "
@@ -1154,10 +1174,25 @@ def fit_dense_mvou(
     alpha=None,
     alpha_bounds=None,
     standard_errors=None,
+    measurement_covariances=None,
     compute_posterior=True,
     _geometry_cache=None,
 ):
     """Fit stationary correlated-trait MV-OU with one shared attraction rate."""
+
+    if measurement_covariances is not None or _needs_vector_pruning(values_by_leaf):
+        from nwkit.vector_ou_fit import fit_pruning_mvou
+
+        return fit_pruning_mvou(
+            tree,
+            values_by_leaf,
+            trait_names,
+            alpha=alpha,
+            alpha_bounds=alpha_bounds,
+            standard_errors=standard_errors,
+            measurement_covariances=measurement_covariances,
+            compute_posterior=compute_posterior,
+        )
 
     data = _prepare_observations(
         tree, values_by_leaf, trait_names, standard_errors=standard_errors
@@ -1306,10 +1341,27 @@ def fit_dense_mvou_diag(
     alpha_by_trait=None,
     alpha_bounds=None,
     standard_errors=None,
+    measurement_covariances=None,
     compute_posterior=True,
     _geometry_cache=None,
 ):
     """Fit stationary MV-OU with diagonal trait-specific attraction rates."""
+
+    if measurement_covariances is not None or _needs_vector_pruning(values_by_leaf):
+        from nwkit.vector_ou_fit import fit_pruning_mvou
+
+        return fit_pruning_mvou(
+            tree,
+            values_by_leaf,
+            trait_names,
+            alpha=alpha,
+            alpha_by_trait=alpha_by_trait,
+            alpha_bounds=alpha_bounds,
+            standard_errors=standard_errors,
+            measurement_covariances=measurement_covariances,
+            compute_posterior=compute_posterior,
+            diagonal=True,
+        )
 
     data = _prepare_observations(
         tree, values_by_leaf, trait_names, standard_errors=standard_errors

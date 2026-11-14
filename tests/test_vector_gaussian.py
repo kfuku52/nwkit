@@ -1,0 +1,331 @@
+import numpy as np
+import pytest
+from scipy.stats import multivariate_normal
+
+from nwkit.compiled_tree import CompiledTree
+from nwkit.util import read_tree
+from nwkit.vector_gaussian import (
+    VectorProcess,
+    VectorTransition,
+    condition_vector_tree,
+    prepare_vector_conditioning,
+)
+
+
+def fixture():
+    tree = read_tree("((A:1,B:0.5):0.7,C:1.5)R;", "1", True, quiet=True, rooted="yes")
+    nodes = CompiledTree.from_tree(tree)
+    transitions = {
+        node: VectorTransition(
+            np.array([[0.8, 0.1], [-0.1, 0.9]]),
+            np.array([0.2, -0.3]),
+            np.array([[0.7, 0.2], [0.2, 0.5]]) * node.dist,
+        )
+        for node in nodes.nodes[1:]
+    }
+    process = VectorProcess(
+        tree, 2, transitions, np.array([0.4, -0.2]), np.array([[1.0, 0.3], [0.3, 0.8]])
+    )
+    return process, nodes
+
+
+def dense_joint(process, compiled):
+    count = len(compiled.nodes)
+    mean = np.zeros(count * 2)
+    covariance = np.zeros((count * 2, count * 2))
+    mean[:2] = process.root_mean
+    covariance[:2, :2] = process.root_covariance
+    for i in range(1, count):
+        p = compiled.parents[i]
+        transition = process.transitions[compiled.nodes[i]]
+        index = slice(2 * i, 2 * i + 2)
+        parent = slice(2 * p, 2 * p + 2)
+        mean[index] = transition.slope @ mean[parent] + transition.intercept
+        covariance[index, : 2 * i] = transition.slope @ covariance[parent, : 2 * i]
+        covariance[: 2 * i, index] = covariance[index, : 2 * i].T
+        covariance[index, index] = (
+            transition.slope @ covariance[parent, parent] @ transition.slope.T
+            + transition.covariance
+        )
+    return mean, covariance
+
+
+@pytest.mark.parametrize("noisy", [False, True])
+def test_vector_pruning_equals_dense_joint_conditioning(noisy):
+    process, compiled = fixture()
+    observed = {"A": [1.2, None], "B": [-0.3, 0.5], "C": [None, -0.8]}
+    errors = (
+        {name: np.array([[0.1, 0.03], [0.03, 0.2]]) for name in observed}
+        if noisy
+        else None
+    )
+    result = condition_vector_tree(process, observed, error_covariances=errors)
+    mean, covariance = dense_joint(process, compiled)
+    indices = [
+        2 * compiled.leaf_index_by_name[name] + k
+        for name, values in observed.items()
+        for k, value in enumerate(values)
+        if value is not None
+    ]
+    values = np.array(
+        [value for vector in observed.values() for value in vector if value is not None]
+    )
+    noise = np.zeros((4, 4))
+    if noisy:
+        noise[np.diag_indices(4)] = [0.1, 0.1, 0.2, 0.2]
+        noise[1, 2] = noise[2, 1] = 0.03
+    observed_covariance = covariance[np.ix_(indices, indices)] + noise
+    inverse = np.linalg.inv(observed_covariance)
+    cross = covariance[:, indices]
+    expected_mean = mean + cross @ inverse @ (values - mean[indices])
+    expected_covariance = covariance - cross @ inverse @ cross.T
+    assert result.means.reshape(-1) == pytest.approx(expected_mean, abs=1e-12)
+    for i in range(len(compiled.nodes)):
+        assert result.covariances[i] == pytest.approx(
+            expected_covariance[2 * i : 2 * i + 2, 2 * i : 2 * i + 2], abs=1e-12
+        )
+    assert result.log_likelihood == pytest.approx(
+        multivariate_normal.logpdf(values, mean[indices], observed_covariance),
+        abs=1e-12,
+    )
+    draws = result.sample(20000, seed=12).reshape(20000, -1)
+    assert draws.mean(axis=0) == pytest.approx(expected_mean, abs=0.025)
+    assert np.cov(draws, rowvar=False) == pytest.approx(expected_covariance, abs=0.025)
+
+
+def test_vector_flat_root_matches_scalar_independent_traits():
+    from nwkit.evolution import build_evolutionary_process
+    from nwkit.gaussian_inference import condition_gaussian_tree
+
+    process, compiled = fixture()
+    process = VectorProcess(
+        process.tree,
+        2,
+        {
+            node: VectorTransition(np.eye(2), np.zeros(2), np.eye(2) * node.dist)
+            for node in compiled.nodes[1:]
+        },
+    )
+    observed = {"A": [1.2, None], "B": [-0.3, 0.5], "C": [None, -0.8]}
+    result = condition_vector_tree(process, observed)
+    likelihood = 0
+    for trait in range(2):
+        scalar = condition_gaussian_tree(
+            build_evolutionary_process(
+                process.tree, model="brownian", root_mode="flat"
+            ),
+            {name: values[trait] for name, values in observed.items()},
+        )
+        likelihood += scalar.log_likelihood
+        for i, node in enumerate(compiled.nodes):
+            assert result.means[i, trait] == pytest.approx(scalar.marginals[node].mean)
+            assert result.covariances[i, trait, trait] == pytest.approx(
+                scalar.marginals[node].variance
+            )
+    assert result.log_likelihood == pytest.approx(likelihood)
+
+
+def test_unobserved_subtree_keeps_its_branch_transitions():
+    process, compiled = fixture()
+    first_tip = compiled.leaf_index_by_name["A"]
+    process.transitions[compiled.nodes[first_tip]] = VectorTransition(
+        np.eye(2), np.zeros(2), np.zeros((2, 2))
+    )
+    observed_index = 2 * compiled.leaf_index_by_name["C"]
+    condition = prepare_vector_conditioning(compiled, 2, {"C": [1.2, None]})
+    likelihood = condition(process, likelihood_only=True)
+    result = condition(process)
+    mean, covariance = dense_joint(process, compiled)
+    cross = covariance[:, observed_index]
+    variance = covariance[observed_index, observed_index]
+    expected_mean = mean + cross * ((1.2 - mean[observed_index]) / variance)
+    expected_covariance = covariance - np.outer(cross, cross) / variance
+    np.testing.assert_allclose(result.means.ravel(), expected_mean, atol=1e-12)
+    for index, actual in enumerate(result.covariances):
+        coordinates = slice(2 * index, 2 * index + 2)
+        np.testing.assert_allclose(
+            actual, expected_covariance[coordinates, coordinates], atol=1e-12
+        )
+    assert result.log_likelihood == pytest.approx(
+        multivariate_normal.logpdf(1.2, mean[observed_index], variance), abs=1e-12
+    )
+    assert likelihood == result.log_likelihood
+
+
+def test_vector_conditioning_preserves_extreme_finite_covariances():
+    process, compiled = fixture()
+    covariance = np.diag([1.25e308, np.nextafter(0.0, 1.0)])
+    independent = VectorTransition(np.zeros((2, 2)), np.zeros(2), covariance)
+    process = VectorProcess(
+        process.tree,
+        2,
+        dict.fromkeys(compiled.nodes[1:], independent),
+        np.zeros(2),
+        covariance,
+    )
+    with np.errstate(over="raise", invalid="raise"):
+        result = condition_vector_tree(process, {})
+        draws = result.sample(1000, seed=12) / np.sqrt(covariance.diagonal())
+    expected = np.broadcast_to(covariance, result.covariances.shape)
+    np.testing.assert_array_equal(result.covariances, expected)
+    np.testing.assert_array_equal(result.conditional_covariances, expected)
+    np.testing.assert_allclose(draws[:, :, 0].std(axis=0), 1.0, atol=0.09)
+    assert result.log_likelihood == 0.0
+
+
+def test_full_ou_preserves_extreme_finite_branch_covariance():
+    from nwkit.vector_processes import vector_ou_process
+
+    tree = read_tree("(A:4,B:4)R;", "1", True, quiet=True, rooted="yes")
+    diffusion = np.eye(2) * 1.25e308
+    with np.errstate(over="raise", invalid="raise"):
+        process = vector_ou_process(tree, 0.4 * np.eye(2), diffusion, np.zeros(2))
+    np.testing.assert_allclose(process.root_covariance, diffusion / 0.8, rtol=2e-15)
+    for transition in process.transitions.values():
+        np.testing.assert_allclose(
+            transition.covariance, (diffusion / 0.8) * -np.expm1(-3.2), rtol=2e-15
+        )
+
+
+@pytest.mark.parametrize(
+    "rate,diffusion,length",
+    [(1e-190, 1e-308, 1e190), (1.5e170, 1e308, 1e-170)],
+)
+def test_full_ou_rescales_extreme_finite_attraction(rate, diffusion, length):
+    from nwkit.vector_processes import vector_ou_process
+
+    tree = read_tree(f"(A:{length},B:{length})R;", "1", True, quiet=True, rooted="yes")
+    identity = np.eye(2)
+    root_variance = diffusion / (2 * rate)
+    exponent = rate * length
+    with np.errstate(over="raise", invalid="raise"):
+        process = vector_ou_process(
+            tree, rate * identity, diffusion * identity, [1, -2]
+        )
+    np.testing.assert_allclose(
+        process.root_covariance, identity * root_variance, rtol=2e-15, atol=0.0
+    )
+    for transition in process.transitions.values():
+        np.testing.assert_allclose(transition.slope, identity * np.exp(-exponent))
+        np.testing.assert_allclose(
+            transition.covariance,
+            identity * (root_variance * -np.expm1(-2 * exponent)),
+            rtol=2e-15,
+            atol=0.0,
+        )
+        np.testing.assert_allclose(
+            transition.intercept, -np.expm1(-exponent) * np.array([1, -2])
+        )
+
+
+def test_zero_length_branches_preserve_exact_observations():
+    from nwkit.vector_processes import vector_brownian_process
+
+    tree = read_tree("((A:0,B:0):1,C:1)R;", "1", True, quiet=True, rooted="yes")
+    process = vector_brownian_process(tree, np.eye(2))
+    result = condition_vector_tree(
+        process, {"A": [1.0, None], "B": [1.0, 2.0], "C": [2.0, 3.0]}
+    )
+    for name in ("A", "B"):
+        index = next(i for i, node in enumerate(result.nodes) if node.name == name)
+        assert result.means[index] == pytest.approx([1.0, 2.0])
+        assert result.covariances[index] == pytest.approx(np.zeros((2, 2)))
+    with pytest.raises(ValueError, match="Conflicting exact"):
+        condition_vector_tree(
+            process, {"A": [1.0, None], "B": [2.0, None], "C": [2.0, 3.0]}
+        )
+
+
+def test_prepared_conditioning_keeps_exact_constraints_local_to_each_process():
+    from nwkit.vector_processes import vector_brownian_process
+
+    tree = read_tree("(A:1,B:1)R;", "1", True, quiet=True, rooted="yes")
+    process = vector_brownian_process(tree, np.eye(1))
+    observed = {"A": [1.0], "B": [3.0]}
+    condition = prepare_vector_conditioning(CompiledTree.from_tree(tree), 1, observed)
+    zero = VectorTransition(np.eye(1), np.zeros(1), np.zeros((1, 1)))
+    transitions = dict(process.transitions)
+    first, second = tree.children
+    transitions[first] = zero
+    condition(VectorProcess(tree, 1, transitions))
+    with pytest.raises(ValueError, match="Conflicting exact"):
+        condition(VectorProcess(tree, 1, {first: zero, second: zero}))
+
+    expected = condition_vector_tree(process, observed)
+    actual = condition(process)
+    assert actual.log_likelihood == expected.log_likelihood
+    np.testing.assert_array_equal(actual.means, expected.means)
+    np.testing.assert_array_equal(actual.covariances, expected.covariances)
+
+
+def test_general_ou_stationarity_and_short_edges():
+    from nwkit.vector_processes import vector_ou_process
+
+    tree = read_tree(
+        "(A:0.000000000001,B:1,C:1000)R;", "1", True, quiet=True, rooted="yes"
+    )
+    attraction = np.array([[1.0, 0.3], [-0.2, 0.5]])
+    diffusion = np.array([[0.7, 0.1], [0.1, 0.8]])
+    process = vector_ou_process(tree, attraction, diffusion, [2.0, -1.0])
+    for node, branch in process.transitions.items():
+        assert (
+            branch.slope @ process.root_covariance @ branch.slope.T + branch.covariance
+            == pytest.approx(process.root_covariance, abs=1e-12)
+        )
+        if node.name == "A":
+            assert branch.covariance / node.dist == pytest.approx(diffusion, abs=1e-11)
+    with pytest.raises(ValueError, match="positive real"):
+        vector_ou_process(tree, -attraction, diffusion, [2.0, -1.0])
+
+
+def test_general_ou_equal_length_branches_have_independent_transition_arrays():
+    from nwkit.vector_processes import vector_ou_process
+
+    tree = read_tree("(A:1,B:1)R;", "1", True, quiet=True, rooted="yes")
+    process = vector_ou_process(tree, np.eye(2), np.eye(2), [2.0, -1.0])
+    first, second = process.transitions.values()
+    for field in ("slope", "intercept", "covariance"):
+        left, right = getattr(first, field), getattr(second, field)
+        np.testing.assert_array_equal(left, right)
+        assert not np.shares_memory(left, right)
+
+
+def test_full_ou_short_edge_intercept_keeps_diagonal_and_cross_trait_changes():
+    from nwkit.vector_processes import vector_ou_process
+
+    tree = read_tree("(A:1e-18,B:1)R;", "1", True, quiet=True, rooted="yes")
+    attraction = np.array([[1.0, 0.25], [-0.5, 0.75]])
+    theta = np.array([1e18, -1e18])
+    process = vector_ou_process(tree, attraction, np.eye(2), theta)
+    # The second-order term is smaller than half an ulp of either component.
+    np.testing.assert_allclose(
+        process.transitions[tree.children[0]].intercept, [0.75, -1.25], rtol=1e-15
+    )
+
+
+def test_nearly_singular_proper_root_does_not_create_spurious_likelihood():
+    from scipy.stats import multivariate_normal
+
+    from nwkit.vector_processes import vector_ou_process
+
+    tree = read_tree("(A:1)R;", "1", True, quiet=True, rooted="yes")
+    sigma = np.array([[1e-12, 1e-10], [1e-10, 1.000001e-8]])
+    mean = np.array([2.0, -3.0])
+    y = np.array([1.0, 4.0])
+    error = np.diag([0.1, 0.2])
+    process = vector_ou_process(tree, np.eye(2) * 0.4, 0.8 * sigma, mean)
+    result = condition_vector_tree(process, {"A": y}, error_covariances={"A": error})
+    assert result.log_likelihood == pytest.approx(
+        multivariate_normal.logpdf(y, mean=mean, cov=sigma + error), abs=1e-8
+    )
+
+
+def test_exact_coordinate_retains_nearly_singular_conditional_variance():
+    tree = read_tree("(A:1)R;", "1", True, quiet=True, rooted="yes")
+    correlation_entry = 1.0 - 2.0**-27
+    variance = 1.0 - 2.0**-26 + 2.0**-53
+    covariance = np.array([[1.0, correlation_entry], [correlation_entry, variance]])
+    branch = VectorTransition(np.zeros((2, 2)), np.zeros(2), covariance)
+    process = VectorProcess(tree, 2, {tree.children[0]: branch}, np.zeros(2), np.eye(2))
+    result = condition_vector_tree(process, {"A": [0.0, None]})
+    assert result.covariances[1, 1, 1] == 2.0**-54

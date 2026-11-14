@@ -1,0 +1,655 @@
+{
+  "source": "/Users/kf/repos/nwkit/nwkit/signal_stats.py",
+  "source_sha256": "df4cfb50b69035d30980d966255d81dee97a0a41f63c98c683bab997fa13b2ad",
+  "controls": [
+    {
+      "tips": 8,
+      "gap": 0.001,
+      "seed": 314,
+      "spectral": true,
+      "exact": false,
+      "differences": {
+        "estimate": 6.8833827526759706e-15,
+        "sigma2": 1.1319278847565784e-12,
+        "root_mean": 1.6653345369377348e-15,
+        "log_likelihood": 2.948752353404416e-13,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 5.968558980384842e-13,
+        "p_value": 2.2902563210061954e-22,
+        "ci_lower": 1.3322676295501878e-15,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 8,
+      "gap": 0.001,
+      "seed": 412,
+      "spectral": true,
+      "exact": false,
+      "differences": {
+        "estimate": 2.1005419625907962e-13,
+        "sigma2": 2.1534218852536924e-11,
+        "root_mean": 5.551115123125783e-16,
+        "log_likelihood": 2.6645352591003757e-14,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 5.684341886080802e-14,
+        "p_value": 1.0008885411891635e-22,
+        "ci_lower": 1.1102230246251565e-16,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 8,
+      "gap": 0.0001,
+      "seed": 314,
+      "spectral": true,
+      "exact": false,
+      "differences": {
+        "estimate": 3.3306690738754696e-16,
+        "sigma2": 5.206945985491984e-13,
+        "root_mean": 6.994405055138486e-15,
+        "log_likelihood": 2.1245227799226996e-12,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 4.249045559845399e-12,
+        "p_value": 1.4509991946273203e-24,
+        "ci_lower": 8.881784197001252e-16,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 8,
+      "gap": 0.0001,
+      "seed": 412,
+      "spectral": true,
+      "exact": false,
+      "differences": {
+        "estimate": 4.9960036108132044e-15,
+        "sigma2": 4.759803662324202e-12,
+        "root_mean": 1.2490009027033011e-14,
+        "log_likelihood": 1.5276668818842154e-12,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 3.055333763768431e-12,
+        "p_value": 4.776483361353567e-24,
+        "ci_lower": 1.2212453270876722e-15,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 8,
+      "gap": 1e-05,
+      "seed": 314,
+      "spectral": true,
+      "exact": false,
+      "differences": {
+        "estimate": 5.551115123125783e-16,
+        "sigma2": 1.0009326700810561e-11,
+        "root_mean": 3.3639757646142243e-14,
+        "log_likelihood": 4.3158365770068485e-11,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 8.631673154013697e-11,
+        "p_value": 2.6426150071611827e-26,
+        "ci_lower": 1.6653345369377348e-15,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 8,
+      "gap": 1e-05,
+      "seed": 412,
+      "spectral": true,
+      "exact": false,
+      "differences": {
+        "estimate": 6.994405055138486e-15,
+        "sigma2": 6.830658261236522e-11,
+        "root_mean": 9.658940314238862e-15,
+        "log_likelihood": 3.3146818623208674e-11,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 6.629363724641735e-11,
+        "p_value": 9.28792996893641e-26,
+        "ci_lower": 2.220446049250313e-15,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 8,
+      "gap": 1e-06,
+      "seed": 314,
+      "spectral": true,
+      "exact": false,
+      "differences": {
+        "estimate": 2.220446049250313e-16,
+        "sigma2": 3.1319724591583054e-11,
+        "root_mean": 1.8762769116165146e-14,
+        "log_likelihood": 1.3145040611561853e-12,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 2.6290081223123707e-12,
+        "p_value": 7.30890413894956e-31,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 8,
+      "gap": 1e-06,
+      "seed": 412,
+      "spectral": true,
+      "exact": false,
+      "differences": {
+        "estimate": 5.218048215738236e-15,
+        "sigma2": 5.173294570504083e-10,
+        "root_mean": 3.5860203695392556e-14,
+        "log_likelihood": 4.8416382014693227e-11,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 9.683276402938645e-11,
+        "p_value": 1.2334271661438062e-28,
+        "ci_lower": 4.440892098500626e-16,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 8,
+      "gap": 1e-08,
+      "seed": 314,
+      "spectral": false,
+      "exact": true,
+      "differences": {
+        "estimate": 0.0,
+        "sigma2": 0.0,
+        "root_mean": 0.0,
+        "log_likelihood": 0.0,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 0.0,
+        "p_value": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 8,
+      "gap": 1e-08,
+      "seed": 412,
+      "spectral": false,
+      "exact": true,
+      "differences": {
+        "estimate": 0.0,
+        "sigma2": 0.0,
+        "root_mean": 0.0,
+        "log_likelihood": 0.0,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 0.0,
+        "p_value": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 8,
+      "gap": 1e-10,
+      "seed": 314,
+      "spectral": false,
+      "exact": true,
+      "differences": {
+        "estimate": 0.0,
+        "sigma2": 0.0,
+        "root_mean": 0.0,
+        "log_likelihood": 0.0,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 0.0,
+        "p_value": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 8,
+      "gap": 1e-10,
+      "seed": 412,
+      "spectral": false,
+      "exact": true,
+      "differences": {
+        "estimate": 0.0,
+        "sigma2": 0.0,
+        "root_mean": 0.0,
+        "log_likelihood": 0.0,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 0.0,
+        "p_value": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 32,
+      "gap": 0.001,
+      "seed": 314,
+      "spectral": true,
+      "exact": false,
+      "differences": {
+        "estimate": 7.183142969324763e-14,
+        "sigma2": 5.444533712761768e-12,
+        "root_mean": 1.1102230246251565e-15,
+        "log_likelihood": 3.552713678800501e-13,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 7.105427357601002e-13,
+        "p_value": 8.566419705588463e-51,
+        "ci_lower": 1.4432899320127035e-15,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 32,
+      "gap": 0.001,
+      "seed": 412,
+      "spectral": true,
+      "exact": false,
+      "differences": {
+        "estimate": 1.89637194836223e-12,
+        "sigma2": 8.143211105426928e-11,
+        "root_mean": 4.218847493575595e-15,
+        "log_likelihood": 3.623767952376511e-13,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 7.105427357601002e-13,
+        "p_value": 3.6584803351741974e-47,
+        "ci_lower": 2.55351295663786e-15,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 32,
+      "gap": 0.0001,
+      "seed": 314,
+      "spectral": true,
+      "exact": false,
+      "differences": {
+        "estimate": 8.359979375427429e-14,
+        "sigma2": 6.259992524348945e-11,
+        "root_mean": 1.6764367671839864e-14,
+        "log_likelihood": 9.109157872444484e-12,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 1.8189894035458565e-11,
+        "p_value": 2.0423816367222614e-64,
+        "ci_lower": 3.6637359812630166e-15,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 32,
+      "gap": 0.0001,
+      "seed": 412,
+      "spectral": true,
+      "exact": false,
+      "differences": {
+        "estimate": 8.149037000748649e-14,
+        "sigma2": 3.548922267171406e-11,
+        "root_mean": 1.1435297153639112e-14,
+        "log_likelihood": 2.984279490192421e-13,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 5.968558980384842e-13,
+        "p_value": 2.412823764197565e-62,
+        "ci_lower": 6.661338147750939e-16,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 32,
+      "gap": 1e-05,
+      "seed": 314,
+      "spectral": true,
+      "exact": false,
+      "differences": {
+        "estimate": 6.772360450213455e-15,
+        "sigma2": 4.920086560389336e-11,
+        "root_mean": 1.5987211554602254e-14,
+        "log_likelihood": 1.679723027336877e-11,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 3.359446054673754e-11,
+        "p_value": 3.3969762044417416e-79,
+        "ci_lower": 5.551115123125783e-16,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 32,
+      "gap": 1e-05,
+      "seed": 412,
+      "spectral": true,
+      "exact": false,
+      "differences": {
+        "estimate": 3.3306690738754696e-16,
+        "sigma2": 8.001654894229659e-13,
+        "root_mean": 3.191891195797325e-14,
+        "log_likelihood": 2.0747847884194925e-11,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 4.149569576838985e-11,
+        "p_value": 1.4124099454006072e-75,
+        "ci_lower": 1.3322676295501878e-15,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 32,
+      "gap": 1e-06,
+      "seed": 314,
+      "spectral": false,
+      "exact": true,
+      "differences": {
+        "estimate": 0.0,
+        "sigma2": 0.0,
+        "root_mean": 0.0,
+        "log_likelihood": 0.0,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 0.0,
+        "p_value": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 32,
+      "gap": 1e-06,
+      "seed": 412,
+      "spectral": false,
+      "exact": true,
+      "differences": {
+        "estimate": 0.0,
+        "sigma2": 0.0,
+        "root_mean": 0.0,
+        "log_likelihood": 0.0,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 0.0,
+        "p_value": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 32,
+      "gap": 1e-08,
+      "seed": 314,
+      "spectral": false,
+      "exact": true,
+      "differences": {
+        "estimate": 0.0,
+        "sigma2": 0.0,
+        "root_mean": 0.0,
+        "log_likelihood": 0.0,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 0.0,
+        "p_value": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 32,
+      "gap": 1e-08,
+      "seed": 412,
+      "spectral": false,
+      "exact": true,
+      "differences": {
+        "estimate": 0.0,
+        "sigma2": 0.0,
+        "root_mean": 0.0,
+        "log_likelihood": 0.0,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 0.0,
+        "p_value": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 32,
+      "gap": 1e-10,
+      "seed": 314,
+      "spectral": false,
+      "exact": true,
+      "differences": {
+        "estimate": 0.0,
+        "sigma2": 0.0,
+        "root_mean": 0.0,
+        "log_likelihood": 0.0,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 0.0,
+        "p_value": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 32,
+      "gap": 1e-10,
+      "seed": 412,
+      "spectral": false,
+      "exact": true,
+      "differences": {
+        "estimate": 0.0,
+        "sigma2": 0.0,
+        "root_mean": 0.0,
+        "log_likelihood": 0.0,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 0.0,
+        "p_value": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 128,
+      "gap": 0.001,
+      "seed": 314,
+      "spectral": true,
+      "exact": false,
+      "differences": {
+        "estimate": 1.951849792902749e-11,
+        "sigma2": 1.1798496346582255e-09,
+        "root_mean": 1.1274314815068465e-13,
+        "log_likelihood": 3.922195901395753e-12,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 7.844391802791506e-12,
+        "p_value": 1.09299657380533e-162,
+        "ci_lower": 1.5654144647214707e-14,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 128,
+      "gap": 0.001,
+      "seed": 412,
+      "spectral": true,
+      "exact": false,
+      "differences": {
+        "estimate": 2.5718094320836826e-11,
+        "sigma2": 1.5538184072738659e-09,
+        "root_mean": 8.693046282814976e-14,
+        "log_likelihood": 1.3073986337985843e-12,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 2.6147972675971687e-12,
+        "p_value": 4.800420873521727e-162,
+        "ci_lower": 4.440892098500626e-15,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 128,
+      "gap": 0.0001,
+      "seed": 314,
+      "spectral": false,
+      "exact": true,
+      "differences": {
+        "estimate": 0.0,
+        "sigma2": 0.0,
+        "root_mean": 0.0,
+        "log_likelihood": 0.0,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 0.0,
+        "p_value": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 128,
+      "gap": 0.0001,
+      "seed": 412,
+      "spectral": false,
+      "exact": true,
+      "differences": {
+        "estimate": 0.0,
+        "sigma2": 0.0,
+        "root_mean": 0.0,
+        "log_likelihood": 0.0,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 0.0,
+        "p_value": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 128,
+      "gap": 1e-05,
+      "seed": 314,
+      "spectral": false,
+      "exact": true,
+      "differences": {
+        "estimate": 0.0,
+        "sigma2": 0.0,
+        "root_mean": 0.0,
+        "log_likelihood": 0.0,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 0.0,
+        "p_value": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 128,
+      "gap": 1e-05,
+      "seed": 412,
+      "spectral": false,
+      "exact": true,
+      "differences": {
+        "estimate": 0.0,
+        "sigma2": 0.0,
+        "root_mean": 0.0,
+        "log_likelihood": 0.0,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 0.0,
+        "p_value": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 128,
+      "gap": 1e-06,
+      "seed": 314,
+      "spectral": false,
+      "exact": true,
+      "differences": {
+        "estimate": 0.0,
+        "sigma2": 0.0,
+        "root_mean": 0.0,
+        "log_likelihood": 0.0,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 0.0,
+        "p_value": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 128,
+      "gap": 1e-06,
+      "seed": 412,
+      "spectral": false,
+      "exact": true,
+      "differences": {
+        "estimate": 0.0,
+        "sigma2": 0.0,
+        "root_mean": 0.0,
+        "log_likelihood": 0.0,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 0.0,
+        "p_value": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 128,
+      "gap": 1e-08,
+      "seed": 314,
+      "spectral": false,
+      "exact": true,
+      "differences": {
+        "estimate": 0.0,
+        "sigma2": 0.0,
+        "root_mean": 0.0,
+        "log_likelihood": 0.0,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 0.0,
+        "p_value": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 128,
+      "gap": 1e-08,
+      "seed": 412,
+      "spectral": false,
+      "exact": true,
+      "differences": {
+        "estimate": 0.0,
+        "sigma2": 0.0,
+        "root_mean": 0.0,
+        "log_likelihood": 0.0,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 0.0,
+        "p_value": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 128,
+      "gap": 1e-10,
+      "seed": 314,
+      "spectral": false,
+      "exact": true,
+      "differences": {
+        "estimate": 0.0,
+        "sigma2": 0.0,
+        "root_mean": 0.0,
+        "log_likelihood": 0.0,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 0.0,
+        "p_value": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      }
+    },
+    {
+      "tips": 128,
+      "gap": 1e-10,
+      "seed": 412,
+      "spectral": false,
+      "exact": true,
+      "differences": {
+        "estimate": 0.0,
+        "sigma2": 0.0,
+        "root_mean": 0.0,
+        "log_likelihood": 0.0,
+        "null_log_likelihood": 0.0,
+        "likelihood_ratio": 0.0,
+        "p_value": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      }
+    }
+  ],
+  "result": "passed"
+}

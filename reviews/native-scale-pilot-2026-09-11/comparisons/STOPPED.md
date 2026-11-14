@@ -1,0 +1,1 @@
+The initial comparison was stopped after repeated QR regressions in fixed-layout and pectinate runs. The in-flight search10-v2-1 process was allowed to finish before stopping the controller; every retained result JSON is complete. Remaining planned trials were not run. Final comparisons use the candidate without the SciPy QR substitution.

@@ -131,6 +131,14 @@ def test_contrast_has_independent_unmatched_default_and_allows_override():
     assert parser.parse_args(["draw", "--unmatched", "error"]).unmatched == "error"
 
 
+def test_constrain_accepts_apgv_backbone():
+    args = parser.parse_args(
+        ["constrain", "--backbone", "ncbi_apgv", "--species-list", "species.txt"]
+    )
+
+    assert args.backbone == "ncbi_apgv"
+
+
 @pytest.mark.integration
 def test_python_module_entry_point():
     project_root = Path(__file__).parents[1]

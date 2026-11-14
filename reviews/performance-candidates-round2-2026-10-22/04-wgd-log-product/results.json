@@ -1,0 +1,1211 @@
+{
+  "environment": {
+    "python": "3.12.14 (main, Aug 25 2026, 13:50:33) [Clang 22.1.3 ]",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "numpy": "2.5.4",
+    "scipy": "1.17.1",
+    "pandas": "3.0.6",
+    "nwkit": "0.43.55",
+    "nwkit_source": "/tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/__init__.py",
+    "baseline_commit": "86c8f2c537769d852c17e2c789340f6c9de4ef54",
+    "timing_limit": "Exploratory host-local measurements; unrelated CPU jobs are active.",
+    "memory_limit": "tracemalloc peak is not complete RSS or all native allocations."
+  },
+  "prototype": {
+    "workspace_bytes_estimate": 1048576,
+    "max_row_batch": 32,
+    "baseline_function_sha256": "8f0f655948e909b730c807952729de77fc83af51efffb8b4b2effaf795215239"
+  },
+  "edge_checks": [
+    {
+      "exact": true,
+      "shape": [
+        1,
+        1
+      ],
+      "dtype": "float32",
+      "max_absolute_difference": 0.0,
+      "negative_infinity_count": 0,
+      "nan_count": 0
+    },
+    {
+      "exact": true,
+      "shape": [
+        1,
+        1
+      ],
+      "dtype": "float64",
+      "max_absolute_difference": 0.0,
+      "negative_infinity_count": 1,
+      "nan_count": 0
+    },
+    {
+      "exact": true,
+      "shape": [
+        2,
+        2
+      ],
+      "dtype": "float32",
+      "max_absolute_difference": 0.0,
+      "negative_infinity_count": 0,
+      "nan_count": 0
+    },
+    {
+      "exact": true,
+      "shape": [
+        2,
+        2
+      ],
+      "dtype": "float64",
+      "max_absolute_difference": 0.0,
+      "negative_infinity_count": 0,
+      "nan_count": 0
+    },
+    {
+      "exact": true,
+      "shape": [
+        3,
+        3
+      ],
+      "dtype": "float32",
+      "max_absolute_difference": 0.0,
+      "negative_infinity_count": 0,
+      "nan_count": 0
+    },
+    {
+      "exact": true,
+      "shape": [
+        3,
+        3
+      ],
+      "dtype": "float64",
+      "max_absolute_difference": 0.0,
+      "negative_infinity_count": 2,
+      "nan_count": 0
+    },
+    {
+      "exact": true,
+      "shape": [
+        7,
+        7
+      ],
+      "dtype": "float32",
+      "max_absolute_difference": 0.0,
+      "negative_infinity_count": 0,
+      "nan_count": 0
+    },
+    {
+      "exact": true,
+      "shape": [
+        7,
+        7
+      ],
+      "dtype": "float64",
+      "max_absolute_difference": 0.0,
+      "negative_infinity_count": 0,
+      "nan_count": 0
+    },
+    {
+      "exact": true,
+      "shape": [
+        17,
+        17
+      ],
+      "dtype": "float32",
+      "max_absolute_difference": 0.0,
+      "negative_infinity_count": 0,
+      "nan_count": 0
+    },
+    {
+      "exact": true,
+      "shape": [
+        17,
+        17
+      ],
+      "dtype": "float64",
+      "max_absolute_difference": 0.0,
+      "negative_infinity_count": 0,
+      "nan_count": 0
+    },
+    {
+      "exact": true,
+      "shape": [
+        41,
+        41
+      ],
+      "dtype": "float32",
+      "max_absolute_difference": 0.0,
+      "negative_infinity_count": 0,
+      "nan_count": 0
+    },
+    {
+      "exact": true,
+      "shape": [
+        41,
+        41
+      ],
+      "dtype": "float64",
+      "max_absolute_difference": 0.0,
+      "negative_infinity_count": 0,
+      "nan_count": 0
+    },
+    {
+      "exact": true,
+      "shape": [
+        0
+      ],
+      "dtype": "float64",
+      "max_absolute_difference": 0.0,
+      "negative_infinity_count": 0,
+      "nan_count": 0
+    },
+    {
+      "exact": true,
+      "shape": [
+        1,
+        7
+      ],
+      "dtype": "float64",
+      "max_absolute_difference": 0.0,
+      "negative_infinity_count": 0,
+      "nan_count": 0
+    },
+    {
+      "exact": true,
+      "shape": [
+        9,
+        11
+      ],
+      "dtype": "float64",
+      "max_absolute_difference": 0.0,
+      "negative_infinity_count": 0,
+      "nan_count": 0
+    },
+    {
+      "exact": true,
+      "shape": [
+        30,
+        9
+      ],
+      "dtype": "float64",
+      "max_absolute_difference": 0.0,
+      "negative_infinity_count": 0,
+      "nan_count": 0
+    },
+    {
+      "exact": true,
+      "shape": [
+        21,
+        21
+      ],
+      "dtype": "float64",
+      "max_absolute_difference": 0.0,
+      "negative_infinity_count": 21,
+      "nan_count": 0
+    },
+    {
+      "exact": true,
+      "shape": [
+        21,
+        21
+      ],
+      "dtype": "float64",
+      "max_absolute_difference": 0.0,
+      "negative_infinity_count": 21,
+      "nan_count": 0
+    },
+    {
+      "exact": true,
+      "shape": [
+        21,
+        21
+      ],
+      "dtype": "float64",
+      "max_absolute_difference": 0.0,
+      "negative_infinity_count": 21,
+      "nan_count": 0
+    },
+    {
+      "exact": true,
+      "shape": [
+        21,
+        21
+      ],
+      "dtype": "float64",
+      "max_absolute_difference": 0.0,
+      "negative_infinity_count": 0,
+      "nan_count": 0
+    },
+    {
+      "exact": true,
+      "shape": [
+        21,
+        21
+      ],
+      "dtype": "float64",
+      "max_absolute_difference": 0.0,
+      "negative_infinity_count": 20,
+      "nan_count": 0
+    },
+    {
+      "exact": true,
+      "shape": [
+        21,
+        21
+      ],
+      "dtype": "float64",
+      "max_absolute_difference": 0.0,
+      "negative_infinity_count": 20,
+      "nan_count": 0
+    },
+    {
+      "exact": true,
+      "shape": [
+        21,
+        21
+      ],
+      "dtype": "float64",
+      "max_absolute_difference": 0.0,
+      "negative_infinity_count": 20,
+      "nan_count": 0
+    },
+    {
+      "exact": true,
+      "shape": [
+        21,
+        21
+      ],
+      "dtype": "float64",
+      "max_absolute_difference": 0.0,
+      "negative_infinity_count": 20,
+      "nan_count": 0
+    },
+    {
+      "exact": true,
+      "shape": [
+        21,
+        21
+      ],
+      "dtype": "float64",
+      "max_absolute_difference": 0.0,
+      "negative_infinity_count": 220,
+      "nan_count": 0
+    },
+    {
+      "exact": true,
+      "shape": [
+        21,
+        21
+      ],
+      "dtype": "float64",
+      "max_absolute_difference": 0.0,
+      "negative_infinity_count": 300,
+      "nan_count": 0
+    }
+  ],
+  "cases": [
+    {
+      "case": "kernel_bound_4",
+      "scope": "log-semiring matrix-product kernel; inputs prepared outside timing",
+      "bound": 4,
+      "comparison": {
+        "exact": true,
+        "shape": [
+          5,
+          5
+        ],
+        "dtype": "float64",
+        "max_absolute_difference": 0.0,
+        "negative_infinity_count": 4,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 156,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.0002119038462973176,
+            0.00019315865341550074,
+            0.00021367280770881244,
+            0.0002088245192471032,
+            0.00027260149363428354,
+            0.0001720253718443788,
+            0.00018566185892081985
+          ],
+          "median_seconds": 0.0002088245192471032,
+          "min_seconds": 0.0001720253718443788,
+          "max_seconds": 0.00027260149363428354
+        },
+        "candidate": {
+          "raw_seconds": [
+            6.0814904431119947e-05,
+            9.005742284875267e-05,
+            4.132157669235498e-05,
+            7.918055799121085e-05,
+            6.111217991042978e-05,
+            3.890517967729232e-05,
+            3.9302615615992974e-05
+          ],
+          "median_seconds": 6.0814904431119947e-05,
+          "min_seconds": 3.890517967729232e-05,
+          "max_seconds": 9.005742284875267e-05
+        },
+        "speedup": 3.4337720530930307
+      },
+      "peak_bytes": {
+        "baseline": 10125,
+        "candidate": 12273
+      }
+    },
+    {
+      "case": "kernel_bound_20",
+      "scope": "log-semiring matrix-product kernel; inputs prepared outside timing",
+      "bound": 20,
+      "comparison": {
+        "exact": true,
+        "shape": [
+          21,
+          21
+        ],
+        "dtype": "float64",
+        "max_absolute_difference": 0.0,
+        "negative_infinity_count": 20,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 37,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.000890777027863707,
+            0.0011913119186017964,
+            0.0012090844605621453,
+            0.0012578322155703161,
+            0.0010533614864421856,
+            0.0009110867284943123,
+            0.0010585292695543252
+          ],
+          "median_seconds": 0.0010585292695543252,
+          "min_seconds": 0.000890777027863707,
+          "max_seconds": 0.0012578322155703161
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.00014119256740889033,
+            0.000138529299481495,
+            0.00014087613483236447,
+            0.00013767229707760585,
+            0.00014103040401194548,
+            0.00022026240460675312,
+            0.00016338062296445305
+          ],
+          "median_seconds": 0.00014103040401194548,
+          "min_seconds": 0.00013767229707760585,
+          "max_seconds": 0.00022026240460675312
+        },
+        "speedup": 7.505681324323982
+      },
+      "peak_bytes": {
+        "baseline": 44622,
+        "candidate": 471192
+      }
+    },
+    {
+      "case": "kernel_bound_40",
+      "scope": "log-semiring matrix-product kernel; inputs prepared outside timing",
+      "bound": 40,
+      "comparison": {
+        "exact": true,
+        "shape": [
+          41,
+          41
+        ],
+        "dtype": "float64",
+        "max_absolute_difference": 0.0,
+        "negative_infinity_count": 40,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 15,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.0025946027987326183,
+            0.003129255600894491,
+            0.0028335916732127467,
+            0.002860049996525049,
+            0.004228380601853132,
+            0.003580236070168515,
+            0.002060725004412234
+          ],
+          "median_seconds": 0.002860049996525049,
+          "min_seconds": 0.002060725004412234,
+          "max_seconds": 0.004228380601853132
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.0017303972660253446,
+            0.0012286583349729577,
+            0.0010160360640535753,
+            0.0007125333339596788,
+            0.0008109056002770861,
+            0.00077293886958311,
+            0.0008441361365839839
+          ],
+          "median_seconds": 0.0008441361365839839,
+          "min_seconds": 0.0007125333339596788,
+          "max_seconds": 0.0017303972660253446
+        },
+        "speedup": 3.3881383257669597
+      },
+      "peak_bytes": {
+        "baseline": 121030,
+        "candidate": 1607585
+      }
+    },
+    {
+      "case": "kernel_bound_86",
+      "scope": "log-semiring matrix-product kernel; inputs prepared outside timing",
+      "bound": 86,
+      "comparison": {
+        "exact": true,
+        "shape": [
+          87,
+          87
+        ],
+        "dtype": "float64",
+        "max_absolute_difference": 0.0,
+        "negative_infinity_count": 86,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 4,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.00972937498590909,
+            0.008616114500910044,
+            0.008157510485034436,
+            0.01228964573238045,
+            0.012516874994616956,
+            0.009517625003354624,
+            0.010389322735136375
+          ],
+          "median_seconds": 0.00972937498590909,
+          "min_seconds": 0.008157510485034436,
+          "max_seconds": 0.012516874994616956
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.006232437503058463,
+            0.006535604246892035,
+            0.005659906251821667,
+            0.005792010517325252,
+            0.005702624999685213,
+            0.005555708252359182,
+            0.005786947993328795
+          ],
+          "median_seconds": 0.005786947993328795,
+          "min_seconds": 0.005555708252359182,
+          "max_seconds": 0.006535604246892035
+        },
+        "speedup": 1.6812618667257995
+      },
+      "peak_bytes": {
+        "baseline": 470452,
+        "candidate": 1567978
+      }
+    },
+    {
+      "case": "kernel_bound_128",
+      "scope": "log-semiring matrix-product kernel; inputs prepared outside timing",
+      "bound": 128,
+      "comparison": {
+        "exact": true,
+        "shape": [
+          129,
+          129
+        ],
+        "dtype": "float64",
+        "max_absolute_difference": 0.0,
+        "negative_infinity_count": 128,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.024555625044740736,
+            0.026845291955396533,
+            0.02989999996498227,
+            0.035869042039848864,
+            0.03426708304323256,
+            0.03065837500616908,
+            0.032099375035613775
+          ],
+          "median_seconds": 0.03065837500616908,
+          "min_seconds": 0.024555625044740736,
+          "max_seconds": 0.035869042039848864
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.01988599996548146,
+            0.02596183295827359,
+            0.0197471670107916,
+            0.04163062502630055,
+            0.02971758390776813,
+            0.030087459017522633,
+            0.02901729103177786
+          ],
+          "median_seconds": 0.02901729103177786,
+          "min_seconds": 0.0197471670107916,
+          "max_seconds": 0.04163062502630055
+        },
+        "speedup": 1.0565553818443636
+      },
+      "peak_bytes": {
+        "baseline": 998373,
+        "candidate": 998067
+      }
+    },
+    {
+      "case": "complete_log_transitions_bound_20",
+      "scope": "complete _log_transitions including all birth/death kernels and pulse construction",
+      "bound": 20,
+      "product_calls": [
+        [
+          [
+            21,
+            21
+          ],
+          [
+            21,
+            21
+          ]
+        ],
+        [
+          [
+            21,
+            21
+          ],
+          [
+            21,
+            21
+          ]
+        ]
+      ],
+      "comparison": {
+        "exact": true,
+        "shape": [
+          4,
+          21,
+          21
+        ],
+        "dtype": "float64",
+        "max_absolute_difference": 0.0,
+        "negative_infinity_count": 80,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 3,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.016038624996629853,
+            0.014706111008611819,
+            0.02141686133109033,
+            0.009132291655987501,
+            0.011835097335278988,
+            0.011714819353073835,
+            0.011823805669943491
+          ],
+          "median_seconds": 0.011835097335278988,
+          "min_seconds": 0.009132291655987501,
+          "max_seconds": 0.02141686133109033
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.011478180337386826,
+            0.011349680678298077,
+            0.016382861339176696,
+            0.01318155531771481,
+            0.012162333315548798,
+            0.00866413900318245,
+            0.01251711102668196
+          ],
+          "median_seconds": 0.012162333315548798,
+          "min_seconds": 0.00866413900318245,
+          "max_seconds": 0.016382861339176696
+        },
+        "speedup": 0.9730943091444912
+      },
+      "peak_bytes": {
+        "baseline": 74923,
+        "candidate": 511445
+      }
+    },
+    {
+      "case": "complete_log_transitions_bound_40",
+      "scope": "complete _log_transitions including all birth/death kernels and pulse construction",
+      "bound": 40,
+      "product_calls": [
+        [
+          [
+            41,
+            41
+          ],
+          [
+            41,
+            41
+          ]
+        ],
+        [
+          [
+            41,
+            41
+          ],
+          [
+            41,
+            41
+          ]
+        ]
+      ],
+      "comparison": {
+        "exact": true,
+        "shape": [
+          4,
+          41,
+          41
+        ],
+        "dtype": "float64",
+        "max_absolute_difference": 0.0,
+        "negative_infinity_count": 160,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 2,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.030837500002235174,
+            0.03174931253306568,
+            0.0410384374554269,
+            0.021211541490629315,
+            0.03045064554316923,
+            0.09680441650561988,
+            0.14480781252495944
+          ],
+          "median_seconds": 0.03174931253306568,
+          "min_seconds": 0.021211541490629315,
+          "max_seconds": 0.14480781252495944
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.027910291508305818,
+            0.01877497899113223,
+            0.0461600415292196,
+            0.07444504147861153,
+            0.07165112503571436,
+            0.0564518750179559,
+            0.04869620798854157
+          ],
+          "median_seconds": 0.04869620798854157,
+          "min_seconds": 0.01877497899113223,
+          "max_seconds": 0.07444504147861153
+        },
+        "speedup": 0.6519873691301883
+      },
+      "peak_bytes": {
+        "baseline": 231640,
+        "candidate": 1706696
+      }
+    },
+    {
+      "case": "complete_log_transitions_bound_86",
+      "scope": "complete _log_transitions including all birth/death kernels and pulse construction",
+      "bound": 86,
+      "product_calls": [
+        [
+          [
+            87,
+            87
+          ],
+          [
+            87,
+            87
+          ]
+        ],
+        [
+          [
+            87,
+            87
+          ],
+          [
+            87,
+            87
+          ]
+        ]
+      ],
+      "comparison": {
+        "exact": true,
+        "shape": [
+          4,
+          87,
+          87
+        ],
+        "dtype": "float64",
+        "max_absolute_difference": 0.0,
+        "negative_infinity_count": 344,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.07703174999915063,
+            0.1473411669721827,
+            0.12026220792904496,
+            0.09860320796724409,
+            0.1428733750944957,
+            0.11177616694476455,
+            0.14263116708025336
+          ],
+          "median_seconds": 0.12026220792904496,
+          "min_seconds": 0.07703174999915063,
+          "max_seconds": 0.1473411669721827
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.09178062505088747,
+            0.1410967499250546,
+            0.10972441593185067,
+            0.11249179195147008,
+            0.17544041702058166,
+            0.10310979199130088,
+            0.08880083402618766
+          ],
+          "median_seconds": 0.10972441593185067,
+          "min_seconds": 0.08880083402618766,
+          "max_seconds": 0.17544041702058166
+        },
+        "speedup": 1.096038715792657
+      },
+      "peak_bytes": {
+        "baseline": 945156,
+        "candidate": 1947980
+      }
+    },
+    {
+      "case": "complete_log_transitions_bound_128",
+      "scope": "complete _log_transitions including all birth/death kernels and pulse construction",
+      "bound": 128,
+      "product_calls": [
+        [
+          [
+            129,
+            129
+          ],
+          [
+            129,
+            129
+          ]
+        ],
+        [
+          [
+            129,
+            129
+          ],
+          [
+            129,
+            129
+          ]
+        ]
+      ],
+      "comparison": {
+        "exact": true,
+        "shape": [
+          4,
+          129,
+          129
+        ],
+        "dtype": "float64",
+        "max_absolute_difference": 0.0,
+        "negative_infinity_count": 512,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.2738855000352487,
+            0.22667366603855044,
+            0.23037508293054998,
+            0.3086500000208616,
+            0.1812218331033364,
+            0.41030637500807643,
+            0.26239849999547005
+          ],
+          "median_seconds": 0.26239849999547005,
+          "min_seconds": 0.1812218331033364,
+          "max_seconds": 0.41030637500807643
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.19165316701401025,
+            0.23190920799970627,
+            0.2825995829189196,
+            0.26539879210758954,
+            0.3121484579751268,
+            0.33667329198215157,
+            0.25753466703463346
+          ],
+          "median_seconds": 0.26539879210758954,
+          "min_seconds": 0.19165316701401025,
+          "max_seconds": 0.33667329198215157
+        },
+        "speedup": 0.9886951553611321
+      },
+      "peak_bytes": {
+        "baseline": 2048660,
+        "candidate": 2042849
+      }
+    },
+    {
+      "case": "complete_family_likelihood_rare_small",
+      "scope": "complete family_log_likelihoods including emissions, transitions, pruning and ascertainment",
+      "families": 1,
+      "bound": 20,
+      "product_calls": [
+        [
+          [
+            21,
+            21
+          ],
+          [
+            21,
+            21
+          ]
+        ],
+        [
+          [
+            21,
+            21
+          ],
+          [
+            21,
+            21
+          ]
+        ]
+      ],
+      "comparison": {
+        "exact": true,
+        "shape": [
+          1
+        ],
+        "dtype": "float64",
+        "max_absolute_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 2,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.030558520986232907,
+            0.01236254145624116,
+            0.01019345800159499,
+            0.016488708497490734,
+            0.013000041479244828,
+            0.010450000001583248,
+            0.016740854480303824
+          ],
+          "median_seconds": 0.013000041479244828,
+          "min_seconds": 0.01019345800159499,
+          "max_seconds": 0.030558520986232907
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.009032416506670415,
+            0.013457041524816304,
+            0.008805478981230408,
+            0.013078562507871538,
+            0.011411125015001744,
+            0.021447166509460658,
+            0.012792812485713512
+          ],
+          "median_seconds": 0.012792812485713512,
+          "min_seconds": 0.008805478981230408,
+          "max_seconds": 0.021447166509460658
+        },
+        "speedup": 1.0161988611779265
+      },
+      "peak_bytes": {
+        "baseline": 99379,
+        "candidate": 528641
+      }
+    },
+    {
+      "case": "complete_family_likelihood_rare_1",
+      "scope": "complete family_log_likelihoods including emissions, transitions, pruning and ascertainment",
+      "families": 1,
+      "bound": 86,
+      "product_calls": [
+        [
+          [
+            87,
+            87
+          ],
+          [
+            87,
+            87
+          ]
+        ],
+        [
+          [
+            87,
+            87
+          ],
+          [
+            87,
+            87
+          ]
+        ]
+      ],
+      "comparison": {
+        "exact": true,
+        "shape": [
+          1
+        ],
+        "dtype": "float64",
+        "max_absolute_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.10093641595449299,
+            0.22089391690678895,
+            0.1551694170339033,
+            0.35100604104809463,
+            0.2936553340405226,
+            0.07178316707722843,
+            0.07150691701099277
+          ],
+          "median_seconds": 0.1551694170339033,
+          "min_seconds": 0.07150691701099277,
+          "max_seconds": 0.35100604104809463
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.09783525008242577,
+            0.08689449995290488,
+            0.11179512506350875,
+            0.076708999928087,
+            0.08716262492816895,
+            0.08594258408993483,
+            0.07145183300599456
+          ],
+          "median_seconds": 0.08689449995290488,
+          "min_seconds": 0.07145183300599456,
+          "max_seconds": 0.11179512506350875
+        },
+        "speedup": 1.7857219630471675
+      },
+      "peak_bytes": {
+        "baseline": 1200332,
+        "candidate": 2200603
+      }
+    },
+    {
+      "case": "complete_family_likelihood_rare_16_missing",
+      "scope": "complete family_log_likelihoods including emissions, transitions, pruning and ascertainment",
+      "families": 16,
+      "bound": 86,
+      "product_calls": [
+        [
+          [
+            87,
+            87
+          ],
+          [
+            87,
+            87
+          ]
+        ],
+        [
+          [
+            87,
+            87
+          ],
+          [
+            87,
+            87
+          ]
+        ]
+      ],
+      "comparison": {
+        "exact": true,
+        "shape": [
+          16
+        ],
+        "dtype": "float64",
+        "max_absolute_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.1132465829141438,
+            0.07870920898858458,
+            0.07831195904873312,
+            0.07824050006456673,
+            0.08676295797340572,
+            0.09323416696861386,
+            0.0822332079987973
+          ],
+          "median_seconds": 0.0822332079987973,
+          "min_seconds": 0.07824050006456673,
+          "max_seconds": 0.1132465829141438
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.09539587493054569,
+            0.11838929203804582,
+            0.07338662492111325,
+            0.07350841700099409,
+            0.07729291694704443,
+            0.07870600000023842,
+            0.07478216709569097
+          ],
+          "median_seconds": 0.07729291694704443,
+          "min_seconds": 0.07338662492111325,
+          "max_seconds": 0.11838929203804582
+        },
+        "speedup": 1.06391647833834
+      },
+      "peak_bytes": {
+        "baseline": 1233753,
+        "candidate": 2231294
+      }
+    },
+    {
+      "case": "complete_family_likelihood_ordinary_control",
+      "scope": "complete family_log_likelihoods including emissions, transitions, pruning and ascertainment",
+      "families": 16,
+      "bound": 40,
+      "product_calls": [],
+      "comparison": {
+        "exact": true,
+        "shape": [
+          16
+        ],
+        "dtype": "float64",
+        "max_absolute_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 17,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.0018854436450911796,
+            0.0018346642335767254,
+            0.001802404411137104,
+            0.0018328970558393527,
+            0.001824943588443977,
+            0.002068267176475595,
+            0.002135953407132012
+          ],
+          "median_seconds": 0.0018346642335767254,
+          "min_seconds": 0.001802404411137104,
+          "max_seconds": 0.002135953407132012
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.0018657622927361552,
+            0.0018582426436135873,
+            0.0018786887693054536,
+            0.0019487524747519808,
+            0.0018374558798420954,
+            0.0021692499970359836,
+            0.0020240220611038454
+          ],
+          "median_seconds": 0.0018786887693054536,
+          "min_seconds": 0.0018374558798420954,
+          "max_seconds": 0.0021692499970359836
+        },
+        "speedup": 0.9765663496540707
+      },
+      "peak_bytes": {
+        "baseline": 131922,
+        "candidate": 131922
+      }
+    },
+    {
+      "case": "complete_family_likelihood_zero_retention_control",
+      "scope": "complete family_log_likelihoods including emissions, transitions, pruning and ascertainment",
+      "families": 1,
+      "bound": 86,
+      "product_calls": [],
+      "comparison": {
+        "exact": true,
+        "shape": [
+          1
+        ],
+        "dtype": "float64",
+        "max_absolute_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.03559004096314311,
+            0.0349587919190526,
+            0.035304666962474585,
+            0.034038083045743406,
+            0.03397591691464186,
+            0.035493790986947715,
+            0.03479033301118761
+          ],
+          "median_seconds": 0.0349587919190526,
+          "min_seconds": 0.03397591691464186,
+          "max_seconds": 0.03559004096314311
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.03611041698604822,
+            0.03449520794674754,
+            0.035326375043950975,
+            0.03522245807107538,
+            0.0338689578929916,
+            0.035127292037941515,
+            0.03518712508957833
+          ],
+          "median_seconds": 0.03518712508957833,
+          "min_seconds": 0.0338689578929916,
+          "max_seconds": 0.03611041698604822
+        },
+        "speedup": 0.9935108887144248
+      },
+      "peak_bytes": {
+        "baseline": 941672,
+        "candidate": 940397
+      }
+    }
+  ]
+}
