@@ -2204,60 +2204,55 @@ def _should_output_node(node, observed_state_by_leaf, targets):
     return False
 
 
+def _discrete_output_node_columns(nodes, observed_state_by_leaf, node_to_branch_id):
+    observed = [
+        observed_state_by_leaf.get(node.name) if node.is_leaf else None
+        for node in nodes
+    ]
+    return {
+        "branch_id": [node_to_branch_id[node] for node in nodes],
+        "parent": [
+            -1 if node.is_root else node_to_branch_id[node.up] for node in nodes
+        ],
+        "node_class": [get_node_class(node) for node in nodes],
+        "name": ["" if node.name in (None, "") else str(node.name) for node in nodes],
+        "observed_state": ["" if value is None else value for value in observed],
+        "is_imputed": [
+            node.is_leaf and _is_missing_observation(value)
+            for node, value in zip(nodes, observed, strict=True)
+        ],
+    }
+
+
 def _build_output_table(
     tree, states, observed_state_by_leaf, posterior_by_node, targets, output_mode
 ):
     node_to_branch_id = assign_branch_ids(tree)
-    state_ids = [_safe_column_state(state) for state in states]
-    rows = list()
-    for node in tree.traverse():
-        if not _should_output_node(node, observed_state_by_leaf, targets):
-            continue
-        posterior = posterior_by_node[node]
-        map_index = int(np.argmax(posterior))
-        observed_state = observed_state_by_leaf.get(node.name) if node.is_leaf else None
-        row = {
-            "branch_id": node_to_branch_id[node],
-            "parent": -1 if node.is_root else node_to_branch_id[node.up],
-            "node_class": get_node_class(node),
-            "name": "" if node.name in [None, ""] else str(node.name),
-            "observed_state": "" if observed_state is None else observed_state,
-            "is_imputed": bool(_is_missing_tip(node, observed_state_by_leaf)),
-        }
-        if output_mode == "probabilities":
-            row["map_state"] = states[map_index]
-            row["map_probability"] = float(posterior[map_index])
-            for state_id, probability in zip(state_ids, posterior, strict=True):
-                row["p_{}".format(state_id)] = float(probability)
-        elif output_mode == "map":
-            row["state"] = states[map_index]
-            row["probability"] = float(posterior[map_index])
-        else:
-            raise ValueError("Unsupported '--output': {}".format(output_mode))
-        rows.append(row)
+    nodes = [
+        node
+        for node in tree.traverse()
+        if _should_output_node(node, observed_state_by_leaf, targets)
+    ]
+    columns = _discrete_output_node_columns(
+        nodes, observed_state_by_leaf, node_to_branch_id
+    )
+    probabilities = np.empty((len(nodes), len(states)), dtype=float)
+    for index, node in enumerate(nodes):
+        probabilities[index] = posterior_by_node[node]
+    selected = np.argmax(probabilities, axis=1)
+    labels = [states[index] for index in selected]
+    maximum = probabilities[np.arange(len(nodes)), selected]
     if output_mode == "probabilities":
-        columns = [
-            "branch_id",
-            "parent",
-            "node_class",
-            "name",
-            "observed_state",
-            "is_imputed",
-            "map_state",
-            "map_probability",
-        ] + ["p_{}".format(state_id) for state_id in state_ids]
+        columns.update(map_state=labels, map_probability=maximum)
+        columns.update(
+            (f"p_{_safe_column_state(state)}", probabilities[:, index])
+            for index, state in enumerate(states)
+        )
+    elif output_mode == "map":
+        columns.update(state=labels, probability=maximum)
     else:
-        columns = [
-            "branch_id",
-            "parent",
-            "node_class",
-            "name",
-            "observed_state",
-            "is_imputed",
-            "state",
-            "probability",
-        ]
-    return pd.DataFrame(rows, columns=columns)
+        raise ValueError("Unsupported '--output': {}".format(output_mode))
+    return pd.DataFrame(columns)
 
 
 def _safe_column_state(state):
