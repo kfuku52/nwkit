@@ -110,6 +110,41 @@ def test_regime_split_rank_matches_full_pairwise_distances(observed_names):
     assert _sigma_design_rank(tree, tips, regimes) == expected
 
 
+@pytest.mark.parametrize("time_scale", [1e-120, 1.0, 1e120])
+def test_regime_drift_recovers_weighted_least_squares_across_time_units(time_scale):
+    depths = np.tile(np.arange(1.0, 7.0), 2)
+    warm = np.repeat([True, False], 6)
+    response = 1.0 + depths * np.where(warm, 0.6, -0.4)
+    response += np.random.default_rng(1019).normal(0.0, 0.3, len(depths))
+    tree = tree_from(
+        "("
+        + ",".join(f"T{i}:{depth * time_scale}" for i, depth in enumerate(depths))
+        + ")R;"
+    )
+    regimes = assignment(tree, ["warm", *np.where(warm, "warm", "cold")])
+    design = np.column_stack((np.ones(len(depths)), depths * warm, depths * ~warm))
+    weights = np.sqrt(depths)
+    expected = np.linalg.lstsq(
+        design / weights[:, None], response / weights, rcond=None
+    )[0]
+
+    posterior, fit = compute_regime_drift_marginals(
+        tree,
+        {f"T{i}": float(value) for i, value in enumerate(response)},
+        regimes,
+        sigma2=1.0 / time_scale,
+    )
+
+    assert fit.optimizer_success
+    assert posterior[tree].mean == pytest.approx(expected[0], abs=2e-5)
+    assert fit.drift_by_regime["warm"] * time_scale == pytest.approx(
+        expected[1], abs=2e-5
+    )
+    assert fit.drift_by_regime["cold"] * time_scale == pytest.approx(
+        expected[2], abs=2e-5
+    )
+
+
 @pytest.mark.integration
 def test_regime_drift_cli_fixed_parameters(tmp_path):
     traits = tmp_path / "traits.tsv"

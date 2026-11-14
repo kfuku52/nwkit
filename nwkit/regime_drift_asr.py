@@ -7,6 +7,7 @@ from typing import Mapping
 import numpy as np
 
 from nwkit.compiled_tree import CompiledTree
+from nwkit.continuous_asr import _ldexp
 from nwkit.gaussian_inference import (
     condition_gaussian_tree,
     gaussian_tree_likelihood,
@@ -174,6 +175,24 @@ def _sigma_design_rank(tree, observed_leaves, assignment):
     )
 
 
+def _drift_fit_scales(tree, observed_values):
+    positive_times = [
+        float(node.dist)
+        for node in tree.traverse()
+        if not node.is_root and float(node.dist) > 0.0
+    ]
+    _, time_exponent = math.frexp(max(positive_times, default=1.0))
+    _, trait_exponent = math.frexp(float(np.max(np.abs(observed_values))))
+    normalized = np.ldexp(observed_values, -trait_exponent)
+    variance = max(float(np.var(normalized)), np.finfo(float).eps)
+    mean_time = (
+        float(np.mean(np.ldexp(positive_times, -time_exponent)))
+        if positive_times
+        else 1.0
+    )
+    return math.log(variance / mean_time), trait_exponent, time_exponent
+
+
 def compute_regime_drift_marginals(
     tree,
     values_by_leaf,
@@ -255,29 +274,27 @@ def compute_regime_drift_marginals(
             "BMS-DRIFT has too many free parameters for the observed tips; "
             "fix rates/drifts or supply more data."
         )
-    positive_lengths = [
-        float(node.dist)
-        for node in tree.traverse()
-        if not node.is_root and float(node.dist) > 0.0
-    ]
-    mean_length = float(np.mean(positive_lengths)) if positive_lengths else 1.0
-    trait_variance = max(
-        float(np.var(observed_values)),
-        np.finfo(float).eps * max(1.0, float(np.max(np.abs(observed_values)))) ** 2,
+    initial_log_rate, trait_exponent, time_exponent = _drift_fit_scales(
+        tree, observed_values
     )
-    initial_sigma = max(trait_variance / mean_length, np.finfo(float).tiny)
-    sigma_bounds = (
-        max(initial_sigma * 1e-8, np.finfo(float).tiny),
-        min(initial_sigma * 1e8, np.finfo(float).max / max(1.0, mean_length)),
-    )
+    drift_exponent = trait_exponent - time_exponent
     names: list[tuple[str, str]] = []
     initial: list[float] = []
     bounds: list[tuple[float | None, float | None]] = []
     if fixed_sigma is None:
+        initial_log_rate += (2 * trait_exponent - time_exponent) * math.log(2.0)
+        min_log_rate = math.log(math.ulp(0.0))
+        max_log_rate = math.log(np.finfo(float).max)
+        initial_log_rate = min(max_log_rate, max(min_log_rate, initial_log_rate))
+        log_sigma_bounds = (
+            max(initial_log_rate - math.log(1e8), min_log_rate),
+            min(initial_log_rate + math.log(1e8), max_log_rate),
+        )
+        sigma_bounds = tuple(math.exp(bound) for bound in log_sigma_bounds)
         for regime in regimes:
             names.append(("sigma2", regime))
-            initial.append(math.log(initial_sigma))
-            bounds.append((math.log(sigma_bounds[0]), math.log(sigma_bounds[1])))
+            initial.append(initial_log_rate)
+            bounds.append(log_sigma_bounds)
     if fixed_drift is None:
         for regime in regimes:
             names.append(("drift", regime))
@@ -297,7 +314,12 @@ def compute_regime_drift_marginals(
         drift_map = (
             dict(fixed_drift)
             if fixed_drift is not None
-            else {regime: supplied[("drift", regime)] for regime in regimes}
+            else {
+                regime: _ldexp(
+                    supplied[("drift", regime)], drift_exponent, "BMS-DRIFT trend"
+                )
+                for regime in regimes
+            }
         )
         return sigma_map, drift_map
 
