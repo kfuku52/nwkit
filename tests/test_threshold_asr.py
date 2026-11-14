@@ -8,6 +8,7 @@ from scipy.stats import truncnorm
 from nwkit.cli import main
 from nwkit.compiled_tree import CompiledTree
 from nwkit.threshold_asr import (
+    _allowed_intervals,
     _initialize_values,
     _rhat_and_ess,
     _truncated_draw,
@@ -70,16 +71,15 @@ def test_disjoint_ordinal_intervals_keep_equal_mass_in_both_far_tails():
     rng = np.random.default_rng(23)
     allowed = np.array([0, 2])
     thresholds = np.array([-40.0, 40.0])
-    draws = np.array(
-        [_truncated_draw(0.0, 1.0, allowed, thresholds, rng) for _ in range(300)]
-    )
+    bounds = _allowed_intervals(allowed, thresholds)
+    draws = np.array([_truncated_draw(0.0, 1.0, bounds, rng) for _ in range(300)])
     assert np.all(np.abs(draws) >= 40.0)
     assert 0.4 < np.mean(draws > 0.0) < 0.6
 
 
 def test_threshold_draw_rounds_to_first_allowed_value_in_extreme_tail():
     rng = np.random.default_rng(5)
-    result = _truncated_draw(0.0, 1.0, np.array([1]), np.array([1e200]), rng)
+    result = _truncated_draw(0.0, 1.0, [(1e200, math.inf)], rng)
     assert result == np.nextafter(1e200, np.inf)
 
 
@@ -88,20 +88,15 @@ def test_threshold_draw_reports_tail_with_no_finite_allowed_value():
     with pytest.raises(
         ValueError, match="ordinal liability exceeds floating-point range"
     ):
-        _truncated_draw(0.0, 1.0, np.array([1]), np.array([np.finfo(float).max]), rng)
+        _truncated_draw(0.0, 1.0, [(float(np.finfo(float).max), math.inf)], rng)
 
 
 @pytest.mark.parametrize("sign", [-1.0, 1.0])
 def test_threshold_draw_resolves_tail_excess_after_centering(sign):
     rng = np.random.default_rng(331)
-    category = np.array([int(sign > 0.0)])
+    bounds = [(0.0, math.inf)] if sign > 0.0 else [(-math.inf, 0.0)]
     draws = (
-        np.array(
-            [
-                _truncated_draw(-sign * 1e16, 1.0, category, np.array([0.0]), rng)
-                for _ in range(1500)
-            ]
-        )
+        np.array([_truncated_draw(-sign * 1e16, 1.0, bounds, rng) for _ in range(1500)])
         * sign
         * 1e16
     )
@@ -115,10 +110,7 @@ def test_threshold_draw_preserves_width_when_cdf_endpoints_coincide(mean):
     width = 1e-200
     rng = np.random.default_rng(3)
     sample = np.array(
-        [
-            _truncated_draw(mean, 1.0, np.array([1]), np.array([0.0, width]), rng)
-            for _ in range(400)
-        ]
+        [_truncated_draw(mean, 1.0, [(0.0, width)], rng) for _ in range(400)]
     )
     assert np.all((sample > 0.0) & (sample <= width))
     assert np.mean(sample / width) == pytest.approx(0.5, abs=0.04)
@@ -129,9 +121,8 @@ def test_disjoint_narrow_ordinal_intervals_are_selected_in_proportion_to_width()
     thresholds = width * np.array([0, 1, 2, 4])
     allowed = np.array([1, 3])
     rng = np.random.default_rng(7)
-    sample = np.array(
-        [_truncated_draw(-1.0, 1.0, allowed, thresholds, rng) for _ in range(800)]
-    )
+    bounds = _allowed_intervals(allowed, thresholds)
+    sample = np.array([_truncated_draw(-1.0, 1.0, bounds, rng) for _ in range(800)])
     first = (sample > 0.0) & (sample <= width)
     second = (sample > 2 * width) & (sample <= 4 * width)
     assert np.all(first | second)

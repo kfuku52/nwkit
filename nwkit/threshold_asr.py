@@ -246,13 +246,18 @@ def _tail_interval_draw(lower, upper, standardized_lower, mean, sd, rng):
             return lower + excess
 
 
-def _truncated_draw(mean, sd, allowed, thresholds, rng):
+def _truncated_draw(mean, sd, bounds, rng, *, thresholds=None):
     if not math.isfinite(mean):
         raise ValueError("An ordinal liability conditional mean is not finite.")
-    bounds = _allowed_intervals(allowed, thresholds)
-    intervals = [((lower - mean) / sd, (upper - mean) / sd) for lower, upper in bounds]
-    index = 0
-    if len(intervals) > 1:
+    if thresholds is not None:
+        bounds = _allowed_intervals(bounds, thresholds)
+    if len(bounds) == 1:
+        lower, upper = bounds[0]
+        a, b = (lower - mean) / sd, (upper - mean) / sd
+    else:
+        intervals = [
+            ((lower - mean) / sd, (upper - mean) / sd) for lower, upper in bounds
+        ]
         log_masses = np.asarray(
             [
                 _interval_log_mass(lower, upper, a, b, sd)
@@ -266,8 +271,8 @@ def _truncated_draw(mean, sd, allowed, thresholds, rng):
             )
         weights = np.exp(log_masses - largest)
         index = int(rng.choice(len(intervals), p=weights / weights.sum()))
-    a, b = intervals[index]
-    lower, upper = bounds[index]
+        a, b = intervals[index]
+        lower, upper = bounds[index]
     location = _interval_draw(lower, upper, a, b, mean, sd, rng)
     # Ordinal categories use (lower, upper]. A continuous tail draw can
     # round onto its excluded endpoint when projected back into trait units.
@@ -432,6 +437,15 @@ def _allowed_categories_by_constraint(constraints, states):
     return allowed
 
 
+def _liability_bounds(constraints, thresholds, estimated):
+    if estimated:
+        return constraints
+    return {
+        index: _allowed_intervals(allowed, thresholds)
+        for index, allowed in constraints.items()
+    }
+
+
 def compute_threshold_marginals(
     tree,
     states,
@@ -499,6 +513,7 @@ def compute_threshold_marginals(
     estimate_thresholds = fixed_thresholds is None and len(states) > 2
     process = build_threshold_process(tree)
     conditionals = _liability_conditionals(compiled, process)
+    bounds = _liability_bounds(constraints, initial_thresholds, estimate_thresholds)
     constrained_indices = np.asarray(tuple(constraints), dtype=int)
     allowed_by_constraint = _allowed_categories_by_constraint(constraints, len(states))
     seed_sequences = np.random.SeedSequence(seed).spawn(chains)
@@ -514,6 +529,7 @@ def compute_threshold_marginals(
     for chain_index, child_seed in enumerate(seed_sequences):
         rng = np.random.default_rng(child_seed)
         current_thresholds = initial_thresholds.copy()
+        moving_thresholds = current_thresholds if estimate_thresholds else None
         values = _initialize_values(compiled, constraints, current_thresholds)
         retained = 0
         for sweep in range(total_sweeps):
@@ -522,11 +538,13 @@ def compute_threshold_marginals(
                 mean = math.fsum(
                     float(values[neighbor]) * weight for neighbor, weight in neighbors
                 )
-                allowed = constraints.get(int(node_index))
+                intervals = bounds.get(int(node_index))
                 values[node_index] = (
                     rng.normal(mean, sd)
-                    if allowed is None
-                    else _truncated_draw(mean, sd, allowed, current_thresholds, rng)
+                    if intervals is None
+                    else _truncated_draw(
+                        mean, sd, intervals, rng, thresholds=moving_thresholds
+                    )
                 )
             if estimate_thresholds:
                 _update_thresholds(
