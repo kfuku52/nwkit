@@ -1464,7 +1464,8 @@ def _beta_weighted_divergence(observed, fitted, difference, precision):
 
 @lru_cache(maxsize=1024)
 def _beta_observation_logit(value):
-    with localcontext(prec=80):
+    with localcontext() as context:
+        context.prec = 80
         observed = Decimal.from_float(value)
         logit = observed.ln() - (1 - observed).ln()
         leading = float(logit)
