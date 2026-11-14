@@ -387,6 +387,11 @@ def _rhat_and_ess(traces):
     return rhat, ess
 
 
+def _accumulate_threshold_mean(mean, thresholds, draw_count, estimated):
+    if estimated:
+        mean += (thresholds - mean) / draw_count
+
+
 def compute_threshold_marginals(
     tree,
     states,
@@ -460,7 +465,7 @@ def compute_threshold_marginals(
     probability_counts = np.zeros((len(compiled.nodes), len(states)), dtype=float)
     liability_mean = np.zeros(len(compiled.nodes), dtype=float)
     liability_m2 = np.zeros(len(compiled.nodes), dtype=float)
-    threshold_sum = np.zeros(len(states) - 1, dtype=float)
+    threshold_mean = initial_thresholds.copy()
     diagnostic_traces = np.empty(
         (chains, num_samples, 1 + max(0, len(states) - 2)), dtype=float
     )
@@ -498,7 +503,9 @@ def compute_threshold_marginals(
             centered = values - liability_mean
             liability_mean += centered / retained_draws
             liability_m2 += centered * (values - liability_mean)
-            threshold_sum += current_thresholds
+            _accumulate_threshold_mean(
+                threshold_mean, current_thresholds, retained_draws, estimate_thresholds
+            )
             diagnostic_traces[chain_index, retained, 0] = values[0]
             if len(current_thresholds) > 1:
                 diagnostic_traces[chain_index, retained, 1:] = current_thresholds[1:]
@@ -513,7 +520,7 @@ def compute_threshold_marginals(
         node: GaussianMarginal(float(liability_mean[index]), float(variances[index]))
         for index, node in enumerate(compiled.nodes)
     }
-    fitted_thresholds = tuple(float(value) for value in threshold_sum / total_draws)
+    fitted_thresholds = tuple(float(value) for value in threshold_mean)
     rhat, ess = _rhat_and_ess(diagnostic_traces)
     available_rhat = rhat[~np.isnan(rhat)]
     rhat_max = float(np.max(available_rhat)) if len(available_rhat) else math.nan

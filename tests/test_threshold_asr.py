@@ -189,6 +189,28 @@ def test_binary_threshold_samples_probabilities_and_liabilities():
     assert len(threshold_liability_table(tree, fit)) == 7
 
 
+def test_fixed_ordinal_thresholds_are_preserved_exactly():
+    tree = tree_from("(A:1,B:1,C:1)R;")
+    states = ("a", "b", "c", "d", "e", "f")
+    observed = {"A": "c", "B": "d", "C": None}
+    thresholds = (-1e308, -1.0, 0.3, 1.0, 1e308)
+    with np.errstate(over="raise", invalid="raise"):
+        posterior, fit = compute_threshold_marginals(
+            tree,
+            states,
+            observed,
+            likelihoods(tree, states, observed),
+            thresholds=",".join(map(str, thresholds)),
+            num_samples=12,
+            burnin=4,
+            chains=2,
+            seed=7,
+        )
+    assert fit.thresholds == thresholds
+    np.testing.assert_array_equal(posterior[tree["A"]], [0, 0, 1, 0, 0, 0])
+    np.testing.assert_array_equal(posterior[tree["B"]], [0, 0, 0, 1, 0, 0])
+
+
 def test_threshold_allows_zero_burnin_and_marks_single_chain_rhat_unavailable():
     tree = tree_from("(A:1,B:1,C:1)R;")
     states = ("low", "high")
