@@ -1033,9 +1033,9 @@ def _prepare_predictor_posteriors(
             "posterior": posterior,
             "posterior_factor": posterior_factor,
             "posterior_model": posterior_model,
-            "mean_sampling_variance": float(np.mean(_covariance_diagonal(covariance))),
+            "mean_sampling_variance": finite_mean(_covariance_diagonal(covariance)),
             "mean_prior_variance": float(
-                posterior.evolutionary_rate * np.mean(contrast_variance)
+                posterior.evolutionary_rate * finite_mean(contrast_variance)
             ),
         }
         posteriors[predictor] = state
@@ -2517,24 +2517,22 @@ def _predictor_measurement_result_fields(
     if isinstance(uncertainty, ContinuousPredictorUncertainty):
         selected_factor = uncertainty.factor[uncertainty.observation_index]
         if np.ndim(selected_factor) == 1:
-            mean_posterior_variance = float(np.mean(np.square(selected_factor)))
+            mean_posterior_variance = finite_mean(np.square(selected_factor))
         else:
-            mean_posterior_variance = float(
-                np.mean(np.sum(np.square(selected_factor), axis=1))
+            mean_posterior_variance = finite_mean(
+                np.sum(np.square(selected_factor), axis=1)
             )
     elif isinstance(uncertainty, GmrfPredictorUncertainty):
-        mean_posterior_variance = float(
-            np.mean(
-                _predictor_error_variance_diagonal(
-                    np.asarray([1.0]),
-                    uncertainty,
-                    0,
-                    len(uncertainty.observation_index),
-                )
+        mean_posterior_variance = finite_mean(
+            _predictor_error_variance_diagonal(
+                np.asarray([1.0]),
+                uncertainty,
+                0,
+                len(uncertainty.observation_index),
             )
         )
     else:
-        mean_posterior_variance = float(np.mean(np.diag(uncertainty)))
+        mean_posterior_variance = finite_mean(np.diag(uncertainty))
     mean_prior_variance = state["mean_prior_variance"]
     return {
         "mean_predictor_sampling_variance": state["mean_sampling_variance"],

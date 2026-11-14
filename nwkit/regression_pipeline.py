@@ -36,7 +36,12 @@ from nwkit.evolution import (
     parameter_near_boundary,
     transformed_edge_variances,
 )
-from nwkit.gaussian import DiagonalLowRankCovariance, draw_from_factor, is_diagonal
+from nwkit.gaussian import (
+    DiagonalLowRankCovariance,
+    draw_from_factor,
+    finite_mean,
+    is_diagonal,
+)
 from nwkit.measurement_error import fit_latent_predictor, fit_sparse_latent_predictor
 from nwkit.model_matrix import (
     PredictorTerm,
@@ -1121,9 +1126,9 @@ def _prepare_reconciled_tip_predictors(
                 index=leaf_names,
                 columns=leaf_names,
             )
-            mean_posterior_variance = float(np.mean(np.diag(posterior.covariance)))
-            mean_prior_variance = float(
-                np.mean(np.diag(posterior.evolutionary_rate * prior_covariance))
+            mean_posterior_variance = finite_mean(np.diag(posterior.covariance))
+            mean_prior_variance = posterior.evolutionary_rate * finite_mean(
+                np.diag(prior_covariance)
             )
         diagnostics[predictor].update(
             {

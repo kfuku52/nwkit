@@ -1373,14 +1373,9 @@ def _prepare_latent_ordinary_predictors(
             marginal_converged = marginal_fit["optimizer_converged"]
             marginal_message = marginal_fit["optimizer_message"]
             marginal_parameter_boundary = marginal_fit["boundary_warning"]
-            mean_posterior_variance = float(np.mean(np.diag(posterior.covariance)))
-            mean_prior_variance = float(
-                np.mean(
-                    np.diag(
-                        posterior.evolutionary_rate
-                        * marginal_fit["phylogenetic_covariance"]
-                    )
-                )
+            mean_posterior_variance = finite_mean(np.diag(posterior.covariance))
+            mean_prior_variance = posterior.evolutionary_rate * finite_mean(
+                np.diag(marginal_fit["phylogenetic_covariance"])
             )
         posterior_predictor_values[predictor] = dict(
             zip(leaf_names, posterior.mean, strict=True)

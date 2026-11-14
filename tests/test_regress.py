@@ -5,6 +5,7 @@ import sys
 import threading
 import warnings
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -33,9 +34,34 @@ from nwkit.regression_pipeline import (
     write_regression_bundle,
 )
 from nwkit.sparse_laplace import (
+    ContinuousPredictorUncertainty,
     JointPredictorUncertainty,
     continuous_predictor_loading,
 )
+
+
+def test_predictor_uncertainty_report_averages_large_finite_variances():
+    scale = 1e308
+    posterior = SimpleNamespace(
+        evolutionary_rate=1.0,
+        optimizer_converged=True,
+        optimizer_message="test",
+        boundary_warning=False,
+    )
+    state = {
+        "posterior": posterior,
+        "mean_sampling_variance": scale,
+        "mean_prior_variance": scale,
+    }
+    uncertainty = ContinuousPredictorUncertainty(
+        np.full(4, np.sqrt(scale)), np.arange(4)
+    )
+    with np.errstate(over="raise", invalid="raise"):
+        result = regression_mod._predictor_measurement_result_fields(
+            "x", {"x": uncertainty}, {"x": state}, {}, 0.0
+        )
+    assert result["mean_latent_predictor_variance"] == pytest.approx(scale)
+    assert result["predictor_uncertainty_fraction"] == pytest.approx(1.0)
 
 
 def _write_raw_regression_inputs(tmp_path, *, biological_replicates=False):
