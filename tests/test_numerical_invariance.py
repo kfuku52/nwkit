@@ -14,7 +14,12 @@ from nwkit.evolution import (
     build_evolutionary_covariance,
     build_sparse_evolutionary_model,
 )
-from nwkit.gaussian import DiagonalLowRankCovariance
+from nwkit.gaussian import (
+    DiagonalLowRankCovariance,
+    draw_from_factor,
+    factor_logdet,
+    solve_factor,
+)
 from nwkit.measurement_error import (
     _positive_semidefinite,
     _predictor_error_covariance,
@@ -164,6 +169,71 @@ def test_gaussian_variance_follows_response_units(scale):
     assert fits[1]["beta_covariance"] / scale**2 == pytest.approx(
         fits[0]["beta_covariance"]
     )
+
+
+@pytest.mark.parametrize("exponent", [-500, 500])
+@pytest.mark.parametrize("structured", [False, True])
+def test_gaussian_regression_preserves_fits_in_extreme_response_units(
+    exponent, structured
+):
+    design, response = _data()
+    size = len(response)
+    if structured:
+        fixed = DiagonalLowRankCovariance(
+            np.full(size, 0.04), sparse.csr_matrix(np.full((size, 1), 0.2))
+        )
+        scaled_fixed = DiagonalLowRankCovariance(
+            np.ldexp(fixed.diagonal, 2 * exponent),
+            fixed.low_rank * math.ldexp(1.0, exponent),
+        )
+        component = np.ones(size)
+    else:
+        fixed = np.full(size, 0.04)
+        scaled_fixed = np.ldexp(fixed, 2 * exponent)
+        distances = np.abs(np.arange(size)[:, None] - np.arange(size))
+        component = 0.4**distances
+    components = [("evolutionary_rate", component)]
+    reference = regress._profile_covariance_fit(
+        response, design, fixed, components, reml=True
+    )
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        scaled = regress._profile_covariance_fit(
+            np.ldexp(response, exponent), design, scaled_fixed, components, reml=True
+        )
+    np.testing.assert_allclose(
+        np.ldexp(scaled["beta"], -exponent), reference["beta"], atol=1e-7
+    )
+    np.testing.assert_allclose(
+        np.ldexp(scaled["beta_covariance"], -2 * exponent),
+        reference["beta_covariance"],
+        rtol=1e-5,
+        atol=1e-10,
+    )
+    assert scaled["objective"] - (size - 2) * exponent * math.log(2.0) == pytest.approx(
+        reference["objective"], abs=1e-9
+    )
+    scaled_rate = np.ldexp(
+        scaled["component_variances"]["evolutionary_rate"], -2 * exponent
+    )
+    assert scaled_rate == pytest.approx(
+        reference["component_variances"]["evolutionary_rate"], rel=1e-5
+    )
+    assert factor_logdet(scaled["cholesky"]) - 2 * size * exponent * math.log(
+        2.0
+    ) == pytest.approx(factor_logdet(reference["cholesky"]), abs=1e-4)
+    scaled_response = np.ldexp(response, exponent)
+    np.testing.assert_allclose(
+        np.ldexp(solve_factor(scaled["cholesky"], scaled_response), exponent),
+        solve_factor(reference["cholesky"], response),
+        rtol=1e-5,
+        atol=1e-8,
+    )
+    draws = np.random.default_rng(22).standard_normal(size)
+    before = draw_from_factor(
+        reference["cholesky"], draws, rng=np.random.default_rng(15)
+    )
+    after = draw_from_factor(scaled["cholesky"], draws, rng=np.random.default_rng(15))
+    np.testing.assert_allclose(np.ldexp(after, -exponent), before, rtol=1e-5, atol=1e-8)
 
 
 def test_no_intercept_fit_retains_the_response_mean():

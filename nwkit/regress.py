@@ -18,6 +18,7 @@ from scipy.stats import t as student_t
 from nwkit.evolution import evolution_model_spec, validate_evolution_parameter
 from nwkit.gaussian import (
     DiagonalLowRankCovariance,
+    ScaledCovarianceFactor,
     center_response,
     draw_from_factor,
     effective_likelihood_settings,
@@ -1548,6 +1549,66 @@ def _dense_profile_gls(cholesky, design, response, rhs, return_details):
     return beta, gram, gram_logdet, residual, inverse_residual, quadratic
 
 
+def _rescale_profile_fixed_covariance(covariance, exponent):
+    if isinstance(covariance, DiagonalLowRankCovariance):
+        diagonal = np.ldexp(covariance.diagonal, 2 * exponent)
+        if sparse.issparse(covariance.low_rank):
+            loading = covariance.low_rank.copy()
+            loading.data = np.ldexp(loading.data, exponent)
+        else:
+            loading = np.ldexp(covariance.low_rank, exponent)
+        return DiagonalLowRankCovariance(diagonal, loading)
+    return np.ldexp(covariance, 2 * exponent)
+
+
+def _profile_response_units(response, sampling_diagonal):
+    response_size = float(np.max(np.abs(response), initial=0.0))
+    sampling_size = math.sqrt(float(np.max(sampling_diagonal, initial=0.0)))
+    exponent = math.frexp(max(response_size, sampling_size))[1]
+    if -250 <= exponent <= 250:
+        return response, sampling_diagonal, 0
+    return (
+        np.ldexp(response, -exponent),
+        np.ldexp(sampling_diagonal, -2 * exponent),
+        exponent,
+    )
+
+
+def _restore_profile_response_units(fit, exponent, effective_likelihood_count):
+    if exponent == 0:
+        return fit
+    log_variance_shift = 2 * exponent * math.log(2.0)
+    try:
+        with np.errstate(over="raise", under="ignore"):
+            fit["beta"] = np.ldexp(fit["beta"], exponent)
+            fit["beta_covariance"] = np.ldexp(fit["beta_covariance"], 2 * exponent)
+            fit["residual"] = np.ldexp(fit["residual"], exponent)
+            fit["inverse_residual"] = np.ldexp(fit["inverse_residual"], -exponent)
+            fit["covariance"] = _rescale_profile_fixed_covariance(
+                fit["covariance"], exponent
+            )
+            fit["component_variances"] = {
+                name: math.ldexp(value, 2 * exponent)
+                for name, value in fit["component_variances"].items()
+            }
+            fit["lower_variance"] = np.ldexp(fit["lower_variance"], 2 * exponent)
+    except (FloatingPointError, OverflowError) as exc:
+        raise ValueError(
+            "Gaussian regression estimates exceed the range of the response units."
+        ) from exc
+    fit["cholesky"] = ScaledCovarianceFactor(
+        fit["cholesky"], exponent, len(fit["residual"])
+    )
+    # Search bounds can extend past representable covariance in trait units.
+    with np.errstate(over="ignore", under="ignore"):
+        fit["upper_variance"] = min(
+            np.finfo(float).max, np.ldexp(fit["upper_variance"], 2 * exponent)
+        )
+    fit["log_variances"] = fit["log_variances"] + log_variance_shift
+    fit["objective"] += 0.5 * effective_likelihood_count * log_variance_shift
+    return fit
+
+
 def _profile_covariance_fit(
     y,
     design,
@@ -1603,14 +1664,30 @@ def _profile_covariance_fit(
     ) = _prepare_profile_covariance_components(
         n_observations, fixed_covariance, components, component_factors
     )
-    centered_response, beta_offset = center_response(y, design)
+    working_response, sampling_diagonal, response_exponent = _profile_response_units(
+        y, _covariance_diagonal(fixed_covariance)
+    )
+    if response_exponent:
+        working_fixed_covariance = np.ldexp(
+            working_fixed_covariance, -2 * response_exponent
+        )
+        fixed_updates = (
+            [
+                _rescale_profile_fixed_covariance(
+                    fixed_covariance, -response_exponent
+                ).low_rank
+            ]
+            if isinstance(fixed_covariance, DiagonalLowRankCovariance)
+            else []
+        )
+    centered_response, beta_offset = center_response(working_response, design)
     ordinary_beta = np.linalg.lstsq(design, centered_response, rcond=None)[0]
     ordinary_residual = centered_response - design @ ordinary_beta
     dense_rhs = (
         None if structured_model else np.column_stack((design, ordinary_residual))
     )
     response_scale = residual_variance_scale(
-        centered_response, ordinary_residual, _covariance_diagonal(fixed_covariance)
+        centered_response, ordinary_residual, sampling_diagonal
     )
     lower_variance = max(response_scale * 1e-12, np.finfo(float).tiny)
     upper_variance = max(response_scale * 1e6, lower_variance * 1e6)
@@ -1761,7 +1838,9 @@ def _profile_covariance_fit(
         details["boundary_warning"] = bool(
             optimum <= lower_variance * 10.0 or optimum >= upper_variance / 10.0
         )
-        return details
+        return _restore_profile_response_units(
+            details, response_exponent, effective_likelihood_count
+        )
 
     if starting_log_variances is None:
         starts = [
@@ -1775,7 +1854,10 @@ def _profile_covariance_fit(
             np.log(np.repeat(max(response_scale, lower_variance), len(components))),
         ]
     else:
-        starts = [np.asarray(starting_log_variances, dtype=float)]
+        starts = [
+            np.asarray(starting_log_variances, dtype=float)
+            - 2 * response_exponent * math.log(2.0)
+        ]
     candidates = []
     for start in starts:
         result = _minimize_variance_components(
@@ -1799,7 +1881,9 @@ def _profile_covariance_fit(
         np.any(np.exp(details["log_variances"]) <= lower_variance * 10.0)
         or np.any(np.exp(details["log_variances"]) >= upper_variance / 10.0)
     )
-    return details
+    return _restore_profile_response_units(
+        details, response_exponent, effective_likelihood_count
+    )
 
 
 def _random_effect_policy(policy, identifiable, label):
@@ -3042,7 +3126,7 @@ def _fit_covariance_model(
     lineage_variance_by_term, _ = _lineage_variances_by_term(
         random_designs, component_variances
     )
-    mean_sampling_variance = float(np.mean(_covariance_diagonal(sampling_covariance)))
+    mean_sampling_variance = finite_mean(_covariance_diagonal(sampling_covariance))
     fitted_variance = mean_sampling_variance
     for uncertainty, columns in zip(
         raw_predictor_uncertainties,

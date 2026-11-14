@@ -194,6 +194,21 @@ class NestedLowRankFactor:
     woodbury_cholesky: np.ndarray
 
 
+@dataclass(frozen=True)
+class ScaledCovarianceFactor:
+    """Covariance in power-of-two working units and its trait-unit exponent."""
+
+    factor: (
+        np.ndarray
+        | DiagonalLowRankFactor
+        | GroupedDiagonalLowRankFactor
+        | SparseDiagonalLowRankFactor
+        | SparseCovarianceFactor
+    )
+    exponent: int
+    dimension: int
+
+
 def _positive_diagonal(values: np.ndarray) -> np.ndarray:
     diagonal = np.asarray(values, dtype=float)
     if diagonal.ndim != 1 or not np.all((diagonal > 0.0) & np.isfinite(diagonal)):
@@ -684,10 +699,14 @@ def solve_factor(
     | SparseDiagonalLowRankFactor
     | SparseCovarianceFactor
     | DiagonalSparsePrecisionFactor
-    | NestedLowRankFactor,
+    | NestedLowRankFactor
+    | ScaledCovarianceFactor,
     values: np.ndarray,
 ) -> np.ndarray:
     """Apply the inverse covariance represented by a Cholesky-style factor."""
+    if isinstance(factor, ScaledCovarianceFactor):
+        result = solve_factor(factor.factor, np.ldexp(values, -factor.exponent))
+        return np.ldexp(result, -factor.exponent)
     if isinstance(factor, DiagonalLowRankFactor):
         values = np.asarray(values, dtype=float)
         if values.ndim == 1:
@@ -763,9 +782,18 @@ def factor_logdet(
     | SparseDiagonalLowRankFactor
     | SparseCovarianceFactor
     | DiagonalSparsePrecisionFactor
-    | NestedLowRankFactor,
+    | NestedLowRankFactor
+    | ScaledCovarianceFactor,
 ) -> float:
     """Return the covariance log determinant from its factor."""
+    if isinstance(factor, ScaledCovarianceFactor):
+        return factor_logdet(
+            factor.factor
+        ) + 2 * factor.exponent * factor.dimension * math.log(2.0)
+    return _native_factor_logdet(factor)
+
+
+def _native_factor_logdet(factor):
     if isinstance(factor, DiagonalLowRankFactor):
         return float(np.log(factor.diagonal).sum()) + 2.0 * float(
             np.log(np.diag(factor.woodbury_cholesky)).sum()
@@ -801,12 +829,20 @@ def draw_from_factor(
     | SparseDiagonalLowRankFactor
     | SparseCovarianceFactor
     | DiagonalSparsePrecisionFactor
-    | NestedLowRankFactor,
+    | NestedLowRankFactor
+    | ScaledCovarianceFactor,
     standard_normal: np.ndarray,
     *,
     rng: np.random.Generator | None = None,
 ) -> np.ndarray:
     """Transform standard-normal draws by a covariance factor."""
+    if isinstance(factor, ScaledCovarianceFactor):
+        draw = draw_from_factor(factor.factor, standard_normal, rng=rng)
+        return np.ldexp(draw, factor.exponent)
+    return _draw_native_covariance_factor(factor, standard_normal, rng)
+
+
+def _draw_native_covariance_factor(factor, standard_normal, rng):
     if isinstance(factor, DiagonalLowRankFactor):
         standard_normal = np.asarray(standard_normal, dtype=float)
         if standard_normal.ndim != 1:

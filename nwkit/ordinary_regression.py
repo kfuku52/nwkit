@@ -32,6 +32,7 @@ from nwkit.gaussian import (
     DiagonalLowRankCovariance,
     DiagonalSparsePrecisionCovariance,
     draw_from_factor,
+    finite_mean,
     is_diagonal,
 )
 from nwkit.measurement_error import (
@@ -895,10 +896,10 @@ def _ordinary_response_statistics(y, fit, fixed_covariance, *, intercept):
     else:
         fixed_array = np.asarray(fixed_covariance, dtype=float)
         fixed_diagonal = fixed_array if fixed_array.ndim == 1 else np.diag(fixed_array)
-    mean_sampling_variance = float(np.mean(fixed_diagonal))
+    mean_sampling_variance = finite_mean(fixed_diagonal)
     fitted_covariance = fit["covariance"]
     if isinstance(fitted_covariance, DiagonalSparsePrecisionCovariance):
-        mean_fitted_variance = float(np.mean(fitted_covariance.marginal_diagonal))
+        mean_fitted_variance = finite_mean(fitted_covariance.marginal_diagonal)
     elif isinstance(fitted_covariance, DiagonalLowRankCovariance):
         update = fitted_covariance.low_rank
         update_diagonal = (
@@ -906,13 +907,11 @@ def _ordinary_response_statistics(y, fit, fixed_covariance, *, intercept):
             if sparse.issparse(update)
             else np.sum(np.square(update), axis=1)
         )
-        mean_fitted_variance = float(
-            np.mean(fitted_covariance.diagonal + update_diagonal)
-        )
+        mean_fitted_variance = finite_mean(fitted_covariance.diagonal + update_diagonal)
     else:
         fitted_array = np.asarray(fitted_covariance, dtype=float)
-        mean_fitted_variance = float(
-            np.mean(fitted_array if fitted_array.ndim == 1 else np.diag(fitted_array))
+        mean_fitted_variance = finite_mean(
+            fitted_array if fitted_array.ndim == 1 else np.diag(fitted_array)
         )
     sampling_fraction = (
         0.0
