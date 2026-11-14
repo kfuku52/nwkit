@@ -488,6 +488,7 @@ def fit_multivariate_pgls(
         )
     response_vector = responses.reshape(-1, order="F")
     observed_indices = np.flatnonzero(observed.reshape(-1, order="F"))
+    observed_covariance_index = np.ix_(observed_indices, observed_indices)
     observed_response = response_vector[observed_indices]
     full_design = np.kron(np.eye(n_traits), design)
     observed_design = full_design[observed_indices]
@@ -532,9 +533,9 @@ def fit_multivariate_pgls(
             full_covariance += np.kron(trait_covariances[name], tip_covariance)
         if fixed_dense is not None:
             full_covariance += fixed_dense
-        observed_covariance = full_covariance[
-            np.ix_(observed_indices, observed_indices)
-        ]
+        observed_covariance = full_covariance
+        if len(observed_indices) < responses.size:
+            observed_covariance = full_covariance[observed_covariance_index]
         cholesky = _positive_cholesky(observed_covariance)
         inverse = cho_solve(
             (cholesky, True),
