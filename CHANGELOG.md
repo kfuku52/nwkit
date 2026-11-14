@@ -57,6 +57,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   transition coefficient alone would overflow or underflow.
 - Initialize nonstationary and regime OU attraction from the midpoint of
   the log bounds so multiplying extreme bounds cannot overflow or underflow.
+- Normalize the nonstationary OU optimum and identifiability calculations so
+  estimated diffusion and trait means remain consistent across trait units.
 - Refine scalar likelihoods in normalized parameter units, prioritizing the
   strongest grid minima and reporting convergence for the selected fit.
 - Keep scalar likelihood evaluations inside bounds that differ by a single

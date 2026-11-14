@@ -78,6 +78,29 @@ def test_nonstationary_ou_initialization_handles_extreme_time_units(scale):
     assert scaled.log_likelihood == pytest.approx(reference.log_likelihood, abs=1e-9)
 
 
+@pytest.mark.parametrize("scale", [1e-95, 1e95])
+def test_nonstationary_ou_theta_and_diffusion_are_trait_unit_invariant(scale):
+    tree = tree_from("((A:0.5,B:1.1)I:0.4,C:1.2,D:1.7)R;")
+    values = {"A": -1.0, "B": 0.4, "C": 0.7, "D": 1.6}
+    options = {"root_prior": "fixed", "root_mean": 0.0, "alpha": 0.5}
+    expected, fit = compute_general_ou_marginals(tree, values, **options)
+    posterior, scaled = compute_general_ou_marginals(
+        tree, {name: value * scale for name, value in values.items()}, **options
+    )
+    assert scaled.theta / scale == pytest.approx(fit.theta, rel=1e-5)
+    assert scaled.sigma2 / scale**2 == pytest.approx(fit.sigma2, rel=1e-5)
+    assert scaled.log_likelihood + len(values) * np.log(scale) == pytest.approx(
+        fit.log_likelihood, abs=1e-9
+    )
+    for node in tree.traverse():
+        assert posterior[node].mean / scale == pytest.approx(
+            expected[node].mean, abs=1e-5
+        )
+        assert posterior[node].variance / scale**2 == pytest.approx(
+            expected[node].variance, abs=1e-5
+        )
+
+
 def test_fixed_root_star_rejects_joint_alpha_sigma_confounding():
     tree = tree_from("(A:1,B:1,C:1,D:1,E:1,F:1)R;")
     with pytest.raises(ValueError, match="not jointly identifiable"):

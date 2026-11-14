@@ -521,7 +521,9 @@ def gaussian_tree_likelihood(
     )
 
 
-def gaussian_process_parameter_rank(process_for, parameters, observed_nodes, bounds):
+def gaussian_process_parameter_rank(
+    process_for, parameters, observed_nodes, bounds, *, trait_exponent=0
+):
     """Numerically rank free parameters through observed means and covariances."""
 
     parameters = np.asarray(parameters, dtype=float)
@@ -541,7 +543,12 @@ def gaussian_process_parameter_rank(process_for, parameters, observed_nodes, bou
         means, _ = process.marginal_moments()
         mean_vector = np.asarray([means[node] for node in observed_nodes], dtype=float)
         covariance = process.covariance(observed_nodes)
-        result = np.concatenate((mean_vector, covariance[triangle]))
+        result = np.concatenate(
+            (
+                np.ldexp(mean_vector, -trait_exponent),
+                np.ldexp(covariance[triangle], -2 * trait_exponent),
+            )
+        )
         if np.any(~np.isfinite(result)):
             raise ValueError("Gaussian parameter-rank summary is not finite.")
         return result

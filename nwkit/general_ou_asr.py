@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from nwkit.compiled_tree import CompiledTree
+from nwkit.continuous_asr import _ldexp
 from nwkit.gaussian_inference import (
     condition_gaussian_tree,
     gaussian_process_parameter_rank,
@@ -123,13 +124,17 @@ def compute_general_ou_marginals(
         depths[node] = depth
         maximum_depth = max(maximum_depth, depth)
     time_scale = maximum_depth if maximum_depth > 0.0 else 1.0
-    observed_variance = max(
-        float(np.var(observed)),
-        float(np.ptp(observed)) ** 2 / max(1, len(observed)),
-        np.finfo(float).eps * max(1.0, abs(float(np.mean(observed)))) ** 2,
+    trait_size = max(
+        float(np.max(np.abs(observed))), abs(root_mean), math.sqrt(root_variance)
     )
-    initial_sigma2 = max(observed_variance / time_scale, np.finfo(float).tiny)
-    initial_theta = float(np.mean(observed))
+    _, trait_exponent = math.frexp(trait_size)
+    scaled_observed = np.ldexp(observed, -trait_exponent)
+    initial_theta = float(np.mean(scaled_observed))
+    scaled_variance = max(
+        float(np.var(scaled_observed)),
+        float(np.ptp(scaled_observed)) ** 2 / len(observed),
+        np.finfo(float).eps,
+    )
 
     names: list[str] = []
     initial: list[float] = []
@@ -141,11 +146,19 @@ def compute_general_ou_marginals(
         parameter_bounds.append(log_alpha_bounds)
     if fixed_sigma2 is None:
         names.append("log_sigma2")
-        initial.append(math.log(initial_sigma2))
+        min_log_rate = math.log(math.ulp(0.0))
+        max_log_rate = math.log(np.finfo(float).max)
+        log_rate = (
+            math.log(scaled_variance)
+            + 2 * trait_exponent * math.log(2.0)
+            - math.log(time_scale)
+        )
+        log_rate = min(max_log_rate, max(min_log_rate, log_rate))
+        initial.append(log_rate)
         parameter_bounds.append(
             (
-                math.log(initial_sigma2) - math.log(1e10),
-                math.log(initial_sigma2) + math.log(1e10),
+                max(min_log_rate, log_rate - math.log(1e10)),
+                min(max_log_rate, log_rate + math.log(1e10)),
             )
         )
     if fixed_theta is None:
@@ -168,7 +181,11 @@ def compute_general_ou_marginals(
             if fixed_sigma2 is not None
             else math.exp(supplied["log_sigma2"])
         )
-        current_theta = fixed_theta if fixed_theta is not None else supplied["theta"]
+        current_theta = (
+            fixed_theta
+            if fixed_theta is not None
+            else _ldexp(float(supplied["theta"]), trait_exponent, "OU theta")
+        )
         return current_alpha, current_sigma2, current_theta
 
     def process_for(parameters):
@@ -187,7 +204,11 @@ def compute_general_ou_marginals(
         leaf for leaf in tree.leaves() if values_by_leaf.get(str(leaf.name)) is not None
     ]
     if gaussian_process_parameter_rank(
-        process_for, initial, observed_nodes, parameter_bounds
+        process_for,
+        initial,
+        observed_nodes,
+        parameter_bounds,
+        trait_exponent=trait_exponent,
     ) < len(names):
         raise ValueError(
             "OU free parameters are not jointly identifiable from the observed "
