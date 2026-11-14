@@ -198,6 +198,31 @@ class TestDistanceMetrics:
             _path_distance(first, second, list("ABCD"), topological=False) == 2 * step
         )
 
+    def test_path_length_rounds_subnormal_norm_once(self):
+        step = math.ulp(0.0)
+        names = list("ABC")
+        ends = [
+            (25686890370570, 44939368185031, 31454958493669),
+            (94884213870195, 92535252312417, 87180037960354),
+        ]
+        first, second = [
+            Tree(
+                "("
+                + ",".join(
+                    f"{name}:{unit * step!r}"
+                    for name, unit in zip(names, units, strict=True)
+                )
+                + ");",
+                parser=1,
+            )
+            for units in ends
+        ]
+        deltas = [a - b for a, b in zip(*ends, strict=True)]
+        squared = sum((a + b) ** 2 for a, b in combinations(deltas, 2))
+        nearest = math.isqrt(squared)
+        nearest += 4 * squared > (2 * nearest + 1) ** 2
+        assert _path_distance(first, second, names, topological=False) == nearest * step
+
     def test_path_length_recovers_a_difference_hidden_by_rounded_path_sums(self):
         first = Tree("(A:1.0,B:549755813888.0);", parser=1)
         second = Tree("(A:1.0000000000000002,B:549755813888.0);", parser=1)

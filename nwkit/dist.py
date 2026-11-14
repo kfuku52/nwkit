@@ -265,6 +265,9 @@ def _path_matrix_is_safe(tree1, tree2, num_taxa):
                 min_length = min(min_length, length)
     if max_length == 0.0:
         return True
+    if min_length < sys.float_info.min:
+        # Sum and round subnormal lengths in integer units of the smallest float.
+        return False
     if max_length > (sys.float_info.max / max(4, edge_count * 2)):
         return False
     return (max_length / min_length) <= PATH_MATRIX_MAX_DYNAMIC_RANGE
@@ -311,8 +314,8 @@ def _path_distance_matrix(tree1, tree2, leaf_names):
     upper -= second
     del second
     scale = float(np.max(np.abs(upper)))
-    if scale == 0.0:
-        # Rounded path sums can agree even when a branch length changed.
+    if scale < sys.float_info.min:
+        # Also covers rounded path sums that agree after a branch length changed.
         return None
     # Subtracting independently accumulated path sums is ill-conditioned when
     # the trees are nearly identical. Fall back before roundoff can dominate
@@ -327,7 +330,8 @@ def _path_distance_matrix(tree1, tree2, leaf_names):
         return None
     distance = scale * math.sqrt(float(np.sum((upper / scale) ** 2)))
     if not math.isfinite(distance):
-        raise ValueError("The path distance is too large to represent.")
+        # Recheck overflow after accumulating the exact squared differences.
+        return None
     return distance
 
 
