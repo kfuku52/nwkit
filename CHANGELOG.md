@@ -88,6 +88,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   without creating a pandas Series for each tip.
 - Release child likelihood messages after they have contributed to a
   likelihood-only Mk tree traversal.
+- Reuse logged tip likelihoods and parsed branch lengths during Mk rate
+  optimization.
 - Reuse prepared stochastic mapping contexts without copying branch rate
   matrices into each worker specification.
 - Precompute child-state conditional probabilities before sampling
