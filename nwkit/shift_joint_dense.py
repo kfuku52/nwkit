@@ -104,6 +104,34 @@ class _DenseFactor:
         return solve_triangular(self.lower, values, lower=True, check_finite=False)
 
 
+def _observed_path_geometry(tree, tips):
+    """Measure each side of a pair from its shared ancestor."""
+    count = len(tips)
+    shared = np.empty((count, count))
+    distance = np.zeros((count, count))
+    depths = np.zeros(len(tree.times))
+    bounds = np.searchsorted(tips, tree.tip_intervals)
+    for node, parent in enumerate(tree.compiled.parents[1:], 1):
+        depths[node] = depths[parent] + tree.times[node]
+    remaining = np.zeros(count)
+    for node in tree.compiled.postorder:
+        children = tree.compiled.children[node]
+        if not children:
+            start, stop = bounds[node]
+            shared[start:stop, start:stop] = depths[node]
+            continue
+        left, right = children
+        start, split = bounds[left]
+        _, stop = bounds[right]
+        remaining[start:split] += tree.times[left]
+        remaining[split:stop] += tree.times[right]
+        shared[start:split, split:stop] = depths[node]
+        shared[split:stop, start:split] = depths[node]
+        distance[start:split, split:stop] = remaining[start:split, None]
+        distance[split:stop, start:split] = remaining[split:stop, None]
+    return shared, distance
+
+
 class DenseJointContext:
     """Reusable geometry; never cache parameter-dependent matrix factorizations."""
 
@@ -113,12 +141,7 @@ class DenseJointContext:
         self.data, self.root_model = data, root_model
         self.mask = np.isfinite(data.values)
         self.tips, self.traits = np.nonzero(self.mask)
-        m = len(self.tips)
-        self.shared = np.zeros((m, m))
-        for node, (first, last) in enumerate(data.tree.tip_intervals):
-            positions = np.flatnonzero((self.tips >= first) & (self.tips < last))
-            self.shared[np.ix_(positions, positions)] += data.tree.times[node]
-        self.distance = self.shared.diagonal()[:, None] - self.shared
+        self.shared, self.distance = _observed_path_geometry(data.tree, self.tips)
         self.same_tip = self.tips[:, None] == self.tips[None, :]
         self.rows, self.columns = self.traits[:, None], self.traits[None, :]
 
