@@ -66,6 +66,18 @@ def test_likelihood_reuses_the_same_event_matrix_across_rate_scales(
     assert calls == [(retention, 3, bound)] * expected_calls
 
 
+def test_multiplication_event_validates_without_allocating_a_transition(monkeypatch):
+    def reject_allocation(*_args):
+        pytest.fail("validation allocated a transition matrix")
+
+    monkeypatch.setattr(wgd_count_model, "multiplication_transition", reject_allocation)
+    assert MultiplicationEvent(1, 0.5, multiplicity=3).retention == 0.5
+    with pytest.raises(ValueError, match="Retention"):
+        MultiplicationEvent(1, float("nan"))
+    with pytest.raises(ValueError, match="Multiplicity"):
+        MultiplicationEvent(1, 0.5, multiplicity=True)
+
+
 def test_likelihood_transition_cache_is_bounded_and_preserves_results(monkeypatch):
     model = CountLikelihood(tree(), np.array([[2.0, 3.0], [1.0, np.nan]]))
     rates = np.array([[0.12, 0.17]])

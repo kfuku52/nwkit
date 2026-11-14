@@ -222,10 +222,7 @@ def _log_pulse_transition(before, after, event):
     return _log_matrix_product(_log_matrix_product(before, pulse), after)
 
 
-def multiplication_transition(
-    retention: float, multiplicity: int, max_count: int
-) -> np.ndarray:
-    """Keep original copies; retain each of (multiplicity-1)*n extra copies."""
+def _validate_multiplication(retention, multiplicity):
     retention = float(retention)
     if not np.isfinite(retention) or not 0 <= retention <= 1:
         raise ValueError("Retention must be finite and in [0, 1].")
@@ -233,6 +230,14 @@ def multiplication_transition(
         raise ValueError("Multiplicity must be an integer >= 2.")
     if multiplicity < 2:
         raise ValueError("Multiplicity must be an integer >= 2.")
+    return retention
+
+
+def multiplication_transition(
+    retention: float, multiplicity: int, max_count: int
+) -> np.ndarray:
+    """Keep original copies; retain each of (multiplicity-1)*n extra copies."""
+    retention = _validate_multiplication(retention, multiplicity)
     if isinstance(max_count, bool) or not isinstance(max_count, int) or max_count < 1:
         raise ValueError("max_count must be a positive integer.")
     states = np.arange(max_count + 1)
@@ -469,7 +474,7 @@ class MultiplicationEvent:
             raise ValueError("Event node must be a positive integer branch index.")
         if not np.isfinite(self.fraction) or not 0 <= self.fraction <= 1:
             raise ValueError("Event fraction must be in [0, 1], measured from parent.")
-        multiplication_transition(self.retention, self.multiplicity, 1)
+        _validate_multiplication(self.retention, self.multiplicity)
 
 
 class CountLikelihood:
