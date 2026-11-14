@@ -35,6 +35,7 @@ from nwkit.sparse_laplace import (
     JointPredictorUncertainty,
     SparseCovarianceModel,
     SparseLatentModel,
+    SparsePositiveDefiniteFactor,
     append_identity_latent_components,
     append_latent_component,
     combine_sparse_covariance_models,
@@ -870,6 +871,8 @@ def _project_predictor_uncertainty(
     uncertainties: Sequence[np.ndarray],
     columns: Sequence[int | tuple[int, ...]],
     n_observations: int,
+    *,
+    gmrf_factors=None,
 ) -> np.ndarray:
     """Project predictor uncertainty into the multivariate linear predictor."""
     dimension = coefficients.shape[1]
@@ -878,7 +881,9 @@ def _project_predictor_uncertainty(
     )
     if len(uncertainties) != len(columns):
         raise ValueError("Predictor uncertainty and coefficient-column counts differ.")
-    for uncertainty, selected_columns in zip(uncertainties, columns, strict=True):
+    for index, (uncertainty, selected_columns) in enumerate(
+        zip(uncertainties, columns, strict=True)
+    ):
         if isinstance(
             uncertainty,
             (
@@ -892,7 +897,7 @@ def _project_predictor_uncertainty(
                 uncertainty, selected_columns, coefficients
             )
             if isinstance(uncertainty, GmrfPredictorUncertainty):
-                factor = factor_sparse_positive_definite(uncertainty.model.precision)
+                factor = _gmrf_projection_factor(uncertainty, index, gmrf_factors)
                 projected += np.asarray(loading @ factor.solve(loading.T.toarray()))
             else:
                 projected += np.asarray((loading @ loading.T).toarray())
@@ -923,6 +928,14 @@ def _project_predictor_uncertainty(
             raise ValueError("Grouped predictor uncertainty has wrong dimensions.")
         _add_joint_dense_predictor_covariance(projected, slopes, covariance)
     return (projected + projected.T) / 2.0
+
+
+def _gmrf_projection_factor(uncertainty, index, cached):
+    if cached is None:
+        return factor_sparse_positive_definite(uncertainty.model.precision)
+    if index not in cached:
+        cached[index] = factor_sparse_positive_definite(uncertainty.model.precision)
+    return cached[index]
 
 
 def _add_joint_dense_predictor_covariance(projected, slopes, covariance):
@@ -2798,6 +2811,8 @@ def _fit_scalar_phylogenetic_glmm(
             decoded_parameter,
         )
 
+    gmrf_factors: dict[int, SparsePositiveDefiniteFactor] = {}
+
     def state(parameters: np.ndarray):
         coefficients, fitted_dispersion, fitted_zero, log_variances, decoded = unpack(
             parameters
@@ -2855,6 +2870,7 @@ def _fit_scalar_phylogenetic_glmm(
             predictor_uncertainties,
             predictor_columns,
             n_tips,
+            gmrf_factors=gmrf_factors,
         )
         covariance_cholesky = _positive_definite_cholesky(expanded_covariance)
         precision = cho_solve(
@@ -3434,6 +3450,8 @@ def _fit_categorical_phylogenetic_glmm(
         )
         return coefficients, thresholds, log_variances, decoded_parameter
 
+    gmrf_factors: dict[int, SparsePositiveDefiniteFactor] = {}
+
     def state(parameters: np.ndarray):
         coefficients, thresholds, log_variances, decoded_parameter = unpack(parameters)
         components = dict(zip(component_names, np.exp(log_variances), strict=True))
@@ -3487,6 +3505,7 @@ def _fit_categorical_phylogenetic_glmm(
             predictor_uncertainties,
             predictor_columns,
             len(design),
+            gmrf_factors=gmrf_factors,
         )
         covariance_cholesky = _positive_definite_cholesky(expanded_covariance)
         precision = cho_solve(
