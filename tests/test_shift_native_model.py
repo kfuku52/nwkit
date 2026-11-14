@@ -29,6 +29,16 @@ def test_fixed_root_ou_retains_short_branches_in_the_brownian_limit():
     assert root == 0.0
 
 
+def test_stationary_ou_keeps_innovations_with_underflowing_exponents():
+    tree = ShiftTree.build(
+        read_tree("((a:1e-170,b:1e-170):1,c:1);", "auto", True, quiet=True)
+    )
+    _, innovations, root = covariance_geometry(tree, 1e-170, 1e308, "OUrandomRoot")
+    index = tree.compiled.leaf_index_by_name["a"]
+    assert innovations[index] == pytest.approx(2e-32, rel=2e-16, abs=0)
+    assert root == 1e308
+
+
 def test_trait_normalization_handles_finite_values_near_float_limits():
     tree = read_tree("((a:1,b:1):1,(c:1,d:1):1);", "auto", True, quiet=True)
     values = np.array(

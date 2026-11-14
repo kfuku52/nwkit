@@ -12,6 +12,7 @@ from sys import float_info
 import numpy as np
 
 from nwkit.compiled_tree import CompiledTree
+from nwkit.gaussian_tree import _product_ratio
 from nwkit.gaussian_whitening import TreeWhitening, tree_gls
 from nwkit.util import assign_branch_ids
 
@@ -255,6 +256,12 @@ def covariance_geometry(tree, alpha_height, process_variance, root_model):
                 else 2 * exponent
             )
             innovations = process_variance * -np.expm1(exponent)
+            if root_model == "OUrandomRoot" and process_variance:
+                affected = (exponent > -float_info.min) & (tree.times > 0)
+                for index in np.flatnonzero(affected):
+                    innovations[index] = _product_ratio(
+                        double_rate, tree.times[index], process_variance
+                    )
     root_variance = process_variance if root_model == "OUrandomRoot" else 0.0
     return slopes, innovations, root_variance
 
