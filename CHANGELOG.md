@@ -46,6 +46,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   overflows or underflows at an otherwise representable rate and tree scale.
 - Report EB and ACDC fit boundaries using relative distances within the
   search interval.
+- Apply the shared transformed-Brownian search to the legacy two-sided EB
+  API so its fitted rate is stable across time units.
 - Check BMS rate identifiability from observed tree splits so a regime remains
   estimable when its informative branches are much shorter than other branches.
 - Retain finite OU stationary variances at extreme attraction rates and

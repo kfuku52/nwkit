@@ -12,7 +12,7 @@ from nwkit.continuous_asr import (
     _ldexp,
     compute_bm_marginals,
 )
-from nwkit.evolution import build_evolutionary_process
+from nwkit.transformed_continuous_asr import compute_transformed_bm_marginals
 
 
 @dataclass(frozen=True)
@@ -82,38 +82,6 @@ def parse_eb_rate_bounds(value, tree):
     return lower, upper
 
 
-def _run_eb(
-    tree,
-    values_by_leaf,
-    rate,
-    sigma2,
-    standard_errors,
-    tree_validated,
-    *,
-    compute_posterior=True,
-):
-    # The ASR command historically calls the two-sided exponential rate-change
-    # model EB.  Internally it is the same process that regression calls ACDC,
-    # including positive acceleration parameters.
-    process = build_evolutionary_process(
-        tree,
-        model="acdc",
-        parameter=rate,
-        root_mode="flat",
-        allow_zero=True,
-    )
-    posterior, fit = compute_bm_marginals(
-        tree,
-        values_by_leaf,
-        sigma2=sigma2,
-        standard_errors=standard_errors,
-        _tree_validated=tree_validated,
-        _process=process,
-        _compute_posterior=compute_posterior,
-    )
-    return posterior, fit
-
-
 def compute_eb_marginals(
     tree,
     values_by_leaf,
@@ -133,98 +101,34 @@ def compute_eb_marginals(
     bounds = float(bounds[0]), float(bounds[1])
     if not all(math.isfinite(value) for value in bounds) or bounds[0] >= bounds[1]:
         raise ValueError("EB rate bounds must be two increasing finite values.")
-    if eb_rate is not None:
-        fitted_rate = _finite_number(eb_rate, "--eb-rate")
-        posterior, bm_fit = _run_eb(
+    fixed_rate = None if eb_rate is None else _finite_number(eb_rate, "--eb-rate")
+    # This API historically permits acceleration and uses its own bounds.
+    try:
+        posterior, bm_fit = compute_transformed_bm_marginals(
             tree,
             values_by_leaf,
-            fitted_rate,
-            fixed_sigma2,
-            standard_errors,
-            _tree_validated,
+            model="acdc",
+            sigma2=fixed_sigma2,
+            evolution_parameter=fixed_rate,
+            evolution_parameter_bounds=bounds,
+            standard_errors=standard_errors,
+            _tree_validated=_tree_validated,
         )
-        evaluations = 1
-        success = True
-        message = "EB rate fixed"
-    else:
-        cache = {}
-
-        def evaluate(rate):
-            key = float(rate)
-            if key not in cache:
-                try:
-                    cache[key] = _run_eb(
-                        tree,
-                        values_by_leaf,
-                        key,
-                        fixed_sigma2,
-                        standard_errors,
-                        _tree_validated,
-                        compute_posterior=False,
-                    )
-                except (ValueError, ArithmeticError):
-                    cache[key] = None
-            result = cache[key]
-            if result is None or result[1].restricted_log_likelihood is None:
-                return 1e100
-            return -result[1].restricted_log_likelihood
-
-        grid = np.linspace(bounds[0], bounds[1], 41)
-        objectives = np.asarray([evaluate(value) for value in grid])
-        candidates = [
-            (float(objectives[index]), float(grid[index]), "grid")
-            for index in range(len(grid))
-            if math.isfinite(float(objectives[index]))
-            and float(objectives[index]) < 1e99
-        ]
-        for index in range(1, len(grid) - 1):
-            if (
-                objectives[index] <= objectives[index - 1]
-                and objectives[index] <= objectives[index + 1]
-            ):
-                result = minimize_scalar(
-                    evaluate,
-                    bounds=(float(grid[index - 1]), float(grid[index + 1])),
-                    method="bounded",
-                    options={"xatol": 1e-10},
-                )
-                if result.success and math.isfinite(float(result.fun)):
-                    candidates.append(
-                        (float(result.fun), float(result.x), str(result.message))
-                    )
-        zero = 0.0
-        if bounds[0] <= zero <= bounds[1]:
-            candidates.append((evaluate(zero), zero, "BM boundary candidate"))
-        if not candidates:
-            raise ValueError("Failed to find a finite EB likelihood.")
-        _, fitted_rate, message = min(candidates, key=lambda item: item[0])
-        posterior, bm_fit = _run_eb(
-            tree,
-            values_by_leaf,
-            fitted_rate,
-            fixed_sigma2,
-            standard_errors,
-            _tree_validated,
-        )
-        evaluations = len(cache)
-        success = True
-        message = f"profile grid and bounded polishing; {message}"
-        # A flat profile means EB rate and sigma2 are confounded on this tree.
-        finite_objectives = objectives[np.isfinite(objectives) & (objectives < 1e99)]
-        if len(finite_objectives) > 1 and np.ptp(finite_objectives) <= 1e-10 * max(
-            1.0, abs(float(np.min(finite_objectives)))
-        ):
+    except ValueError as exc:
+        message = str(exc)
+        if message.startswith("ACDC parameter is not identifiable"):
             raise ValueError(
                 "EB rate is not identifiable on this tree and observation pattern; fix --eb-rate."
-            )
-    statuses = []
-    tolerance = 1e-6 * max(1.0, abs(bounds[0]), abs(bounds[1]))
-    if eb_rate is None and abs(fitted_rate - bounds[0]) <= tolerance:
-        statuses.append("eb_rate_lower_boundary")
-    if eb_rate is None and abs(fitted_rate - bounds[1]) <= tolerance:
-        statuses.append("eb_rate_upper_boundary")
-    if bm_fit.fit_status != "ok":
-        statuses.append(bm_fit.fit_status)
+            ) from exc
+        if message == "Failed to find a finite ACDC likelihood.":
+            raise ValueError("Failed to find a finite EB likelihood.") from exc
+        raise
+    fitted_rate = bm_fit.evolution_parameter
+    statuses = bm_fit.fit_status.split("+")
+    if statuses[0] == "evolution_parameter_boundary":
+        midpoint = 0.5 * bounds[0] + 0.5 * bounds[1]
+        edge = "lower" if fitted_rate <= midpoint else "upper"
+        statuses[0] = f"eb_rate_{edge}_boundary"
     fit = EarlyBurstFit(
         sigma2=bm_fit.sigma2,
         sigma2_estimated=bm_fit.sigma2_estimated,
@@ -235,10 +139,12 @@ def compute_eb_marginals(
         num_observed=bm_fit.num_observed,
         num_effective_observations=bm_fit.num_effective_observations,
         residual_df=bm_fit.residual_df,
-        fit_status="+".join(statuses) if statuses else "ok",
-        optimizer_success=success,
-        optimizer_message=message,
-        optimizer_grid_evaluations=evaluations,
+        fit_status="+".join(statuses),
+        optimizer_success=bm_fit.optimizer_success,
+        optimizer_message="EB rate fixed"
+        if eb_rate is not None
+        else bm_fit.optimizer_message,
+        optimizer_grid_evaluations=bm_fit.optimizer_grid_evaluations,
     )
     return posterior, fit
 

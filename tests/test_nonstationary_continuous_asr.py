@@ -57,6 +57,21 @@ def test_early_burst_rate_is_rejected_when_star_profile_is_flat():
         compute_eb_marginals(tree, {"A": 0.0, "B": 1.0, "C": 2.0, "D": 3.0})
 
 
+def test_legacy_early_burst_api_refines_rate_in_relative_time_units():
+    values = {"A": 0.3, "B": 2.1, "C": 2.3, "D": 8.0}
+    tree = tree_from("(A:1,B:2,C:3,D:4)R;")
+    _, expected = compute_eb_marginals(tree, values, sigma2=1.0)
+    for node in tree.traverse():
+        if not node.is_root:
+            node.dist *= 1e180
+    _, fit = compute_eb_marginals(tree, values, sigma2=1e-180)
+    assert fit.eb_rate * 1e180 == pytest.approx(expected.eb_rate, rel=2e-7)
+    assert fit.restricted_log_likelihood == pytest.approx(
+        expected.restricted_log_likelihood, abs=1e-10
+    )
+    assert fit.fit_status == expected.fit_status == "ok"
+
+
 def test_drift_is_estimated_from_heterochronous_tips():
     tree = tree_from("(A:1,B:2,C:3,D:4)R;")
     values = {
