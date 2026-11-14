@@ -282,46 +282,33 @@ def _sparse_component_model(component, parameter):
     return model
 
 
-def _prepare_sparse_component_lookup(components):
+def _prepare_sparse_component_lookup(components, n_traits):
+    trait_identity = sparse.eye(n_traits, format="csr")
+
+    def component_matrices(name, parameter):
+        model = _sparse_component_model(components[name], parameter)
+        precision = sparse.kron(trait_identity, model.precision, format="csc")
+        return model, precision
+
     @lru_cache(maxsize=max(1, len(components)))
     def tree_component(name, parameter):
-        return _sparse_component_model(components[name], parameter)
+        return component_matrices(name, parameter)
 
     def lookup(name, parameter):
         component = components[name]
+        if isinstance(component, SparseCovarianceModel):
+            return tree_component(name, None)
         if type(component) is EvolutionaryCovarianceFactory:
             return tree_component(name, parameter)
-        return _sparse_component_model(component, parameter)
+        return component_matrices(name, parameter)
 
     return lookup
 
 
-def _sparse_multivariate_latent_model(
-    component_model,
-    trait_covariances,
-    decoded,
-    n_traits,
-    fixed_covariance,
-):
+def _sparse_sampling_blocks(fixed_covariance, use_sparse):
     precision_blocks = []
     loading_blocks = []
-    prior_logdet = 0.0
-    trait_identity = sparse.eye(n_traits, format="csr")
-    for name in trait_covariances:
-        model = component_model(name, decoded)
-        # Mix independent latent traits through the observation loading.
-        # Precision then remains well scaled when trait variance is near zero.
-        trait_covariance = np.asarray(trait_covariances[name], dtype=float)
-        trait_factor = _positive_cholesky(trait_covariance)
-        trait_transform = trait_factor * np.sqrt(model.covariance_scale)
-        precision_blocks.append(
-            sparse.kron(trait_identity, model.precision, format="csc")
-        )
-        loading_blocks.append(
-            sparse.kron(trait_transform, model.tip_loading, format="csr")
-        )
-        prior_logdet += n_traits * model.logdet_covariance
-    if fixed_covariance is not None:
+    if use_sparse and fixed_covariance is not None:
         if isinstance(fixed_covariance, DiagonalLowRankCovariance):
             diagonal = np.asarray(fixed_covariance.diagonal, dtype=float)
             fixed_loading = sparse.csr_matrix(fixed_covariance.low_rank, dtype=float)
@@ -344,6 +331,34 @@ def _sparse_multivariate_latent_model(
         if fixed_loading.shape[1]:
             precision_blocks.append(sparse.eye(fixed_loading.shape[1], format="csc"))
             loading_blocks.append(fixed_loading)
+    return precision_blocks, loading_blocks
+
+
+def _sparse_multivariate_latent_model(
+    component_model,
+    trait_covariances,
+    decoded,
+    n_traits,
+    sampling_blocks,
+):
+    precision_blocks = []
+    loading_blocks = []
+    prior_logdet = 0.0
+    for name in trait_covariances:
+        model, precision = component_model(name, decoded)
+        # Mix independent latent traits through the observation loading.
+        # Precision then remains well scaled when trait variance is near zero.
+        trait_covariance = np.asarray(trait_covariances[name], dtype=float)
+        trait_factor = _positive_cholesky(trait_covariance)
+        trait_transform = trait_factor * np.sqrt(model.covariance_scale)
+        precision_blocks.append(precision)
+        loading_blocks.append(
+            sparse.kron(trait_transform, model.tip_loading, format="csr")
+        )
+        prior_logdet += n_traits * model.logdet_covariance
+    sampling_precision, sampling_loading = sampling_blocks
+    precision_blocks.extend(sampling_precision)
+    loading_blocks.extend(sampling_loading)
     precision = sparse.block_diag(precision_blocks, format="csc")
     loading = sparse.hstack(loading_blocks, format="csr")
     return precision, loading, float(prior_logdet)
@@ -354,7 +369,7 @@ def _sparse_multivariate_state(
     trait_covariances,
     decoded,
     n_traits,
-    fixed_covariance,
+    sampling_blocks,
     observed_indices,
     observed_design,
     observed_response,
@@ -368,7 +383,7 @@ def _sparse_multivariate_state(
         trait_covariances,
         decoded,
         n_traits,
-        fixed_covariance,
+        sampling_blocks,
     )
     observed_loading = loading[observed_indices]
     zero = sparse.csc_matrix((len(observed_indices), len(observed_indices)))
@@ -607,7 +622,8 @@ def fit_multivariate_pgls(
     dense_component, fixed_dense = _dense_covariance_inputs(
         covariance_components, n_tips, fixed_covariance, use_sparse
     )
-    sparse_component = _prepare_sparse_component_lookup(covariance_components)
+    sparse_component = _prepare_sparse_component_lookup(covariance_components, n_traits)
+    sampling_blocks = _sparse_sampling_blocks(fixed_covariance, use_sparse)
 
     def unpack(parameters: np.ndarray):
         component_covariances = {}
@@ -632,7 +648,7 @@ def fit_multivariate_pgls(
                 trait_covariances,
                 decoded,
                 n_traits,
-                fixed_covariance,
+                sampling_blocks,
                 observed_indices,
                 observed_design,
                 observed_response,
