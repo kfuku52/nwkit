@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import numpy as np
 import pytest
 
@@ -72,6 +74,18 @@ def test_simulation_preserves_missingness_and_known_error_units():
     simulated = simulate_native_data(data, fit, np.random.default_rng(1))
     np.testing.assert_array_equal(np.isnan(simulated.values), np.isnan(data.values))
     np.testing.assert_allclose(simulated.variances * simulated.scales**2, 0.13)
+
+
+def test_scalar_bootstrap_restores_large_but_finite_sampling_variance():
+    data = sample_data()
+    normalized_variance = np.full(data.values.shape, 1e-5)
+    data = replace(data, scales=np.full(2, 1e155), variances=normalized_variance)
+    fit = fit_native_layout(
+        data, ShiftLayout.build(data.tree), alpha_height=0.7, process_variance=1e-5
+    )
+    simulated = simulate_native_data(data, fit, np.random.default_rng(1))
+    restored = simulated.variances * simulated.scales * simulated.scales
+    np.testing.assert_allclose(restored, np.full(data.values.shape, 1e305), rtol=1e-14)
 
 
 def test_calibration_replays_search_deterministically_and_does_not_discard_failures():
