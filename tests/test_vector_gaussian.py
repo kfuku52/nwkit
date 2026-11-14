@@ -236,3 +236,14 @@ def test_nearly_singular_proper_root_does_not_create_spurious_likelihood():
     assert result.log_likelihood == pytest.approx(
         multivariate_normal.logpdf(y, mean=mean, cov=sigma + error), abs=1e-8
     )
+
+
+def test_exact_coordinate_retains_nearly_singular_conditional_variance():
+    tree = read_tree("(A:1)R;", "1", True, quiet=True, rooted="yes")
+    correlation_entry = 1.0 - 2.0**-27
+    variance = 1.0 - 2.0**-26 + 2.0**-53
+    covariance = np.array([[1.0, correlation_entry], [correlation_entry, variance]])
+    branch = VectorTransition(np.zeros((2, 2)), np.zeros(2), covariance)
+    process = VectorProcess(tree, 2, {tree.children[0]: branch}, np.zeros(2), np.eye(2))
+    result = condition_vector_tree(process, {"A": [0.0, None]})
+    assert result.covariances[1, 1, 1] == 2.0**-54

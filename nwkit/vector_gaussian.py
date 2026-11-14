@@ -7,6 +7,7 @@ are eliminated algebraically, without adding a numerical noise floor.
 
 import math
 from dataclasses import dataclass
+from fractions import Fraction
 
 import numpy as np
 from scipy.linalg import cho_factor, cho_solve
@@ -200,6 +201,24 @@ def _propagate(precision, linear, constant, fixed, branch, dimension):
         conditional_prior_slope -= gain @ exact_slope
         conditional_prior_mean += gain @ delta
         conditional_prior_covariance -= gain @ covariance[np.ix_(constrained, free)]
+        if dimension == 2 and len(free) == 1:
+            f, c = free[0], constrained[0]
+            variance = covariance[f, f]
+            if conditional_prior_covariance[0, 0] <= variance * 1e-4:
+                # Close to perfect correlation, rounding in gain can dominate
+                # the Schur complement. Evaluate it from the original entries.
+                cross = Fraction(float(covariance[f, c]))
+                reverse_cross = Fraction(float(covariance[c, f]))
+                observed_variance = Fraction(float(covariance[c, c]))
+                residual = (
+                    Fraction(float(variance))
+                    - cross * reverse_cross / observed_variance
+                )
+                if residual <= 0:
+                    raise ValueError(
+                        "Conditional branch covariance must be positive definite."
+                    )
+                conditional_prior_covariance[0, 0] = float(residual)
     conditional_covariance = np.zeros((dimension, dimension))
     conditional_slope = np.zeros((dimension, dimension))
     location = coordinates.copy()
