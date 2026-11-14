@@ -104,6 +104,25 @@ def test_fitted_simulation_and_joint_quick_profile():
         joint_group_lasso_screen(data, fitted, memory_limit=1)
 
 
+def test_explicit_simulation_scales_optima_before_unrepresentable_subtraction():
+    data = fixture_data()
+    spec = explicit_simulation(
+        data.tree,
+        {
+            "trait_names": ["x"],
+            "alpha": 0.01,
+            "shift_branch_ids": [2],
+            "regime_optima": [[-1e308], [1e308]],
+            "process_tip_covariance": [[0.0]],
+        },
+    )
+    attenuation = -np.expm1(-0.01 * data.tree.height)
+    assert spec.coefficients[1, 0] == pytest.approx(2.0 * (1e308 * attenuation))
+    values, latent = simulate_shift(spec)
+    assert np.isfinite(values).all()
+    assert np.isfinite(latent).all()
+
+
 @pytest.mark.parametrize("joint", [False, True])
 def test_fitted_simulation_restores_representable_extreme_covariance(joint):
     data = fixture_data()
