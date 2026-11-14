@@ -99,6 +99,21 @@ def test_gls_normalizes_design_with_subnormal_observation_variance():
     assert covariance[0, 0] == 1e-310 / 8
 
 
+def test_whitening_handles_overflowing_terminal_variance_sum():
+    compiled = CompiledTree.from_tree(read_tree(TREE, "auto", True, quiet=True))
+    indices = compiled.leaf_indices
+    innovations = np.full(len(compiled.nodes), 1e308)
+    errors = np.full(len(indices), 1e308)
+    factor = TreeWhitening.build(
+        compiled, indices, np.zeros(len(innovations)), innovations, errors
+    )
+    values = np.full(len(indices), 1e154)
+    whitened = factor.apply(values)
+    assert whitened @ whitened == pytest.approx(len(indices) / 2, rel=5e-16)
+    expected = len(indices) * (np.log(1e308) + np.log(2.0))
+    assert factor.log_determinant == pytest.approx(expected, rel=2e-16)
+
+
 def test_whitening_rejects_invalid_inputs():
     compiled = CompiledTree.from_tree(read_tree(TREE, "auto", True, quiet=True))
     n = len(compiled.nodes)

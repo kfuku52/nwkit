@@ -152,16 +152,29 @@ class TreeWhitening:
         root_variance = float(root_variance)
         if not math.isfinite(root_variance) or root_variance < 0:
             raise ValueError("Root variance must be finite and nonnegative.")
-        variances = innovations[list(indices)] + errors
-        if not np.isfinite(variances).all() or np.any(variances <= 0):
+        observed_nodes = list(indices)
+        terminal = innovations[observed_nodes]
+        with np.errstate(over="ignore"):
+            variances = terminal + errors
+        if np.any(variances <= 0):
             raise ValueError("Whitening requires positive observed terminal variances.")
-        leaf_scales = 1 / np.sqrt(variances)
+        deviations = np.sqrt(variances)
+        log_variances = np.log(variances)
+        overflow = np.isinf(variances)
+        if overflow.any():
+            # The standard deviation and log variance remain representable.
+            large_deviations = np.hypot(
+                np.sqrt(terminal[overflow]), np.sqrt(errors[overflow])
+            )
+            deviations[overflow] = large_deviations
+            log_variances[overflow] = 2 * np.log(large_deviations)
+        leaf_scales = 1 / deviations
         precision_roots = np.zeros(n)
-        precision_roots[list(indices)] = slopes[list(indices)] * leaf_scales
+        precision_roots[observed_nodes] = slopes[observed_nodes] * leaf_scales
         steps, structure, rows = _whitening_structure(
             compiled.children, compiled.postorder, compiled.parents, indices
         )
-        logdet = float(np.log(variances).sum())
+        logdet = float(log_variances.sum())
         if len(steps) >= 32 * len(structure):
             cosines, sines, scales, divisors = _level_rotations(
                 structure, precision_roots, slopes, innovations, root_variance
