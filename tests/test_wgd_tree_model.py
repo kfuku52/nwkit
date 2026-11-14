@@ -104,6 +104,43 @@ def test_fixed_background_and_single_candidate_are_equal_without_origin_markers(
     assert not np.any(model.evaluate(*args).origin_probabilities)
 
 
+def test_nested_fixed_doubling_marks_only_the_younger_candidate_origins():
+    species_tree = CountTree(
+        (-1, 0, 1, 1, 0),
+        (0.0, 0.4, 0.6, 0.6, 1.0),
+        (2, 3, 4),
+        ("A", "B", "C"),
+        (0, 1, 2, 3, 4),
+        ("ABC", "AB", "A", "B", "C"),
+    )
+    a, b, c = (("tip", tip) for tip in "ABC")
+    ab = ("node", ("node", a, a), b)
+    topology = gene(("node", ("node", ab, ab), c))
+    older, younger = MultiplicationEvent(1, 1.0), MultiplicationEvent(2, 1.0)
+    fit = TopologyLikelihood(
+        species_tree, topology, ascertainment="root-clades", fixed_events=(older,)
+    ).evaluate([[0.0, 0.0]], 1.0, younger)
+    assert fit.log_likelihood == pytest.approx(0.0)
+    assert tuple(
+        i
+        for i, probability in zip(
+            fit.origin_node_ids, fit.origin_probabilities, strict=True
+        )
+        if probability == 1
+    ) == ("g2", "g7")
+    np.testing.assert_array_equal(
+        np.sort(fit.origin_probabilities), [0.0, 0.0, 0.0, 0.0, 1.0, 1.0]
+    )
+    fixed = TopologyLikelihood(
+        species_tree,
+        topology,
+        ascertainment="root-clades",
+        fixed_events=(older, younger),
+    ).evaluate([[0.0, 0.0]], 1.0)
+    assert fixed.log_likelihood == fit.log_likelihood
+    assert not fixed.origin_probabilities.any()
+
+
 @pytest.mark.parametrize("with_background", [False, True])
 @pytest.mark.parametrize("fraction", [0.0, 0.4, 1.0])
 def test_zero_retention_topology_equals_background_exactly(with_background, fraction):
