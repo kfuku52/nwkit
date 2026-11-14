@@ -123,7 +123,7 @@ _POISSON_LIMIT_DISPERSION = (np.finfo(float).eps / 2.0) ** 2
 _NB_LOG_GAMMA_RATIO_SERIES = (0.0,) + tuple(
     (-1.0) ** (order + 1) / (order * (order + 1)) for order in range(1, 9)
 )
-_SMALL_BETA_BINOMIAL_PRECISION = 1e-20
+_SMALL_BETA_PRECISION = 1e-20
 
 
 def _estimated_dense_glmm_gib(n_tips: int, random_dimension: int) -> float:
@@ -1210,6 +1210,24 @@ def _small_beta_binomial_terms(values, linear, dispersion, trials):
     return float(np.sum(contributions)), gradient, curvature
 
 
+def _small_beta_terms(values, linear, dispersion):
+    mean = _beta_mean(linear)
+    complement = 1.0 - mean
+    # Gamma(1 + shape) is one to working precision at these shapes.
+    # The beta density is then precision * mean * (1 - mean) / (y * (1 - y)).
+    contributions = (
+        math.log(dispersion)
+        + np.log(mean)
+        + np.log(complement)
+        - np.log(values)
+        - np.log1p(-values)
+    )
+    interior_mean = (mean > 1e-10) & (mean < 1.0 - 1e-10)
+    gradient = (mean - complement) * interior_mean
+    curvature = (2.0 * mean * complement) * interior_mean
+    return float(np.sum(contributions)), gradient, curvature
+
+
 def _standardized_censor_bounds(bounds, center, dispersion):
     difference = bounds - center
     result = difference / dispersion
@@ -1568,12 +1586,14 @@ def _numerical_scalar_terms(contributions, current, linear):
 
 def _beta_family_terms(values, linear, dispersion, trials, family):
     if family == "beta":
+        if dispersion is not None and 0.0 < dispersion < _SMALL_BETA_PRECISION:
+            return _small_beta_terms(values, linear, dispersion)
         contributions = _beta_log_likelihood(values, linear, dispersion)
         gradient, curvature = _beta_scalar_terms(values, linear, dispersion)
         return float(np.sum(contributions)), gradient, curvature
     if trials is None:
         raise ValueError("Beta-binomial responses require trial counts.")
-    if dispersion is not None and 0.0 < dispersion < _SMALL_BETA_BINOMIAL_PRECISION:
+    if dispersion is not None and 0.0 < dispersion < _SMALL_BETA_PRECISION:
         return _small_beta_binomial_terms(values, linear, dispersion, trials)
     contributions = _beta_binomial_log_likelihood(values, linear, dispersion, trials)
     gradient, curvature = _beta_binomial_scalar_terms(
@@ -2335,9 +2355,13 @@ def _draw_lognormal(rng, linear, dispersion):
 
 
 def _draw_beta(rng, linear, dispersion):
-    assert dispersion is not None
-    means = np.clip(expit(linear), 1e-10, 1.0 - 1e-10)
-    return rng.beta(means * dispersion, (1.0 - means) * dispersion)
+    _, _, alpha, beta = _beta_parameters(linear, dispersion, "Beta")
+    if dispersion < _SMALL_BETA_PRECISION:
+        raise RuntimeError(
+            "Beta bootstrap draws round to 0 or 1 at the fitted precision, "
+            "outside the open response interval."
+        )
+    return rng.beta(alpha, beta)
 
 
 def _draw_beta_binomial(rng, linear, dispersion, trials):
@@ -2347,7 +2371,7 @@ def _draw_beta_binomial(rng, linear, dispersion, trials):
 
 def _draw_beta_binomial_with_precision(rng, linear, dispersion, trials):
     means = _beta_mean(linear)
-    if dispersion < _SMALL_BETA_BINOMIAL_PRECISION:
+    if dispersion < _SMALL_BETA_PRECISION:
         return np.where(rng.random(len(linear)) < means, trials, 0.0)
     probabilities = rng.beta(means * dispersion, (1.0 - means) * dispersion)
     return rng.binomial(trials.astype(int), probabilities).astype(float)

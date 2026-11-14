@@ -25,6 +25,7 @@ from nwkit.ordinary_regression import (
 )
 from nwkit.phylogenetic_glmm import (
     MAX_DENSE_GLMM_TIPS,
+    _beta_family_terms,
     _censored_gaussian_log_likelihood,
     _draw_count,
     _draw_zero_truncated_count,
@@ -60,6 +61,52 @@ def test_near_poisson_negative_binomial_bootstrap_draws_keep_count_mean(dispersi
     assert counts.mean() == pytest.approx(3.0, abs=0.15)
     assert np.all(truncated > 0.0)
     assert truncated.mean() == pytest.approx(3.0 / -math.expm1(-3.0), abs=0.15)
+
+
+@pytest.mark.parametrize("dispersion", [1e-150, 1e-310, math.ulp(0.0)])
+def test_continuous_beta_likelihood_keeps_small_precision_derivatives(dispersion):
+    values = np.array([math.ulp(0.0), 0.6, np.nextafter(1.0, 0.0), 0.42, 0.65])
+    linear = np.array([-1.0, 0.0, 1.0, -90.0, 90.0])
+    mean = np.clip(1.0 / (1.0 + np.exp(-linear)), 1e-10, 1.0 - 1e-10)
+    expected = len(values) * math.log(dispersion) + np.sum(
+        np.log(mean) + np.log1p(-mean) - np.log(values) - np.log1p(-values)
+    )
+
+    with np.errstate(invalid="raise", over="raise", divide="raise"):
+        likelihood, gradient, curvature = _beta_family_terms(
+            values, linear, dispersion, None, "beta"
+        )
+
+    assert likelihood == pytest.approx(expected, rel=1e-14)
+    np.testing.assert_allclose(gradient[:3], 2.0 * mean[:3] - 1.0, atol=1e-15)
+    np.testing.assert_allclose(curvature[:3], 2.0 * mean[:3] * (1.0 - mean[:3]))
+    np.testing.assert_array_equal(gradient[3:], [0.0, 0.0])
+    np.testing.assert_array_equal(curvature[3:], [0.0, 0.0])
+
+
+def test_continuous_beta_fit_keeps_finite_likelihood_at_subnormal_precision():
+    values = np.array([0.15, 0.4, 0.68, 0.42, 0.9])
+    design = np.ones((5, 1))
+    covariance = evolutionary_covariance_factory(_tree(), LEAF_NAMES)
+    fit = fit_phylogenetic_glmm(
+        values, design, covariance, family="beta", dispersion=1e-310
+    )
+    assert fit.optimizer_converged
+    assert fit.log_likelihood == pytest.approx(
+        5 * math.log(1e-310) + np.sum(-math.log(4.0) - np.log(values * (1 - values))),
+        abs=1e-4,
+    )
+    np.testing.assert_allclose(fit.coefficients, [[0.0]], atol=3e-4)
+    with pytest.raises(RuntimeError, match="Beta bootstrap draws round to 0 or 1"):
+        fit_phylogenetic_glmm(
+            values,
+            design,
+            covariance,
+            family="beta",
+            dispersion=1e-310,
+            inference="parametric-bootstrap",
+            bootstrap_replicates=2,
+        )
 
 
 def test_projection_of_joint_dense_predictor_uncertainty_matches_latent_loading():
