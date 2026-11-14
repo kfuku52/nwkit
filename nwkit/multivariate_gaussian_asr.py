@@ -522,7 +522,7 @@ def _factor_covariance(covariance):
     return factor, log_determinant
 
 
-def _profile_mean(data, covariance, *, reml, fixed_mean=None):
+def _prepare_mean_profile(data, *, fixed_mean=None):
     full_design = _design(data)
     dimension = len(data.trait_names)
     mean = np.zeros(dimension, dtype=float)
@@ -536,11 +536,22 @@ def _profile_mean(data, covariance, *, reml, fixed_mean=None):
         mean[fixed] = fixed_mean[fixed]
         free_mean_indices = np.flatnonzero(~fixed)
     design = full_design[:, free_mean_indices]
-    factor, log_determinant = _factor_covariance(covariance)
     adjusted_values = data.values - full_design @ mean
+    rhs = np.column_stack([design, adjusted_values])
+    return full_design, mean, free_mean_indices, rhs
+
+
+def _profile_mean(
+    data, covariance, *, reml, fixed_mean=None, prepared=None, return_residual=True
+):
+    if prepared is None:
+        prepared = _prepare_mean_profile(data, fixed_mean=fixed_mean)
+    full_design, fixed, free_mean_indices, rhs = prepared
+    mean = fixed.copy()
+    factor, log_determinant = _factor_covariance(covariance)
     whitened = solve_triangular(
         factor[0],
-        np.column_stack([design, adjusted_values]),
+        rhs,
         lower=True,
         check_finite=False,
     )
@@ -562,7 +573,7 @@ def _profile_mean(data, covariance, *, reml, fixed_mean=None):
         mean[free_mean_indices] = fitted
         whitened_values = whitened_values - whitened_design @ fitted
         mean_log_determinant = 2.0 * float(np.log(np.diag(mean_factor[0])).sum())
-    residual = data.values - full_design @ mean
+    residual = data.values - full_design @ mean if return_residual else None
     quadratic = float(whitened_values @ whitened_values)
     if reml:
         rank = len(data.values) - len(free_mean_indices)
@@ -860,8 +871,9 @@ def fit_dense_mvbm(
         analysis_data, geometry.observed_shared_depth, fixed_mean
     )
     initial, bounds = _initial_cholesky(dimension)
+    mean_profile = _prepare_mean_profile(analysis_data, fixed_mean=fixed_mean)
 
-    def evaluate(parameters):
+    def evaluate(parameters, *, return_residual=True):
         sigma, _ = _decode_cholesky(parameters, dimension)
         covariance = _observation_covariance(
             analysis_data, geometry.observed_shared_depth, sigma
@@ -869,12 +881,18 @@ def fit_dense_mvbm(
         return (
             sigma,
             covariance,
-            _profile_mean(analysis_data, covariance, reml=True, fixed_mean=fixed_mean),
+            _profile_mean(
+                analysis_data,
+                covariance,
+                reml=True,
+                prepared=mean_profile,
+                return_residual=return_residual,
+            ),
         )
 
     def objective(parameters):
         try:
-            return -evaluate(parameters)[2][0]
+            return -evaluate(parameters, return_residual=False)[2][0]
         except (ValueError, ArithmeticError, OverflowError):
             return 1e100
 
@@ -981,8 +999,9 @@ def fit_dense_mvou(
         )
         initial.insert(0, 0.5 * sum(log_beta_bounds))
         bounds.insert(0, log_beta_bounds)
+    mean_profile = _prepare_mean_profile(data)
 
-    def evaluate(parameters):
+    def evaluate(parameters, *, return_residual=True):
         offset = 0
         decay_rate = fixed_alpha
         if decay_rate is None:
@@ -995,12 +1014,18 @@ def fit_dense_mvou(
             decay_rate,
             sigma,
             covariance,
-            _profile_mean(data, covariance, reml=False),
+            _profile_mean(
+                data,
+                covariance,
+                reml=False,
+                prepared=mean_profile,
+                return_residual=return_residual,
+            ),
         )
 
     def objective(parameters):
         try:
-            return -evaluate(parameters)[3][0]
+            return -evaluate(parameters, return_residual=False)[3][0]
         except (ValueError, ArithmeticError, OverflowError):
             return 1e100
 
@@ -1150,8 +1175,9 @@ def fit_dense_mvou_diag(
     diffusion_initial, diffusion_bounds = _initial_cholesky(dimension)
     initial.extend(diffusion_initial)
     bounds.extend(diffusion_bounds)
+    mean_profile = _prepare_mean_profile(data)
 
-    def evaluate(parameters):
+    def evaluate(parameters, *, return_residual=True):
         offset = 0
         if free_alpha:
             log_decay = np.asarray(parameters[:dimension], dtype=float)
@@ -1175,12 +1201,18 @@ def fit_dense_mvou_diag(
             correlation_scaled_diffusion,
             stationary_sigma,
             covariance,
-            _profile_mean(data, covariance, reml=False),
+            _profile_mean(
+                data,
+                covariance,
+                reml=False,
+                prepared=mean_profile,
+                return_residual=return_residual,
+            ),
         )
 
     def objective(parameters):
         try:
-            return -evaluate(parameters)[4][0]
+            return -evaluate(parameters, return_residual=False)[4][0]
         except (ValueError, ArithmeticError, OverflowError):
             return 1e100
 
