@@ -121,7 +121,7 @@ class DenseJointContext:
         self.same_tip = self.tips[:, None] == self.tips[None, :]
         self.rows, self.columns = self.traits[:, None], self.traits[None, :]
 
-    def covariance(self, alpha, covariance, noise):
+    def covariance(self, alpha, covariance, noise, *, gradient=True):
         # Retain the reference geometry's parameter validation and reported
         # diffusion/tip coordinates, including stationary-root restrictions.
         _, _, _, tip, diffusion = joint_covariance_geometry(
@@ -132,9 +132,11 @@ class DenseJointContext:
                 "Additional measurement variance must be finite and nonnegative."
             )
         r, c = self.rows, self.columns
+        alpha_score = None
         if np.isinf(alpha).all():
             kernel = self.same_tip.astype(float)
-            alpha_score = np.zeros_like(kernel)
+            if gradient:
+                alpha_score = np.zeros_like(kernel)
         else:
             if np.isinf(alpha).any():
                 raise ValueError(
@@ -145,17 +147,19 @@ class DenseJointContext:
             if self.root_model == "OUrandomRoot":
                 scale = np.sqrt(2 * alpha)
                 kernel = decay * scale[r] * scale[c] / sums
-                alpha_score = -self.distance + 0.5 / alpha[r] - 1 / sums
+                if gradient:
+                    alpha_score = -self.distance + 0.5 / alpha[r] - 1 / sums
             else:
                 scale = np.sqrt(integral_decay(2 * alpha, 1.0))
                 kernel = decay * integral_decay(sums, self.shared) / scale[r] / scale[c]
-                alpha_score = (
-                    -self.distance
-                    + log_integral_derivative(sums, self.shared)
-                    - log_integral_derivative(2 * alpha[r], 1.0)
-                )
-        process = covariance[r, c] * kernel
-        matrix = process.copy()
+                if gradient:
+                    alpha_score = (
+                        -self.distance
+                        + log_integral_derivative(sums, self.shared)
+                        - log_integral_derivative(2 * alpha[r], 1.0)
+                    )
+        matrix = covariance[r, c] * kernel
+        alpha_rows = None if alpha_score is None else matrix * alpha_score
         matrix.flat[:: len(matrix) + 1] += (self.data.variances + noise)[self.mask]
         if not np.isfinite(matrix).all():
             raise ValueError("Observed joint covariance must be finite.")
@@ -165,7 +169,7 @@ class DenseJointContext:
             tip,
             diffusion,
             kernel,
-            process * alpha_score,
+            alpha_rows,
         )
 
     def evaluate(self, layout, alpha, covariance, noise, *, gradient=False):
@@ -174,7 +178,7 @@ class DenseJointContext:
         noise = np.broadcast_to(np.asarray(noise, float), (p,)).copy()
         covariance = np.asarray(covariance, float)
         factor, tip, diffusion, kernel, alpha_rows = self.covariance(
-            alpha, covariance, noise
+            alpha, covariance, noise, gradient=gradient
         )
         design = joint_design(self.data, layout, alpha)
         x, y = design[self.mask], self.data.values[self.mask]
@@ -196,6 +200,7 @@ class DenseJointContext:
         )
         if not gradient:
             return fit
+        assert alpha_rows is not None
         # Envelope theorem: at the GLS mean optimum no derivative of beta is
         # required. d(-log L) = .5 tr((K^-1-u u')dK) - u' (dX) beta.
         inverse = cho_solve((factor.lower, True), np.eye(len(y)), check_finite=False)
