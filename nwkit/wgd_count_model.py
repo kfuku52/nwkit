@@ -615,6 +615,7 @@ class CountLikelihood:
         *,
         _split_zero_event=False,
         _kernel=None,
+        _pulse=None,
     ):
         rates = np.asarray(rates, dtype=float)
         if (
@@ -646,13 +647,12 @@ class CountLikelihood:
                 after = kernel(
                     duplication, loss, time * (1 - event.fraction), max_count
                 )
-                matrices[node] = (
-                    before
-                    @ multiplication_transition(
+                pulse = _pulse
+                if pulse is None:
+                    pulse = multiplication_transition(
                         event.retention, event.multiplicity, max_count
                     )
-                    @ after
-                )
+                matrices[node] = before @ pulse @ after
         return matrices
 
     def _prune(self, emissions, matrices, prior):
@@ -725,21 +725,35 @@ class CountLikelihood:
                 -1 / root_mean
             )
         likelihoods = {}
+        exact_counts = {}
         for column, node in enumerate(self.tree.tip_nodes):
             counts = self.counts[rows, column]
+            missing = np.isnan(counts)
+            detection = self.detection[column]
+            if detection == 1:
+                exact_counts[node] = (
+                    np.where(missing, 0, counts).astype(np.intp),
+                    missing,
+                )
+                continue
             value = binom.logpmf(
-                np.nan_to_num(counts)[:, None], states[None, :], self.detection[column]
+                np.where(missing, 0, counts)[:, None], states[None, :], detection
             )
-            value[np.isnan(counts)] = 0.0
+            value[missing] = 0.0
             likelihoods[node] = value
         for node in range(len(self.tree.parents) - 1, -1, -1):
-            if node in likelihoods:
+            if not self.children[node]:
                 continue
             value = np.zeros((len(rows), max_count + 1))
             for child in self.children[node]:
-                contribution = _log_pruning_contribution(
-                    matrices[child], likelihoods.pop(child)
-                )
+                if (tip := exact_counts.pop(child, None)) is not None:
+                    counts, missing = tip
+                    contribution = matrices[child].T[counts]
+                    contribution[missing] = 0.0
+                else:
+                    contribution = _log_pruning_contribution(
+                        matrices[child], likelihoods.pop(child)
+                    )
                 contribution[self.subtree_missing[child][rows]] = 0.0
                 value += contribution
             likelihoods[node] = value
@@ -949,6 +963,13 @@ class CountLikelihood:
             raise ValueError("Maximum state count is below an observed count.")
         prior = root_probabilities(root_mean, max_count)
         emissions = self._emissions(max_count)
+        pulse = None
+        if event is not None and (event.retention != 0 or _split_zero_event):
+            # The event matrix only depends on retention and multiplicity, not
+            # on the background branch rates or the family's rate category.
+            pulse = multiplication_transition(
+                event.retention, event.multiplicity, max_count
+            )
         observed_logs, selection_logs = [], []
         for scale in self.rate_scales:
             transitions = self.transitions(
@@ -958,6 +979,7 @@ class CountLikelihood:
                 event,
                 _split_zero_event=_split_zero_event,
                 _kernel=self._cached_transition,
+                _pulse=pulse,
             )
             logs = self._prune(emissions, transitions, prior)
             # Scaling cannot recover a transition or latent-state contribution

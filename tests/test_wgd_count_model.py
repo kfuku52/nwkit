@@ -26,6 +26,46 @@ def tree():
     )
 
 
+@pytest.mark.parametrize(
+    "retention,split_zero,expected_calls",
+    [(0.0, False, 0), (0.0, True, 1), (0.4, False, 1), (1.0, False, 1)],
+)
+def test_likelihood_reuses_the_same_event_matrix_across_rate_scales(
+    monkeypatch, retention, split_zero, expected_calls
+):
+    model = CountLikelihood(tree(), [[1, 2], [1, np.nan]], rate_scales=[0.25, 1, 2])
+    event = MultiplicationEvent(1, retention, 0.5, 3)
+    rates, root, bound = [[0.12, 0.2]], 1.2, 8
+    prior = root_probabilities(root, bound)
+    emissions = model._emissions(bound)
+    observed = [
+        model._prune(
+            emissions,
+            model.transitions(rates, scale, bound, event, _split_zero_event=split_zero),
+            prior,
+        )
+        for scale in model.rate_scales
+    ]
+    selected = [
+        model._selection_logs(rates, scale, root, event) for scale in model.rate_scales
+    ]
+    expected = (logsumexp(observed, axis=0) - np.log(3)) - (
+        logsumexp(selected, axis=0) - np.log(3)
+    )[model.pattern_index]
+    calls = []
+
+    def counted(*args):
+        calls.append(args)
+        return multiplication_transition(*args)
+
+    monkeypatch.setattr(wgd_count_model, "multiplication_transition", counted)
+    actual = model.family_log_likelihoods(
+        rates, root, bound, event, _split_zero_event=split_zero
+    )
+    np.testing.assert_array_equal(actual, expected)
+    assert calls == [(retention, 3, bound)] * expected_calls
+
+
 def test_likelihood_transition_cache_is_bounded_and_preserves_results(monkeypatch):
     model = CountLikelihood(tree(), np.array([[2.0, 3.0], [1.0, np.nan]]))
     rates = np.array([[0.12, 0.17]])
@@ -302,14 +342,19 @@ def test_loss_free_fully_detected_pulse_has_certain_selection(
 
 
 @pytest.mark.parametrize("retention", [0.0, 0.3, 1.0])
-def test_log_pruning_matches_scaled_pruning_with_pulse_and_missingness(retention):
+@pytest.mark.parametrize("detection", [(0.8, 0.9), (1.0, 0.9), (1.0, 1.0)])
+def test_log_pruning_matches_scaled_pruning_with_pulse_and_missingness(
+    retention, detection
+):
     model = CountLikelihood(
-        tree(), np.array([[1, 2], [0, 1], [1, np.nan]]), detection=np.array([0.8, 0.9])
+        tree(),
+        np.array([[1, 2], [0, 1], [1, np.nan], [np.nan, 1]]),
+        detection=np.array(detection),
     )
     rates, root_mean, bound = [[0.2, 0.3]], 1.5, 40
     event = MultiplicationEvent(1, retention)
     matrices = model._log_transitions(rates, 1, bound, event)
-    unconditional = model._prune_log(matrices, root_mean, bound, np.arange(3))
+    unconditional = model._prune_log(matrices, root_mean, bound, np.arange(4))
     expected = model.family_log_likelihoods(rates, root_mean, bound, event)
     selection = model._selection_logs(rates, 1, root_mean, event)
     np.testing.assert_allclose(
