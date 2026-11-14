@@ -509,6 +509,22 @@ def _fixed_pulse_transition(retention, multiplicity, max_count):
     return multiplication_transition(retention, multiplicity, max_count)
 
 
+def _validate_fixed_events(tree, events):
+    if any(not isinstance(event, MultiplicationEvent) for event in events):
+        raise ValueError("Fixed genome events must be MultiplicationEvent objects.")
+    by_node = {event.node: event for event in events}
+    if len(by_node) != len(events) or any(
+        not 1 <= event.node < len(tree.parents)
+        or tree.lengths[event.node] <= 0
+        or event.retention <= 0
+        for event in events
+    ):
+        raise ValueError(
+            "Fixed genome events need distinct positive-length branches and positive retention."
+        )
+    return by_node
+
+
 class CountLikelihood:
     """Pruning likelihood conditional on >=1 observed copy per family.
 
@@ -530,20 +546,7 @@ class CountLikelihood:
     ):
         self.tree = tree
         self.fixed_events = tuple(fixed_events)
-        if any(
-            not isinstance(event, MultiplicationEvent) for event in self.fixed_events
-        ):
-            raise ValueError("Fixed genome events must be MultiplicationEvent objects.")
-        self._fixed_by_node = {event.node: event for event in self.fixed_events}
-        if len(self._fixed_by_node) != len(self.fixed_events) or any(
-            not 1 <= event.node < len(tree.parents)
-            or tree.lengths[event.node] <= 0
-            or event.retention <= 0
-            for event in self.fixed_events
-        ):
-            raise ValueError(
-                "Fixed genome events need distinct positive-length branches and positive retention."
-            )
+        self._fixed_by_node = _validate_fixed_events(tree, self.fixed_events)
         self.counts = np.asarray(counts, dtype=float)
         if self.counts.ndim != 2 or self.counts.shape[1] != len(tree.tip_names):
             raise ValueError("Counts need one column per ordered species-tree tip.")
