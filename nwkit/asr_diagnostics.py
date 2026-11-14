@@ -8,8 +8,10 @@ import pandas as pd
 from scipy.optimize import brentq
 from scipy.stats import chi2
 
+from nwkit.compiled_tree import CompiledTree
 from nwkit.gaussian_inference import (
-    condition_gaussian_tree,
+    GaussianTreeLikelihood,
+    _gaussian_root_posterior,
     simulate_gaussian_process,
 )
 from nwkit.optimization import _bounded_scalar_grid
@@ -179,23 +181,15 @@ def gaussian_posterior_predictive(
     num_simulations = int(num_simulations)
     if num_simulations <= 0:
         raise ValueError("num_simulations must be a positive integer.")
-    conditioned = condition_gaussian_tree(
-        process, values_by_leaf, standard_errors=standard_errors
-    )
-    compiled = conditioned.compiled_tree
-    records = []
-    for name, node_index in compiled.leaf_index_by_name.items():
-        value = values_by_leaf.get(name)
-        if value is None:
-            continue
-        error = 0.0 if standard_errors is None else float(standard_errors[name])
-        records.append((node_index, float(value), error))
+    compiled = CompiledTree.from_tree(process.tree)
+    prepared = GaussianTreeLikelihood.prepare(compiled, values_by_leaf, standard_errors)
+    root = _gaussian_root_posterior(process, prepared)
+    records = prepared.records
     if len(records) < 2:
         raise ValueError("Posterior predictive checks require two observed tips.")
     seed_sequence = np.random.SeedSequence(seed)
     root_seed, process_seed, error_seed = seed_sequence.spawn(3)
     root_rng = np.random.default_rng(root_seed)
-    root = conditioned.marginals[process.tree]
     root_values = (
         np.full(num_simulations, root.mean)
         if root.variance == 0.0

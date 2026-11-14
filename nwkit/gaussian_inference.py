@@ -107,6 +107,7 @@ class _MessagePass:
     root_posterior: _Factor
     observed_positions: int
     exact_nodes: tuple[tuple[int, float], ...]
+    exact_root: float | None
 
 
 def _normal_log_density(value: float, mean: float, variance: float) -> float:
@@ -510,6 +511,7 @@ def _message_pass_prepared(
         root_posterior,
         len(observed_positions),
         exact_nodes,
+        exact_by_position.get(0),
     )
 
 
@@ -602,35 +604,10 @@ def condition_gaussian_tree(
         factor for factor in posterior if factor is not None and factor.mean is not None
     )
 
-    def restore_mean(value):
-        try:
-            result = center + math.ldexp(value, exponent)
-        except OverflowError:
-            result = _recover_gaussian_mean(value, center, exponent)
-        if not math.isfinite(result):
-            raise ValueError("A posterior Gaussian mean exceeds floating-point range.")
-        return result
-
-    def restore_variance(value):
-        try:
-            result = math.ldexp(value, 2 * exponent)
-        except OverflowError as exc:
-            raise ValueError(
-                "A posterior Gaussian variance exceeds floating-point range."
-            ) from exc
-        if not math.isfinite(result) or result < 0.0:
-            raise ValueError(
-                "A posterior Gaussian variance exceeds floating-point range."
-            )
-        return result
-
     exact_by_node = dict(messages.exact_nodes)
     marginals = {
-        node: GaussianMarginal(exact_by_node[index], 0.0)
-        if index in exact_by_node
-        else GaussianMarginal(
-            restore_mean(final_posterior[index].mean),
-            restore_variance(final_posterior[index].variance),
+        node: _restore_gaussian_marginal(
+            final_posterior[index], center, exponent, exact_by_node.get(index)
         )
         for index, node in enumerate(compiled.nodes)
     }
@@ -644,6 +621,26 @@ def condition_gaussian_tree(
         num_observed_positions=messages.observed_positions,
         compiled_tree=compiled,
     )
+
+
+def _restore_gaussian_marginal(factor, center, exponent, exact):
+    if exact is not None:
+        return GaussianMarginal(exact, 0.0)
+    try:
+        mean = center + math.ldexp(factor.mean, exponent)
+    except OverflowError:
+        mean = _recover_gaussian_mean(factor.mean, center, exponent)
+    if not math.isfinite(mean):
+        raise ValueError("A posterior Gaussian mean exceeds floating-point range.")
+    try:
+        variance = math.ldexp(factor.variance, 2 * exponent)
+    except OverflowError as exc:
+        raise ValueError(
+            "A posterior Gaussian variance exceeds floating-point range."
+        ) from exc
+    if not math.isfinite(variance) or variance < 0.0:
+        raise ValueError("A posterior Gaussian variance exceeds floating-point range.")
+    return GaussianMarginal(mean, variance)
 
 
 def _recover_gaussian_mean(value, center, exponent):
@@ -681,6 +678,13 @@ def _summarize_tree_likelihood(messages):
         num_observed=len(messages.records),
         num_observed_positions=messages.observed_positions,
         compiled_tree=messages.compiled,
+    )
+
+
+def _gaussian_root_posterior(process, prepared):
+    messages = _message_pass_prepared(process, prepared, likelihood_only=True)
+    return _restore_gaussian_marginal(
+        messages.root_posterior, messages.center, messages.exponent, messages.exact_root
     )
 
 
