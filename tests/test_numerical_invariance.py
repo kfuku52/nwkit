@@ -31,11 +31,13 @@ from nwkit.measurement_error import (
 from nwkit.optimization import FitResourceError, ScalarFitCache
 from nwkit.phylogenetic_glmm import (
     _count_log_likelihood,
+    _draw_beta_binomial,
     _gamma_log_likelihood,
     _gamma_scalar_terms,
     _lognormal_scalar_terms,
     _negative_binomial_scalar_terms,
     _scalar_initial_coefficient,
+    _scalar_terms,
     _zero_component_count_scalar_terms,
     _zero_truncation_terms,
 )
@@ -530,6 +532,37 @@ def test_negative_binomial_likelihood_preserves_near_poisson_limit(dispersion):
     np.testing.assert_allclose(
         curvature, means * (1.0 + dispersion * counts) / denominator**2, rtol=1e-12
     )
+
+
+def test_beta_binomial_retains_endpoint_and_interior_mass_at_tiny_precision():
+    dispersion = 1e-310
+    values = np.array([0.0, 1.0, 2.0, 4.0, 0.0])
+    trials = np.array([4.0, 4.0, 4.0, 4.0, 0.0])
+    linear = np.full(len(values), math.log(3.0))
+    with np.errstate(over="raise", divide="raise", invalid="raise"):
+        likelihood, gradient, curvature = _scalar_terms(
+            values,
+            linear,
+            family="beta-binomial",
+            dispersion=dispersion,
+            zero_probability=None,
+            offset=np.zeros_like(values),
+            trials=trials,
+            censor_lower=None,
+            censor_upper=None,
+        )
+    # The scaled endpoint masses are 1/4 and 3/4, and the interior
+    # masses are precision * 3/16 * 4 / (x * (4-x)).
+    expected = math.log(0.25 * 0.75 * 0.25 * (3 / 16)) + 2 * math.log(dispersion)
+    assert likelihood == pytest.approx(expected, abs=1e-12)
+    np.testing.assert_allclose(gradient, [0.75, 0.5, 0.5, -0.25, 0.0])
+    np.testing.assert_allclose(curvature, [3 / 16, 3 / 8, 3 / 8, 3 / 16, 0.0])
+    rng = np.random.default_rng(17)
+    simulated = _draw_beta_binomial(
+        rng, np.full(1200, math.log(3.0)), dispersion, np.full(1200, 4.0)
+    )
+    assert np.all((simulated == 0.0) | (simulated == 4.0))
+    assert simulated.mean() == pytest.approx(3.0, abs=0.16)
 
 
 def test_gamma_likelihood_and_derivatives_scale_with_response_units():

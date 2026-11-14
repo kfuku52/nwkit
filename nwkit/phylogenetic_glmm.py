@@ -122,6 +122,7 @@ _POISSON_LIMIT_DISPERSION = (np.finfo(float).eps / 2.0) ** 2
 _NB_LOG_GAMMA_RATIO_SERIES = (0.0,) + tuple(
     (-1.0) ** (order + 1) / (order * (order + 1)) for order in range(1, 9)
 )
+_SMALL_BETA_BINOMIAL_PRECISION = 1e-20
 
 
 def _estimated_dense_glmm_gib(n_tips: int, random_dimension: int) -> float:
@@ -1130,15 +1131,20 @@ def _lognormal_log_likelihood(values, linear, dispersion):
     )
 
 
+def _beta_mean(linear):
+    return np.clip(expit(linear), 1e-10, 1.0 - 1e-10)
+
+
 def _beta_parameters(linear, dispersion, label):
     if dispersion is None or dispersion <= 0.0:
         raise ValueError("{} precision must be positive.".format(label))
-    means = np.clip(expit(linear), 1e-10, 1.0 - 1e-10)
-    return means * dispersion, (1.0 - means) * dispersion
+    mean = _beta_mean(linear)
+    complement = 1.0 - mean
+    return mean, complement, mean * dispersion, complement * dispersion
 
 
 def _beta_log_likelihood(values, linear, dispersion):
-    alpha, beta = _beta_parameters(linear, dispersion, "Beta")
+    _, _, alpha, beta = _beta_parameters(linear, dispersion, "Beta")
     return (
         -betaln(alpha, beta)
         + (alpha - 1.0) * np.log(values)
@@ -1149,7 +1155,7 @@ def _beta_log_likelihood(values, linear, dispersion):
 def _beta_binomial_log_likelihood(values, linear, dispersion, trials):
     if trials is None:
         raise ValueError("Beta-binomial responses require trial counts.")
-    alpha, beta = _beta_parameters(linear, dispersion, "Beta-binomial")
+    _, _, alpha, beta = _beta_parameters(linear, dispersion, "Beta-binomial")
     return (
         gammaln(trials + 1.0)
         - gammaln(values + 1.0)
@@ -1157,6 +1163,38 @@ def _beta_binomial_log_likelihood(values, linear, dispersion, trials):
         + betaln(values + alpha, trials - values + beta)
         - betaln(alpha, beta)
     )
+
+
+def _small_beta_binomial_log_mass(values, trials, dispersion, mean, complement):
+    log_inner_mass = math.log(dispersion) + np.log(mean) + np.log(complement)
+    # For two positive counts the limiting probability is the beta
+    # interior mass times n / (y * (n-y)).
+    result = np.where(values == trials, np.log(mean), np.log(complement))
+    interior = (values > 0.0) & (values < trials)
+    positive = values[interior]
+    totals = trials[interior]
+    result[interior] = (
+        log_inner_mass[interior]
+        + np.log(totals)
+        - np.log(positive)
+        - np.log(totals - positive)
+    )
+    result[trials == 0.0] = 0.0
+    return result
+
+
+def _small_beta_binomial_terms(values, linear, dispersion, trials):
+    mean = _beta_mean(linear)
+    complement = 1.0 - mean
+    has_successes = (values > 0.0).astype(float)
+    has_failures = (values < trials).astype(float)
+    contributions = _small_beta_binomial_log_mass(
+        values, trials, dispersion, mean, complement
+    )
+    interior_mean = (mean > 1e-10) & (mean < 1.0 - 1e-10)
+    gradient = (mean * has_failures - complement * has_successes) * interior_mean
+    curvature = mean * complement * (has_successes + has_failures) * interior_mean
+    return float(np.sum(contributions)), gradient, curvature
 
 
 def _standardized_censor_bounds(bounds, center, dispersion):
@@ -1255,10 +1293,6 @@ def _scalar_log_likelihood_contributions(
         return _gamma_log_likelihood(values, linear, dispersion)
     if family == "lognormal":
         return _lognormal_log_likelihood(values, linear, dispersion)
-    if family == "beta":
-        return _beta_log_likelihood(values, linear, dispersion)
-    if family == "beta-binomial":
-        return _beta_binomial_log_likelihood(values, linear, dispersion, trials)
     if family == "censored-gaussian":
         return _censored_gaussian_log_likelihood(
             values, linear, dispersion, censor_lower, censor_upper
@@ -1470,14 +1504,12 @@ def _lognormal_scalar_terms(values, linear, dispersion):
 
 def _beta_scalar_terms(values, linear, dispersion):
     assert dispersion is not None
-    means = np.clip(expit(linear), 1e-10, 1.0 - 1e-10)
-    alpha = means * dispersion
-    beta = (1.0 - means) * dispersion
+    means, complement, alpha, beta = _beta_parameters(linear, dispersion, "Beta")
     likelihood_derivative = dispersion * (
         -digamma(alpha) + digamma(beta) + np.log(values) - np.log1p(-values)
     )
     likelihood_second = -(dispersion**2) * (polygamma(1, alpha) + polygamma(1, beta))
-    first = means * (1.0 - means)
+    first = means * complement
     second = first * (1.0 - 2.0 * means)
     gradient = -likelihood_derivative * first
     curvature = -(likelihood_second * first**2 + likelihood_derivative * second)
@@ -1487,9 +1519,9 @@ def _beta_scalar_terms(values, linear, dispersion):
 def _beta_binomial_scalar_terms(values, linear, dispersion, trials):
     assert dispersion is not None
     assert trials is not None
-    means = np.clip(expit(linear), 1e-10, 1.0 - 1e-10)
-    alpha = means * dispersion
-    beta = (1.0 - means) * dispersion
+    means, complement, alpha, beta = _beta_parameters(
+        linear, dispersion, "Beta-binomial"
+    )
     likelihood_mean_derivative = dispersion * (
         digamma(values + alpha)
         - digamma(alpha)
@@ -1502,7 +1534,7 @@ def _beta_binomial_scalar_terms(values, linear, dispersion, trials):
         + polygamma(1, trials - values + beta)
         - polygamma(1, beta)
     )
-    first = means * (1.0 - means)
+    first = means * complement
     second = first * (1.0 - 2.0 * means)
     gradient = -likelihood_mean_derivative * first
     curvature = -(
@@ -1521,6 +1553,22 @@ def _numerical_scalar_terms(contributions, current, linear):
     return gradient, curvature
 
 
+def _beta_family_terms(values, linear, dispersion, trials, family):
+    if family == "beta":
+        contributions = _beta_log_likelihood(values, linear, dispersion)
+        gradient, curvature = _beta_scalar_terms(values, linear, dispersion)
+        return float(np.sum(contributions)), gradient, curvature
+    if trials is None:
+        raise ValueError("Beta-binomial responses require trial counts.")
+    if dispersion is not None and 0.0 < dispersion < _SMALL_BETA_BINOMIAL_PRECISION:
+        return _small_beta_binomial_terms(values, linear, dispersion, trials)
+    contributions = _beta_binomial_log_likelihood(values, linear, dispersion, trials)
+    gradient, curvature = _beta_binomial_scalar_terms(
+        values, linear, dispersion, trials
+    )
+    return float(np.sum(contributions)), gradient, curvature
+
+
 def _scalar_terms(
     values: np.ndarray,
     linear: np.ndarray,
@@ -1533,6 +1581,9 @@ def _scalar_terms(
     censor_lower: np.ndarray | None,
     censor_upper: np.ndarray | None,
 ) -> tuple[float, np.ndarray, np.ndarray]:
+    if family in {"beta", "beta-binomial"}:
+        return _beta_family_terms(values, linear, dispersion, trials, family)
+
     def contributions(candidate: np.ndarray) -> np.ndarray:
         return _scalar_log_likelihood_contributions(
             values,
@@ -1564,10 +1615,6 @@ def _scalar_terms(
         derivative = _gamma_scalar_terms(values, linear, dispersion)
     elif family == "lognormal":
         derivative = _lognormal_scalar_terms(values, linear, dispersion)
-    elif family == "beta":
-        derivative = _beta_scalar_terms(values, linear, dispersion)
-    elif family == "beta-binomial":
-        derivative = _beta_binomial_scalar_terms(values, linear, dispersion, trials)
     else:
         derivative = _numerical_scalar_terms(contributions, current, linear)
     gradient, curvature = derivative
@@ -2282,7 +2329,13 @@ def _draw_beta(rng, linear, dispersion):
 
 def _draw_beta_binomial(rng, linear, dispersion, trials):
     assert dispersion is not None and trials is not None
-    means = np.clip(expit(linear), 1e-10, 1.0 - 1e-10)
+    return _draw_beta_binomial_with_precision(rng, linear, dispersion, trials)
+
+
+def _draw_beta_binomial_with_precision(rng, linear, dispersion, trials):
+    means = _beta_mean(linear)
+    if dispersion < _SMALL_BETA_BINOMIAL_PRECISION:
+        return np.where(rng.random(len(linear)) < means, trials, 0.0)
     probabilities = rng.beta(means * dispersion, (1.0 - means) * dispersion)
     return rng.binomial(trials.astype(int), probabilities).astype(float)
 
