@@ -130,6 +130,7 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   covariance diagonal and index larger groups once.
 - Reuse sparse precision solves for marginal variances when multiple
   observations load the same latent state.
+- Index comparison groups once when assigning counts in ASR comparison tables.
 
 ## [0.43.6] - 2026-09-08
 
