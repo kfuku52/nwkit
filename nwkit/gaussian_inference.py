@@ -593,12 +593,67 @@ def _relative_parameter_rank(normalized):
     return int(np.sum(singular_values > tolerance))
 
 
-def _draw_factor(factor, rng):
-    if factor.mean is None:
-        raise ValueError("Cannot sample an improper Gaussian factor.")
-    if factor.variance == 0.0:
-        return factor.mean
-    return float(rng.normal(factor.mean, math.sqrt(factor.variance)))
+def _posterior_draw_parameters(transition, inside):
+    """Return conditional affine weights, offset and standard deviation."""
+
+    variance = transition.variance
+    if inside.mean is None:
+        return 1.0, 0.0, math.sqrt(variance)
+    if inside.variance == 0.0:
+        # Pruning already checked compatibility, including exact observations
+        # propagated back through deterministic affine branches.
+        return 0.0, inside.mean, 0.0
+    if variance == 0.0:
+        return 1.0, 0.0, 0.0
+    if not math.isfinite(variance + inside.variance):
+        raise ValueError(
+            "A conditional Gaussian variance exceeds floating-point range."
+        )
+    larger = max(variance, inside.variance)
+    smaller = min(variance, inside.variance)
+    denominator = 1.0 + smaller / larger
+    parent_weight = (inside.variance / larger) / denominator
+    inside_weight = (variance / larger) / denominator
+    conditional_variance = smaller / denominator
+    if conditional_variance <= 0.0:
+        raise ValueError("A positive Gaussian variance underflowed during sampling.")
+    return parent_weight, inside_weight * inside.mean, math.sqrt(conditional_variance)
+
+
+def _draw_gaussian_messages(messages, num_samples, rng):
+    compiled = messages.compiled
+    parameters = [
+        _posterior_draw_parameters(
+            messages.process.transitions[compiled.nodes[index]], messages.inside[index]
+        )
+        for index in range(1, len(compiled.nodes))
+    ]
+    root = messages.root_posterior
+    assert root.mean is not None
+    root_sd = math.sqrt(root.variance)
+    stochastic_count = int(root_sd > 0.0) + sum(sd > 0.0 for _, _, sd in parameters)
+    draws = np.empty((num_samples, len(compiled.nodes)), dtype=float)
+    # Keep the original sample-major random-number order. Batch the normals
+    # so temporary storage is bounded even for a large number of samples.
+    batch_size = max(1, 131_072 // max(1, stochastic_count))
+    for start in range(0, num_samples, batch_size):
+        batch = draws[start : start + batch_size]
+        noise = rng.standard_normal((len(batch), stochastic_count)).T
+        next_noise = iter(noise)
+        batch[:, 0] = root.mean
+        if root_sd > 0.0:
+            batch[:, 0] += root_sd * next(next_noise)
+        for index, (weight, offset, sd) in enumerate(parameters, start=1):
+            transition = messages.process.transitions[compiled.nodes[index]]
+            parent = compiled.parents[index]
+            if weight == 0.0:
+                batch[:, index] = offset
+            else:
+                prior = transition.slope * batch[:, parent] + transition.intercept
+                batch[:, index] = weight * prior + offset
+            if sd > 0.0:
+                batch[:, index] += sd * next(next_noise)
+    return draws
 
 
 def sample_gaussian_posterior(
@@ -624,22 +679,9 @@ def sample_gaussian_posterior(
         compiled_tree,
         retain_inside=True,
     )
-    rng = np.random.default_rng(seed)
-    draws = np.empty((num_samples, len(messages.compiled.nodes)), dtype=float)
-    for sample_index in range(num_samples):
-        draws[sample_index, 0] = _draw_factor(messages.root_posterior, rng)
-        for node_index in range(1, len(messages.compiled.nodes)):
-            parent = messages.compiled.parents[node_index]
-            transition = messages.process.transitions[
-                messages.compiled.nodes[node_index]
-            ]
-            prior = _Factor(
-                transition.slope * draws[sample_index, parent] + transition.intercept,
-                transition.variance,
-            )
-            conditional = _combine(prior, messages.inside[node_index])
-            draws[sample_index, node_index] = _draw_factor(conditional, rng)
-    draws = messages.center + np.ldexp(draws, messages.exponent)
+    draws = _draw_gaussian_messages(messages, num_samples, np.random.default_rng(seed))
+    np.ldexp(draws, messages.exponent, out=draws)
+    draws += messages.center
     if np.any(~np.isfinite(draws)):
         raise ValueError("A posterior Gaussian sample exceeds floating-point range.")
     return GaussianSamples(messages.compiled.nodes, draws)

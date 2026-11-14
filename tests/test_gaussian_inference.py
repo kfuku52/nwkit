@@ -231,6 +231,24 @@ def test_joint_posterior_samples_match_marginal_moments_and_exact_tip():
         )
 
 
+def test_joint_sampler_preserves_exact_tip_on_deterministic_affine_branch():
+    tree = tree_from("(A:1,B:1)R;")
+    process = GaussianTreeProcess(
+        tree,
+        {
+            tree["A"]: GaussianTransition(0.3, 0.2, 0.0),
+            tree["B"]: GaussianTransition(1.0, 0.0, 0.5),
+        },
+        GaussianRootPrior("gaussian", 0.0, 1.0),
+        "test-affine",
+    )
+    samples = sample_gaussian_posterior(process, {"A": 0.1}, num_samples=40, seed=17)
+    index = {node: position for position, node in enumerate(samples.nodes)}
+    np.testing.assert_array_equal(samples.values[:, index[tree["A"]]], 0.1)
+    np.testing.assert_allclose(samples.values[:, 0], (0.1 - 0.2) / 0.3)
+    assert np.std(samples.values[:, index[tree["B"]]]) > 0.0
+
+
 def test_prior_process_simulation_matches_affine_moments():
     tree = tree_from("((A:0.5,B:0.8)I:0.4,C:1.1)R;")
     process = build_evolutionary_process(

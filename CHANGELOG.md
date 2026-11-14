@@ -24,6 +24,7 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   likelihood messages with NumPy in log space.
 - Compute Gaussian posterior predictive statistics for all replicates in
   one pass per statistic.
+- Batch joint Gaussian posterior draws using precomputed branch conditionals.
 - Reuse continuous predictor loadings during dense errors-in-variables PGLS
   optimization, including automatic evolutionary-parameter searches.
 
