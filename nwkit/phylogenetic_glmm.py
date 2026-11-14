@@ -127,9 +127,11 @@ _NB_LOG_GAMMA_RATIO_SERIES = (0.0,) + tuple(
 _SMALL_BETA_PRECISION = 1e-20
 _LARGE_GAMMA_SHAPE = 128.0
 _LARGE_POISSON_COUNT = 128.0
+_LARGE_NEGATIVE_BINOMIAL_COUNT = 1e6
 _EXPONENTIAL_DEVIANCE_SERIES = tuple(
     1.0 / math.factorial(order) for order in range(2, 11)
 )
+_LOG1P_REMAINDER_SERIES = tuple((-1.0) ** (order + 1) / order for order in range(2, 15))
 
 
 def _estimated_dense_glmm_gib(n_tips: int, random_dimension: int) -> float:
@@ -1064,25 +1066,149 @@ def _small_dispersion_log_rising_factorial(values, dispersion):
 
 
 def _negative_binomial_log_pmf(values, log_means, dispersion):
-    log_relative_mean = log_means + math.log(dispersion)
+    log_dispersion = math.log(dispersion)
+    log_relative_mean = log_means + log_dispersion
     log_zero = _negative_binomial_log_zero(log_means, log_relative_mean, dispersion)
+    if np.max(values, initial=0.0) >= _LARGE_NEGATIVE_BINOMIAL_COUNT:
+        return (
+            _negative_binomial_with_large_counts(
+                values,
+                log_means,
+                log_relative_mean,
+                log_zero,
+                dispersion,
+                log_dispersion,
+            ),
+            log_zero,
+            log_relative_mean,
+        )
+    return (
+        _ordinary_negative_binomial_log_mass(
+            values, log_means, log_relative_mean, log_zero, dispersion
+        ),
+        log_zero,
+        log_relative_mean,
+    )
+
+
+def _ordinary_negative_binomial_log_mass(
+    values, log_means, log_relative_mean, log_zero, dispersion
+):
     if dispersion < _SMALL_NB_DISPERSION:
-        log_pmf = (
+        return (
             _small_dispersion_log_rising_factorial(values, dispersion)
             - gammaln(values + 1.0)
             + values * (log_means - np.logaddexp(0.0, log_relative_mean))
             + log_zero
         )
-        return log_pmf, log_zero, log_relative_mean
     size = 1.0 / dispersion
-    log_pmf = (
+    return (
         gammaln(values + size)
         - gammaln(size)
         - gammaln(values + 1.0)
         + log_zero
         - values * np.logaddexp(0.0, -log_relative_mean)
     )
-    return log_pmf, log_zero, log_relative_mean
+
+
+def _negative_binomial_with_large_counts(
+    values, log_means, log_relative_mean, log_zero, dispersion, log_dispersion
+):
+    large = values >= _LARGE_NEGATIVE_BINOMIAL_COUNT
+    small = ~large
+    result = np.empty_like(values)
+    result[small] = _ordinary_negative_binomial_log_mass(
+        values[small],
+        log_means[small],
+        log_relative_mean[small],
+        log_zero[small],
+        dispersion,
+    )
+    counts = values[large]
+    log_count = np.log(counts)
+    log_ratio = log_count + log_dispersion
+    # Evaluate the mass at its count-specific mean using Stirling corrections.
+    # The remaining log likelihood is the drop from that mean.
+    peak = (
+        -0.5 * (math.log(math.tau) + log_count + np.logaddexp(0.0, log_ratio))
+        - _negative_binomial_size_correction(dispersion)
+        - _stirling_log_gamma_correction(counts)
+    )
+    inverse_total = np.exp(-np.logaddexp(log_count, -log_dispersion))
+    peak += _stirling_log_gamma_correction_from_inverse(inverse_total)
+    result[large] = peak - _negative_binomial_deviance(
+        log_means[large] - log_count, log_count, log_ratio, dispersion
+    )
+    return result
+
+
+def _negative_binomial_size_correction(dispersion):
+    if dispersion <= 1.0 / _LARGE_GAMMA_SHAPE:
+        return _stirling_log_gamma_correction_from_inverse(dispersion)
+    size = 1.0 / dispersion
+    return (
+        gammaln(1.0 + size)
+        + (size + 0.5) * math.log(dispersion)
+        + size
+        - 0.5 * math.log(math.tau)
+    )
+
+
+def _negative_binomial_deviance(relative, log_count, log_ratio, dispersion):
+    with np.errstate(over="ignore", invalid="ignore", under="ignore", divide="ignore"):
+        log_q = -np.logaddexp(0.0, log_ratio)
+        log_p = -np.logaddexp(0.0, -log_ratio)
+        deviance = np.empty_like(relative)
+        nearby = np.abs(relative) < 0.1
+        deviance[nearby] = _nearby_negative_binomial_deviance(
+            relative[nearby], log_count[nearby], log_q[nearby], log_p[nearby]
+        )
+        far = ~nearby
+        change = relative[far]
+        previous = log_ratio[far]
+        new = previous + change
+        deviance[far] = _far_negative_binomial_deviance(
+            change, previous, new, log_count[far], dispersion
+        )
+        return np.where(np.isinf(relative), np.inf, deviance)
+
+
+def _nearby_negative_binomial_deviance(relative, log_count, log_q, log_p):
+    # Split log1p(p * expm1(t)) - p*t into two quadratic remainders.
+    # Use the smaller of p and q so neither remainder is lost to saturation.
+    small_probability = np.exp(np.minimum(log_p, log_q))
+    direction = np.where(log_p <= log_q, relative, -relative)
+    z = small_probability * np.expm1(direction)
+    log_weight = log_count + np.where(log_p <= log_q, 0.0, log_q - log_p)
+    remainder = _exponential_deviance(direction, np.exp(log_weight))
+    ratio = np.expm1(direction) / np.where(direction == 0.0, 1.0, direction)
+    correction = np.polynomial.polynomial.polyval(z, _LOG1P_REMAINDER_SERIES)
+    scale = np.exp(log_weight + np.minimum(log_p, log_q))
+    return remainder + ((scale * direction) * direction) * ratio**2 * correction
+
+
+def _far_negative_binomial_deviance(change, previous, new, log_count, dispersion):
+    # Orient the softplus difference so that its arguments have a nonpositive
+    # average. Keep the multiplication by the shape in logarithmic units.
+    mostly_failures = (previous + 0.5 * change) > 0.0
+    direction = np.where(mostly_failures, -1.0, 1.0)
+    first, last = previous * direction, new * direction
+    high, low = np.maximum(first, last), np.minimum(first, last)
+    softplus_high = np.logaddexp(0.0, high)
+    difference = softplus_high - np.logaddexp(0.0, low)
+    # log(softplus(high) - softplus(low)). In the extreme tail, both
+    # arguments are negative and log(softplus(high)) tends to high.
+    tail = high < -36.0
+    log_difference = np.log(difference)
+    log_difference[tail] = high[tail] + np.log(-np.expm1(low[tail] - high[tail]))
+    coefficient = np.logaddexp(log_count, -math.log(dispersion))
+    log_term = coefficient + log_difference
+    log_linear = np.log(np.abs(change)) + np.where(
+        mostly_failures, -math.log(dispersion), log_count
+    )
+    larger, smaller = np.maximum(log_term, log_linear), np.minimum(log_term, log_linear)
+    log_deviance = larger + np.log(-np.expm1(smaller - larger))
+    return np.exp(log_deviance)
 
 
 def _poisson_log_mass(values, log_means):
@@ -1171,7 +1297,10 @@ def _gamma_log_density(log_values, log_ratio, shape):
 
 
 def _stirling_log_gamma_correction(shape):
-    inverse = 1.0 / shape
+    return _stirling_log_gamma_correction_from_inverse(1.0 / shape)
+
+
+def _stirling_log_gamma_correction_from_inverse(inverse):
     inverse_squared = inverse * inverse
     return inverse * (1.0 / 12.0 - inverse_squared * (1.0 / 360.0))
 

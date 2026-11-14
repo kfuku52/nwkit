@@ -549,6 +549,30 @@ def test_poisson_log_mass_resolves_large_counts_near_the_fitted_mean():
     np.testing.assert_allclose(mass, expected_mass, rtol=0.0, atol=5e-13)
 
 
+@pytest.mark.parametrize(
+    "dispersion,count,shift,expected",
+    [
+        (1e-8, 1e18, 0.099, -474303.9574402318),
+        (1e-6, 1e6, -0.1, -2507.13229477862),
+        (0.7, 1e18, 0.0, -42.24461542763349),
+        (1e308, 1e18, -0.2, -750.6427403160588),
+        (1e-310, 1e308, 0.0, -355.52201801971427),
+        (0.7, 1e308, 1.0, -710.5198344547231),
+    ],
+)
+def test_large_negative_binomial_counts_match_high_precision_reference(
+    dispersion, count, shift, expected
+):
+    counts = np.array([count])
+    log_mean = np.log(counts) + shift
+    # Reference from the log-gamma definition at 750 decimal digits.
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        actual = _count_log_likelihood(
+            counts, log_mean, "negative-binomial", dispersion, None, 0.0
+        )
+    assert actual[0] == pytest.approx(expected, rel=1e-11)
+
+
 def test_beta_binomial_retains_endpoint_and_interior_mass_at_tiny_precision():
     dispersion = 1e-310
     values = np.array([0.0, 1.0, 2.0, 4.0, 0.0])
