@@ -13,10 +13,15 @@ from typing import Any, Mapping
 import numpy as np
 
 from nwkit.compiled_tree import CompiledTree
-from nwkit.gaussian_tree import GaussianTreeProcess, _scaled_gaussian_variance
+from nwkit.gaussian_tree import (
+    GaussianTreeProcess,
+    _recover_affine_mean,
+    _scaled_gaussian_variance,
+)
 
 _LOG_2PI = math.log(2.0 * math.pi)
 _LOG_2 = math.log(2.0)
+_MAX_FINITE = float(np.finfo(float).max)
 _MIN_SLOPE_FOR_FINITE_NORMALIZED_VARIANCE = math.sqrt(np.finfo(float).tiny)
 
 
@@ -282,6 +287,8 @@ def _push_down(
         return _Factor(intercept, innovation, factor.log_weight, factor.density_rank)
     variance = _scaled_gaussian_variance(slope, factor.variance) + innovation
     mean = slope * factor.mean + intercept
+    if not math.isfinite(mean):
+        mean = _recover_affine_mean(slope, factor.mean, intercept, mean)
     if not math.isfinite(mean) or not math.isfinite(variance) or variance < 0.0:
         raise ValueError("A Gaussian smoothing message exceeds floating-point range.")
     return _Factor(mean, variance, factor.log_weight, factor.density_rank)
@@ -346,17 +353,16 @@ def _scaled_process_and_observations(process, observations):
         return records, 0.0, 0, process
     center = observations.center
     magnitudes = [observations.observed_size]
+    # Form overflowing centered offsets again after trait normalization.
     for transition in process.transitions.values():
         if transition.variance:
             magnitudes.append(math.sqrt(transition.variance))
-        offset = math.fsum(((transition.slope - 1.0) * center, transition.intercept))
-        if math.isfinite(offset):
-            magnitudes.append(abs(offset))
+        offset = (transition.slope - 1.0) * center + transition.intercept
+        magnitudes.append(abs(offset) if math.isfinite(offset) else _MAX_FINITE)
     if process.root.variance:
         magnitudes.append(math.sqrt(process.root.variance))
     root_offset = process.root.mean - center
-    if math.isfinite(root_offset):
-        magnitudes.append(abs(root_offset))
+    magnitudes.append(abs(root_offset) if math.isfinite(root_offset) else _MAX_FINITE)
     size = max(magnitudes, default=0.0)
     exponent = math.frexp(size)[1] - 1 if size > 0.0 else 0
 
@@ -380,11 +386,8 @@ def _scaled_process_and_observations(process, observations):
     ]
     transitions = {}
     for node, transition in process.transitions.items():
-        transformed_intercept = math.fsum(
-            (
-                (transition.slope - 1.0) * scaled_center,
-                scaled(transition.intercept),
-            )
+        transformed_intercept = (transition.slope - 1.0) * scaled_center + scaled(
+            transition.intercept
         )
         transitions[node] = type(transition)(
             transition.slope,
@@ -574,10 +577,8 @@ def condition_gaussian_tree(
     def restore_mean(value):
         try:
             result = center + math.ldexp(value, exponent)
-        except OverflowError as exc:
-            raise ValueError(
-                "A posterior Gaussian mean exceeds floating-point range."
-            ) from exc
+        except OverflowError:
+            result = _recover_gaussian_mean(value, center, exponent)
         if not math.isfinite(result):
             raise ValueError("A posterior Gaussian mean exceeds floating-point range.")
         return result
@@ -612,6 +613,15 @@ def condition_gaussian_tree(
         num_observed_positions=messages.observed_positions,
         compiled_tree=compiled,
     )
+
+
+def _recover_gaussian_mean(value, center, exponent):
+    try:
+        return math.ldexp(value + math.ldexp(center, -exponent), exponent)
+    except OverflowError as exc:
+        raise ValueError(
+            "A posterior Gaussian mean exceeds floating-point range."
+        ) from exc
 
 
 def gaussian_tree_likelihood(
@@ -785,7 +795,7 @@ def _draw_gaussian_messages(messages, num_samples, rng):
             if weight == 0.0:
                 batch[:, index] = offset
             else:
-                prior = transition.slope * batch[:, parent] + transition.intercept
+                prior = _affine_sample_means(transition, batch[:, parent])
                 batch[:, index] = weight * prior + offset
             if sd > 0.0:
                 batch[:, index] += sd * next(next_noise)
@@ -816,11 +826,31 @@ def sample_gaussian_posterior(
         retain_inside=True,
     )
     draws = _draw_gaussian_messages(messages, num_samples, np.random.default_rng(seed))
-    np.ldexp(draws, messages.exponent, out=draws)
-    draws += messages.center
+    _restore_gaussian_draw_means(draws, messages.exponent, messages.center)
     if np.any(~np.isfinite(draws)):
         raise ValueError("A posterior Gaussian sample exceeds floating-point range.")
     return GaussianSamples(messages.compiled.nodes, draws)
+
+
+def _restore_gaussian_draw_means(draws, exponent, center):
+    if exponent > 0 and center != 0.0:
+        limit = math.ldexp(_MAX_FINITE, -exponent)
+        if max(float(np.max(draws)), -float(np.min(draws))) > limit:
+            _restore_overflowing_draw_means(draws, exponent, center)
+            return
+    np.ldexp(draws, exponent, out=draws)
+    draws += center
+
+
+def _restore_overflowing_draw_means(draws, exponent, center):
+    with np.errstate(over="ignore", invalid="ignore"):
+        restored = np.ldexp(draws, exponent)
+        overflowing = np.isinf(restored) & np.isfinite(draws)
+        restored += center
+        restored[overflowing] = np.ldexp(
+            draws[overflowing] + math.ldexp(center, -exponent), exponent
+        )
+    draws[:] = restored
 
 
 def simulate_gaussian_process(
@@ -867,8 +897,12 @@ def _simulate_single_draw(process, compiled, root, rng):
     draws[0] = root[0]
     for index, node in enumerate(compiled.nodes[1:], start=1):
         transition = process.transitions[node]
-        value = transition.slope * float(draws[compiled.parents[index]])
-        value += transition.intercept
+        parent = float(draws[compiled.parents[index]])
+        value = transition.slope * parent + transition.intercept
+        if not math.isfinite(value):
+            value = _recover_affine_mean(
+                transition.slope, parent, transition.intercept, value
+            )
         if transition.variance > 0.0:
             value += rng.normal(0.0, math.sqrt(transition.variance))
         draws[index] = value
@@ -897,6 +931,8 @@ def prepare_gaussian_single_draw(process, compiled, root_values):
         states = [float(root[0])]
         for parent, slope, intercept, stochastic in branches:
             value = slope * states[parent] + intercept
+            if not math.isfinite(value):
+                value = _recover_affine_mean(slope, states[parent], intercept, value)
             if stochastic:
                 value += next(innovations)
             states.append(value)
@@ -928,8 +964,27 @@ def _simulation_root_draws(process, root_values, num_samples, rng):
     raise ValueError("root_values must be scalar or have num_samples values.")
 
 
+def _affine_sample_means(transition, parent_draws):
+    if abs(transition.slope) <= 1.0:
+        return transition.slope * parent_draws + transition.intercept
+    try:
+        with np.errstate(over="raise", invalid="raise"):
+            return transition.slope * parent_draws + transition.intercept
+    except FloatingPointError:
+        with np.errstate(over="ignore", invalid="ignore"):
+            child_draws = transition.slope * parent_draws + transition.intercept
+        for index in np.flatnonzero(~np.isfinite(child_draws)):
+            child_draws[index] = _recover_affine_mean(
+                transition.slope,
+                float(parent_draws[index]),
+                transition.intercept,
+                float(child_draws[index]),
+            )
+        return child_draws
+
+
 def _simulate_branch(transition, parent_draws, child_draws, rng):
-    child_draws[:] = transition.slope * parent_draws + transition.intercept
+    child_draws[:] = _affine_sample_means(transition, parent_draws)
     if transition.variance > 0.0:
         child_draws += rng.normal(0.0, math.sqrt(transition.variance), len(child_draws))
 

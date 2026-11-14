@@ -9,6 +9,7 @@ transitions and innovation variances.
 
 import math
 from dataclasses import dataclass, replace
+from fractions import Fraction
 from typing import Any, Mapping, Sequence
 
 import numpy as np
@@ -23,6 +24,18 @@ def _scaled_gaussian_variance(slope, variance):
     if 2.0**-1022 <= squared < math.inf:
         return squared * variance
     return slope * (slope * variance)
+
+
+def _recover_affine_mean(slope, mean, intercept, result):
+    # A finite opposing intercept can recover an overflowing product.
+    if not math.isfinite(mean) or math.copysign(1.0, result) == math.copysign(
+        1.0, intercept
+    ):
+        return result
+    try:
+        return float(Fraction(slope) * Fraction(mean) + Fraction(intercept))
+    except OverflowError:
+        return result
 
 
 @dataclass(frozen=True, slots=True)
@@ -444,7 +457,13 @@ class GaussianTreeProcess:
             if node.is_root:
                 continue
             transition = self.transitions[node]
-            means[node] = transition.slope * means[node.up] + transition.intercept
+            parent_mean = means[node.up]
+            mean = transition.slope * parent_mean + transition.intercept
+            if not math.isfinite(mean):
+                mean = _recover_affine_mean(
+                    transition.slope, parent_mean, transition.intercept, mean
+                )
+            means[node] = mean
             variances[node] = (
                 _scaled_gaussian_variance(transition.slope, variances[node.up])
                 + transition.variance

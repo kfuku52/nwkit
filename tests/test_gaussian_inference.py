@@ -10,10 +10,12 @@ from nwkit.gaussian_inference import (
     _Factor,
     _normal_log_density,
     _posterior_draw_parameters,
+    _push_down,
     _push_up,
     condition_gaussian_tree,
     gaussian_process_parameter_rank,
     gaussian_tree_likelihood,
+    prepare_gaussian_single_draw,
     sample_gaussian_posterior,
     simulate_gaussian_process,
 )
@@ -70,6 +72,37 @@ def test_gaussian_pruning_checks_transformed_variance_instead_of_its_log():
     assert parent.mean == 1e308
     with pytest.raises(ValueError, match="pruning message exceeds"):
         _push_up(_Factor(1.0, 1.0), 1e-200, 0.0, 0.0)
+
+
+def test_affine_branch_recovers_a_finite_mean_after_product_overflow():
+    tree = tree_from("(A:1,B:1)R;")
+    process = GaussianTreeProcess(
+        tree,
+        {
+            tree["A"]: GaussianTransition(2.0, -1e308, 0.0),
+            tree["B"]: GaussianTransition(-2.0, 1e308, 0.0),
+        },
+        GaussianRootPrior("fixed", 1e308, 0.0),
+        "test",
+    )
+    compiled = CompiledTree.from_tree(tree)
+    expected = np.array([1e308, 1e308, -1e308])
+    means, variances = process.marginal_moments()
+    assert [means[node] for node in compiled.nodes] == expected.tolist()
+    assert not any(variances.values())
+    assert _push_down(_Factor(1e308), 2.0, -1e308, 0.0).mean == 1e308
+    for count in (1, 2):
+        replicates = simulate_gaussian_process(process, num_samples=count, seed=1)
+        np.testing.assert_array_equal(replicates.values, np.tile(expected, (count, 1)))
+    draw = prepare_gaussian_single_draw(process, compiled, None)
+    np.testing.assert_array_equal(draw(np.random.default_rng(1)), expected)
+    values = {"A": 1e308}
+    conditioned = condition_gaussian_tree(process, values)
+    assert [
+        conditioned.marginals[node].mean for node in compiled.nodes
+    ] == expected.tolist()
+    samples = sample_gaussian_posterior(process, values, num_samples=2, seed=1)
+    np.testing.assert_array_equal(samples.values, np.tile(expected, (2, 1)))
 
 
 def test_gaussian_pruning_preserves_proper_root_likelihood_for_a_very_weak_branch():
