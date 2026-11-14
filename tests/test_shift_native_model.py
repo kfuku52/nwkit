@@ -7,12 +7,26 @@ from nwkit.shift_native_model import (
     ShiftData,
     ShiftLayout,
     ShiftTree,
+    covariance_geometry,
     evaluate_trait,
+    mean_geometry,
     restore_trait_fit,
 )
 from nwkit.util import read_tree
 
 TREE = "(((a:1,b:1):1,(c:1,d:1):1):1,((e:1,f:1):1,(g:1,h:1):1):1);"
+
+
+def test_fixed_root_ou_retains_short_branches_in_the_brownian_limit():
+    tree = ShiftTree.build(
+        read_tree("((a:1e-170,b:1e-170):1,c:1);", "auto", True, quiet=True)
+    )
+    alpha = 1e-170
+    _, weights = mean_geometry(tree, alpha)
+    _, innovation, root = covariance_geometry(tree, alpha, 2.0, "OUfixedRoot")
+    np.testing.assert_array_equal(weights, tree.times)
+    np.testing.assert_array_equal(innovation, 2.0 * tree.times)
+    assert root == 0.0
 
 
 def dense_reference(tree, layout, alpha, variance, noise, root):

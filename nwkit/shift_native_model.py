@@ -7,6 +7,7 @@ Scaled regime offsets have well-defined Brownian and independent-tip limits.
 
 import math
 from dataclasses import dataclass
+from sys import float_info
 
 import numpy as np
 
@@ -168,15 +169,18 @@ class ShiftLayout:
             index = tree.indices_by_branch[branch]
             parent = tree.compiled.parents[index]
             age = tree.remaining_times[parent]
-            weight = (
-                age
-                if alpha_height == 0
-                else (
-                    1.0
-                    if math.isinf(alpha_height)
-                    else -math.expm1(-alpha_height * age) / -math.expm1(-alpha_height)
+            if alpha_height < float_info.epsilon / 2:
+                weight = age
+            elif math.isinf(alpha_height):
+                weight = 1.0
+            else:
+                exponent = alpha_height * age
+                denominator = -math.expm1(-alpha_height)
+                weight = (
+                    (alpha_height / denominator) * age
+                    if exponent < float_info.min
+                    else -math.expm1(-exponent) / denominator
                 )
-            )
             first, last = tree.tip_intervals[index]
             if labels[index]:
                 matrix[first:last, labels[index]] += weight
@@ -189,13 +193,23 @@ def mean_geometry(tree, alpha_height):
     alpha_height = float(alpha_height)
     if math.isnan(alpha_height) or alpha_height < 0:
         raise ValueError("Alpha times tree height must be nonnegative.")
-    if alpha_height == 0:
-        return np.ones(len(tree.times)), tree.times.copy()
     if math.isinf(alpha_height):
         return np.zeros(len(tree.times)), np.ones(len(tree.times))
-    return np.exp(-alpha_height * tree.times), -np.expm1(
-        -alpha_height * tree.times
-    ) / -np.expm1(-alpha_height)
+    slopes = np.exp(-alpha_height * tree.times)
+    return slopes, _normalized_ou_duration(alpha_height, tree.times)
+
+
+def _normalized_ou_duration(rate, times):
+    if rate < float_info.epsilon / 2:
+        return times.copy()
+    exponent = rate * times
+    result = -np.expm1(-exponent) / -np.expm1(-rate)
+    # The denominator is still well resolved when only the branch exponent is
+    # subnormal. Apply the first-order branch term before scaling by time.
+    small = exponent < float_info.min
+    if small.any():
+        result[small] = (rate / -math.expm1(-rate)) * times[small]
+    return result
 
 
 def covariance_geometry(tree, alpha_height, process_variance, root_model):
@@ -209,17 +223,20 @@ def covariance_geometry(tree, alpha_height, process_variance, root_model):
         if root_model == "OUrandomRoot":
             raise ValueError("Stationary-root OU is undefined at alpha zero.")
         return slopes, process_variance * tree.times, 0.0
-    denominator = (
-        1.0
-        if math.isinf(alpha_height) or root_model == "OUrandomRoot"
-        else -np.expm1(-2 * alpha_height)
-    )
-    fractions = (
-        np.ones(len(tree.times))
-        if math.isinf(alpha_height)
-        else -np.expm1(-2 * alpha_height * tree.times)
-    )
-    innovations = process_variance * (fractions / denominator)
+    double_rate = 2 * float(alpha_height)
+    if math.isinf(alpha_height):
+        innovations = np.full(len(tree.times), process_variance)
+    elif root_model == "OUfixedRoot" and math.isfinite(double_rate):
+        innovations = process_variance * _normalized_ou_duration(
+            double_rate, tree.times
+        )
+    else:
+        exponent = (
+            -double_rate * tree.times
+            if math.isfinite(double_rate)
+            else -2 * (alpha_height * tree.times)
+        )
+        innovations = process_variance * -np.expm1(exponent)
     root_variance = process_variance if root_model == "OUrandomRoot" else 0.0
     return slopes, innovations, root_variance
 
