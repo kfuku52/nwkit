@@ -115,6 +115,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   supported by SciPy.
 - Reuse continuous predictor loadings during dense errors-in-variables PGLS
   optimization, including automatic evolutionary-parameter searches.
+- Reuse projected categorical predictor factors for observations sharing a
+  species in errors-in-variables regression.
 - Read singleton likelihood-group variances directly from the dense
   covariance diagonal and index larger groups once.
 

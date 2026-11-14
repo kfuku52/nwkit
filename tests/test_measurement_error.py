@@ -26,8 +26,22 @@ from nwkit.measurement_error import (
 from nwkit.sparse_laplace import (
     ContinuousPredictorUncertainty,
     GmrfPredictorUncertainty,
+    GroupedPredictorUncertainty,
     factor_sparse_positive_definite,
+    grouped_predictor_loading,
 )
+
+
+def test_grouped_predictor_loading_keeps_order_and_shared_species_factors():
+    factors = (np.array([[1.0], [2.0]]), np.empty((2, 0)), np.array([[3.0], [0.0]]))
+    indices = np.array([2, 0, 1, 2])
+    loading = grouped_predictor_loading(
+        GroupedPredictorUncertainty(factors, indices), np.eye(2)
+    )
+    np.testing.assert_array_equal(
+        loading.toarray(),
+        [[0, 3], [0, 0], [1, 0], [2, 0], [0, 0], [0, 0], [0, 3], [0, 0]],
+    )
 
 
 def test_latent_predictor_posterior_matches_gaussian_conditioning():

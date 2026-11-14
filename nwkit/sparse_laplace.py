@@ -401,23 +401,50 @@ def grouped_predictor_loading(
     ranks = np.asarray([factor.shape[1] for factor in uncertainty.factors], dtype=int)
     offsets = np.concatenate([[0], np.cumsum(ranks)])
     response_dimension = slopes.shape[1]
+    shape = (len(indices) * response_dimension, int(offsets[-1]))
+    species_order = np.argsort(indices, kind="stable")
+    sorted_indices = indices[species_order]
+    groups, starts = np.unique(sorted_indices, return_index=True)
+    if len(groups) == len(indices):
+        return _ungrouped_predictor_loading(
+            uncertainty, slopes, indices, offsets, shape
+        )
+    stops = np.append(starts[1:], len(indices))
+    rows = []
+    columns = []
+    values = []
+    for species_index, start, stop in zip(groups, starts, stops, strict=True):
+        block = _project_grouped_factor(uncertainty.factors[species_index], slopes)
+        responses, latent = block.nonzero()
+        observations = species_order[start:stop]
+        rows.append((observations[:, None] * response_dimension + responses).ravel())
+        columns.append(np.tile(offsets[species_index] + latent, len(observations)))
+        values.append(np.tile(block[responses, latent], len(observations)))
+    return sparse.csr_matrix(
+        (np.concatenate(values), (np.concatenate(rows), np.concatenate(columns))),
+        shape=shape,
+    )
+
+
+def _ungrouped_predictor_loading(uncertainty, slopes, indices, offsets, shape):
+    dimension = slopes.shape[1]
     rows = []
     columns = []
     values = []
     for observation, species_index in enumerate(indices):
-        factor = np.asarray(uncertainty.factors[int(species_index)], dtype=float)
-        if factor.ndim != 2 or factor.shape[0] != slopes.shape[0]:
-            raise ValueError("Grouped predictor factor is malformed.")
-        block = slopes.T @ factor
-        for response in range(response_dimension):
-            nonzero = np.flatnonzero(block[response])
-            rows.extend([observation * response_dimension + response] * len(nonzero))
-            columns.extend((offsets[species_index] + nonzero).tolist())
-            values.extend(block[response, nonzero].tolist())
-    return sparse.csr_matrix(
-        (values, (rows, columns)),
-        shape=(len(indices) * response_dimension, int(offsets[-1])),
-    )
+        block = _project_grouped_factor(uncertainty.factors[species_index], slopes)
+        response, latent = block.nonzero()
+        rows.extend((observation * dimension + response).tolist())
+        columns.extend((offsets[species_index] + latent).tolist())
+        values.extend(block[response, latent].tolist())
+    return sparse.csr_matrix((values, (rows, columns)), shape=shape)
+
+
+def _project_grouped_factor(factor, slopes):
+    factor = np.asarray(factor, dtype=float)
+    if factor.ndim != 2 or factor.shape[0] != slopes.shape[0]:
+        raise ValueError("Grouped predictor factor is malformed.")
+    return slopes.T @ factor
 
 
 def joint_predictor_loading(
