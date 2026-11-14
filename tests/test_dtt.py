@@ -148,7 +148,8 @@ def test_zero_simulations_do_not_inspect_unused_model_inputs():
 
 
 @pytest.mark.parametrize(
-    "traits,scale", [(1, 1.0), (5, 1e-140), (16, 1e140), (64, 1.0)]
+    "traits,scale",
+    [(1, 1.0), (5, 1e-155), (5, 1e-140), (16, 1e140), (1, 3e153), (64, 1.0)],
 )
 @pytest.mark.parametrize("budget", [1, 8000, 4 * 1024**2])
 def test_batched_simulation_retains_individual_draws_across_workspaces(

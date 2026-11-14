@@ -216,11 +216,14 @@ def _simulate_one(design, factor, seed):
             values[design.parents[node]]
             + np.sqrt(design.lengths[node]) * innovations[node - 1]
         )
-    tips = np.empty((int(np.sum(design.tip_rows >= 0)), factor.shape[0]))
-    for node, row in enumerate(design.tip_rows):
-        if row >= 0:
-            tips[row] = values[node]
-    return dtt_curve(design, tips)
+    return dtt_curve(design, _tip_states(design, values))
+
+
+def _tip_states(design, values):
+    nodes = np.flatnonzero(design.tip_rows >= 0)
+    tips = np.empty((len(nodes), values.shape[1]), dtype=values.dtype)
+    tips[design.tip_rows[nodes]] = values[nodes]
+    return tips
 
 
 _SIMULATION_WORKSPACE_BYTES = 4 * 1024**2
@@ -242,6 +245,20 @@ def _row_squared_norms(delta):
 
 def _batched_disparities(design, means, counts):
     """Replace simulated states with their clade means after propagation."""
+    with np.errstate(over="ignore", invalid="ignore", under="ignore"):
+        disparities = _batched_clade_moments(design, means, counts)
+    affected = ~np.isfinite(disparities).all(axis=0)
+    affected |= disparities[0] < np.finfo(float).tiny
+    for replica in np.flatnonzero(affected):
+        # The in-place reduction changes only internal states. The original
+        # tips let the single-curve path recover extreme but finite disparities.
+        disparities[:, replica], _ = clade_disparities(
+            design, _tip_states(design, means[:, replica])
+        )
+    return disparities
+
+
+def _batched_clade_moments(design, means, counts):
     sums = np.zeros(means.shape[:2])
     for node in range(len(counts) - 1, -1, -1):
         if design.tip_rows[node] >= 0:
@@ -259,17 +276,12 @@ def _batched_disparities(design, means, counts):
             sums[node] += sums[child] + squared * merged * counts[child] / total
             means[node] += delta * (counts[child] / total)
             merged = total
-    disparities = np.divide(
+    return np.divide(
         2 * sums,
         (counts - 1)[:, None],
         out=np.zeros_like(sums),
         where=counts[:, None] > 1,
     )
-    if not np.isfinite(disparities).all() or np.any(disparities[0] <= 0):
-        raise ValueError(
-            "DTT requires finite, positive total disparity; rescale nonconstant traits."
-        )
-    return disparities
 
 
 def _simulate_chunk(payload):
