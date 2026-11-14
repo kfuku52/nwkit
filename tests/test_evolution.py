@@ -16,7 +16,9 @@ from nwkit.evolution import (
     validate_custom_covariance,
     validate_evolution_parameter,
 )
+from nwkit.nonstationary_continuous_asr import default_eb_rate_bounds
 from nwkit.ordinary_regression import fit_ordinary_regression
+from nwkit.ou_asr import default_alpha_bounds
 from nwkit.sparse_laplace import (
     combine_sparse_covariance_models,
     condition_sparse_tip_model,
@@ -40,6 +42,13 @@ def test_default_rate_bounds_are_finite_on_short_trees(model):
     assert math.isfinite(lower) and math.isfinite(upper)
     assert lower < upper
     assert upper > 0.0 if model != "eb" else upper == 0.0
+
+
+@pytest.mark.parametrize("bounds_for", [default_alpha_bounds, default_eb_rate_bounds])
+def test_ancestral_rate_defaults_stay_finite_on_short_trees(bounds_for):
+    lower, upper = bounds_for(_tree("(A:1e-310,B:1e-310);"))
+    assert math.isfinite(lower) and math.isfinite(upper)
+    assert lower < upper
 
 
 def _values(values):

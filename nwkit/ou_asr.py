@@ -15,6 +15,7 @@ from nwkit.continuous_asr import (
     _observations_by_group,
     _tree_groups,
 )
+from nwkit.evolution import _finite_rate_bound
 from nwkit.gaussian_tree import ou_stationary_variance, ou_transition
 
 _LOG_2PI = math.log(2.0 * math.pi)
@@ -484,7 +485,7 @@ def default_alpha_bounds(tree):
         if node.is_leaf:
             maximum_depth = max(maximum_depth, depth)
     time_scale = maximum_depth if maximum_depth > 0.0 else 1.0
-    return 1e-6 / time_scale, 50.0 / time_scale
+    return _finite_rate_bound(1e-6, time_scale), _finite_rate_bound(50.0, time_scale)
 
 
 def parse_alpha_bounds(value, tree):

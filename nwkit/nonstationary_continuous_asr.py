@@ -12,6 +12,7 @@ from nwkit.continuous_asr import (
     _ldexp,
     compute_bm_marginals,
 )
+from nwkit.evolution import _finite_rate_bound
 from nwkit.transformed_continuous_asr import compute_transformed_bm_marginals
 
 
@@ -60,7 +61,8 @@ def default_eb_rate_bounds(tree):
     depths = _node_depths(tree)
     maximum = max(depths.values(), default=0.0)
     scale = maximum if maximum > 0.0 else 1.0
-    return -10.0 / scale, 10.0 / scale
+    limit = _finite_rate_bound(10.0, scale)
+    return -limit, limit
 
 
 def parse_eb_rate_bounds(value, tree):
