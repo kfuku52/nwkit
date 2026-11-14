@@ -1627,18 +1627,18 @@ def _discrete_gamma_category_rates(shape, categories):
 
 
 def _mixture_log_tip_likelihoods(compiled, likelihoods_by_character):
-    return {
-        index: _log_probabilities(
-            np.asarray(
-                [
-                    likelihood[compiled.nodes[index].name]
-                    for likelihood in likelihoods_by_character.values()
-                ],
-                dtype=float,
-            )
-        )
-        for index in compiled.leaf_indices
-    }
+    leaves = compiled.leaf_indices
+    names = tuple(compiled.nodes[index].name for index in leaves)
+    characters = likelihoods_by_character.values()
+    first = next(iter(characters))
+    state_shape = np.shape(first[names[0]])
+    values = np.empty((len(leaves), len(characters), *state_shape), dtype=float)
+    for column, likelihood in enumerate(characters):
+        values[:, column] = [likelihood[name] for name in names]
+    with np.errstate(divide="ignore"):
+        # These are owned buffers, and every category reads the same view.
+        np.log(values, out=values)
+    return dict(zip(leaves, values, strict=True))
 
 
 def _mixture_character_batches(likelihoods_by_character, num_states):

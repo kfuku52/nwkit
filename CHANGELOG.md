@@ -152,7 +152,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   likelihood-only Mk tree traversal.
 - Reuse logged tip likelihoods and parsed branch lengths during Mk rate
   optimization. Reuse generator preparation in MK-REGIME and a fixed
-  generator and stationary prior across Mk mixture iterations.
+  generator and stationary prior across Mk mixture iterations. Pack Mk
+  mixture tip likelihoods in a shared array for batched log conversion.
 - Reuse prepared stochastic mapping contexts without copying branch rate
   matrices into each worker specification.
 - Precompute child-state conditional probabilities before sampling
