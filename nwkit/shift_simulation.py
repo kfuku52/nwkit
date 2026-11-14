@@ -18,7 +18,7 @@ from nwkit.shift_native_model import (
     restore_trait_covariance,
 )
 from nwkit.vector_gaussian import VectorProcess, VectorTransition
-from nwkit.vector_simulation import simulate_vector_process
+from nwkit.vector_simulation import _zero_mean_draws, simulate_vector_process
 
 
 @dataclass(frozen=True)
@@ -150,13 +150,10 @@ def simulate_shift(spec, replicates=1, *, seed=1):
     )
     values = np.take(latent, spec.tree.compiled.leaf_indices, axis=1)
     if np.any(spec.measurement_covariance) or np.any(spec.sampling_variances):
-        rng = np.random.default_rng(error_seed)
-        zero = np.zeros(p)
+        draw = _zero_mean_draws(np.random.default_rng(error_seed), p, replicates)
         for i, sampling in enumerate(spec.sampling_variances):
             covariance = spec.measurement_covariance + np.diag(sampling)
-            values[:, i] += rng.multivariate_normal(
-                zero, covariance, size=replicates, check_valid="raise"
-            )
+            values[:, i] += draw(covariance)
     latent += baseline
     values += baseline
     values[:, spec.missing] = np.nan

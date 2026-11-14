@@ -5,6 +5,38 @@ import numpy as np
 from nwkit.compiled_tree import CompiledTree
 
 
+def _zero_mean_draws(rng, dimension, count):
+    """Reuse the SVD for consecutive draws with identical covariance."""
+    previous = None
+    factor = None
+    zero = np.zeros(dimension)
+
+    def draw(covariance):
+        nonlocal previous, factor
+        covariance = np.asarray(covariance)
+        if covariance.shape != (dimension, dimension) or covariance.dtype != np.float64:
+            return rng.multivariate_normal(
+                zero, covariance, size=count, check_valid="raise"
+            )
+        bits = covariance.view(np.uint64)
+        if previous is None or not np.array_equal(bits, previous):
+            # Match Generator.multivariate_normal's default SVD and validation
+            # so the same standard-normal draws use the same factor.
+            vectors, singular, right = np.linalg.svd(covariance)
+            tolerance = 1e-8
+            if not np.allclose(
+                (right.T * singular) @ right, covariance, rtol=tolerance, atol=tolerance
+            ):
+                raise ValueError("covariance is not symmetric positive-semidefinite.")
+            factor = vectors * np.sqrt(singular)
+            previous = bits.copy()
+        draws = rng.standard_normal((count, dimension)) @ factor.T
+        draws += zero
+        return draws
+
+    return draw
+
+
 def simulate_vector_process(
     process, num_samples=1, *, seed=None, root_values=None, compiled_tree=None
 ):
@@ -43,17 +75,13 @@ def simulate_vector_process(
                 "root_values must be a finite vector or one vector per sample."
             )
         result[:, 0] = roots
+    draw = _zero_mean_draws(rng, dimension, num_samples)
     for index, node in enumerate(compiled.nodes[1:], 1):
         transition = process.transitions[node]
         result[:, index] = (
             result[:, compiled.parents[index]] @ transition.slope.T
             + transition.intercept
-            + rng.multivariate_normal(
-                np.zeros(dimension),
-                transition.covariance,
-                size=num_samples,
-                check_valid="raise",
-            )
+            + draw(transition.covariance)
         )
     return compiled.nodes, result
 
