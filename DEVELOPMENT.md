@@ -122,10 +122,14 @@ after imports and fixture construction. RSS includes the entire child process;
 it is reported as `null` on Windows, where `resource` is unavailable. The Gaussian
 case uses a seeded balanced tree, one response/predictor, REML, and automatic
 lambda estimation. It is not a benchmark of every family or tree shape.
-The Mk mixture case fits 16 three-state characters across four rate
-categories. The threshold case fits a four-state character with two seeded
-chains. Its output captures the thresholds, node probabilities and liability
-moments. Convergence diagnostics depend on the ESS method in each revision.
+The Mk mixture case uses a fixed ER base rate and fits four gamma rate
+categories to 16 seeded three-state characters. It compares the likelihood,
+shape, category rates, category and node posterior probabilities, and
+convergence. The threshold case fits a four-state character with two seeded
+chains. It compares thresholds, node probabilities, and liability moments.
+A change in random-number consumption can change individual MCMC runs.
+Compare results across multiple seeds and inspect convergence before
+interpreting differences between samplers.
 The Poisson GLMM case uses one predictor and a simulated phylogenetic random
 effect. It compares coefficients, coefficient covariance, variance components,
 random modes, likelihood, and convergence and boundary flags. Random modes
@@ -137,10 +141,6 @@ and convergence status are compared (`rtol=1e-4`, `atol=1e-6` for numbers); a
 mismatch fails the command. Inspect actual numerical differences as well as
 the pass/fail result. Do not run other numerical jobs during timing, and report
 the environment, repetitions and output-equivalence check with any speed claim.
-
-The ASR mixture case fits four gamma rate categories to 16 seeded three-state
-characters with a fixed ER base rate. It compares the fitted likelihood, shape,
-category rates, all category and node posterior probabilities, and convergence.
 
 Scalar likelihood searches retain all objective values but at most two complete
 fits, releasing cached arrays after selecting the winner. Ordinary automatic
