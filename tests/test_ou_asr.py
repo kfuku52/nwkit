@@ -24,6 +24,10 @@ def test_affine_ou_pruning_preserves_weak_attraction_to_the_optimum():
     assert propagated.mean_slope == pytest.approx(-1e-20, abs=0.0, rel=1e-14)
 
 
+def test_ou_tail_likelihood_remains_finite_when_the_square_alone_overflows():
+    assert ou_asr._log_normal_density(1.7e154, 0.0, 1.0) == pytest.approx(-1.445e308)
+
+
 def ancestor_distances(node):
     result, distance = {node: 0.0}, 0.0
     while not node.is_root:

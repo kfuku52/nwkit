@@ -16,7 +16,9 @@ from nwkit.continuous_asr import (
     _tree_groups,
 )
 from nwkit.evolution import _finite_rate_bound
+from nwkit.gaussian_inference import _normal_log_density as _log_normal_density
 from nwkit.gaussian_tree import (
+    _scaled_gaussian_variance,
     ou_stationary_variance,
     ou_transition_from_root_variance,
 )
@@ -84,15 +86,6 @@ class _OuData:
     likelihood_dimensions: int
     trait_center: float
     trait_exponent: int
-
-
-def _log_normal_density(value, mean, variance):
-    if variance <= 0.0 or not math.isfinite(variance):
-        raise ValueError("OU Gaussian variance must be positive and finite.")
-    standardized = (value - mean) / math.sqrt(variance)
-    if not math.isfinite(standardized):
-        return -math.inf
-    return -0.5 * (_LOG_2PI + math.log(variance) + standardized * standardized)
 
 
 def _combine(first, second):
@@ -436,7 +429,7 @@ def _predict_down(factor, alpha, root_variance, theta, length):
     )
     marginal = factor.marginal
     mean = decay * marginal.mean + intercept
-    variance = decay * decay * marginal.variance + innovation
+    variance = _scaled_gaussian_variance(decay, marginal.variance) + innovation
     if not math.isfinite(mean) or not math.isfinite(variance) or variance <= 0.0:
         raise ValueError("An OU smoothing message is not finite and positive.")
     return _Factor(GaussianMarginal(mean, variance), factor.log_weight)
