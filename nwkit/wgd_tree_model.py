@@ -186,6 +186,19 @@ def _gene_splits(gene, targets):
     return nodes, children.reshape(-1, 2).T
 
 
+def _observed_gene_tips(tree, gene):
+    by_species: dict[str, list[int]] = {name: [] for name in tree.tip_names}
+    for node, name in enumerate(gene.species):
+        if name:
+            by_species[name].append(node)
+    return {
+        node: (column, by_species[name])
+        for column, (node, name) in enumerate(
+            zip(tree.tip_nodes, tree.tip_names, strict=True)
+        )
+    }
+
+
 def _log_root_survival_normalizer(excess_mean, survival, log_survival):
     if survival >= np.finfo(float).tiny or excess_mean == 0:
         return math.log1p(excess_mean * survival)
@@ -293,6 +306,7 @@ class TopologyLikelihood:
             node for node, children in enumerate(gene_tree.children) if children
         )
         self.split_nodes, self.split_children = _gene_splits(gene_tree, self.targets)
+        self._gene_tips = _observed_gene_tips(species_tree, gene_tree)
         self.tip_counts: list[int] = []
         for children in gene_tree.children:
             self.tip_counts.append(
@@ -385,16 +399,12 @@ class TopologyLikelihood:
         log_survivors = np.full(nodes, -np.inf)
         log_extinctions = np.zeros(nodes)
         columns = 1 + len(self.targets) if event is not None and origins else 1
+        # Every species contributes to observation selection. Only subtrees
+        # containing a mapped gene tip need a topology likelihood matrix.
         probabilities: dict[int, np.ndarray] = {}
-        tips = dict(
-            zip(self.tree.tip_nodes, range(len(self.tree.tip_nodes)), strict=True)
-        )
         for node in reversed(range(nodes)):
-            if node in tips:
-                i = tips[node]
-                probabilities[node] = np.full(
-                    (len(self.gene.children), columns), -np.inf
-                )
+            if (tip := self._gene_tips.get(node)) is not None:
+                i, gene_nodes = tip
                 survivors[node] = self.detection[i]
                 log_survivors[node] = (
                     math.log(self.detection[i]) if self.detection[i] else -np.inf
@@ -402,9 +412,11 @@ class TopologyLikelihood:
                 log_extinctions[node] = (
                     math.log1p(-self.detection[i]) if self.detection[i] < 1 else -np.inf
                 )
-                for gene, name in enumerate(self.gene.species):
-                    if name == self.tree.tip_names[i]:
-                        probabilities[node][gene, 0] = math.log(self.detection[i])
+                if gene_nodes:
+                    probabilities[node] = np.full(
+                        (len(self.gene.children), columns), -np.inf
+                    )
+                    probabilities[node][gene_nodes, 0] = log_survivors[node]
             else:
                 left, right = self.children[node]
                 log_survivors[node] = np.logaddexp(
@@ -412,21 +424,14 @@ class TopologyLikelihood:
                 )
                 log_extinctions[node] = log_extinctions[left] + log_extinctions[right]
                 survivors[node] = math.exp(log_survivors[node])
-                probabilities[node] = np.logaddexp(
-                    probabilities[left] + log_extinctions[right],
-                    probabilities[right] + log_extinctions[left],
+                combined = self._combine_species(
+                    probabilities.pop(left, None),
+                    probabilities.pop(right, None),
+                    log_extinctions[left],
+                    log_extinctions[right],
                 )
-                first, second = self.split_children
-                for a_species, b_species in ((left, right), (right, left)):
-                    _add_species_split(
-                        probabilities[node],
-                        probabilities[a_species],
-                        probabilities[b_species],
-                        self.split_nodes,
-                        first,
-                        second,
-                    )
-                del probabilities[left], probabilities[right]
+                if combined is not None:
+                    probabilities[node] = combined
             if node:
                 duplication, loss = rates[self.groups[node]] * scale
                 length = self.tree.lengths[node]
@@ -436,31 +441,34 @@ class TopologyLikelihood:
                     else self._fixed_by_node.get(node)
                 )
                 if pulse is not None:
-                    survivors[node], probabilities[node] = self._edge(
-                        survivors[node],
-                        probabilities[node],
-                        duplication,
-                        loss,
-                        length * (1 - pulse.fraction),
-                        dtype,
-                        log_survivors[node],
-                    )
+                    after = length * (1 - pulse.fraction)
+                    if node in probabilities:
+                        _, probabilities[node] = self._edge(
+                            survivors[node],
+                            probabilities[node],
+                            duplication,
+                            loss,
+                            after,
+                            dtype,
+                            log_survivors[node],
+                        )
                     log_survivors[node], log_extinctions[node] = (
                         lineage_log_complements(
                             log_survivors[node],
                             log_extinctions[node],
                             duplication,
                             loss,
-                            length * (1 - pulse.fraction),
+                            after,
                         )
                     )
-                    survivors[node], probabilities[node] = self._jump(
-                        survivors[node],
-                        probabilities[node],
-                        pulse,
-                        log_extinctions[node],
-                        mark=pulse is event,
-                    )
+                    if node in probabilities:
+                        _, probabilities[node] = self._jump(
+                            survivors[node],
+                            probabilities[node],
+                            pulse,
+                            log_extinctions[node],
+                            mark=pulse is event,
+                        )
                     q = pulse.retention
                     old_extinction = log_extinctions[node]
                     log_survivors[node] = min(
@@ -472,15 +480,16 @@ class TopologyLikelihood:
                         math.log(q) + old_extinction if q else -np.inf,
                     )
                     length *= pulse.fraction
-                survivors[node], probabilities[node] = self._edge(
-                    survivors[node],
-                    probabilities[node],
-                    duplication,
-                    loss,
-                    length,
-                    dtype,
-                    log_survivors[node],
-                )
+                if node in probabilities:
+                    _, probabilities[node] = self._edge(
+                        survivors[node],
+                        probabilities[node],
+                        duplication,
+                        loss,
+                        length,
+                        dtype,
+                        log_survivors[node],
+                    )
                 log_survivors[node], log_extinctions[node] = lineage_log_complements(
                     log_survivors[node],
                     log_extinctions[node],
@@ -530,6 +539,17 @@ class TopologyLikelihood:
             log_survivors[0],
         )
         return root[-1], selection_log
+
+    def _combine_species(self, left, right, left_extinction, right_extinction):
+        if left is None:
+            return None if right is None else right + left_extinction
+        if right is None:
+            return left + right_extinction
+        combined = np.logaddexp(left + right_extinction, right + left_extinction)
+        first, second = self.split_children
+        for a, b in ((left, right), (right, left)):
+            _add_species_split(combined, a, b, self.split_nodes, first, second)
+        return combined
 
     def _evaluate(self, rates, root_mean, event, dtype, *, origins=True):
         categories = [
