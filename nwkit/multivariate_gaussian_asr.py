@@ -665,10 +665,9 @@ def _posterior(
     )
     trait_covariance = sigma[:, data.trait_indices]
 
-    def cross_covariance(node_index):
-        shared, left, right = geometry.cross(node_index)
+    def cross_covariance(shared, left, right):
         cross = shared if flat_root else np.exp(-alpha * (left + right))
-        return cross[None, :] * trait_covariance
+        return cross[:, None, :] * trait_covariance
 
     adjustment_base = np.zeros((dimension, len(free_mean_indices)), dtype=float)
     adjustment_base[free_mean_indices, np.arange(len(free_mean_indices))] = 1.0
@@ -677,7 +676,7 @@ def _posterior(
     )
     posterior = {}
     for start, nodes, cross, conditional_covariance in _posterior_covariance_batches(
-        data, geometry, factor, cross_covariance
+        data, geometry, factor, cross_covariance, need_paths=not flat_root
     ):
         scalars = prior_scales[start : start + len(nodes), None, None]
         covariance = scalars * sigma - conditional_covariance
@@ -689,16 +688,27 @@ def _posterior(
     return posterior
 
 
-def _posterior_covariance_batches(data, geometry, factor, cross_covariance):
+def _posterior_covariance_batches(
+    data, geometry, factor, cross_covariance, *, need_paths=True
+):
     dimension = len(data.trait_names)
     observations = len(data.values)
     batch_size = max(1, 32_768 // (dimension * observations))
     all_nodes = geometry.compiled.nodes
+    lookup = geometry.lca.indexed_ancestors()
+    path_lengths = _prepare_indexed_path_lengths(geometry.lca, geometry.jump_lengths)
+    observed = geometry.unique_observed_nodes[None, :]
+    inverse = geometry.observed_node_inverse
     for start in range(0, len(all_nodes), batch_size):
         nodes = all_nodes[start : start + batch_size]
-        cross = np.stack(
-            [cross_covariance(index) for index in range(start, start + len(nodes))]
-        )
+        indices = np.arange(start, start + len(nodes))[:, None]
+        ancestor = lookup(indices, observed)
+        shared = geometry.depths[ancestor][:, inverse]
+        left, right = None, None
+        if need_paths:
+            left = path_lengths(indices, ancestor)[:, inverse] / geometry.time_scale
+            right = path_lengths(observed, ancestor)[:, inverse] / geometry.time_scale
+        cross = cross_covariance(shared, left, right)
         solved_cross = cho_solve(
             factor, cross.reshape(-1, observations).T, check_finite=False
         )
@@ -765,9 +775,10 @@ def _diagonal_ou_posterior(
     trait_covariance = stationary_sigma[:, data.trait_indices]
     posterior = {}
 
-    def cross_covariance(node_index):
-        _, left, right = geometry.cross(node_index)
-        decay = _diagonal_ou_decay(beta[:, None], left, observed_beta[None, :], right)
+    def cross_covariance(_, left, right):
+        decay = _diagonal_ou_decay(
+            beta[:, None], left[:, None, :], observed_beta[None, :], right[:, None, :]
+        )
         return decay * trait_covariance
 
     for _, nodes, cross, conditional_covariance in _posterior_covariance_batches(
