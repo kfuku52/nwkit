@@ -20,16 +20,33 @@ _SELECTION_PROBABILITY_FLOOR = np.finfo(float).tiny / np.finfo(float).eps
 _GEOMETRIC_RECURRENCE_MIN_COUNT = 256
 
 
+def _logsum_probabilities(values, axis):
+    """Unweighted log-sum for real log probabilities, including empty support."""
+    top = np.max(values, axis=axis, keepdims=True)
+    dominant = values == top
+    count = np.count_nonzero(dominant, axis=axis)
+    shifted = values - np.where(top == -np.inf, 0.0, top)
+    shifted[dominant] = -np.inf
+    np.exp(shifted, out=shifted)
+    # Keep a tiny tail next to an exactly represented dominant term. All
+    # impossible rows have sum zero and top -inf, so stay -inf.
+    return (np.log1p(shifted.sum(axis=axis) / count) + np.log(count)) + np.squeeze(
+        top, axis=axis
+    )
+
+
 def _log_pruning_contribution(matrix, values):
     # Estimate four float-sized broadcast/logsumexp temporaries. Retain the
     # row loop when even a two-family tile would exceed this workspace.
     batch = max(1, min(64, _LOG_PRUNING_WORKSPACE_BYTES // (32 * matrix.size)))
     if len(values) <= 1 or batch == 1:
-        return np.array([logsumexp(matrix + row[None, :], axis=1) for row in values])
+        return np.array(
+            [_logsum_probabilities(matrix + row[None, :], axis=1) for row in values]
+        )
     contribution = np.empty((len(values), matrix.shape[0]))
     for start in range(0, len(values), batch):
         end = min(start + batch, len(values))
-        contribution[start:end] = logsumexp(
+        contribution[start:end] = _logsum_probabilities(
             matrix[None, :, :] + values[start:end, None, :], axis=2
         )
     return contribution
@@ -1008,9 +1025,10 @@ class CountLikelihood:
                 )
             observed_logs.append(logs)
             selection_logs.append(self._selection_logs(rates, scale, root_mean, event))
-        observed_log = logsumexp(observed_logs, axis=0) - np.log(len(self.rate_scales))
+        scale_log = np.log(len(self.rate_scales))
+        observed_log = _logsum_probabilities(np.stack(observed_logs), axis=0) - scale_log
         # Ascertainment is conditioned after mixing, not separately per category.
-        survival_log = logsumexp(selection_logs, axis=0) - np.log(len(self.rate_scales))
+        survival_log = _logsum_probabilities(np.stack(selection_logs), axis=0) - scale_log
         result = observed_log - survival_log[self.pattern_index]
         if np.any(np.isnan(result)) or np.any(result > 1e-8):
             raise ValueError(

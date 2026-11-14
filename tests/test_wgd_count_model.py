@@ -12,6 +12,7 @@ from nwkit.wgd_count_model import (
     CountTree,
     MultiplicationEvent,
     _birth_death_log_transition,
+    _logsum_probabilities,
     birth_death_parameters,
     birth_death_transition,
     multiplication_transition,
@@ -24,6 +25,20 @@ def tree():
     return CountTree(
         (-1, 0, 0), (0.0, 0.4, 0.7), (1, 2), ("A", "B"), (0, 1, 2), ("AB", "A", "B")
     )
+
+
+@pytest.mark.parametrize("axis", [0, 1])
+def test_log_probability_sum_retains_tiny_terms_ties_and_impossible_rows(axis):
+    values = np.array(
+        [[0.0, -50.0, -np.inf], [-50.0, -50.0, -51.0], [-np.inf, -np.inf, -np.inf]]
+    )
+    if axis == 0:
+        values = values.T
+    with np.errstate(invalid="raise", divide="raise"):
+        actual = _logsum_probabilities(values, axis=axis)
+    np.testing.assert_allclose(actual, logsumexp(values, axis=axis), rtol=1e-14, atol=0)
+    assert actual[0] == np.log1p(np.exp(-50.0)) > 0
+    assert np.isneginf(actual[-1])
 
 
 @pytest.mark.parametrize(
