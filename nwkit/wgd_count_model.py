@@ -536,33 +536,33 @@ class CountLikelihood:
         return matrices
 
     def _prune(self, emissions, matrices, prior):
-        likelihoods: dict[int, np.ndarray] = {}
-        scales: dict[int, np.ndarray] = {}
+        size = len(self.tree.parents)
+        likelihoods = [None] * size
+        scales = [None] * size
         rows = next(iter(emissions.values())).shape[0]
-        for node in range(len(self.tree.parents) - 1, -1, -1):
-            if node in emissions:
-                value = emissions[node]
-                scale = np.zeros(rows)
-            else:
+        with np.errstate(divide="ignore"):
+            for node in range(size - 1, -1, -1):
+                if node in emissions:
+                    likelihoods[node] = emissions[node]
+                    continue
                 value = np.ones((rows, len(prior)))
                 scale = np.zeros(rows)
                 for child in self.children[node]:
-                    contribution = likelihoods.pop(child) @ matrices[child].T
-                    child_scale = scales.pop(child)
+                    contribution = likelihoods[child] @ matrices[child].T
                     # An unobserved subtree integrates to one over the unbounded
                     # process, not to the truncated transition's row sum.
                     missing = self.subtree_missing[child]
                     contribution[missing] = 1.0
-                    child_scale[missing] = 0.0
                     value *= contribution
-                    scale += child_scale
+                    if (child_scale := scales[child]) is not None:
+                        child_scale[missing] = 0.0
+                        scale += child_scale
+                    likelihoods[child] = scales[child] = None
                     normalizer = value.max(axis=1)
                     positive = normalizer > 0
                     value[positive] /= normalizer[positive, None]
-                    with np.errstate(divide="ignore"):
-                        scale += np.log(normalizer)
-            likelihoods[node], scales[node] = value, scale
-        with np.errstate(divide="ignore"):
+                    scale += np.log(normalizer)
+                likelihoods[node], scales[node] = value, scale
             return np.log(likelihoods[0] @ prior) + scales[0]
 
     def _log_transitions(
