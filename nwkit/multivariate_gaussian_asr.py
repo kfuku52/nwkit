@@ -4,7 +4,7 @@ import math
 from dataclasses import dataclass, replace
 
 import numpy as np
-from scipy.linalg import cho_factor, cho_solve
+from scipy.linalg import cho_factor, cho_solve, solve_triangular
 
 from nwkit.clade_index import LcaIndex
 from nwkit.compiled_tree import CompiledTree
@@ -514,24 +514,32 @@ def _profile_mean(data, covariance, *, reml, fixed_mean=None):
     design = full_design[:, free_mean_indices]
     factor, log_determinant = _factor_covariance(covariance)
     adjusted_values = data.values - full_design @ mean
+    whitened = solve_triangular(
+        factor[0],
+        np.column_stack([design, adjusted_values]),
+        lower=True,
+        check_finite=False,
+    )
+    whitened_values = whitened[:, -1]
     mean_factor = None
     mean_log_determinant = 0.0
     if len(free_mean_indices):
-        solved_design = cho_solve(factor, design, check_finite=False)
-        information = design.T @ solved_design
+        whitened_design = whitened[:, :-1]
+        information = whitened_design.T @ whitened_design
         try:
             mean_factor = cho_factor(information, lower=True, check_finite=False)
         except np.linalg.LinAlgError as exc:
             raise ValueError(
                 "Multivariate trait means are not separately identifiable."
             ) from exc
-        solved_values = cho_solve(factor, adjusted_values, check_finite=False)
-        fitted = cho_solve(mean_factor, design.T @ solved_values, check_finite=False)
+        fitted = cho_solve(
+            mean_factor, whitened_design.T @ whitened_values, check_finite=False
+        )
         mean[free_mean_indices] = fitted
+        whitened_values = whitened_values - whitened_design @ fitted
         mean_log_determinant = 2.0 * float(np.log(np.diag(mean_factor[0])).sum())
     residual = data.values - full_design @ mean
-    solved_residual = cho_solve(factor, residual, check_finite=False)
-    quadratic = float(residual @ solved_residual)
+    quadratic = float(whitened_values @ whitened_values)
     if reml:
         rank = len(data.values) - len(free_mean_indices)
         likelihood = -0.5 * (
