@@ -282,9 +282,26 @@ class ShiftData:
             raise ValueError(
                 "Each native shift trait needs at least three observed tips."
             )
-        centers = np.nanmean(values, axis=0)
-        centered = values - centers
+        with np.errstate(over="ignore", invalid="ignore"):
+            centers = np.nanmean(values, axis=0)
+            centered = values - centers
         scales = np.nanmax(np.abs(centered), axis=0)
+        affected = ~np.isfinite(centers) | ~np.isfinite(scales)
+        for column in np.flatnonzero(affected):
+            trait = values[:, column]
+            magnitude = np.nanmax(np.abs(trait))
+            exponent = math.frexp(magnitude)[1] - 1
+            center = math.ldexp(np.nanmean(np.ldexp(trait, -exponent)), exponent)
+            with np.errstate(over="ignore"):
+                shifted = trait - center
+            if np.isinf(shifted).any():
+                # Centering at the middle of the observed range bounds the
+                # deviations when even subtraction from the mean overflows.
+                center = np.nanmin(trait) / 2 + np.nanmax(trait) / 2
+                shifted = trait - center
+            centers[column] = center
+            centered[:, column] = shifted
+            scales[column] = np.nanmax(np.abs(shifted))
         scales = np.maximum(scales, np.sqrt(np.max(errors, axis=0)))
         if np.any(scales == 0) or not np.isfinite(scales).all():
             raise ValueError(

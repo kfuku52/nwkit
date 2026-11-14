@@ -29,6 +29,24 @@ def test_fixed_root_ou_retains_short_branches_in_the_brownian_limit():
     assert root == 0.0
 
 
+def test_trait_normalization_handles_finite_values_near_float_limits():
+    tree = read_tree("((a:1,b:1):1,(c:1,d:1):1);", "auto", True, quiet=True)
+    values = np.array(
+        [
+            [1e308, -1.7e308],
+            [1.1e308, -1.7e308],
+            [1.2e308, -1.7e308],
+            [1.3e308, 1.7e308],
+        ]
+    )
+    data = ShiftData.build(tree, values, ["same_sign", "mixed_sign"])
+    assert data.centers[0] == pytest.approx(1.15e308, rel=2e-16)
+    assert data.centers[1] == 0.0
+    np.testing.assert_allclose(
+        data.values * data.scales + data.centers, values, rtol=2e-16
+    )
+
+
 def dense_reference(tree, layout, alpha, variance, noise, root):
     """Propagate independent branch innovations and regime forcing directly."""
     compiled = tree.compiled
