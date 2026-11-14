@@ -186,6 +186,18 @@ def test_stationary_distribution_is_invariant_to_rate_units(scale):
         np.testing.assert_allclose(stationary_distribution(matrix), [2 / 3, 1 / 3])
 
 
+@pytest.mark.parametrize("slow_rate", [1e-30, 1e-310])
+@pytest.mark.parametrize("order", [(0, 1, 2), (2, 0, 1), (1, 2, 0)])
+def test_stationary_distribution_resolves_weakly_connected_classes(slow_rate, order):
+    matrix = np.array(
+        [[-1.0, 1.0, 0.0], [1.0, -1.0, slow_rate], [0.0, 2 * slow_rate, -2 * slow_rate]]
+    )
+    expected = np.array([0.4, 0.4, 0.2])
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        probabilities = stationary_distribution(matrix[np.ix_(order, order)])
+    np.testing.assert_allclose(probabilities, expected[list(order)], rtol=2e-13)
+
+
 def test_mk_fit_recovers_from_scipy_bound_roundoff(monkeypatch):
     minimize = asr.minimize
     methods = []
