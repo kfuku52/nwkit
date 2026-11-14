@@ -16,6 +16,7 @@ from nwkit.gaussian_tree import (
     GaussianRootPrior,
     GaussianTransition,
     GaussianTreeProcess,
+    _build_sparse_precision,
     ou_transition,
 )
 from nwkit.nonstationary_continuous_asr import compute_eb_marginals
@@ -238,6 +239,25 @@ def test_covariance_does_not_round_subnormal_products_of_cumulative_loadings(cou
     covariance = process.covariance([tree["A"], tree["B"]] + [tree["C"]] * (count - 2))
     assert covariance[0, 1] == pytest.approx(9e-54, rel=1e-12, abs=0.0)
     assert covariance[1, 0] == covariance[0, 1]
+
+
+@pytest.mark.parametrize(
+    ("slope", "innovation", "parent_innovation"),
+    [(1e-200, 1e-308, 1e100), (1e200, 1e308, 1e-100)],
+)
+def test_sparse_gaussian_precision_preserves_rate_weighted_squared_coefficients(
+    slope, innovation, parent_innovation
+):
+    with np.errstate(over="raise", under="raise", invalid="raise"):
+        matrix = _build_sparse_precision(
+            [-1, 0], [0.0, slope], [parent_innovation, innovation]
+        )
+    cross = slope / innovation
+    expected = [
+        [1.0 / parent_innovation + slope * cross, -cross],
+        [-cross, 1.0 / innovation],
+    ]
+    np.testing.assert_allclose(matrix.toarray(), expected, rtol=1e-14, atol=0.0)
 
 
 def test_positive_asr_eb_uses_the_shared_acdc_branch_process():

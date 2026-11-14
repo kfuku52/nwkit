@@ -211,23 +211,23 @@ def _build_sparse_precision(parents, coefficients, innovations):
         or len(innovation_values) != size
         or np.any(~np.isfinite(coefficient_values))
         or np.any(~np.isfinite(innovation_values))
-        or np.any(innovation_values < 1.0 / np.finfo(float).max)
+        or np.any(innovation_values <= 0.0)
     ):
         return None
-    inverse = 1.0 / innovation_values
+    with np.errstate(over="ignore", under="ignore"):
+        inverse = 1.0 / innovation_values
+    if not np.isfinite(inverse).all():
+        return None
     children = np.arange(size, dtype=int)
     has_parent = parent_values >= 0
     child_with_parent = children[has_parent]
     parents_with_child = parent_values[has_parent]
     coefficients_with_parent = coefficient_values[has_parent]
     inverse_with_parent = inverse[has_parent]
-    parent_diagonal = (
-        coefficients_with_parent * coefficients_with_parent * inverse_with_parent
+    parent_diagonal, cross = _sparse_precision_branch_terms(
+        coefficients_with_parent, inverse_with_parent
     )
-    cross = -coefficients_with_parent * inverse_with_parent
-    if any(
-        np.any(~np.isfinite(values)) for values in (inverse, parent_diagonal, cross)
-    ):
+    if not np.isfinite(parent_diagonal).all() or not np.isfinite(cross).all():
         return None
     rows = np.concatenate(
         (children, parents_with_child, child_with_parent, parents_with_child)
@@ -238,6 +238,16 @@ def _build_sparse_precision(parents, coefficients, innovations):
     values = np.concatenate((inverse, parent_diagonal, cross, cross))
     result = sparse.coo_matrix((values, (rows, columns)), shape=(size, size)).tocsc()
     return result if np.isfinite(result.data).all() else None
+
+
+def _sparse_precision_branch_terms(coefficients, inverse):
+    with np.errstate(over="ignore", under="ignore"):
+        cross = -coefficients * inverse
+        squared = coefficients * coefficients
+        parent_diagonal = squared * inverse
+        extreme = (squared < _MIN_NORMAL) | ~np.isfinite(squared)
+        parent_diagonal[extreme] = -coefficients[extreme] * cross[extreme]
+    return parent_diagonal, cross
 
 
 def _normal_sparse_precision(state, normalization):
