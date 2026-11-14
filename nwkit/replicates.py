@@ -920,21 +920,17 @@ def _prepare_raw_replicates(
 def _estimate_one_trait(
     dataframe, leaf_names, trait, batch, within_variance, *, allow_missing=False
 ):
+    selected = dataframe[dataframe[trait].notna()]
+    counts_by_leaf = selected.groupby("leaf_name", sort=False, observed=True)[
+        trait
+    ].size()
     observed_leaf_names = [
-        leaf_name
-        for leaf_name in leaf_names
-        if dataframe.loc[dataframe["leaf_name"] == leaf_name, trait].notna().any()
+        leaf_name for leaf_name in leaf_names if leaf_name in counts_by_leaf.index
     ]
     if not observed_leaf_names:
         raise ValueError("Trait '{}' contains no observations.".format(trait))
     fitted_leaf_names = observed_leaf_names if allow_missing else leaf_names
-    selected_counts = (
-        dataframe[dataframe[trait].notna()]
-        .groupby("leaf_name", sort=False)[trait]
-        .size()
-        .reindex(fitted_leaf_names)
-        .astype(int)
-    )
+    selected_counts = counts_by_leaf.reindex(fitted_leaf_names).astype(int)
     if batch is None and within_variance == "pooled" and (selected_counts == 1).all():
         estimates = _single_observation_no_batch(dataframe, fitted_leaf_names, trait)
         method = "single-observation"
