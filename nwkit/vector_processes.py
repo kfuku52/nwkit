@@ -7,6 +7,15 @@ from nwkit.compiled_tree import CompiledTree
 from nwkit.vector_gaussian import VectorProcess, VectorTransition, _array, _inverse
 
 
+def _short_ou_displacement(exponent):
+    """Compute I - exp(-exponent) before adding any unit diagonal."""
+    # At ||exponent||_1 <= 1e-4, the omitted terms are below roundoff.
+    identity = np.eye(len(exponent))
+    series = identity / 6 - exponent / 24
+    series = identity / 2 - exponent @ series
+    return exponent @ (identity - exponent @ series)
+
+
 def vector_brownian_process(tree, sigma):
     """Build flat-root correlated Brownian motion, including zero-length edges."""
     sigma = np.asarray(sigma, dtype=float)
@@ -66,7 +75,8 @@ def vector_ou_process(tree, attraction, diffusion, theta):
                 cached.covariance.copy(order="K"),
             )
             continue
-        if time * attraction_norm < 0.5:
+        exponent_norm = time * attraction_norm
+        if exponent_norm < 0.5:
             exponential = expm(block * time)
             slope = exponential[:d, :d]
             covariance = exponential[:d, d:] @ slope.T
@@ -75,9 +85,12 @@ def vector_ou_process(tree, attraction, diffusion, theta):
             covariance = stationary - slope @ stationary @ slope.T
         slope = slope * scales[:, None] / scales[None, :]
         covariance = covariance * scale_product
-        transition = VectorTransition(
-            slope, theta - slope @ theta, (covariance + covariance.T) / 2
-        )
+        if exponent_norm <= 1e-4:
+            displacement = _short_ou_displacement(attraction * time)
+            intercept = (displacement * scales[:, None] / scales[None, :]) @ theta
+        else:
+            intercept = theta - slope @ theta
+        transition = VectorTransition(slope, intercept, (covariance + covariance.T) / 2)
         transitions[node] = transition
         transition_by_time[time] = transition
     return VectorProcess(tree, d, transitions, theta, stationary * scale_product)

@@ -224,6 +224,19 @@ def test_general_ou_equal_length_branches_have_independent_transition_arrays():
         assert not np.shares_memory(left, right)
 
 
+def test_full_ou_short_edge_intercept_keeps_diagonal_and_cross_trait_changes():
+    from nwkit.vector_processes import vector_ou_process
+
+    tree = read_tree("(A:1e-18,B:1)R;", "1", True, quiet=True, rooted="yes")
+    attraction = np.array([[1.0, 0.25], [-0.5, 0.75]])
+    theta = np.array([1e18, -1e18])
+    process = vector_ou_process(tree, attraction, np.eye(2), theta)
+    # The second-order term is smaller than half an ulp of either component.
+    np.testing.assert_allclose(
+        process.transitions[tree.children[0]].intercept, [0.75, -1.25], rtol=1e-15
+    )
+
+
 def test_nearly_singular_proper_root_does_not_create_spurious_likelihood():
     from scipy.stats import multivariate_normal
 
