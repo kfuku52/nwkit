@@ -37,6 +37,7 @@ from nwkit.phylogenetic_glmm import (
     _lognormal_scalar_terms,
     _negative_binomial_scalar_terms,
     _normal_censor_interval_terms,
+    _poisson_scalar_terms,
     _scalar_initial_coefficient,
     _scalar_terms,
     _scale_covariance_by_mean_variance,
@@ -575,8 +576,8 @@ def test_negative_binomial_likelihood_preserves_near_poisson_limit(dispersion):
 
 
 def test_poisson_log_mass_resolves_large_counts_near_the_fitted_mean():
-    counts = np.array([1e12, 1e15, 1e24, 1e100, 1e308])
-    eta = np.log(counts) + np.array([0.0, 1e-7, -1e-12, 0.0, 0.0])
+    counts = np.array([1e12, 1e15, 1e18])
+    eta = np.log(counts) + np.array([0.0, 1e-7, -1e-12])
     with np.errstate(over="raise", invalid="raise", divide="raise"):
         mass = _count_log_likelihood(counts, eta, "poisson", None, None, 0.0)
     # Evaluate the reference around the same representable log-count used in
@@ -595,7 +596,7 @@ def test_poisson_log_mass_resolves_large_counts_near_the_fitted_mean():
         (1e-6, 1e6, -0.1, -2507.13229477862),
         (0.7, 1e18, 0.0, -42.24461542763349),
         (1e308, 1e18, -0.2, -750.6427403160588),
-        (1e-310, 1e308, 0.0, -355.52201801971427),
+        (1e-310, 1e308, 0.0, -9.099441551930474e279),
         (0.7, 1e308, 1.0, -710.5198344547231),
     ],
 )
@@ -610,6 +611,64 @@ def test_large_negative_binomial_counts_match_high_precision_reference(
             counts, log_mean, "negative-binomial", dispersion, None, 0.0
         )
     assert actual[0] == pytest.approx(expected, rel=1e-11)
+
+
+@pytest.mark.parametrize(
+    "count,eta,dispersion,expected",
+    [
+        (
+            1e150,
+            345.38776394910684,
+            None,
+            (-6.995567977508237e121, -1.1828413230444888e136, 9.999999999999882e149),
+        ),
+        (
+            1e150,
+            345.38776394910684,
+            1e-155,
+            (-6.9954980225280125e121, -1.182829494749541e136, 9.999900000999872e149),
+        ),
+        (
+            1e308,
+            709.1962086421661,
+            None,
+            (-9.190435967449779e279, 1.355760743453642e294, 1.0000000000000136e308),
+        ),
+        (
+            1e308,
+            709.1962086421661,
+            1e-308,
+            (-4.595217983724868e279, 6.778803717268165e293, 5e307),
+        ),
+        (
+            1e308,
+            709.1962086421661,
+            1e-155,
+            (-9.190435967449695e126, 1.3557607434536237e141, 9.999999999999864e154),
+        ),
+    ],
+)
+def test_high_count_likelihood_retains_the_log_mean_rounding_residual(
+    count, eta, dispersion, expected
+):
+    # Evaluate the log-gamma likelihood and analytic derivatives with
+    # 850-digit arithmetic at the exact binary64 input values.
+    counts = np.array([count])
+    linear = np.array([eta])
+    family = "poisson" if dispersion is None else "negative-binomial"
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        likelihood = _count_log_likelihood(
+            counts, linear, family, dispersion, None, 0.0
+        )[0]
+        if dispersion is None:
+            gradient, curvature = _poisson_scalar_terms(counts, linear, 0.0)
+        else:
+            gradient, curvature = _negative_binomial_scalar_terms(
+                counts, linear, 0.0, dispersion
+            )
+    np.testing.assert_allclose(
+        [likelihood, gradient[0], curvature[0]], expected, rtol=2e-13
+    )
 
 
 def test_beta_binomial_retains_endpoint_and_interior_mass_at_tiny_precision():

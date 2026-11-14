@@ -131,6 +131,10 @@ _LARGE_BETA_PRECISION = 1e6
 _LARGE_GAMMA_SHAPE = 128.0
 _LARGE_POISSON_COUNT = 128.0
 _LARGE_NEGATIVE_BINOMIAL_COUNT = 1e6
+# Near 2**53 the log-count rounding error has no measurable likelihood cost.
+# At larger counts it can dominate the local count deviance and score.
+_HIGH_PRECISION_COUNT = 1e20
+_LOG_NORMAL_PROBABILITY_LIMIT = -math.log(np.finfo(float).tiny)
 _EXPONENTIAL_DEVIANCE_SERIES = tuple(
     1.0 / math.factorial(order) for order in range(2, 11)
 )
@@ -1191,8 +1195,9 @@ def _negative_binomial_with_large_counts(
     )
     inverse_total = np.exp(-np.logaddexp(log_count, -log_dispersion))
     peak += _stirling_log_gamma_correction_from_inverse(inverse_total)
+    relative = _count_log_mean_difference(counts, log_means[large], log_count)
     result[large] = peak - _negative_binomial_deviance(
-        log_means[large] - log_count, log_count, log_ratio, log_dispersion
+        relative, log_count, log_ratio, log_dispersion
     )
     return result
 
@@ -1292,7 +1297,9 @@ def _poisson_log_mass_with_large_counts(values, log_means, log_zero):
     result[large] = (
         -0.5 * (math.log(math.tau) + log_counts)
         - _stirling_log_gamma_correction(counts)
-        - _exponential_deviance(log_means[large] - log_counts, counts)
+        - _exponential_deviance(
+            _count_log_mean_difference(counts, log_means[large], log_counts), counts
+        )
     )
     return result
 
@@ -1513,6 +1520,24 @@ def _precise_log_odds(value, total=1.0):
         logit = observed.ln() - (Decimal.from_float(total) - observed).ln()
         leading = float(logit)
         return leading, float(logit - Decimal.from_float(leading))
+
+
+@lru_cache(maxsize=1024)
+def _precise_log_count(value):
+    with localcontext() as context:
+        context.prec = 80
+        logarithm = Decimal.from_float(value).ln()
+        leading = float(logarithm)
+        return leading, float(logarithm - Decimal.from_float(leading))
+
+
+def _count_log_mean_difference(values, log_means, log_counts):
+    difference = log_means - log_counts
+    near = (values >= _HIGH_PRECISION_COUNT) & (np.abs(difference) < 0.1)
+    for index in np.flatnonzero(near):
+        leading, trailing = _precise_log_count(float(values[index]))
+        difference[index] = (log_means[index] - leading) - trailing
+    return difference
 
 
 def _beta_weighted_divergence(observed, fitted, difference, precision):
@@ -2095,9 +2120,43 @@ def _scalar_log_likelihood_contributions(
 
 
 def _poisson_scalar_terms(values, linear, offset):
+    log_means = linear + offset
     with np.errstate(over="ignore"):
-        means = np.exp(linear + offset)
-    return means - values, means
+        means = np.exp(log_means)
+    gradient = means - values
+    _refine_poisson_count_score(gradient, values, log_means)
+    return gradient, means
+
+
+def _refine_poisson_count_score(gradient, values, log_means):
+    if np.max(values, initial=0.0) >= _HIGH_PRECISION_COUNT:
+        indices = np.flatnonzero(values >= _HIGH_PRECISION_COUNT)
+        counts = values[indices]
+        relative = _count_log_mean_difference(
+            counts, log_means[indices], np.log(counts)
+        )
+        near = np.abs(relative) < 0.1
+        gradient[indices[near]] = counts[near] * np.expm1(relative[near])
+
+
+def _large_nb_score(relative, log_counts, log_means, log_dispersion):
+    # |mu - y| = max(mu, y) * (1 - exp(-|log(mu/y)|)).
+    # Keep both subnormal probabilities and their count factors together.
+    with np.errstate(over="ignore", under="ignore", divide="ignore"):
+        ratio = log_means + log_dispersion
+        log_failure = -np.logaddexp(0.0, ratio)
+        log_success = -np.logaddexp(0.0, -ratio)
+        scale = np.where(
+            relative > 0.0, -log_dispersion + log_success, log_counts + log_failure
+        )
+        magnitude = np.exp(scale + np.log(-np.expm1(-np.abs(relative))))
+        curvature = np.exp(
+            -log_dispersion
+            + log_success
+            + log_failure
+            + np.logaddexp(0.0, log_counts + log_dispersion)
+        )
+    return np.copysign(magnitude, relative), curvature
 
 
 def _negative_binomial_score_terms(log_means, log_relative_mean, log_dispersion):
@@ -2114,6 +2173,22 @@ def _negative_binomial_score_terms(log_means, log_relative_mean, log_dispersion)
     return scaled_mean, complement, zero_curvature
 
 
+def _refine_negative_binomial_count_terms(
+    gradient, curvature, values, log_means, log_relative_mean, log_dispersion
+):
+    large = (values >= _HIGH_PRECISION_COUNT) | (
+        (log_relative_mean > _LOG_NORMAL_PROBABILITY_LIMIT) & (values > 0.0)
+    )
+    if np.any(large):
+        counts = values[large]
+        log_counts = np.log(counts)
+        selected_means = log_means[large]
+        relative = _count_log_mean_difference(counts, selected_means, log_counts)
+        gradient[large], curvature[large] = _large_nb_score(
+            relative, log_counts, selected_means, log_dispersion
+        )
+
+
 def _negative_binomial_scalar_terms(values, linear, offset, dispersion):
     assert dispersion is not None
     log_means = linear + offset
@@ -2124,6 +2199,9 @@ def _negative_binomial_scalar_terms(values, linear, offset, dispersion):
     )
     gradient = scaled_mean - values * complement
     curvature = zero_curvature + (values * complement) * expit(log_relative_mean)
+    _refine_negative_binomial_count_terms(
+        gradient, curvature, values, log_means, log_relative_mean, log_dispersion
+    )
     return gradient, curvature
 
 
