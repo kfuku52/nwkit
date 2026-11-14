@@ -132,13 +132,13 @@ def compute_eb_marginals(
         success = True
         message = "EB rate fixed"
     else:
-        cache = {}
+        objectives_by_rate = {}
 
         def evaluate(rate):
             key = float(rate)
-            if key not in cache:
+            if key not in objectives_by_rate:
                 try:
-                    cache[key] = _run_eb(
+                    _, trial_fit = _run_eb(
                         tree,
                         values_by_leaf,
                         key,
@@ -147,11 +147,11 @@ def compute_eb_marginals(
                         _tree_validated,
                     )
                 except (ValueError, ArithmeticError):
-                    cache[key] = None
-            result = cache[key]
-            if result is None or result[1].restricted_log_likelihood is None:
-                return 1e100
-            return -result[1].restricted_log_likelihood
+                    likelihood = None
+                else:
+                    likelihood = trial_fit.restricted_log_likelihood
+                objectives_by_rate[key] = 1e100 if likelihood is None else -likelihood
+            return objectives_by_rate[key]
 
         grid = np.linspace(bounds[0], bounds[1], 41)
         objectives = np.asarray([evaluate(value) for value in grid])
@@ -190,7 +190,7 @@ def compute_eb_marginals(
             standard_errors,
             _tree_validated,
         )
-        evaluations = len(cache)
+        evaluations = len(objectives_by_rate)
         success = True
         message = f"profile grid and bounded polishing; {message}"
         # A flat profile means EB rate and sigma2 are confounded on this tree.
@@ -408,15 +408,18 @@ def compute_bm_drift_marginals(
             success = True
             message = "exact zero-diffusion boundary"
         else:
-            cache = {}
+            objectives_by_drift = {}
             if boundary_candidate is not None:
-                cache[ordinary_slope] = boundary_candidate
+                likelihood = boundary_candidate[1].restricted_log_likelihood
+                objectives_by_drift[ordinary_slope] = (
+                    1e100 if likelihood is None else -likelihood
+                )
 
             def evaluate(current_drift):
                 key = float(current_drift)
-                if key not in cache:
+                if key not in objectives_by_drift:
                     try:
-                        cache[key] = _run_drift(
+                        _, trial_fit = _run_drift(
                             tree,
                             values_by_leaf,
                             depths,
@@ -427,11 +430,13 @@ def compute_bm_drift_marginals(
                             _tree_validated,
                         )
                     except (ValueError, ArithmeticError):
-                        cache[key] = None
-                result = cache[key]
-                if result is None or result[1].restricted_log_likelihood is None:
-                    return 1e100
-                return -result[1].restricted_log_likelihood
+                        likelihood = None
+                    else:
+                        likelihood = trial_fit.restricted_log_likelihood
+                    objectives_by_drift[key] = (
+                        1e100 if likelihood is None else -likelihood
+                    )
+                return objectives_by_drift[key]
 
             fitted_drift, objective, optimizer_message = _minimize_unbounded_profile(
                 evaluate,
@@ -451,7 +456,7 @@ def compute_bm_drift_marginals(
                 standard_errors,
                 _tree_validated,
             )
-            evaluations = len(cache)
+            evaluations = len(objectives_by_drift)
             success = True
             message = f"adaptive unbounded profile; {optimizer_message}"
     fit = BrownianDriftFit(
