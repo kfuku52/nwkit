@@ -2620,49 +2620,25 @@ def _draw_bridge_event_count(start_state, end_state, context, rng):
     return event_count, backward
 
 
-def _sample_bridge_transition_counts(
-    start_state,
-    end_state,
-    branch_length,
-    rate_matrix,
-    rng,
-    uniformization_contexts=None,
-    uniformization_context=None,
-):
-    context = _resolve_uniformization_context(
-        rate_matrix,
-        float(branch_length),
-        uniformization_contexts,
-        uniformization_context,
-    )
+def _draw_bridge_transition_counts(start_state, end_state, context, rng):
     event_count, backward = _draw_bridge_event_count(
         start_state, end_state, context, rng
     )
-    num_states = rate_matrix.shape[0]
     counts: defaultdict[Any, int] = defaultdict(int)
     if event_count == 0:
         return counts
     r_matrix = context["r_matrix"]
+    num_states = len(r_matrix)
     current_state = start_state
     for step_index in range(event_count):
         remaining = event_count - step_index - 1
         weights = r_matrix[current_state, :] * backward[remaining, :]
         probabilities = _bridge_probabilities(weights)
-        next_state = int(rng.choice(np.arange(num_states), p=probabilities))
+        next_state = int(rng.choice(num_states, p=probabilities))
         if next_state != current_state:
             counts[(current_state, next_state)] += 1
         current_state = next_state
     return counts
-
-
-def _resolve_uniformization_context(
-    rate_matrix, branch_length, contexts, explicit_context
-):
-    if explicit_context is not None:
-        return explicit_context
-    if contexts is not None:
-        return contexts[branch_length]
-    return _build_uniformization_context(rate_matrix, branch_length)
 
 
 def _sample_node_states(tree, states, fit, rng):
@@ -2700,12 +2676,10 @@ def _build_stochastic_map_spec(tree, fit, node_to_branch_id, uniformization_cont
     children_by_index: list[list[int]] = [[] for _ in nodes]
     parent_indices = [-1] * len(nodes)
     branch_ids = [-1] * len(nodes)
-    branch_lengths = [0.0] * len(nodes)
     transition_matrices = np.zeros(
         (len(nodes), fit["rate_matrix"].shape[0], fit["rate_matrix"].shape[1]),
         dtype=float,
     )
-    rate_matrices = np.zeros_like(transition_matrices)
     contexts = [None] * len(nodes)
     inside = np.zeros((len(nodes), fit["rate_matrix"].shape[0]), dtype=float)
     for node, node_index in node_to_index.items():
@@ -2716,21 +2690,14 @@ def _build_stochastic_map_spec(tree, fit, node_to_branch_id, uniformization_cont
         parent_indices[node_index] = parent_index
         children_by_index[parent_index].append(node_index)
         branch_ids[node_index] = node_to_branch_id[node]
-        branch_lengths[node_index] = float(node.dist)
         transition_matrices[node_index, :, :] = fit["transition_matrices"][node]
-        rate_matrices[node_index, :, :] = fit.get("rate_matrix_by_node", {}).get(
-            node, fit["rate_matrix"]
-        )
         contexts[node_index] = _stochastic_map_context(uniformization_contexts, node)
     return {
         "children_by_index": children_by_index,
         "parent_indices": parent_indices,
         "branch_ids": branch_ids,
-        "branch_lengths": branch_lengths,
         "log_inside": inside,
         "log_transition_matrices": _log_probabilities(transition_matrices),
-        "rate_matrix": fit["rate_matrix"],
-        "rate_matrices": rate_matrices,
         "root_posterior": fit["posterior_by_node"][tree],
         "uniformization_contexts": contexts,
         "num_states": fit["rate_matrix"].shape[0],
@@ -2746,8 +2713,8 @@ def _stochastic_map_context(uniformization_contexts, node):
 
 def _sample_node_states_from_spec(spec, rng):
     sampled_states = np.zeros(len(spec["parent_indices"]), dtype=int)
-    state_indices = np.arange(spec["num_states"])
-    sampled_states[0] = int(rng.choice(state_indices, p=spec["root_posterior"]))
+    num_states = spec["num_states"]
+    sampled_states[0] = int(rng.choice(num_states, p=spec["root_posterior"]))
     for parent_index, child_indices in enumerate(spec["children_by_index"]):
         parent_state = sampled_states[parent_index]
         for child_index in child_indices:
@@ -2756,9 +2723,7 @@ def _sample_node_states_from_spec(spec, rng):
                 transition_matrix[parent_state, :] + spec["log_inside"][child_index]
             )
             probabilities = _probabilities_from_logs(weights)
-            sampled_states[child_index] = int(
-                rng.choice(state_indices, p=probabilities)
-            )
+            sampled_states[child_index] = int(rng.choice(num_states, p=probabilities))
     return sampled_states
 
 
@@ -2769,13 +2734,11 @@ def _simulate_stochastic_map_once(spec, seed_sequence):
     for node_index, parent_index in enumerate(spec["parent_indices"]):
         if parent_index < 0:
             continue
-        branch_counts = _sample_bridge_transition_counts(
+        branch_counts = _draw_bridge_transition_counts(
             int(sampled_states[parent_index]),
             int(sampled_states[node_index]),
-            spec["branch_lengths"][node_index],
-            spec["rate_matrices"][node_index],
+            spec["uniformization_contexts"][node_index],
             rng,
-            uniformization_context=spec["uniformization_contexts"][node_index],
         )
         _merge_projected_branch_counts(
             simulation_counts,
