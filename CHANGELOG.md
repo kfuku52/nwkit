@@ -9,6 +9,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Mk transition matrices preserve rare multi-step changes on short branches
   and remain stochastic on very long branches. Asymmetric generators retain
   their directionality under reciprocal changes of rate and branch-length units.
+- Sparse Mk transition graphs use a nonnegative Poisson series to resolve
+  probabilities for endpoints separated by many jumps.
 - Threshold ASR samples disjoint ordinal intervals by their log probability
   mass, including when all allowed intervals lie in the extreme tails.
 - Profile-likelihood intervals resolve crossings near the edge of the finite

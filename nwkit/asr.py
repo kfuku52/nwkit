@@ -375,10 +375,16 @@ def _general_transition_matrix(rate_matrix, branch_length):
     scaled_rate_norm = float(np.max(np.sum(absolute_rates / rate_scale, axis=1)))
     log2_rate_norm = math.log2(rate_scale) + math.log2(scaled_rate_norm)
     log2_exponent_norm = log2_rate_norm + math.log2(branch_length)
-    if log2_exponent_norm <= math.log2(_MAX_DIRECT_EXPONENT_NORM):
+    # Use a nonnegative Poisson series for sparse state graphs. Padé
+    # approximants can give large relative errors for endpoints that require
+    # many jumps, even while their absolute error meets the expm tolerance.
+    sparse_rates = np.count_nonzero(rate_matrix) < rate_matrix.size
+    direct_norm = 2.0 if sparse_rates else _MAX_DIRECT_EXPONENT_NORM
+    if log2_exponent_norm <= math.log2(direct_norm):
         exponent_norm = 2.0**log2_exponent_norm
         return _validated_transition_matrix(
-            expm(rate_matrix * branch_length), exponent_norm
+            _exponentiate_generator(rate_matrix * branch_length, sparse_rates),
+            exponent_norm,
         )
 
     # scipy.linalg.expm is backward stable, but on very long CTMC branches its
@@ -389,12 +395,12 @@ def _general_transition_matrix(rate_matrix, branch_length):
     # overflowing rate_norm * branch_length for finite inputs.
     squarings = max(
         1,
-        int(math.ceil(log2_exponent_norm - math.log2(_MAX_DIRECT_EXPONENT_NORM))),
+        int(math.ceil(log2_exponent_norm - math.log2(direct_norm))),
     )
     scaled_length = math.ldexp(branch_length, -squarings)
     scaled_norm = rate_scale * scaled_length * scaled_rate_norm
     matrix = _validated_transition_matrix(
-        expm(rate_matrix * scaled_length), scaled_norm
+        _exponentiate_generator(rate_matrix * scaled_length, sparse_rates), scaled_norm
     )
     exponent_norm = 2.0**log2_exponent_norm if log2_exponent_norm < 1023.0 else math.inf
     for _ in range(squarings):
@@ -406,6 +412,28 @@ def _general_transition_matrix(rate_matrix, branch_length):
         if np.array_equal(matrix, previous):
             break
     return matrix
+
+
+def _exponentiate_generator(exponent, sparse_rates):
+    if not sparse_rates:
+        return expm(exponent)
+    # Uniformization with λ <= 1. Use λI + Qt directly so that forming
+    # a stochastic jump matrix cannot underflow tiny off-diagonal rates.
+    num_states = exponent.shape[0]
+    diagonal = np.diag_indices(num_states)
+    intensity = float(np.max(-exponent[diagonal]))
+    exponent[diagonal] += intensity
+    term = np.eye(num_states)
+    result = term.copy()
+    # Every reachable pair has a path with at most k - 1 jumps. Include
+    # these terms before applying an elementwise relative convergence test.
+    for count in range(1, num_states + 32):
+        term = (term @ exponent) / count
+        updated = result + term
+        if count >= num_states and np.array_equal(updated, result):
+            break
+        result = updated
+    return result * math.exp(-intensity)
 
 
 def _validated_transition_matrix(matrix, exponent_norm):

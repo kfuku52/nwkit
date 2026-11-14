@@ -149,6 +149,31 @@ def test_short_ordered_mk_branch_keeps_two_step_changes_possible():
     np.testing.assert_array_equal(posterior[tree], [1.0, 0.0, 0.0])
 
 
+@pytest.mark.parametrize("num_states,length", [(8, 1e-20), (16, 1e-15)])
+def test_short_ordered_mk_branch_resolves_small_many_step_likelihood(
+    num_states, length
+):
+    tree = Tree(f"(A:0,B:{length});", parser=1)
+    states = list(map(str, range(num_states)))
+    neighboring_rates = np.ones(num_states - 1)
+    matrix = np.diag(neighboring_rates, 1) + np.diag(neighboring_rates, -1)
+    np.fill_diagonal(matrix, -matrix.sum(axis=1))
+    tip_likelihoods = np.eye(num_states)
+    _, fit = asr.compute_mk_marginals(
+        tree,
+        states,
+        {"A": states[0], "B": states[-1]},
+        {"A": tip_likelihoods[0], "B": tip_likelihoods[-1]},
+        model="CUSTOM",
+        fixed_rate_matrix=matrix,
+    )
+    num_jumps = num_states - 1
+    leading_term = num_jumps * math.log(length) - math.lgamma(num_jumps + 1)
+    assert fit["log_likelihood"] == pytest.approx(
+        leading_term - math.log(num_states), abs=3e-12
+    )
+
+
 def test_rsc_origin_mapping_preserves_a_fixed_process_across_time_units(monkeypatch):
     original_fit = asr.compute_mk_marginals
     results, omissions = [], []
