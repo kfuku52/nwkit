@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 
 import numpy as np
-from scipy.special import logsumexp
+from scipy.special import gammaln, logsumexp
 from scipy.stats import binom, gamma
 
 _LOG_PRUNING_WORKSPACE_BYTES = 1024**2
@@ -21,6 +21,7 @@ _EDGE_PROBABILITY_CACHE_ENTRIES = 4096
 _EMISSION_CACHE_BYTES = 16 * 1024**2
 _SELECTION_PROBABILITY_FLOOR = np.finfo(float).tiny / np.finfo(float).eps
 _GEOMETRIC_RECURRENCE_MIN_COUNT = 256
+_CLOSED_FORM_MIN_COUNT = 32
 _MIN_NORMAL_FLOAT = float(np.finfo(float).tiny)
 
 
@@ -168,14 +169,19 @@ def _birth_death_log_transition(duplication, loss, time, max_count):
     duplication = _nonnegative(duplication, "Duplication rate")
     loss = _nonnegative(loss, "Loss rate")
     time = _nonnegative(time, "Time")
-    result = np.full((max_count + 1, max_count + 1), -np.inf)
-    result[0, 0] = 0.0
     if time == 0 or duplication == loss == 0:
+        result = np.full((max_count + 1, max_count + 1), -np.inf)
         np.fill_diagonal(result, 0.0)
         return result
     log_a, log_b, log_survival, log_success = _birth_death_log_probabilities(
         duplication, loss, time
     )
+    if max_count >= _CLOSED_FORM_MIN_COUNT and (duplication == 0 or loss == 0):
+        return _one_way_log_transition(
+            max_count, log_a, log_b, log_survival, log_success
+        )
+    result = np.full((max_count + 1, max_count + 1), -np.inf)
+    result[0, 0] = 0.0
     result[1:, 0] = np.arange(1, max_count + 1) * log_a
     log_one = log_survival + log_success
     positive = np.full(max_count, -np.inf)
@@ -198,6 +204,63 @@ def _birth_death_log_transition(duplication, loss, time, max_count):
             shift *= 2
         result[1:, descendants] = column
     return result
+
+
+def _one_way_log_transition(max_count, log_a, log_b, log_survival, log_success):
+    result = np.full((max_count + 1, max_count + 1), -np.inf)
+    result[0, 0] = 0.0
+    states = np.arange(max_count + 1)
+    log_factorial = gammaln(states + 1.0)
+    batch = max(1, _LOG_PRUNING_WORKSPACE_BYTES // (64 * len(states)))
+    for start in range(1, len(states), batch):
+        stop = min(start + batch, len(states))
+        ancestral = states[start:stop, None]
+        if log_b == -np.inf:
+            _fill_pure_loss(
+                result[start:stop, :stop],
+                ancestral,
+                states[:stop],
+                log_factorial,
+                log_a,
+                log_survival,
+            )
+        else:
+            _fill_pure_birth(
+                result[start:stop, start:],
+                ancestral,
+                states[start:],
+                log_factorial,
+                log_b,
+                log_success,
+            )
+    return result
+
+
+def _fill_pure_loss(rows, ancestral, descendants, log_factorial, log_a, log_survival):
+    # Linear pure loss is binomial thinning of ancestral copies.
+    extra = np.maximum(ancestral - descendants, 0)
+    log_choose = log_factorial[ancestral] - (
+        log_factorial[descendants] + log_factorial[extra]
+    )
+    with np.errstate(invalid="ignore"):
+        losses = np.where(extra, extra * log_a, 0.0)
+        surviving = np.where(descendants, descendants * log_survival, 0.0)
+    rows[:] = np.where(
+        ancestral >= descendants, log_choose + losses + surviving, -np.inf
+    )
+
+
+def _fill_pure_birth(rows, ancestral, descendants, log_factorial, log_b, log_success):
+    # Linear pure birth sums one positive geometric count per ancestral copy.
+    extra = np.maximum(descendants - ancestral, 0)
+    log_choose = log_factorial[descendants - 1] - (
+        log_factorial[ancestral - 1] + log_factorial[extra]
+    )
+    rows[:] = np.where(
+        descendants >= ancestral,
+        log_choose + ancestral * log_success + extra * log_b,
+        -np.inf,
+    )
 
 
 def _birth_death_log_probabilities(duplication, loss, time):

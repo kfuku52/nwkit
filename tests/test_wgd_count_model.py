@@ -145,6 +145,20 @@ def test_log_birth_death_preserves_near_zero_complements():
     assert short[2:] == pytest.approx((-2e-20, -1e-20), rel=1e-13, abs=0)
 
 
+def test_log_pure_birth_and_loss_match_exact_combinatorial_weights():
+    from math import comb, log
+
+    rate = 760.0
+    log_transition = wgd_count_model._birth_death_log_transition
+    birth = log_transition(rate, 0.0, 1.0, 64)
+    loss = log_transition(0.0, rate, 1.0, 64)
+    # The geometric continuation and extinction differ from one by less
+    # than a representable amount, but log survival and success remain finite.
+    assert birth[15, 61] == pytest.approx(log(comb(60, 14)) - 15 * rate)
+    assert loss[61, 15] == pytest.approx(log(comb(61, 15)) - 15 * rate)
+    assert birth[61, 15] == loss[15, 61] == -np.inf
+
+
 def test_likelihood_transition_cache_is_bounded_and_preserves_results(monkeypatch):
     model = CountLikelihood(tree(), np.array([[2.0, 3.0], [1.0, np.nan]]))
     rates = np.array([[0.12, 0.17]])
