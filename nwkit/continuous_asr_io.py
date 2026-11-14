@@ -2,6 +2,7 @@
 
 import math
 from copy import copy
+from functools import lru_cache
 
 import pandas as pd
 from scipy.special import erfinv
@@ -21,11 +22,16 @@ def _safe_parameter_id(value):
     return "regime_" + text.encode("utf-8").hex()
 
 
-def _summary(marginal, ci_level):
-    sd = math.sqrt(marginal.variance)
+@lru_cache(maxsize=32)
+def _normal_interval_multiplier(ci_level):
     # This centered form retains both tiny levels, where 1-level rounds to one,
     # and the largest representable level below one.
-    width = math.sqrt(2.0) * float(erfinv(ci_level)) * sd
+    return math.sqrt(2.0) * float(erfinv(ci_level))
+
+
+def _summary(marginal, ci_level):
+    sd = math.sqrt(marginal.variance)
+    width = _normal_interval_multiplier(ci_level) * sd
     lower, upper = marginal.mean - width, marginal.mean + width
     if not math.isfinite(lower) or not math.isfinite(upper):
         raise ValueError(
