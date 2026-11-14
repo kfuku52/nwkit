@@ -49,6 +49,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Apply the same ultrametricity tolerance to delta and OU contrasts across
   branch-length units.
 - Preserve short positive branches under the delta time transformation.
+- Validate custom covariance on relative scales so overflow and tiny input
+  units cannot hide invalid entries.
 - Compute OU contrast branch variances directly so short branches and weak
   attraction retain their Brownian-limit behavior.
 - Keep EB and ACDC branch variances finite when an intermediate exponential

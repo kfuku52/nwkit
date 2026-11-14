@@ -388,16 +388,31 @@ def validate_custom_covariance(matrix, leaf_names) -> np.ndarray:
         raise ValueError("Custom covariance has the wrong dimensions.")
     if not np.isfinite(values).all():
         raise ValueError("Custom covariance must contain finite values.")
-    symmetric = (values + values.T) / 2.0
-    scale = max(1.0, float(np.max(np.abs(symmetric))))
-    tolerance = np.finfo(float).eps * scale * max(100, len(values))
-    if float(np.max(np.abs(values - values.T))) > tolerance:
+    _, exponent = math.frexp(float(np.max(np.abs(values))))
+    normalized = np.ldexp(values, -exponent)
+    tolerance = np.finfo(float).eps * max(100, len(values))
+    if float(np.max(np.abs(normalized - normalized.T))) > tolerance:
         raise ValueError("Custom covariance must be symmetric.")
+    symmetric = np.where(values == values.T, values, 0.5 * values + 0.5 * values.T)
+    _require_positive_custom_covariance(symmetric)
+    return symmetric
+
+
+def _require_positive_custom_covariance(symmetric):
+    diagonals = np.diag(symmetric)
+    standard_deviations = np.sqrt(np.maximum(diagonals, 0.0))
+    if np.any(standard_deviations == 0.0):
+        raise ValueError("Custom covariance must be positive definite.")
+    larger = np.maximum(standard_deviations[:, None], standard_deviations)
+    smaller = np.minimum(standard_deviations[:, None], standard_deviations)
+    with np.errstate(over="ignore"):
+        correlation = (symmetric / larger) / smaller
+    if not np.isfinite(correlation).all():
+        raise ValueError("Custom covariance must be positive definite.")
     try:
-        np.linalg.cholesky(symmetric)
+        np.linalg.cholesky(correlation)
     except np.linalg.LinAlgError as exc:
         raise ValueError("Custom covariance must be positive definite.") from exc
-    return symmetric
 
 
 def read_custom_covariance(path: str, leaf_names) -> np.ndarray:

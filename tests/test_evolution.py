@@ -228,6 +228,26 @@ def test_fixed_root_ou_covariance_retains_brownian_limit_at_subnormal_alpha():
     np.testing.assert_array_equal(ou, brownian)
 
 
+def test_custom_covariance_can_validate_large_diagonals_without_overflow():
+    covariance = np.array([[1e308, 1e307], [1e307, 1.1e308]])
+    with np.errstate(over="raise", invalid="raise"):
+        result = validate_custom_covariance(covariance, ["a", "b"])
+    np.testing.assert_array_equal(result, covariance)
+
+
+def test_custom_covariance_accepts_heterogeneous_variance_units():
+    covariance = np.array([[1e308, 0.1], [0.1, 1e-308]])
+    np.testing.assert_array_equal(
+        validate_custom_covariance(covariance, ["a", "b"]), covariance
+    )
+
+
+def test_custom_covariance_checks_symmetry_relative_to_small_matrix_units():
+    covariance = np.array([[1e-100, 0.0], [1e-100, 1e-100]])
+    with pytest.raises(ValueError, match="must be symmetric"):
+        validate_custom_covariance(covariance, ["a", "b"])
+
+
 @pytest.mark.parametrize("alpha", [1e-18, 1e-300, 1e-323])
 def test_ou_contrasts_preserve_brownian_limit_below_absolute_roundoff(alpha):
     tree = _tree()
