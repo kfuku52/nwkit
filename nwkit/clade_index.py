@@ -5,6 +5,9 @@ from io import StringIO
 import numpy as np
 
 CLADE_ID_PREFIX = "clade-sha256:"
+_SET_BYTE_BITS = tuple(
+    tuple(index for index in range(8) if value & (1 << index)) for value in range(256)
+)
 
 
 class CladeIndex:
@@ -12,6 +15,7 @@ class CladeIndex:
 
     def __init__(self, tree):
         self.names = tuple(sorted(str(leaf.name) for leaf in tree.leaves()))
+        self._all_names_mask = (1 << len(self.names)) - 1
         bit_by_name = {name: 1 << index for index, name in enumerate(self.names)}
         self.mask_by_node = dict()
         for node in tree.traverse(strategy="postorder"):
@@ -25,13 +29,29 @@ class CladeIndex:
         self._clade_id_by_node = dict()
 
     def names_for_mask(self, mask):
+        remaining = int(mask) & self._all_names_mask
+        width = remaining.bit_length()
+        # Clearing high bits repeatedly copies the entire integer. Process
+        # dense, wide masks in bytes, while sparse masks need only a few steps.
+        if remaining.bit_count() > max(32, width // 32):
+            return self._names_for_dense_mask(remaining)
+        return self._names_for_sparse_mask(remaining)
+
+    def _names_for_sparse_mask(self, remaining):
         names = []
-        remaining = int(mask) & ((1 << len(self.names)) - 1)
         while remaining:
             lowest_bit = remaining & -remaining
             names.append(self.names[lowest_bit.bit_length() - 1])
             remaining ^= lowest_bit
         return tuple(names)
+
+    def _names_for_dense_mask(self, mask):
+        width = (mask.bit_length() + 7) // 8
+        return tuple(
+            self.names[8 * offset + bit]
+            for offset, byte in enumerate(mask.to_bytes(width, byteorder="little"))
+            for bit in _SET_BYTE_BITS[byte]
+        )
 
     def names_for_node(self, node):
         return self.names_for_mask(self.mask_by_node[node])
