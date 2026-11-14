@@ -683,11 +683,27 @@ def ou_transition_from_root_variance(
     # An overflowing positive exponent is already past the stationary limit
     # in floating point. exp and expm1 give the limiting transition at infinity.
     decay = math.exp(-exponent)
-    innovation = root_variance * (-math.expm1(-2.0 * exponent))
+    if exponent < 2.0**-1022:
+        # A subnormal alpha*length can lose information before multiplication
+        # by a large variance or optimum. Combine binary exponents first.
+        innovation = _small_ou_increment(root_variance, alpha, length, 1)
+        intercept = _small_ou_increment(optimum, alpha, length, 0)
+    else:
+        innovation = root_variance * (-math.expm1(-2.0 * exponent))
+        intercept = (-math.expm1(-exponent)) * optimum
     if root_variance > 0.0 and length > 0.0 and innovation <= 0.0:
         raise ValueError("A positive OU branch variance underflowed.")
-    intercept = (-math.expm1(-exponent)) * optimum
     return GaussianTransition(decay, intercept, innovation)
+
+
+def _small_ou_increment(value, alpha, length, extra_exponent):
+    mantissa_value, exponent_value = math.frexp(value)
+    mantissa_alpha, exponent_alpha = math.frexp(alpha)
+    mantissa_length, exponent_length = math.frexp(length)
+    return math.ldexp(
+        mantissa_value * mantissa_alpha * mantissa_length,
+        exponent_value + exponent_alpha + exponent_length + extra_exponent,
+    )
 
 
 def exponential_rate_edge_variance(start: float, length: float, rate: float) -> float:

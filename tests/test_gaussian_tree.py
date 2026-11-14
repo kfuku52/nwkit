@@ -34,6 +34,14 @@ def test_ou_transition_preserves_finite_stationary_variance_at_extreme_alpha():
     assert transition == GaussianTransition(0.0, 3.0, 0.5)
 
 
+def test_ou_innovation_and_intercept_survive_underflowing_attraction_time():
+    transition, variance = ou_transition(1e-200, 1e-200, 1.0, 1e100)
+    assert variance == pytest.approx(5e199)
+    assert transition.slope == 1.0
+    assert transition.variance == pytest.approx(1e-200, rel=1e-14, abs=0.0)
+    assert transition.intercept == pytest.approx(1e-300, rel=1e-14, abs=0.0)
+
+
 def test_reconstructed_stationary_ou_uses_fitted_variance():
     tree = tree_from("(A:1,B:2,C:3)R;")
     _, fit = compute_ou_marginals(
