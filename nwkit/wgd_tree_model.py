@@ -11,7 +11,7 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.special import logsumexp
 
-from nwkit.wgd_count_model import CountTree, MultiplicationEvent
+from nwkit.wgd_count_model import CountTree, MultiplicationEvent, _validate_fixed_events
 
 
 @dataclass(frozen=True)
@@ -174,8 +174,14 @@ class TopologyLikelihood:
         rate_scales=None,
         ascertainment="observed",
         max_tips=128,
+        fixed_events=(),
     ):
         self.tree, self.gene = species_tree, gene_tree
+        self._fixed_by_node = _validate_fixed_events(species_tree, tuple(fixed_events))
+        if any(event.multiplicity != 2 for event in self._fixed_by_node.values()):
+            raise ValueError(
+                "Fixed-topology likelihood requires all fixed background events to be doublings."
+            )
         self.children = species_tree.children
         if any(len(children) not in {0, 2} for children in self.children):
             raise ValueError("Fixed-topology DL/WGD requires a binary species tree.")
@@ -306,7 +312,7 @@ class TopologyLikelihood:
             )
         return new_survival, result
 
-    def _jump(self, survival, logs, event, log_extinction):
+    def _jump(self, survival, logs, event, log_extinction, *, mark=True):
         q = event.retention
         if q == 0:
             return survival, logs.copy()
@@ -334,7 +340,8 @@ class TopologyLikelihood:
             )
             markers = logsumexp(terms, axis=1)
             # Only the marker for this node gains a new origin at the pulse.
-            markers[origin_index] = logsumexp([*terms[origin_index], split])
+            if mark:
+                markers[origin_index] = logsumexp([*terms[origin_index], split])
             result[node, 1:] = markers
         return survival * (1 + q - q * survival), result
 
@@ -400,13 +407,18 @@ class TopologyLikelihood:
             if node:
                 duplication, loss = rates[self.groups[node]] * scale
                 length = self.tree.lengths[node]
-                if event is not None and node == event.node:
+                pulse = (
+                    event
+                    if event is not None and node == event.node
+                    else self._fixed_by_node.get(node)
+                )
+                if pulse is not None:
                     survivors[node], probabilities[node] = self._edge(
                         survivors[node],
                         probabilities[node],
                         duplication,
                         loss,
-                        length * (1 - event.fraction),
+                        length * (1 - pulse.fraction),
                         dtype,
                         log_survivors[node],
                     )
@@ -416,16 +428,17 @@ class TopologyLikelihood:
                             log_extinctions[node],
                             duplication,
                             loss,
-                            length * (1 - event.fraction),
+                            length * (1 - pulse.fraction),
                         )
                     )
                     survivors[node], probabilities[node] = self._jump(
                         survivors[node],
                         probabilities[node],
-                        event,
+                        pulse,
                         log_extinctions[node],
+                        mark=pulse is event,
                     )
-                    q = event.retention
+                    q = pulse.retention
                     old_extinction = log_extinctions[node]
                     log_survivors[node] = min(
                         0.0,
@@ -435,7 +448,7 @@ class TopologyLikelihood:
                         math.log1p(-q) if q < 1 else -np.inf,
                         math.log(q) + old_extinction if q else -np.inf,
                     )
-                    length *= event.fraction
+                    length *= pulse.fraction
                 survivors[node], probabilities[node] = self._edge(
                     survivors[node],
                     probabilities[node],
@@ -549,6 +562,10 @@ class TopologyLikelihood:
         ):
             raise ValueError(
                 "Fixed-topology model supports one doubling on a non-root branch."
+            )
+        if event is not None and event.node in self._fixed_by_node:
+            raise ValueError(
+                "A topology candidate cannot overlap a fixed genome event."
             )
         if any(
             not np.isfinite(value) or value <= 0

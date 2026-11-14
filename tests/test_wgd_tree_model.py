@@ -65,6 +65,45 @@ def test_likelihood_only_agrees_with_full_node_origin_calculation(retention):
     assert only.origin_probability_error == 0
 
 
+def test_fixed_background_doubling_never_counts_as_candidate_origin():
+    a, b = ("tip", "A"), ("tip", "B")
+    topology = gene(("node", ("node", a, a), ("node", b, b)))
+    fixed, tested = MultiplicationEvent(1, 1.0), MultiplicationEvent(2, 1.0)
+    model = TopologyLikelihood(
+        species(), topology, fixed_events=(fixed,), ascertainment="root-clades"
+    )
+    combined = model.evaluate([[0.0, 0.0]], 1.0, tested)
+    assert combined.log_likelihood == pytest.approx(0.0)
+    np.testing.assert_array_equal(combined.origin_probabilities, [0.0, 1.0, 0.0])
+    assert (
+        model.evaluate([[0.0, 0.0]], 1.0, tested, origins=False).log_likelihood
+        == combined.log_likelihood
+    )
+    with pytest.raises(ValueError, match="overlap"):
+        model.evaluate([[0.0, 0.0]], 1.0, fixed)
+    with pytest.raises(ValueError, match="all fixed background events to be doublings"):
+        TopologyLikelihood(
+            species(), topology, fixed_events=(MultiplicationEvent(1, 0.5, 0.5, 3),)
+        )
+
+
+def test_fixed_background_and_single_candidate_are_equal_without_origin_markers():
+    a, b = ("tip", "A"), ("tip", "B")
+    topology = gene(("node", ("node", a, a), b))
+    event = MultiplicationEvent(1, 0.65, 0.25)
+    settings = dict(
+        detection=(0.7, 0.9), rate_scales=(0.4, 1.6), ascertainment="root-clades"
+    )
+    model = TopologyLikelihood(species(), topology, fixed_events=(event,), **settings)
+    baseline = TopologyLikelihood(species(), topology, **settings)
+    args = [[0.1, 0.22]], 1.12
+    assert (
+        model.evaluate(*args).log_likelihood
+        == baseline.evaluate(*args, event).log_likelihood
+    )
+    assert not np.any(model.evaluate(*args).origin_probabilities)
+
+
 def test_one_ancestral_copy_rejects_crossed_root_before_numerical_evaluation(
     monkeypatch,
 ):

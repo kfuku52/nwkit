@@ -87,8 +87,6 @@ def test_state_bound_failure_names_the_family_and_tip(tmp_path):
 
 
 def test_fixed_event_cli_conditions_null_and_excludes_fixed_branch(tmp_path):
-    from nwkit.wgd_tree import model_mapping
-
     tree, counts = inputs(tmp_path)
     fixed = tmp_path / "fixed.tsv"
     fixed.write_text(
@@ -129,8 +127,6 @@ def test_fixed_event_cli_conditions_null_and_excludes_fixed_branch(tmp_path):
     assert (
         "fixed_events_tsv" in json.loads(checkpoint.read_text())["identity"]["inputs"]
     )
-    with pytest.raises(ValueError, match="does not support fixed background"):
-        model_mapping(data, None)
 
 
 @pytest.mark.parametrize(

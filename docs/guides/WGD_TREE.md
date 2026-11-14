@@ -74,6 +74,12 @@ The likelihood difference also uses separately supplied count-fit parameters;
 it is not an independent significance test. All internal gene nodes are
 reported, including nodes not classified as duplications by LCA reconciliation.
 
+If the count model includes `fixed_background_events`, all those events
+must be doublings. Both the background and candidate likelihoods include
+them. Only a split at the additional candidate contributes to the reported
+origin probability. Fixed background events are matched by stable species
+clade ID, not by tree traversal order.
+
 The default evaluates all supplied count candidates; `--event-ids` restricts
 stable species-clade identifiers. Tables include gene-clade and branch IDs,
 per-candidate likelihoods and assignment meaning. JSON records the background,
@@ -83,7 +89,7 @@ standard output. The gene tree, species tree, or count-model JSON may be the
 single `-` standard-input source; two simultaneous standard-input owners fail.
 
 Later family origins, ILS, HGT, allopolyploid donor trees, triplication
-polytomy resolution, tree ensembles and joint multiple-event histories are not
+polytomy resolution, tree ensembles and joint event estimation are not
 modeled. This is an experimental independent implementation, not a claim of
 Whale equivalence.
 

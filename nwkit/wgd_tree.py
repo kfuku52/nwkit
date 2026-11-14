@@ -39,10 +39,6 @@ def gene_topology(tree, parser):
 
 
 def model_mapping(metadata, design):
-    if metadata.get("fixed_background_events"):
-        raise ValueError(
-            "Fixed-topology likelihood does not support fixed background genome events in the count model."
-        )
     expected = metadata.get("species_tree")
     if expected is None:
         raise ValueError(
@@ -67,6 +63,23 @@ def model_mapping(metadata, design):
             )
         groups[new] = metadata["branch_rate_groups"][old]
     return mapping, tuple(groups)
+
+
+def fixed_events_from_count_model(metadata, design):
+    by_clade = {clade: i for i, clade in enumerate(design.clade_ids)}
+    events = []
+    for row in metadata.get("fixed_background_events", ()):
+        node = by_clade.get(row["species_event_id"])
+        if node is None or node == 0:
+            raise ValueError(
+                "Fixed background event does not match a non-root clade in the species tree."
+            )
+        events.append(
+            MultiplicationEvent(
+                node, row["retention"], row["event_fraction"], row["multiplicity"]
+            )
+        )
+    return tuple(events)
 
 
 def wgd_tree_main(args):
@@ -113,6 +126,7 @@ def wgd_tree_main(args):
         else Path(args.count_model).read_text()
     )
     mapping, groups = model_mapping(metadata, design)
+    fixed = fixed_events_from_count_model(metadata, design)
     model = TopologyLikelihood(
         design,
         gene,
@@ -121,6 +135,7 @@ def wgd_tree_main(args):
         rate_scales=metadata["family_rate_scales"],
         ascertainment=args.ascertainment,
         max_tips=args.max_tips,
+        fixed_events=fixed,
     )
     options = {"tolerance": args.tolerance, "origin_tolerance": args.origin_tolerance}
     background = metadata["background"]
@@ -178,7 +193,11 @@ def wgd_tree_main(args):
                     "conditional_log_likelihood_difference": result.log_likelihood
                     - background_result.log_likelihood,
                     "parameter_source": "supplied_count_fit",
-                    "probability_meaning": "latent_node_origin_given_topology_parameters_and_one_event",
+                    "probability_meaning": (
+                        "latent_node_origin_at_candidate_given_topology_and_fixed_background"
+                        if fixed
+                        else "latent_node_origin_given_topology_parameters_and_one_event"
+                    ),
                 }
             )
     columns = [
@@ -211,6 +230,11 @@ def wgd_tree_main(args):
             "Later family origins, HGT, ILS, allopolyploid donor trees and triplication polytomy resolution are not modeled.",
         ],
     }
+    if fixed:
+        report["fixed_background_events"] = metadata["fixed_background_events"]
+        report["limitations"].append(
+            "Background doublings participate in all likelihoods, but only the additional candidate contributes origin markers."
+        )
     with output_transaction(paths.values()) as staged:
         for role, path in paths.items():
             Path(staged[path]).write_text(
