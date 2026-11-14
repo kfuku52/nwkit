@@ -7,10 +7,10 @@ import numpy as np
 
 from nwkit.continuous_asr import _fit_brownian_edges
 from nwkit.evolution import (
+    _prepare_edge_variance_transform,
     encoded_evolution_parameter,
     optimization_parameterization,
     parameter_near_boundary,
-    transformed_edge_variances,
     validate_evolution_parameter,
 )
 from nwkit.model_specs import evolution_model_spec
@@ -85,18 +85,6 @@ def parse_parameter_bounds(value, tree, model):
     return lower, upper
 
 
-def _edge_variances(tree, model, parameter):
-    variances = transformed_edge_variances(
-        tree,
-        model=model,
-        parameter=parameter,
-        allow_zero=True,
-    )
-    if not all(math.isfinite(value) and value >= 0.0 for value in variances.values()):
-        raise ValueError("Transformed edge variances must be non-negative and finite.")
-    return variances
-
-
 def compute_transformed_bm_marginals(
     tree,
     values_by_leaf,
@@ -127,9 +115,20 @@ def compute_transformed_bm_marginals(
         raise ValueError("Evolution-parameter bounds must be increasing and finite.")
     validate_evolution_parameter(model, bounds[0])
     validate_evolution_parameter(model, bounds[1])
+    if evolution_parameter is not None:
+        evolution_parameter = validate_evolution_parameter(model, evolution_parameter)
+    # Geometry, including DELTA ultrametricity, is shared by all candidates.
+    transform = _prepare_edge_variance_transform(tree, model, allow_zero=True)
 
     def fit_at(parameter, *, compute_posterior=True):
-        variances = _edge_variances(tree, model, parameter)
+        validated = validate_evolution_parameter(model, parameter)
+        variances = transform(validated)
+        if not all(
+            math.isfinite(value) and value >= 0.0 for value in variances.values()
+        ):
+            raise ValueError(
+                "Transformed edge variances must be non-negative and finite."
+            )
         return _fit_brownian_edges(
             tree,
             values_by_leaf,
@@ -141,8 +140,7 @@ def compute_transformed_bm_marginals(
         )
 
     if evolution_parameter is not None:
-        fitted_parameter = validate_evolution_parameter(model, evolution_parameter)
-        assert fitted_parameter is not None
+        fitted_parameter = evolution_parameter
         posterior, brownian_fit = fit_at(
             fitted_parameter, compute_posterior=_compute_posterior
         )
@@ -151,11 +149,6 @@ def compute_transformed_bm_marginals(
         optimizer_message = "evolution parameter fixed"
         evaluations = 1
     else:
-        if model == "delta":
-            # Ultrametricity is a structural DELTA requirement, not an invalid
-            # optimizer candidate.  Probe once so the useful model-level error
-            # is not converted into an all-nonfinite search failure.
-            _edge_variances(tree, model, 1.0)
         encoded_bounds = (
             encoded_evolution_parameter(model, bounds[0]),
             encoded_evolution_parameter(model, bounds[1]),

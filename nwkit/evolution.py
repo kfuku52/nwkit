@@ -240,47 +240,56 @@ def transformed_edge_variances(
             node: 0.0 if node.is_root or not node.is_leaf else 1.0
             for node in tree.traverse()
         }
+    transform = _prepare_edge_variance_transform(
+        tree, model, branch_length=branch_length, allow_zero=allow_zero
+    )
+    return transform(parameter)
+
+
+def _prepare_edge_variance_transform(
+    tree, model, *, branch_length="original", allow_zero=False
+):
+    """Prepare the geometry shared by valid candidates of one time transform."""
     base_edges = _base_edge_lengths(tree, branch_length, allow_zero=allow_zero)
     if model == "brownian":
-        return base_edges
+        return lambda parameter: base_edges
     if model == "kappa":
-        assert parameter is not None
-        return _kappa_edge_variances(tree, base_edges, parameter)
+        return lambda parameter: _kappa_edge_variances(base_edges, parameter)
     base_depths = _depths_from_edges(tree, base_edges)
     if model == "lambda":
-        assert parameter is not None
-        return _lambda_edge_variances(tree, base_edges, base_depths, parameter)
-    assert parameter is not None
+        return lambda parameter: _lambda_edge_variances(
+            base_edges, base_depths, parameter
+        )
     if model in {"eb", "acdc"}:
-        return {
-            node: (
-                0.0
-                if node.is_root
-                else exponential_rate_edge_variance(
-                    base_depths[node.up], base_edges[node], parameter
-                )
-            )
-            for node in tree.traverse()
-        }
+        return lambda parameter: _exponential_edge_variances(
+            base_edges, base_depths, parameter
+        )
     height = _require_ultrametric(tree, base_depths, model)
     if model == "ou":
         # Project each branch innovation to the common sampling time.
-        return {
+        return lambda parameter: {
             node: _ou_contrast_variance(length, height - base_depths[node], parameter)
             for node, length in base_edges.items()
         }
-    return _delta_edge_variances(parameter, base_depths, base_edges, height)
+    return lambda parameter: _delta_edge_variances(
+        parameter, base_depths, base_edges, height
+    )
 
 
-def _kappa_edge_variances(tree, base_edges, parameter):
+def _exponential_edge_variances(base_edges, base_depths, parameter):
+    return {
+        node: 0.0
+        if node.is_root
+        else exponential_rate_edge_variance(base_depths[node.up], length, parameter)
+        for node, length in base_edges.items()
+    }
+
+
+def _kappa_edge_variances(base_edges, parameter):
     try:
         edges = {
-            node: (
-                0.0
-                if node.is_root or base_edges[node] == 0.0
-                else base_edges[node] ** parameter
-            )
-            for node in tree.traverse()
+            node: 0.0 if length == 0.0 else length**parameter
+            for node, length in base_edges.items()
         }
     except OverflowError as exc:
         raise ValueError(
@@ -291,17 +300,15 @@ def _kappa_edge_variances(tree, base_edges, parameter):
     return edges
 
 
-def _lambda_edge_variances(tree, base_edges, base_depths, parameter):
+def _lambda_edge_variances(base_edges, base_depths, parameter):
     transformed = {}
-    for node in tree.traverse():
+    for node, length in base_edges.items():
         if node.is_root:
             transformed[node] = 0.0
         elif node.is_leaf:
-            transformed[node] = (
-                base_edges[node] + (1.0 - parameter) * base_depths[node.up]
-            )
+            transformed[node] = length + (1.0 - parameter) * base_depths[node.up]
         else:
-            transformed[node] = parameter * base_edges[node]
+            transformed[node] = parameter * length
     return transformed
 
 
