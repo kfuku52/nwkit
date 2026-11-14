@@ -473,12 +473,11 @@ def _multinomial_terms(
     )
     gradient = totals[:, None] * probabilities[:, :-1] - counts[:, :-1]
     dimension = linear.shape[1]
-    weights = np.empty((len(linear), dimension, dimension), dtype=float)
-    for row, (total, probability) in enumerate(
-        zip(totals, probabilities[:, :-1], strict=True)
-    ):
-        block = total * (np.diag(probability) - np.outer(probability, probability))
-        weights[row] = block
+    nonreference = probabilities[:, :-1]
+    weights = -nonreference[:, :, None] * nonreference[:, None, :]
+    diagonal = np.arange(dimension)
+    weights[:, diagonal, diagonal] += nonreference
+    weights *= totals[:, None, None]
     return log_likelihood, gradient.reshape(-1), weights
 
 
@@ -536,9 +535,8 @@ def _dense_weight_matrix(weights: np.ndarray) -> np.ndarray:
         return np.diag(weights)
     dimension = weights.shape[1]
     matrix = np.zeros((len(weights) * dimension,) * 2, dtype=float)
-    for row, block in enumerate(weights):
-        start = row * dimension
-        matrix[start : start + dimension, start : start + dimension] = block
+    indices = np.arange(len(weights) * dimension).reshape(-1, dimension)
+    matrix[indices[:, :, None], indices[:, None, :]] = weights
     return matrix
 
 
