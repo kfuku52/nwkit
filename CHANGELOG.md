@@ -65,9 +65,11 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   limit.
 - Evaluate large-count Poisson log probabilities without subtracting the
   large terms shared by the power and factorial of the count.
-- Preserve likelihoods at extreme Gamma shapes and very small beta and
-  beta-binomial precisions. Simulate Gamma and count bootstrap responses in
-  the fitted units without clipping their means.
+- Preserve likelihoods at extreme Gamma shapes and extreme fixed beta and
+  beta-binomial precisions. Keep analytic curvature in ordinal-logit tails.
+  Simulate Gamma and count bootstrap responses in the fitted units.
+- Preserve small sampling variances in replicate estimates and independent
+  contrasts. Scale large pooled residuals before summing their squares.
 - Use analytic score and curvature for exact and censored Gaussian responses,
   including when interval bounds are close together or in the tail.
 - Apply observation-specific scales when projecting sparse predictor uncertainty
@@ -140,6 +142,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Skip ancestral reconstruction during continuous and discrete ASR model
   comparison.
 - Reuse multivariate ASR branch distances across observations at the same node.
+- Reuse the same tree pass for all traits in complete-data multivariate
+  Brownian ancestral reconstruction.
 - Batch common-ancestor lookups when building dense Gaussian covariances.
 - Reuse the same Gaussian interval quantile throughout ancestral output tables.
 - Solve for dense multivariate posterior covariances in bounded node batches.
@@ -171,6 +175,10 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Reduce covariance copies and reuse sparse tree components in multivariate
   PGLS. Whiten the dense design and response in one triangular solve.
 - Use scalar branch updates for single Gaussian tree simulations.
+- Reuse branch parameters across Gaussian ASR bootstrap simulations.
+- Group regression inputs and replicate observations by tip before processing
+  individual traits. Build ancestral and sampling covariance output tables
+  by column.
 
 ## [0.43.6] - 2026-09-08
 
