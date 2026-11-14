@@ -142,19 +142,9 @@ def _normal_log_density_with_large_variance(
 
 def _combine(first: _Factor, second: _Factor) -> _Factor:
     if first.mean is None:
-        return _Factor(
-            second.mean,
-            second.variance,
-            first.log_weight + second.log_weight,
-            first.density_rank + second.density_rank,
-        )
+        return _combine_constant(first, second)
     if second.mean is None:
-        return _Factor(
-            first.mean,
-            first.variance,
-            first.log_weight + second.log_weight,
-            first.density_rank + second.density_rank,
-        )
+        return _combine_constant(second, first)
     variance_sum = first.variance + second.variance
     base_weight = first.log_weight + second.log_weight
     base_rank = first.density_rank + second.density_rank
@@ -187,6 +177,17 @@ def _combine(first: _Factor, second: _Factor) -> _Factor:
         variance,
         base_weight + log_overlap,
         base_rank + 1,
+    )
+
+
+def _combine_constant(constant: _Factor, factor: _Factor) -> _Factor:
+    if constant.log_weight == 0.0 and constant.density_rank == 0:
+        return factor
+    return _Factor(
+        factor.mean,
+        factor.variance,
+        constant.log_weight + factor.log_weight,
+        constant.density_rank + factor.density_rank,
     )
 
 
@@ -459,7 +460,7 @@ def _message_pass_prepared(
         variance = error * error
         if error > 0.0 and variance == 0.0:
             raise ValueError("A positive observation variance underflowed.")
-        local[index] = _combine(local[index], _Factor(value, variance))
+        local[index] = _Factor(value, variance)
         observed_positions.add(latent_positions[index])
     inside = local if likelihood_only else list(local)
     upward = _prune_gaussian_messages(
