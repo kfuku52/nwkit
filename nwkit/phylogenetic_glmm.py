@@ -7,6 +7,7 @@ from typing import Callable, Mapping, Sequence
 
 import numpy as np
 from scipy import sparse
+from scipy.linalg import cho_solve
 from scipy.optimize import brentq, linprog, minimize
 from scipy.special import (
     betaln,
@@ -709,7 +710,7 @@ def _random_mode(
             cholesky = _positive_definite_cholesky(hessian)
         except np.linalg.LinAlgError:
             break
-        step = np.linalg.solve(cholesky.T, np.linalg.solve(cholesky, gradient))
+        step = cho_solve((cholesky, True), gradient, check_finite=False)
         current = -log_likelihood + 0.5 * float(mode @ precision @ mode)
         step_scale = 1.0
         accepted = False
@@ -1669,9 +1670,8 @@ def _marginal_coefficient_covariance(
     joint_fixed = expanded_design.T @ weight_matrix @ expanded_design
     fixed_random = expanded_design.T @ weight_matrix
     posterior_cholesky = _positive_definite_cholesky(weight_matrix + precision)
-    adjustment = fixed_random @ np.linalg.solve(
-        posterior_cholesky.T,
-        np.linalg.solve(posterior_cholesky, fixed_random.T),
+    adjustment = fixed_random @ cho_solve(
+        (posterior_cholesky, True), fixed_random.T, check_finite=False
     )
     information = joint_fixed - adjustment
     information = (information + information.T) / 2.0
@@ -2279,7 +2279,7 @@ def _scalar_random_mode(
             cholesky = _positive_definite_cholesky(hessian)
         except np.linalg.LinAlgError:
             break
-        step = np.linalg.solve(cholesky.T, np.linalg.solve(cholesky, gradient))
+        step = cho_solve((cholesky, True), gradient, check_finite=False)
         current = -log_likelihood + 0.5 * float(mode @ precision @ mode)
         accepted = False
         step_scale = 1.0
@@ -2368,9 +2368,8 @@ def _marginal_scalar_coefficient_covariance(
     posterior_cholesky = _positive_definite_cholesky(
         np.diag(mapped_weights) + precision
     )
-    adjustment = fixed_random @ np.linalg.solve(
-        posterior_cholesky.T,
-        np.linalg.solve(posterior_cholesky, fixed_random.T),
+    adjustment = fixed_random @ cho_solve(
+        (posterior_cholesky, True), fixed_random.T, check_finite=False
     )
     information = joint_fixed - adjustment
     information = (information + information.T) / 2.0
@@ -2637,9 +2636,8 @@ def _fit_scalar_phylogenetic_glmm(
             n_tips,
         )
         covariance_cholesky = _positive_definite_cholesky(expanded_covariance)
-        precision = np.linalg.solve(
-            covariance_cholesky.T,
-            np.linalg.solve(covariance_cholesky, np.eye(n_tips)),
+        precision = cho_solve(
+            (covariance_cholesky, True), np.eye(n_tips), check_finite=False
         )
         mode, posterior_objective, weights = _scalar_random_mode(
             values,
@@ -3298,11 +3296,10 @@ def fit_phylogenetic_glmm(
             len(design),
         )
         covariance_cholesky = _positive_definite_cholesky(expanded_covariance)
-        precision = np.linalg.solve(
-            covariance_cholesky.T,
-            np.linalg.solve(
-                covariance_cholesky, np.eye(len(design) * random_dimension)
-            ),
+        precision = cho_solve(
+            (covariance_cholesky, True),
+            np.eye(len(design) * random_dimension),
+            check_finite=False,
         )
         fixed_linear = design @ coefficients
         if family == "ordinal":
