@@ -5,7 +5,11 @@ import numpy as np
 import pandas as pd
 from scipy import sparse
 
-from nwkit.gaussian import DiagonalLowRankCovariance, validate_psd_covariance
+from nwkit.gaussian import (
+    DiagonalLowRankCovariance,
+    finite_mean,
+    validate_psd_covariance,
+)
 from nwkit.model_matrix import CategoricalObservation, ReplicatedObservation
 
 TIP_SUMMARY_COLUMNS = [
@@ -283,20 +287,31 @@ def estimate_likelihood_replicates(
 
 def _likelihood_summary_row(tree_id, leaf_name, trait, values, technical_count):
     finite_values = np.asarray(values)[np.isfinite(values)]
+    mean, within_sd = _likelihood_replicate_moments(finite_values)
     return {
         "tree_id": tree_id,
         "leaf_name": leaf_name,
         "trait": trait,
         "n_biological": len(values),
         "n_technical": technical_count,
-        "mean": float(np.mean(finite_values)) if finite_values.size else "",
-        "within_sd": (
-            float(np.std(finite_values, ddof=1)) if finite_values.size > 1 else 0.0
-        ),
+        "mean": mean,
+        "within_sd": within_sd,
         "standard_error": "",
         "variance_method": "likelihood-replicates",
         "batch_adjusted": "no",
     }
+
+
+def _likelihood_replicate_moments(values):
+    if len(values) == 0:
+        return "", 0.0
+    if len(values) == 1:
+        return float(values[0]), 0.0
+    scale = float(np.max(np.abs(values)))
+    if scale == 0.0 or 2.0**-450 <= scale <= 2.0**450:
+        return float(np.mean(values)), float(np.std(values, ddof=1))
+    mean, variance, exponent = _scaled_replicate_moments(values)
+    return mean, math.ldexp(math.sqrt(variance), exponent)
 
 
 def _require_nonempty_ids(dataframe, column, option_name):
@@ -390,7 +405,9 @@ def _aggregate_technical_replicates(
             raise ValueError(
                 "Technical replicates for one biological observation cannot span batches."
             )
-    aggregations = {trait: "mean" for trait in traits}
+    aggregations = {
+        trait: _replicate_mean_aggregation(dataframe[trait]) for trait in traits
+    }
     if batch is not None:
         aggregations[batch] = "first"
     result = dataframe.groupby(key, sort=False, as_index=False).agg(aggregations)
@@ -400,6 +417,22 @@ def _aggregate_technical_replicates(
     )
     result = result.merge(counts, on=key, how="left", validate="one_to_one")
     return result
+
+
+def _finite_replicate_mean(values):
+    observed = values.dropna()
+    return finite_mean(observed) if len(observed) else math.nan
+
+
+def _replicate_mean_aggregation(values):
+    if _replicate_sum_needs_scaling(values.abs().max(), len(values)):
+        return _finite_replicate_mean
+    return "mean"
+
+
+def _replicate_sum_needs_scaling(magnitude, count):
+    # Leave headroom for intermediate sums of batch and leaf means.
+    return magnitude > math.ldexp(np.finfo(float).max / max(1, count), -4)
 
 
 def _known_se_trait_arrays(by_leaf, trait, se_column, allow_missing):
@@ -570,7 +603,9 @@ def _pooled_residual_variance(residuals, degrees_of_freedom):
 def _pooled_no_batch(dataframe, leaf_names, trait):
     selected = dataframe[dataframe[trait].notna()].copy()
     grouped = selected.groupby("leaf_name", sort=False)[trait]
-    means = grouped.mean().reindex(leaf_names)
+    means = grouped.agg(_replicate_mean_aggregation(selected[trait])).reindex(
+        leaf_names
+    )
     counts = grouped.size().reindex(leaf_names).astype(int)
     residuals = selected[trait] - selected["leaf_name"].map(means)
     degrees_of_freedom = len(selected) - len(leaf_names)
@@ -589,7 +624,6 @@ def _pooled_no_batch(dataframe, leaf_names, trait):
 def _leaf_specific_no_batch(dataframe, leaf_names, trait):
     selected = dataframe[dataframe[trait].notna()].copy()
     grouped = selected.groupby("leaf_name", sort=False)[trait]
-    means = grouped.mean().reindex(leaf_names)
     counts = grouped.size().reindex(leaf_names).astype(int)
     if (counts < 2).any():
         missing = counts.index[counts < 2].tolist()
@@ -597,14 +631,36 @@ def _leaf_specific_no_batch(dataframe, leaf_names, trait):
             "Leaf-specific variance for trait '{}' needs at least two biological "
             "replicates per leaf (insufficient: {}).".format(trait, ", ".join(missing))
         )
-    variances = grouped.var(ddof=1).reindex(leaf_names).to_numpy(float)
-    covariance = variances / counts.to_numpy(dtype=float)
-    return (
-        means.to_numpy(float),
-        covariance,
-        counts.to_numpy(int),
-        np.sqrt(np.maximum(variances, 0.0)),
+    return _leaf_replicate_moments(grouped, leaf_names, counts)
+
+
+def _leaf_replicate_moments(groups, leaf_names, counts):
+    with np.errstate(over="ignore", invalid="ignore", under="ignore"):
+        means = groups.mean().reindex(leaf_names).to_numpy(float, copy=True)
+        variances = groups.var(ddof=1).reindex(leaf_names).to_numpy(float)
+        covariance = variances / counts.to_numpy(float)
+    within_sd = np.sqrt(np.maximum(variances, 0.0))
+    exceptional = np.flatnonzero(
+        (variances < np.finfo(float).tiny)
+        | ~np.isfinite(variances)
+        | ~np.isfinite(means)
     )
+    for index in exceptional:
+        values = groups.get_group(leaf_names[index]).to_numpy(float)
+        means[index], variance, exponent = _scaled_replicate_moments(values)
+        with np.errstate(over="ignore", under="ignore"):
+            covariance[index] = np.ldexp(variance / len(values), 2 * exponent)
+        within_sd[index] = math.ldexp(math.sqrt(variance), exponent)
+    return means, covariance, counts.to_numpy(int), within_sd
+
+
+def _scaled_replicate_moments(values):
+    exponent = math.frexp(float(np.max(np.abs(values))))[1]
+    with np.errstate(under="ignore"):
+        scaled = np.ldexp(values, -exponent)
+        variance = float(np.var(scaled, ddof=1))
+    mean = math.ldexp(float(np.mean(scaled)), exponent)
+    return mean, variance, exponent
 
 
 def _single_observation_no_batch(dataframe, leaf_names, trait):
@@ -758,6 +814,19 @@ def _batch_mean_covariance(
         )
 
 
+def _scaled_batch_response(response):
+    size = float(np.max(np.abs(response)))
+    if not _replicate_sum_needs_scaling(size, len(response)):
+        return response, 0.0, 0
+    exponent = math.frexp(size)[1]
+    with np.errstate(under="ignore"):
+        scaled = np.ldexp(response, -exponent)
+    # A shared offset is absorbed by the leaf intercepts. Remove it before
+    # the Schur-complement subtraction so a constant trait has zero residuals.
+    center = float(scaled[0])
+    return scaled - center, center, exponent
+
+
 def _pooled_with_batch(dataframe, leaf_names, trait, batch):
     selected = dataframe[dataframe[trait].notna()].copy()
     if (
@@ -770,7 +839,9 @@ def _pooled_with_batch(dataframe, leaf_names, trait, batch):
     observed_leaf, observed_batch, batch_count = _batch_observation_indices(
         selected, leaf_levels, batch, batch_levels
     )
-    response = selected[trait].to_numpy(float)
+    response, response_center, response_exponent = _scaled_batch_response(
+        selected[trait].to_numpy(float)
+    )
     (
         counts,
         leaf_sums,
@@ -813,6 +884,8 @@ def _pooled_with_batch(dataframe, leaf_names, trait, batch):
             "of freedom.".format(trait)
         )
     variance, exponent = _pooled_residual_variance(residuals, degrees_of_freedom)
+    exponent += response_exponent
+    adjusted_means = np.ldexp(adjusted_means + response_center, response_exponent)
     mean_covariance = _batch_mean_covariance(
         variance, counts, cross_counts, average_batch, schur_cholesky, exponent
     )
