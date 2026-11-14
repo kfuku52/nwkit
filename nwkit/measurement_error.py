@@ -33,6 +33,7 @@ from nwkit.gaussian import (
     scale_covariance_by_slope,
     solve_factor,
     sparse_precision_update_diagonal,
+    symmetric_average,
     validate_psd_covariance,
 )
 from nwkit.optimization import FitResourceError
@@ -47,6 +48,7 @@ from nwkit.sparse_laplace import (
     factor_sparse_positive_definite,
     grouped_predictor_loading,
     joint_predictor_loading,
+    materialize_sparse_covariance,
 )
 
 MAX_DENSE_EIV_OBSERVATIONS = 2000
@@ -210,7 +212,7 @@ def _condition_dense_predictor(prior, sampling, factor, residual, prior_mean):
     if float(np.max(np.diag(sampling))) > float(np.max(np.diag(prior))):
         larger, smaller = sampling, prior
     covariance = smaller @ _solve(factor, larger)
-    return mean, (covariance + covariance.T) * 0.5
+    return mean, symmetric_average(covariance)
 
 
 def fit_latent_predictor(
@@ -941,10 +943,7 @@ def _predictor_error_covariance(
         loading, precision, _ = _gmrf_uncertainty_update(
             beta, int(columns), uncertainty
         )
-        factor = factor_sparse_positive_definite(precision)
-        solved = factor.solve(loading.T.toarray())
-        covariance = np.asarray(loading @ solved)
-        return (covariance + covariance.T) / 2.0
+        return materialize_sparse_covariance(precision, loading)
     if isinstance(columns, (int, np.integer)):
         matrix = _positive_semidefinite(uncertainty, "Predictor posterior covariance")
         if matrix.shape != (n_observations, n_observations):
@@ -1413,7 +1412,7 @@ def _dense_eiv_covariance(
             covariance[diagonal] += variance * component_array
         else:
             covariance += variance * component_array
-    return (covariance + covariance.T) / 2.0
+    return symmetric_average(covariance)
 
 
 def _prepare_dense_predictor_uncertainties(uncertainties, columns, size, structured):

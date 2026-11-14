@@ -14,12 +14,13 @@ from nwkit.evolution import EvolutionaryCovarianceFactory
 from nwkit.gaussian import (
     DiagonalLowRankCovariance,
     materialize_covariance,
+    symmetric_average,
     validate_psd_covariance,
 )
 from nwkit.sparse_laplace import (
     SparseCovarianceModel,
     factor_sparse_nonsingular,
-    factor_sparse_positive_definite,
+    materialize_sparse_covariance,
 )
 
 MAX_DENSE_MULTIVARIATE_DIMENSION = 2000
@@ -41,10 +42,7 @@ class SparseFittedCovariance:
 
     def materialize(self) -> np.ndarray:
         """Materialize the covariance when a caller explicitly requests it."""
-        factor = factor_sparse_positive_definite(self.precision)
-        solved = factor.solve(self.loading.T.toarray())
-        covariance = np.asarray(self.loading @ solved, dtype=float)
-        return (covariance + covariance.T) / 2.0
+        return materialize_sparse_covariance(self.precision, self.loading)
 
 
 @dataclass(frozen=True)
@@ -66,7 +64,7 @@ class MultivariatePglsFit:
 
 
 def _positive_cholesky(matrix: np.ndarray) -> np.ndarray:
-    symmetric = (matrix + matrix.T) / 2.0
+    symmetric = symmetric_average(matrix)
     # A diagonal nugget changes the statistical model and can be exploited by
     # the variance optimizer. Singular exact observations must not acquire noise.
     return np.linalg.cholesky(symmetric)

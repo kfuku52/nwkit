@@ -42,6 +42,19 @@ def finite_mean(values):
     return math.ldexp(float(np.mean(np.ldexp(values, -exponent))), exponent)
 
 
+def symmetric_average(matrix: np.ndarray) -> np.ndarray:
+    """Average transposed entries across the finite floating-point range."""
+    try:
+        with np.errstate(over="raise"):
+            return 0.5 * (matrix + matrix.T)
+    except FloatingPointError:
+        with np.errstate(over="ignore"):
+            averaged = 0.5 * (matrix + matrix.T)
+        large = np.isinf(averaged)
+        averaged[large] = 0.5 * matrix[large] + 0.5 * matrix.T[large]
+        return averaged
+
+
 def scale_covariance_by_slope(covariance, slope):
     """Multiply by a squared slope without overflowing the slope alone."""
     mantissa, exponent = math.frexp(float(slope))

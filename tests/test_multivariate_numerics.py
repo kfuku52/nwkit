@@ -109,6 +109,33 @@ def test_singular_covariance_is_not_given_artificial_noise():
         )
 
 
+def test_materialized_sparse_covariance_preserves_extreme_finite_entries():
+    loading = np.array([[1e154, 0.0], [-1e154, 0.0], [0.0, 2.0**-537]])
+    precision = sparse.eye(2, format="csc")
+    projected = sparse.csr_matrix(loading)
+    fitted = pgls.SparseFittedCovariance(precision, projected)
+    latent = SparseCovarianceModel(
+        precision=precision,
+        tip_loading=projected,
+        logdet_covariance=0.0,
+        sampling_parent=np.full(2, -1),
+        sampling_transition=np.zeros(2),
+        sampling_variance=np.ones(2),
+    )
+    expected = loading @ loading.T
+    assert expected[-1, -1] == np.nextafter(0.0, 1.0)
+    with np.errstate(over="raise", invalid="raise"):
+        np.testing.assert_array_equal(latent.materialize(), expected)
+        np.testing.assert_array_equal(fitted.materialize(), expected)
+
+
+def test_pgls_cholesky_factors_finite_covariance_near_maximum():
+    correlation = np.array([[1.0, -0.5], [-0.5, 1.0]])
+    with np.errstate(over="raise", invalid="raise"):
+        factor = pgls._positive_cholesky(1e308 * correlation)
+    np.testing.assert_allclose(factor / 1e154, np.linalg.cholesky(correlation))
+
+
 @pytest.mark.parametrize("scale", [2.0**-1060, 2.0**1023])
 def test_pgls_validates_covariance_in_its_own_units(scale):
     valid = scale * np.array([[1.0, 0.5], [0.5, 1.0]])

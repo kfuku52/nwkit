@@ -7,7 +7,11 @@ import numpy as np
 from scipy import sparse
 from scipy.sparse.linalg import SuperLU, splu
 
-from nwkit.gaussian import _factor_sparse_lu_with_pivots, _sparse_lu_logdet
+from nwkit.gaussian import (
+    _factor_sparse_lu_with_pivots,
+    _sparse_lu_logdet,
+    symmetric_average,
+)
 
 
 @dataclass(frozen=True)
@@ -91,10 +95,16 @@ class SparseCovarianceModel:
 
     def materialize(self) -> np.ndarray:
         """Materialize the tip covariance for small reference calculations."""
-        factor = factor_sparse_positive_definite(self.precision)
-        solved = factor.solve(self.tip_loading.T.toarray())
-        covariance = np.asarray(self.tip_loading @ solved, dtype=float)
-        return (covariance + covariance.T) / 2.0
+        return materialize_sparse_covariance(self.precision, self.tip_loading)
+
+
+def materialize_sparse_covariance(
+    precision: sparse.csc_matrix, loading: sparse.csr_matrix
+) -> np.ndarray:
+    """Compute the dense covariance of the projected latent variables."""
+    factor = factor_sparse_positive_definite(precision)
+    solved = factor.solve(loading.T.toarray())
+    return symmetric_average(np.asarray(loading @ solved, dtype=float))
 
 
 @dataclass(frozen=True)
