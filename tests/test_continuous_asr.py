@@ -178,6 +178,33 @@ def test_two_tip_root_mean_variance_and_residual_likelihood():
     assert posterior[tree["A"]].variance == posterior[tree["B"]].variance == 0.0
 
 
+def test_fixed_brownian_likelihood_halves_an_overflowing_squared_residual():
+    tree = tree_from("(A:1,B:1)R;")
+    contrast = 2.6e154
+    posterior, fit = compute_bm_marginals(tree, {"A": 0.0, "B": contrast}, sigma2=1.0)
+    assert fit.restricted_log_likelihood == pytest.approx(
+        -(0.25 * contrast) * contrast, rel=2e-15
+    )
+    assert posterior[tree].mean == pytest.approx(contrast / 2)
+    assert posterior[tree].variance == pytest.approx(0.5)
+    with pytest.raises(ValueError, match="residual log-likelihood is not finite"):
+        compute_bm_marginals(tree, {"A": 0.0, "B": 2.7e154}, sigma2=1.0)
+
+
+@pytest.mark.parametrize("local", [False, True])
+def test_fixed_brownian_likelihood_halves_residuals_before_summing(local):
+    if local:
+        tree = tree_from("((A:0,B:0):1,C:1)R;")
+        values = {"A": 0.0, "B": 2e154, "C": 1e154}
+        errors = {"A": 1.0, "B": 1.0, "C": 0.0}
+    else:
+        tree = tree_from("((A:0.5,B:0.5):1,(C:0.5,D:0.5):1)R;")
+        values = {"A": 0.0, "B": 1e154, "C": 0.0, "D": 1e154}
+        errors = None
+    _, fit = compute_bm_marginals(tree, values, sigma2=1.0, standard_errors=errors)
+    assert fit.restricted_log_likelihood == pytest.approx(-1e308, rel=2e-15)
+
+
 @pytest.mark.parametrize("errors", [None, {"A": 0.2, "B": 0.0, "C": 0.7, "D": 1.2}])
 @pytest.mark.parametrize(
     "source",

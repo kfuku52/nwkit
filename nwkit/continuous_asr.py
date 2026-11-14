@@ -61,9 +61,15 @@ class _PruningResult:
     log_variance: float
     quadratic: float
     residual_df: int
+    half_quadratic: bool = False
 
     @property
     def log_likelihood(self):
+        if self.half_quadratic:
+            return (
+                -0.5 * (self.residual_df * _LOG_2PI + self.log_variance)
+                - self.quadratic
+            )
         return -0.5 * (self.residual_df * _LOG_2PI + self.log_variance + self.quadratic)
 
 
@@ -109,7 +115,7 @@ def _nonnegative_sum(values):
         return math.inf
 
 
-def _merge(first, second_mean, second_variance):
+def _merge(first, second_mean, second_variance, half_quadratic=False):
     """Multiply Gaussian messages without allocating an incoming wrapper."""
     if first is None:
         return GaussianMarginal(second_mean, second_variance), 0.0, 0.0, 0
@@ -132,7 +138,11 @@ def _merge(first, second_mean, second_variance):
             "A positive conditional variance underflowed; rescale the input units."
         )
     standardized = (first.mean - second_mean) / math.sqrt(larger)
-    quadratic = (standardized * standardized) / denominator
+    quadratic = (
+        (0.5 * standardized) * (standardized / denominator)
+        if half_quadratic
+        else (standardized * standardized) / denominator
+    )
     return (
         GaussianMarginal(mean, variance),
         math.log(larger) + math.log1p(ratio),
@@ -260,6 +270,7 @@ def _prepare_data(
     trait_exponent_ceiling=None,
     tree_validated=False,
     edge_length=_raw_brownian_edge_length,
+    half_quadratic=False,
 ):
     node_groups, parents, lengths = _tree_groups(
         tree, validated=tree_validated, edge_length=edge_length
@@ -282,7 +293,7 @@ def _prepare_data(
                     "A positive measurement variance underflowed; rescale the input units."
                 )
             message, log_variance, quadratic, df = _merge(
-                observations[group], mean, variance
+                observations[group], mean, variance, half_quadratic
             )
             observations[group] = message
             log_variances.append(log_variance)
@@ -320,7 +331,9 @@ def _edge_variance(rate, length, *, allow_underflow=False):
     return variance
 
 
-def _prune(data, rate, *, allow_edge_underflow=False, collect_inside=True):
+def _prune(
+    data, rate, *, allow_edge_underflow=False, collect_inside=True, half_quadratic=False
+):
     if rate == 0.0 and len(set(data.exact_values.values())) > 1:
         raise _ExactConstraintError(
             "Conflicting exact observations have zero likelihood under sigma2=0."
@@ -356,7 +369,7 @@ def _prune(data, rate, *, allow_edge_underflow=False, collect_inside=True):
             raise ValueError("An ancestral variance exceeds floating-point range.")
         parent = parents[index]
         merged, log_variance, quadratic, df = _merge(
-            inside[parent], message.mean, variance
+            inside[parent], message.mean, variance, half_quadratic
         )
         inside[parent] = merged
         log_variances.append(log_variance)
@@ -367,6 +380,7 @@ def _prune(data, rate, *, allow_edge_underflow=False, collect_inside=True):
         math.fsum(log_variances),
         _nonnegative_sum(quadratics),
         residual_df,
+        half_quadratic,
     )
 
 
@@ -659,8 +673,18 @@ def _fit_brownian_edges(
         else upward.log_likelihood - residual_df * data.trait_exponent * _LOG_2
     )
     if log_likelihood is not None and not math.isfinite(log_likelihood):
-        raise ValueError(
-            "Brownian residual log-likelihood is not finite; check the rate and input scales."
+        likelihood_data = _prepare_data(
+            tree,
+            values_by_leaf,
+            standard_errors,
+            sigma2,
+            trait_exponent_ceiling=trait_exponent_ceiling,
+            tree_validated=True,
+            edge_length=edge_length,
+            half_quadratic=True,
+        )
+        log_likelihood = _brownian_tail_log_likelihood(
+            likelihood_data, rate, residual_df
         )
     fit = BrownianFit(
         sigma2=fitted_sigma2,
@@ -676,6 +700,18 @@ def _fit_brownian_edges(
         else "ok",
     )
     return posterior, fit
+
+
+def _brownian_tail_log_likelihood(data, rate, residual_df):
+    # Accumulate the half-quadratic directly when the full residual sum
+    # overflows even though its contribution to log-likelihood can be finite.
+    upward = _prune(data, rate, collect_inside=False, half_quadratic=True)
+    log_likelihood = upward.log_likelihood - residual_df * data.trait_exponent * _LOG_2
+    if not math.isfinite(log_likelihood):
+        raise ValueError(
+            "Brownian residual log-likelihood is not finite; check the rate and input scales."
+        )
+    return log_likelihood
 
 
 def _brownian_has_underflowing_edge(tree, edge_length, rate):
