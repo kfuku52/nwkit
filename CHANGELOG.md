@@ -48,6 +48,7 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   trait and time units so branch rescaling preserves the fitted trends.
 - Apply the same ultrametricity tolerance to delta and OU contrasts across
   branch-length units.
+- Preserve short positive branches under the delta time transformation.
 - Compute OU contrast branch variances directly so short branches and weak
   attraction retain their Brownian-limit behavior.
 - Keep EB and ACDC branch variances finite when an intermediate exponential
@@ -112,6 +113,7 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   smoothing when bootstrap refits only return parameter estimates.
 - Reuse multivariate ASR branch distances across observations at the same node.
 - Batch common-ancestor lookups when building dense Gaussian covariances.
+- Reuse the same Gaussian interval quantile throughout ancestral output tables.
 - Solve for dense multivariate posterior covariances in bounded node batches.
 - Check BMS-DRIFT rate identifiability from observed subtree splits without
   constructing every pairwise path.

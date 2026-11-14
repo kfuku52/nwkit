@@ -269,7 +269,7 @@ def transformed_edge_variances(
             node: _ou_contrast_variance(length, height - base_depths[node], parameter)
             for node, length in base_edges.items()
         }
-    return _delta_edge_variances(tree, parameter, base_depths, height)
+    return _delta_edge_variances(parameter, base_depths, base_edges, height)
 
 
 def _kappa_edge_variances(tree, base_edges, parameter):
@@ -305,27 +305,52 @@ def _lambda_edge_variances(tree, base_edges, base_depths, parameter):
     return transformed
 
 
-def _delta_edge_variances(tree, parameter, base_depths, height):
-    transformed_depths = {
-        node: height * (depth / height) ** parameter
-        for node, depth in base_depths.items()
-    }
-    edges = {
-        node: (
-            0.0
-            if node.is_root
-            else transformed_depths[node] - transformed_depths[node.up]
+def _delta_edge_variance(parent_depth, length, height, parameter):
+    if length == 0.0 or parameter == 1.0:
+        return length
+    child_depth = parent_depth + length
+    separation = math.inf
+    if parent_depth == 0.0:
+        fraction = 1.0
+    else:
+        relative_length = length / parent_depth
+        if relative_length == 0.0:
+            # The derivative is accurate to floating-point precision here.
+            return math.exp(
+                math.log(length)
+                + math.log(parameter)
+                + (parameter - 1.0) * (math.log(parent_depth) - math.log(height))
+            )
+        separation = (
+            math.log1p(relative_length)
+            if math.isfinite(relative_length)
+            else math.log(child_depth) - math.log(parent_depth)
         )
-        for node in tree.traverse()
+        fraction = -math.expm1(-parameter * separation)
+    ratio = child_depth / height
+    if ratio > 0.0 and fraction > 0.0:
+        powered = ratio**parameter
+        if powered >= 2.0**-1022:
+            return height * powered * fraction
+    log_fraction = (
+        math.log(fraction)
+        if fraction > 0.0
+        else math.log(parameter) + math.log(separation)
+    )
+    return math.exp(
+        math.log(height)
+        + parameter * (math.log(child_depth) - math.log(height))
+        + log_fraction
+    )
+
+
+def _delta_edge_variances(parameter, base_depths, base_edges, height):
+    return {
+        node: 0.0
+        if node.is_root
+        else _delta_edge_variance(base_depths[node.up], length, height, parameter)
+        for node, length in base_edges.items()
     }
-    scale = max(1.0, max(abs(value) for value in edges.values()))
-    tolerance = np.finfo(float).eps * scale * max(100, len(edges))
-    for node, value in edges.items():
-        if value < -tolerance or not math.isfinite(value):
-            raise ValueError("Evolutionary model 'delta' produced invalid branches.")
-        if value < 0.0:
-            edges[node] = 0.0
-    return edges
 
 
 def validate_custom_covariance(matrix, leaf_names) -> np.ndarray:
