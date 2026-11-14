@@ -39,6 +39,19 @@ manual_gene_trees.txt    deb4553706828128fe8f488a4a7d6b1e9874e0823200f3e43ca4e73
 Original-program tests are opt-in via `NWKIT_GRAMPA_REFERENCE`; they were
 explicitly enabled in both host and Docker runs here, not skipped.
 
+## Repeated Subtrees
+
+A 2026-11-14 comparison of `run_search` sampled 240 rooted gene families
+with seed 71 from a 24-species angiosperm project and evaluated all 1,874
+candidate trees. It compared the same serial, one-CPU ARM64 Docker
+workload three times per implementation in alternating order. Median
+process CPU time was 33.2 to 21.6 seconds without the detailed check
+table and 54.3 to 30.9 seconds with it. Peak resident memory in the
+detailed check run changed from approximately 357 to 358 MiB. The full
+candidate scores and all check rows agreed exactly. These CPU times
+include Python startup and serialization for comparison, not GeneGalleon's
+input preparation or the later expansion of optimal maps.
+
 ## Execution and Workflow Evidence
 
 NWKIT's existing checker was invoked from its repository root:
