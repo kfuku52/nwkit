@@ -326,6 +326,38 @@ def test_bootstrap_checkpoint_has_distinct_file_inputs_and_outputs(tmp_path):
             )
 
 
+def test_checkpoint_detects_input_mutation_after_last_null_draw(tmp_path, monkeypatch):
+    import nwkit.wgd_count_fit as fitting
+
+    tree, counts = inputs(tmp_path)
+    checkpoint = tmp_path / "bootstrap.json"
+    output, report = tmp_path / "result.tsv", tmp_path / "model.json"
+    refit = fitting._bootstrap_scan_statistic
+
+    def mutate(*args):
+        result = refit(*args)
+        counts.write_text(counts.read_text() + "\n")
+        return result
+
+    monkeypatch.setattr(fitting, "_bootstrap_scan_statistic", mutate)
+    with pytest.raises(ValueError, match="changed during null calibration"):
+        main(
+            command(tree, counts)
+            + [
+                "--bootstrap",
+                "1",
+                "--bootstrap-checkpoint",
+                str(checkpoint),
+                "-o",
+                str(output),
+                "--model-out",
+                str(report),
+            ]
+        )
+    assert not output.exists() and not report.exists()
+    assert json.loads(checkpoint.read_text())["statistics"][0] is not None
+
+
 def test_tip_and_family_labels_remain_literal_and_missing_is_explicit(tmp_path):
     path = tmp_path / "counts.tsv"
     path.write_text(

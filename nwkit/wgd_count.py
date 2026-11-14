@@ -367,6 +367,11 @@ def wgd_count_main(args):
                 checkpoint=checkpoint,
                 **options,
             )
+        if (
+            checkpoint_source is not None
+            and checkpoint_inputs(args) != checkpoint_source
+        ):
+            raise ValueError("WGD bootstrap inputs changed during null calibration.")
     rows = []
     for rank, candidate in enumerate(result.candidates, 1):
         fit = candidate.event_fit
