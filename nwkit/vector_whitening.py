@@ -11,7 +11,7 @@ import math
 from dataclasses import dataclass
 
 import numpy as np
-from scipy.linalg import solve_triangular
+from scipy.linalg import get_lapack_funcs, solve_triangular
 
 
 def _cholesky(matrix, label):
@@ -28,11 +28,35 @@ def _cholesky(matrix, label):
 
 
 @dataclass(frozen=True)
+class _HouseholderRotation:
+    reflectors: np.ndarray
+    coefficients: np.ndarray
+
+    @classmethod
+    def factor(cls, matrix):
+        transposed, coefficients = np.linalg.qr(matrix, mode="raw")
+        reflectors = transposed.T
+        triangular = np.triu(reflectors[: len(coefficients)])
+        return cls(reflectors, coefficients), triangular
+
+    def apply_transpose(self, values):
+        apply = get_lapack_funcs("ormqr", (self.reflectors,))
+        args = ("L", "T", self.reflectors, self.coefficients, values)
+        _, work, info = apply(*args, lwork=-1)
+        if info != 0:
+            raise ValueError("Could not determine QR application workspace.")
+        result, _, info = apply(*args, lwork=int(work[0]))
+        if info != 0:
+            raise ValueError("Could not apply the tree whitening QR factor.")
+        return result
+
+
+@dataclass(frozen=True)
 class _Step:
     node: int
     children: tuple
     positions: np.ndarray | None
-    rotation: np.ndarray | None
+    rotation: np.ndarray | _HouseholderRotation | None
     retained: int
     factor: np.ndarray
 
@@ -155,7 +179,11 @@ class VectorTreeWhitening:
                 local = np.concatenate([messages.pop(i) for i in children])
                 retained = min(p, len(local))
                 rotation = None
-                if len(local) > p:
+                if len(local) >= max(64, 4 * p):
+                    # Large polytomies need only the first p Householder
+                    # reflectors, even when emitting every orthogonal residual.
+                    rotation, local = _HouseholderRotation.factor(local)
+                elif len(local) > p:
                     rotation, triangular = np.linalg.qr(local, mode="complete")
                     local = triangular[:retained]
                 if node == 0:
@@ -204,8 +232,13 @@ class VectorTreeWhitening:
                 if step.positions is not None
                 else np.concatenate([messages.pop(i) for i in step.children])
             )
-            if step.rotation is not None:
-                local = step.rotation.T @ local
+            rotation = step.rotation
+            if rotation is not None:
+                local = (
+                    rotation.apply_transpose(local)
+                    if isinstance(rotation, _HouseholderRotation)
+                    else rotation.T @ local
+                )
                 residual = local[step.retained :]
                 output[offset : offset + len(residual)] = residual
                 offset += len(residual)

@@ -86,6 +86,30 @@ def test_zero_process_with_noise_and_singular_rejection():
         )
 
 
+def test_multifurcation_whitening_matches_dense_covariance():
+    tips, traits = 40, 3
+    newick = "(" + ",".join(f"T{i}:1" for i in range(tips)) + ");"
+    tree = CompiledTree.from_tree(Tree(newick))
+    rng = np.random.default_rng(230)
+    slopes = rng.uniform(0.4, 0.9, (tips + 1, traits))
+    root = np.eye(traits) + 0.2
+    innovations = np.broadcast_to(root, (tips + 1, traits, traits))
+    errors = np.broadcast_to(np.zeros_like(root), (tips, traits, traits))
+    mask = rng.random((tips, traits)) > 0.2
+    dense = dense_covariance(tree, slopes, innovations, root)
+    dense = dense[np.ix_(mask.ravel(), mask.ravel())]
+    factor = VectorTreeWhitening.build(
+        tree, mask, slopes, innovations, errors, root_covariance=root
+    )
+    whitening = factor.apply(np.eye(mask.sum()))
+    np.testing.assert_allclose(
+        whitening @ dense @ whitening.T, np.eye(mask.sum()), atol=1e-12
+    )
+    assert factor.log_determinant == pytest.approx(
+        np.linalg.slogdet(dense)[1], abs=1e-12
+    )
+
+
 def test_observation_plan_reuse_and_identity_checks():
     from nwkit.vector_whitening import VectorObservationPlan
 
