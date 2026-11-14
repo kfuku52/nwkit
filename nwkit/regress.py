@@ -1550,6 +1550,18 @@ def _dense_profile_gls(cholesky, design, response, rhs, return_details):
     return beta, gram, gram_logdet, residual, inverse_residual, quadratic
 
 
+def _structured_profile_covariance(diagonal, updates, required):
+    if not required:
+        return None
+    if any(sparse.issparse(update) for update in updates):
+        loading = sparse.hstack(
+            [sparse.csr_matrix(update) for update in updates], format="csr"
+        )
+    else:
+        loading = np.column_stack(updates)
+    return DiagonalLowRankCovariance(diagonal, loading)
+
+
 def _profile_covariance_fit(
     y,
     design,
@@ -1623,6 +1635,7 @@ def _profile_covariance_fit(
     dense_rhs = (
         None if structured_model else np.column_stack((design, ordinary_residual))
     )
+    need_grouped_covariance = likelihood_groups is not None
     response_scale = residual_variance_scale(
         centered_response, ordinary_residual, sampling_diagonal
     )
@@ -1654,16 +1667,10 @@ def _profile_covariance_fit(
                     cholesky = factor_diagonal_low_rank_updates(
                         covariance, low_rank_updates
                     )
-                    low_rank = (
-                        sparse.hstack(
-                            [sparse.csr_matrix(update) for update in low_rank_updates],
-                            format="csr",
-                        )
-                        if any(sparse.issparse(update) for update in low_rank_updates)
-                        else np.column_stack(low_rank_updates)
-                    )
-                    covariance_representation = DiagonalLowRankCovariance(
-                        covariance, low_rank
+                    covariance_representation = _structured_profile_covariance(
+                        covariance,
+                        low_rank_updates,
+                        return_details or need_grouped_covariance,
                     )
                 else:
                     cholesky = np.sqrt(covariance)
