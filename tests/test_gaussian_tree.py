@@ -1,6 +1,7 @@
 """Cross-consumer contracts for the shared tree-Gaussian process layer."""
 
 import math
+from decimal import Decimal, localcontext
 
 import numpy as np
 import pytest
@@ -15,6 +16,7 @@ from nwkit.gaussian_tree import (
     GaussianRootPrior,
     GaussianTransition,
     GaussianTreeProcess,
+    exponential_rate_edge_variance,
 )
 from nwkit.nonstationary_continuous_asr import compute_eb_marginals
 from nwkit.ordinary_regression import _fit_ordinary_gaussian
@@ -24,6 +26,27 @@ from nwkit.util import read_tree
 
 def tree_from(source):
     return read_tree(source, "1", True, quiet=True, rooted="yes")
+
+
+@pytest.mark.parametrize(
+    "start,length,rate",
+    [
+        (0.0, 8e-298, 1e300),
+        (8e-298, 1e-315, 1e300),
+        (8e302, 1e303, -1e-300),
+        (0.0, 1e-15, 1e-310),
+    ],
+)
+def test_rate_change_branch_variance_avoids_unrepresentable_intermediates(
+    start, length, rate
+):
+    with localcontext() as context:
+        context.prec = 400
+        a, b, r = map(Decimal.from_float, (start, length, rate))
+        expected = float((r * a).exp() * ((r * b).exp() - 1) / r)
+    assert exponential_rate_edge_variance(start, length, rate) == pytest.approx(
+        expected, rel=3e-13, abs=0
+    )
 
 
 def test_brownian_asr_and_intercept_only_regression_share_reml_fit():

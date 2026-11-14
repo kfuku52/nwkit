@@ -9,6 +9,7 @@ transitions and innovation variances.
 
 import math
 from dataclasses import dataclass, replace
+from sys import float_info
 from typing import Any, Mapping, Sequence
 
 import numpy as np
@@ -750,12 +751,41 @@ def exponential_rate_edge_variance(start: float, length: float, rate: float) -> 
         raise ValueError(
             "Rate change multiplied by tree depth exceeds floating-point range."
         )
+    if abs(edge_exponent) <= float_info.epsilon:
+        if -700 <= start_exponent <= 700:
+            variance = math.exp(start_exponent) * length
+        else:
+            variance = _checked_rate_exp(start_exponent + math.log(length))
+    elif -700 <= start_exponent <= 700 and edge_exponent <= 700:
+        integrated = math.exp(start_exponent) * math.expm1(edge_exponent)
+        variance = integrated / rate
+        if (
+            float_info.min <= variance <= float_info.max
+            and abs(integrated) >= float_info.min
+        ):
+            return variance
+        variance = _rate_edge_variance_from_logs(start_exponent, edge_exponent, rate)
+    else:
+        variance = _rate_edge_variance_from_logs(start_exponent, edge_exponent, rate)
+    if not math.isfinite(variance) or variance <= 0.0:
+        raise ValueError("A positive rate-change branch variance is not finite.")
+    return variance
+
+
+def _rate_edge_variance_from_logs(start_exponent, edge_exponent, rate):
+    if edge_exponent > 1:
+        log_variance = (start_exponent + edge_exponent) + math.log1p(
+            -math.exp(-edge_exponent)
+        )
+    else:
+        log_variance = start_exponent + math.log(abs(math.expm1(edge_exponent)))
+    return _checked_rate_exp(log_variance - math.log(abs(rate)))
+
+
+def _checked_rate_exp(log_variance):
     try:
-        variance = math.exp(start_exponent) * math.expm1(edge_exponent) / rate
+        return math.exp(log_variance)
     except OverflowError as exc:
         raise ValueError(
             "A rate-change branch variance exceeds floating-point range."
         ) from exc
-    if not math.isfinite(variance) or variance <= 0.0:
-        raise ValueError("A positive rate-change branch variance is not finite.")
-    return variance
