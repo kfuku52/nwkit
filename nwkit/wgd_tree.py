@@ -157,6 +157,7 @@ def wgd_tree_main(args):
         for node, identifier in zip(nodes, gene.node_ids, strict=True)
     }
     rows, results = [], []
+    fixed_nodes = {event.node for event in fixed}
     for item in candidates:
         fit = item["event"]
         selected = fit["event"]
@@ -167,7 +168,21 @@ def wgd_tree_main(args):
         event = MultiplicationEvent(
             node, selected["retention"], selected["fraction"], selected["multiplicity"]
         )
-        result = model.evaluate(fit["rates"], fit["root_mean"], event, **options)
+        # A zero-retention fit with the exact background parameters has the
+        # same topology likelihood and zero origin at every gene node.
+        identical_background = (
+            event.retention == 0
+            and event.multiplicity == 2
+            and node > 0
+            and node not in fixed_nodes
+            and fit["rates"] == background["rates"]
+            and fit["root_mean"] == background["root_mean"]
+        )
+        result = (
+            background_result
+            if identical_background
+            else model.evaluate(fit["rates"], fit["root_mean"], event, **options)
+        )
         results.append(
             {
                 "species_event_id": clade,

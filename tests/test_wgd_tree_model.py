@@ -104,6 +104,30 @@ def test_fixed_background_and_single_candidate_are_equal_without_origin_markers(
     assert not np.any(model.evaluate(*args).origin_probabilities)
 
 
+@pytest.mark.parametrize("with_background", [False, True])
+@pytest.mark.parametrize("fraction", [0.0, 0.4, 1.0])
+def test_zero_retention_topology_equals_background_exactly(with_background, fraction):
+    a, b = ("tip", "A"), ("tip", "B")
+    topology = gene(("node", ("node", a, a), b))
+    fixed = (MultiplicationEvent(1, 0.65, 0.25),) if with_background else ()
+    model = TopologyLikelihood(
+        species(),
+        topology,
+        fixed_events=fixed,
+        detection=(0.75, 0.9),
+        rate_scales=(0.4, 1.6),
+        ascertainment="root-clades",
+    )
+    args = [[0.13, 0.22]], 1.16
+    baseline = model.evaluate(*args)
+    result = model.evaluate(*args, MultiplicationEvent(2, 0.0, fraction))
+    assert result.log_likelihood == baseline.log_likelihood
+    assert result.log_likelihood_error == baseline.log_likelihood_error
+    assert result.origin_node_ids == baseline.origin_node_ids
+    assert result.origin_probability_error == 0
+    np.testing.assert_array_equal(result.origin_probabilities, [0.0, 0.0])
+
+
 def test_one_ancestral_copy_rejects_crossed_root_before_numerical_evaluation(
     monkeypatch,
 ):

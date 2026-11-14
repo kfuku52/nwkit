@@ -579,6 +579,11 @@ class TopologyLikelihood:
             raise ValueError(
                 "Topology numerical tolerances must be finite and positive."
             )
+        # At zero retention the pulse is the identity in the unbounded
+        # topology model. There is no marked origin, including when other
+        # fixed background doublings are present.
+        if event is not None and event.retention == 0:
+            event = None
         first = self._evaluate(rates, root_mean, event, np.float64, origins=origins)
         second = self._evaluate(rates, root_mean, event, np.longdouble, origins=origins)
         error = abs(second[0] - first[0])

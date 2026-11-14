@@ -94,6 +94,41 @@ def test_species_child_reordering_is_valid_but_length_changes_are_not(tmp_path):
     assert first.read_text() == second.read_text()
 
 
+def test_cli_reuses_zero_retention_only_for_exact_background_parameters(
+    tmp_path, monkeypatch
+):
+    from nwkit.wgd_tree_model import TopologyLikelihood
+
+    gene, species, fit = inputs(tmp_path)
+    record = json.loads(fit.read_text())
+    (first,) = record["candidates"]
+    first["event"]["event"]["retention"] = 0
+    second = {
+        "event": {
+            **first["event"],
+            "rates": [[0.15, 0.2]],
+            "event": {**first["event"]["event"], "node": 2},
+        }
+    }
+    record["candidates"].append(second)
+    fit.write_text(json.dumps(record))
+    evaluated = []
+    original = TopologyLikelihood.evaluate
+
+    def evaluate(self, rates, root, event=None, **options):
+        evaluated.append(event.node if event is not None else None)
+        return original(self, rates, root, event, **options)
+
+    monkeypatch.setattr(TopologyLikelihood, "evaluate", evaluate)
+    output = tmp_path / "origins.tsv"
+    main(command(gene, species, fit) + ["-o", str(output)])
+    rows = pd.read_csv(output, sep="\t")
+    assert evaluated == [None, 2]
+    assert list(rows.conditional_wgd_probability) == [0.0, 0.0]
+    assert rows.conditional_log_likelihood_difference.iloc[0] == 0
+    assert rows.conditional_log_likelihood_difference.iloc[1] != 0
+
+
 def test_cli_fixed_background_event_follows_clade_not_preorder_number(tmp_path):
     gene, species, fit = inputs(tmp_path)
     record = json.loads(fit.read_text())
