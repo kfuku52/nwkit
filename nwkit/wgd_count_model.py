@@ -1153,40 +1153,30 @@ class CountLikelihood:
         self.transitions(rates, 1.0, 1, event)
         root_probabilities(root_mean, 1)
         result = np.full_like(self.counts, np.nan)
+        observed = ~np.isnan(self.counts)
         tip_columns = {node: col for col, node in enumerate(self.tree.tip_nodes)}
+        branch_plan = lru_cache(maxsize=16)(
+            lambda scale: self._simulation_branches(rates, scale, event, tip_columns)
+        )
         for row in range(len(result)):
             for _ in range(max_attempts):
                 scale = float(rng.choice(self.rate_scales))
-                latent = {0: int(rng.geometric(1 / root_mean))}
-                for node, time in enumerate(self.tree.lengths[1:], 1):
-                    duplication, loss = rates[self.branch_groups[node]] * scale
-                    count = latent[self.tree.parents[node]]
-                    pulse = (
-                        event
-                        if event is not None and event.node == node
-                        else self._fixed_by_node.get(node)
-                    )
+                plan = branch_plan(scale)
+                latent = [int(rng.geometric(1 / root_mean))]
+                for parent, probabilities, pulse, after, column in plan:
+                    count = _simulate_edge(latent[parent], probabilities, rng)
                     if pulse is not None:
-                        count = _simulate_edge(
-                            count, duplication, loss, time * pulse.fraction, rng
-                        )
                         count += int(
                             rng.binomial(
                                 count * (pulse.multiplicity - 1), pulse.retention
                             )
                         )
-                        count = _simulate_edge(
-                            count, duplication, loss, time * (1 - pulse.fraction), rng
+                        count = _simulate_edge(count, after, rng)
+                    latent.append(count)
+                    if column is not None and observed[row, column]:
+                        result[row, column] = rng.binomial(
+                            count, self.detection[column]
                         )
-                    else:
-                        count = _simulate_edge(count, duplication, loss, time, rng)
-                    latent[node] = count
-                    if node in tip_columns:
-                        column = tip_columns[node]
-                        if not np.isnan(self.counts[row, column]):
-                            result[row, column] = rng.binomial(
-                                count, self.detection[column]
-                            )
                 selected = np.nansum(result[row]) > 0
                 if self.ascertainment == "root-clades":
                     selected = all(
@@ -1201,9 +1191,30 @@ class CountLikelihood:
                 )
         return result
 
+    def _simulation_branches(self, rates, scale, event, tip_columns):
+        plan = []
+        for node, time in enumerate(self.tree.lengths[1:], 1):
+            duplication, loss = rates[self.branch_groups[node]] * scale
+            pulse = (
+                event
+                if event is not None and event.node == node
+                else self._fixed_by_node.get(node)
+            )
+            duration = time if pulse is None else time * pulse.fraction
+            pre = _birth_death_probabilities(duplication, loss, duration)[2:]
+            post = ()
+            if pulse is not None:
+                post = _birth_death_probabilities(
+                    duplication, loss, time * (1 - pulse.fraction)
+                )[2:]
+            plan.append(
+                (self.tree.parents[node], pre, pulse, post, tip_columns.get(node))
+            )
+        return plan
 
-def _simulate_edge(count, duplication, loss, time, rng):
-    _, _, survival, success = _birth_death_probabilities(duplication, loss, time)
+
+def _simulate_edge(count, probabilities, rng):
+    survival, success = probabilities
     surviving = int(rng.binomial(count, survival))
     if surviving == 0:
         return 0
