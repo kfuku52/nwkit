@@ -28,6 +28,7 @@ from scipy.stats import nbinom as nbinom_distribution
 from scipy.stats import poisson as poisson_distribution
 
 from nwkit.evolution import EvolutionaryCovarianceFactory
+from nwkit.gaussian import finite_mean, symmetric_average
 from nwkit.measurement_error import _finite_difference_hessian
 from nwkit.model_matrix import CategoricalObservation, ReplicatedObservation
 from nwkit.sparse_laplace import (
@@ -307,7 +308,7 @@ def response_count_matrix(
 
 
 def _positive_definite_cholesky(matrix: np.ndarray) -> np.ndarray:
-    symmetric = (matrix + matrix.T) / 2.0
+    symmetric = symmetric_average(matrix)
     try:
         return np.linalg.cholesky(symmetric)
     except np.linalg.LinAlgError:
@@ -446,10 +447,16 @@ def _scale_covariance_by_mean_variance(matrix, size, label):
         raise ValueError(
             "{} covariance has invalid dimensions or values.".format(label)
         )
-    _, exponent = math.frexp(float(np.max(np.abs(matrix))))
-    scaled = np.ldexp(matrix, -exponent)
-    matrix = (scaled + scaled.T) / 2.0
-    diagonal_mean = float(np.mean(np.diag(matrix)))
+    matrix = symmetric_average(matrix)
+    diagonal_mean = finite_mean(np.diag(matrix))
+    if diagonal_mean < np.finfo(float).tiny:
+        # Normalize a subnormal mean before rounding it to float precision.
+        # Conversely, normal means can divide the original matrix directly,
+        # preserving entries that would underflow in an intermediate rescaling.
+        _, exponent = math.frexp(float(np.max(np.diag(matrix))))
+        with np.errstate(over="ignore"):
+            matrix = np.ldexp(matrix, -exponent)
+        diagonal_mean = finite_mean(np.diag(matrix))
     if diagonal_mean <= 0.0:
         raise ValueError("{} covariance needs a positive diagonal.".format(label))
     with np.errstate(over="ignore"):

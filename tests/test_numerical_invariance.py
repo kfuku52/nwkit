@@ -39,6 +39,7 @@ from nwkit.phylogenetic_glmm import (
     _normal_censor_interval_terms,
     _scalar_initial_coefficient,
     _scalar_terms,
+    _scale_covariance_by_mean_variance,
     _zero_component_count_scalar_terms,
     _zero_truncation_terms,
 )
@@ -74,6 +75,16 @@ def test_covariance_validation_preserves_small_components_of_a_mixed_scale(diago
     if diagonal:
         values = np.diag(np.diag(values))
     np.testing.assert_array_equal(_positive_semidefinite(values, "sampling"), values)
+
+
+def test_glmm_covariance_normalization_preserves_subnormal_components():
+    tiny = math.ulp(0.0)
+    mixed = np.diag([1.0, tiny])
+    normalized = _scale_covariance_by_mean_variance(mixed, 2, "Test")
+    np.testing.assert_array_equal(np.diag(normalized), [2.0, 2.0 * tiny])
+    entirely_small = np.diag([tiny, 2.0 * tiny])
+    normalized = _scale_covariance_by_mean_variance(entirely_small, 2, "Test")
+    np.testing.assert_allclose(np.diag(normalized), [2 / 3, 4 / 3])
 
 
 @pytest.mark.parametrize("exponent", [-1060, 1023])
