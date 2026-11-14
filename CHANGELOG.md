@@ -20,7 +20,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   row sums, and retain GTR frequencies when unnormalized weights sum to
   more than the floating-point range.
 - Threshold ASR samples disjoint ordinal intervals by their log probability
-  mass and preserves the width of narrow intervals after centering.
+  mass, preserves the width of narrow intervals after centering, and draws
+  far-tail liabilities relative to their truncation boundary.
 - Threshold ASR scales conditional precisions so positive subnormal branch
   lengths retain nonzero innovation standard deviations.
 - Keep rounded threshold liabilities inside their observed categories and
@@ -43,6 +44,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   and search remain finite under extreme branch-length rescaling.
 - Normalize branch times when computing complete-case MV-BM contrasts so
   branch rescaling preserves the likelihood and ancestral marginals.
+- Restore trait and time scales together for multivariate Gaussian
+  covariances, and preserve exact observed trait coordinates after conditioning.
 - Fit diagonal MV-OU with row-scaled diffusion so the stationary covariance
   and representable diffusion remain finite at extreme attraction rates.
 - Fit shared and regime-specific Brownian directional drift in normalized
@@ -65,8 +68,9 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   limit.
 - Evaluate large-count Poisson log probabilities without subtracting the
   large terms shared by the power and factorial of the count.
-- Preserve likelihoods at extreme Gamma shapes and extreme fixed beta and
-  beta-binomial precisions. Keep analytic curvature in ordinal-logit tails.
+- Preserve likelihoods at extreme Gamma shapes, extreme fixed beta and
+  beta-binomial precisions, and large beta-binomial trial totals. Keep
+  analytic curvature in ordinal-logit tails.
   Simulate Gamma and count bootstrap responses in the fitted units.
 - Preserve small sampling variances in replicate estimates and independent
   contrasts. Scale large pooled residuals before summing their squares.
@@ -98,6 +102,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   variance when the fitted root convention supplies its own variance.
 - Preserve representable affine-Gaussian branch variances when squaring a
   transition coefficient alone would overflow or underflow.
+- Keep finite Brownian and stationary OU residual log likelihoods in the tails
+  when the full squared residual would overflow.
 - Initialize nonstationary and regime OU attraction from the midpoint of
   the log bounds so multiplying extreme bounds cannot overflow or underflow.
 - Normalize nonstationary and regime OU optima and identifiability calculations
@@ -151,13 +157,14 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   constructing every pairwise path.
 - Compute transformed and directional-drift Brownian likelihoods without
   reconstructing every node during parameter searches and confidence-interval
-  profiling.
+  profiling. Reuse the tree geometry, tip observations, and likelihood
+  evaluations during transformed Brownian fits.
 - Contract raw zero-length branches without allocating a separate Brownian
   process first.
 - Share order statistics between MCMCtree posterior medians and credible
   intervals.
 - Draw threshold liabilities with scalar log-space normal quantiles when
-  supported by SciPy.
+  supported by SciPy. Reuse liability bounds across sweeps with fixed thresholds.
 - Reuse continuous predictor loadings during dense errors-in-variables PGLS
   optimization, including automatic evolutionary-parameter searches.
 - Reuse projected categorical predictor factors for observations sharing a
@@ -169,7 +176,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Index comparison groups once when assigning counts in ASR comparison tables.
 - Reuse tree covariance and Cholesky factors across phylogenetic GLMM trials.
   Reuse accepted sparse-mode evaluations, batch multinomial curvature
-  calculations, and build sparse sampling factors only when bootstrapping.
+  calculations, and avoid redundant assembly of sparse latent covariance
+  components. Build sparse sampling factors only when bootstrapping.
 - Reuse fixed predictor covariance projections in dense regression fits and
   evaluate only coefficient point estimates during GLMM bootstrap refits.
 - Reduce covariance copies and reuse sparse tree components in multivariate
