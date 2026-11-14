@@ -3786,6 +3786,7 @@ def _fit_continuous_model(
             sigma2=getattr(args, "sigma2", None),
             standard_errors=errors,
             _tree_validated=True,
+            _compute_posterior=compute_posterior,
         )
     if model == "BMS":
         from nwkit.regime_continuous_asr import compute_bms_marginals
@@ -3808,6 +3809,7 @@ def _fit_continuous_model(
             regime_parameters_source=None if fixed is None else fixed[1],
             standard_errors=errors,
             _tree_validated=True,
+            _compute_posterior=compute_posterior,
         )
     if model == "BMS-DRIFT":
         from nwkit.regime_drift_asr import compute_regime_drift_marginals
@@ -3828,15 +3830,26 @@ def _fit_continuous_model(
             regime_parameters_source=None if fixed is None else fixed[1],
             standard_errors=errors,
             _tree_validated=True,
+            _compute_posterior=compute_posterior,
         )
     if model == "OU":
-        return _fit_ou_model(tree, observed, errors, args, settings)
+        return _fit_ou_model(
+            tree, observed, errors, args, settings, compute_posterior=compute_posterior
+        )
     if model in {"OUM", "OUMA", "OUMV", "OUMVA"}:
         return _fit_regime_ou_model(
-            tree, observed, errors, args, model, regime_assignment
+            tree,
+            observed,
+            errors,
+            args,
+            model,
+            regime_assignment,
+            compute_posterior=compute_posterior,
         )
     if model in {"LAMBDA", "KAPPA", "DELTA", "EB", "ACDC"}:
-        return _fit_transformed_continuous_model(tree, observed, errors, args, model)
+        return _fit_transformed_continuous_model(
+            tree, observed, errors, args, model, compute_posterior=compute_posterior
+        )
     if model == "BM-DRIFT":
         from nwkit.nonstationary_continuous_asr import compute_bm_drift_marginals
 
@@ -3847,6 +3860,7 @@ def _fit_continuous_model(
             drift=getattr(args, "drift", None),
             standard_errors=errors,
             _tree_validated=True,
+            _compute_posterior=compute_posterior,
         )
     if model == "MV-BM":
         from nwkit.multivariate_asr import compute_mvbm_marginals
@@ -3900,7 +3914,7 @@ def _fit_continuous_model(
     raise ValueError(f"Unsupported continuous ASR model: {model}.")
 
 
-def _fit_ou_model(tree, observed, errors, args, settings):
+def _fit_ou_model(tree, observed, errors, args, settings, *, compute_posterior):
     from nwkit.ou_asr import compute_ou_marginals, parse_alpha_bounds
 
     alpha_bounds = parse_alpha_bounds(getattr(args, "alpha_bounds", None), tree)
@@ -3914,6 +3928,7 @@ def _fit_ou_model(tree, observed, errors, args, settings):
             alpha_bounds=alpha_bounds,
             standard_errors=errors,
             _tree_validated=True,
+            _compute_posterior=compute_posterior,
         )
     from nwkit.general_ou_asr import compute_general_ou_marginals
 
@@ -3928,10 +3943,13 @@ def _fit_ou_model(tree, observed, errors, args, settings):
         theta=getattr(args, "theta", None),
         alpha_bounds=alpha_bounds,
         standard_errors=errors,
+        _compute_posterior=compute_posterior,
     )
 
 
-def _fit_regime_ou_model(tree, observed, errors, args, model, regime_assignment):
+def _fit_regime_ou_model(
+    tree, observed, errors, args, model, regime_assignment, *, compute_posterior
+):
     from nwkit.asr_regimes import read_regime_parameters
     from nwkit.ou_asr import parse_alpha_bounds
     from nwkit.regime_gaussian_asr import (
@@ -3958,10 +3976,13 @@ def _fit_regime_ou_model(tree, observed, errors, args, model, regime_assignment)
         alpha_bounds=parse_alpha_bounds(getattr(args, "alpha_bounds", None), tree),
         standard_errors=errors,
         _tree_validated=True,
+        _compute_posterior=compute_posterior,
     )
 
 
-def _fit_transformed_continuous_model(tree, observed, errors, args, model):
+def _fit_transformed_continuous_model(
+    tree, observed, errors, args, model, *, compute_posterior
+):
     from nwkit.transformed_continuous_asr import (
         compute_transformed_bm_marginals,
         parse_parameter_bounds,
@@ -3991,6 +4012,7 @@ def _fit_transformed_continuous_model(tree, observed, errors, args, model):
         profile_ci_level=getattr(args, "profile_ci_level", None),
         standard_errors=errors,
         _tree_validated=True,
+        _compute_posterior=compute_posterior,
     )
 
 

@@ -958,13 +958,11 @@ def _fit_continuous(context, candidate):
         candidate_args,
         settings,
         regime_assignment,
-        **(
-            {
-                "compute_posterior": False,
-                "geometry_cache": context.cache.setdefault("multivariate_geometry", {}),
-            }
+        compute_posterior=False,
+        geometry_cache=(
+            context.cache.setdefault("multivariate_geometry", {})
             if candidate.model in MULTIVARIATE_MODELS
-            else {}
+            else None
         ),
     )[1]
 
