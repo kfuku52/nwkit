@@ -138,7 +138,7 @@ minimal worked example, in
 - [`table2nwk`](https://github.com/kfuku52/nwkit/wiki/nwkit-table2nwk): Converting a parent-child table into a Newick tree
 - [`transfer`](https://github.com/kfuku52/nwkit/wiki/nwkit-transfer): Transferring information between trees
 - [`validate`](https://github.com/kfuku52/nwkit/wiki/nwkit-validate): Validating one or more Newick trees and reporting structural issues
-- [`wgd-count`](https://github.com/kfuku52/nwkit/wiki/nwkit-wgd-count): Experimental native DL/WGM gene-count candidates, fixed-event sensitivity, branch-burst diagnostics and resumable search-wide bootstrap
+- [`wgd-count`](https://github.com/kfuku52/nwkit/wiki/nwkit-wgd-count): Experimental native DL/WGM gene-count candidates, model adequacy and branch-burst diagnostics, fixed-event sensitivity, and resumable search-wide bootstrap
 - [`wgd-tree`](https://github.com/kfuku52/nwkit/wiki/nwkit-wgd-tree): Fixed-topology DL/WGD likelihood and conditional node assignments, with optional fixed background doublings
 
 See [reconciliation and dating figures](docs/guides/RECONCILIATION_PLOTS.md) for result reports and redrawing saved outputs.
