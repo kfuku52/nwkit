@@ -86,6 +86,68 @@ def test_state_bound_failure_names_the_family_and_tip(tmp_path):
     assert not out.exists()
 
 
+def test_optional_background_adequacy_does_not_change_scan_or_bootstrap(tmp_path):
+    tree, counts = inputs(tmp_path)
+    counts.write_text("family_id\tA\tB\tC\nf1\t2\t2\t1\nf2\t1\t3\t1\nf3\tNA\t1\t2\n")
+    base = command(tree, counts) + ["--bootstrap", "2", "--seed", "123"]
+    outputs = []
+    for label, extra in (
+        ("baseline", []),
+        ("checked", ["--background-adequacy-draws", "9"]),
+    ):
+        out, model = tmp_path / f"{label}.tsv", tmp_path / f"{label}.json"
+        main(base + ["-o", str(out), "--model-out", str(model), *extra])
+        outputs.append((out.read_bytes(), json.loads(model.read_text())))
+    (original_table, original), (checked_table, checked) = outputs
+    report = checked.pop("background_adequacy")
+    assert original_table == checked_table and original == checked
+    assert report["num_training_draws"] == 4 and report["num_evaluation_draws"] == 5
+    zero_rate = report["statistics"]["tip_zero_rate"]["summaries"]
+    assert [row["tip_name"] for row in zero_rate] == ["A", "B", "C"]
+    assert all(row["observed"] == 0 for row in zero_rate)
+    means = report["statistics"]["tip_mean"]["summaries"]
+    assert means[0]["observed"] == 1.5
+    contrasts = report["statistics"]["mean_copy_contrast"]["summaries"]
+    assert [row["branch_id"] for row in contrasts] == [1, 2, 3, 4]
+    assert contrasts[0]["observed"] == pytest.approx(1 / 3)
+
+
+@pytest.mark.parametrize("draws,with_model", [(1, True), (-1, True), (5, False)])
+def test_background_adequacy_requires_output_and_sufficient_draws(
+    tmp_path, draws, with_model
+):
+    tree, counts = inputs(tmp_path)
+    opts = ["--model-out", str(tmp_path / "count.json")] if with_model else []
+    with pytest.raises(ValueError, match="at least four draws and --model-out"):
+        main(command(tree, counts) + ["--background-adequacy-draws", str(draws), *opts])
+
+
+def test_background_adequacy_handles_constant_and_entirely_missing_tips():
+    from types import SimpleNamespace
+
+    from nwkit.wgd_count_adequacy import count_background_adequacy
+    from nwkit.wgd_count_model import CountLikelihood, CountTree
+
+    tree = CountTree(
+        (-1, 0, 0, 0),
+        (0, 1, 1, 1),
+        (1, 2, 3),
+        ("A", "B", "C"),
+        (0, 1, 2, 3),
+        ("ABC", "A", "B", "C"),
+    )
+    model = CountLikelihood(tree, [[1, 1, np.nan], [1, 1, np.nan]])
+    fit = SimpleNamespace(rates=np.array([[0.0, 0.0]]), root_mean=1.0)
+    report = count_background_adequacy(model, fit, 5, 3)
+    assert report == count_background_adequacy(model, fit, 5, 3)
+    tip_means = report["statistics"]["tip_mean"]
+    assert [r["tip_name"] for r in tip_means["summaries"]] == ["A", "B"]
+    assert tip_means["joint_discrepancy"] is None
+    assert not any(r["used_in_joint_discrepancy"] for r in tip_means["summaries"])
+    branch = report["statistics"]["mean_copy_contrast"]["summaries"]
+    assert [r["branch_id"] for r in branch] == [1, 2]
+
+
 def test_fixed_event_cli_conditions_null_and_excludes_fixed_branch(tmp_path):
     tree, counts = inputs(tmp_path)
     fixed = tmp_path / "fixed.tsv"

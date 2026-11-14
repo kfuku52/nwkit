@@ -90,7 +90,13 @@ def register_wgd_count(subparsers, tree_input, table_output, table_policy):
             "bootstrap-checkpoint",
             None,
             str,
-            "Atomically save completed null refits and resume with identical inputs and settings.",
+            "Save completed null refits and resume with identical settings except for an optional larger draw target.",
+        ),
+        (
+            "background-adequacy-draws",
+            0,
+            int,
+            "Optional fitted-background adequacy simulations (0 or at least 4); requires --model-out.",
         ),
         (
             "alpha",

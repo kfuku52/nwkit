@@ -15,6 +15,20 @@ are `NA` and `count_support=not_calibrated`. Increasing the number of bootstrap
 datasets improves Monte Carlo precision, not model adequacy. A p-value is never
 an event posterior probability. The command can be computationally expensive.
 
+With `--model-out`, optionally set `--background-adequacy-draws 999` to compare
+the observed species means, zero-copy and multiple-copy fractions, and the
+within-family mean count difference between each clade and its complement
+with simulated datasets. Both sides of each contrast need observations in a
+family. The diagnostic preserves the original missingness and ascertainment,
+uses an independent seeded random stream, and does not refit each dataset.
+The JSON includes pointwise 95% simulated ranges and a joint discrepancy
+within each group of summaries. Half the draws set the standardization;
+the remaining draws show the empirical range of the standardized RMS with
+the dependence between taxa and branches preserved. Constant or entirely
+unobserved summaries cannot contribute to that joint discrepancy. Low tail
+fractions flag limitations of the fitted background; they are descriptive,
+not goodness-of-fit P-values, and do not change genome-event P-values or calls.
+
 See the [scientific audit](../validation/WGD_SCIENTIFIC_VALIDATION.md) for
 independent numerical and simulation evidence. In its small deliberately
 misspecified local-SSD pilot, the branch-burst AIC gate still admitted conditional

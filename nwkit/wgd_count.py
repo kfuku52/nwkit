@@ -21,6 +21,7 @@ from nwkit.util import (
     validate_outputs_do_not_replace_inputs,
     validate_unique_named_leaves,
 )
+from nwkit.wgd_count_adequacy import count_background_adequacy
 from nwkit.wgd_count_checkpoint import (
     checkpoint_identity,
     checkpoint_inputs,
@@ -276,6 +277,11 @@ def _paths(args):
 
 def wgd_count_main(args):
     paths = _paths(args)
+    adequacy_draws = getattr(args, "background_adequacy_draws", 0)
+    if adequacy_draws != 0 and (adequacy_draws < 4 or "model_out" not in paths):
+        raise ValueError(
+            "--background-adequacy-draws requires at least four draws and --model-out."
+        )
     workers = getattr(args, "bootstrap_workers", 1)
     scan_workers = getattr(args, "scan_workers", 1)
     if workers < 1:
@@ -482,6 +488,10 @@ def wgd_count_main(args):
         ]
         metadata["limitations"].append(
             "Supplied background events are treated as exact and retained in every fit and null draw; their selection and uncertainty are not calibrated."
+        )
+    if adequacy_draws:
+        metadata["background_adequacy"] = count_background_adequacy(
+            model, result.background, adequacy_draws, args.seed
         )
     model_text = (
         json.dumps(metadata, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
