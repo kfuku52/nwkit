@@ -1249,16 +1249,17 @@ def _sparse_precision_marginal_diagonal(loading, precision):
     return sparse_precision_update_diagonal(loading, precision)
 
 
-def _gmrf_likelihood_marginal_profiles(
+def _prepare_eiv_gmrf_components(
     predictor_uncertainties,
     predictor_columns,
     n_coefficients,
     likelihood_groups,
     *,
     use_row_marginals,
+    structured,
 ):
-    """Precompute exact unit-slope GMRF marginals for an EIV objective."""
-    if not any(
+    """Prepare fixed precision factors and exact unit-slope GMRF marginals."""
+    if not structured or not any(
         isinstance(uncertainty, GmrfPredictorUncertainty)
         for uncertainty in predictor_uncertainties
     ):
@@ -1294,7 +1295,8 @@ def _gmrf_likelihood_marginal_profiles(
         loading = _gmrf_uncertainty_loading(unit_beta, column, uncertainty)
         precision = uncertainty.model.precision
         profiles[index] = {
-            "column": column,
+            "loading": loading,
+            "precision_factor": uncertainty.model.precision_factor(),
             "row": (
                 sparse_precision_update_diagonal(loading, precision)
                 if use_row_marginals
@@ -1474,7 +1476,7 @@ def _conditional_eiv_covariance(
     structured,
     *,
     compute_marginal=False,
-    gmrf_marginal_profiles=None,
+    gmrf_marginal_profiles,
     likelihood_groups=None,
     dense_predictor_uncertainties=((), ()),
 ):
@@ -1489,32 +1491,21 @@ def _conditional_eiv_covariance(
             if isinstance(uncertainty, GmrfPredictorUncertainty):
                 assert isinstance(columns, (int, np.integer))
                 model = uncertainty.model
+                profile = gmrf_marginal_profiles[uncertainty_index]
+                slope = float(beta[int(columns)])
                 precision_updates.append(
                     (
-                        _gmrf_uncertainty_loading(beta, int(columns), uncertainty),
+                        profile["loading"] * slope,
                         model.precision,
-                        model.precision_factor(),
+                        profile["precision_factor"],
                     )
                 )
-                profile = (gmrf_marginal_profiles or {}).get(uncertainty_index)
-                if profile is not None:
-                    scale = float(beta[int(columns)]) ** 2
-                    if profile["row"] is not None:
-                        contribution = scale * np.asarray(profile["row"], dtype=float)
-                        row_precision_marginal = (
-                            contribution
-                            if row_precision_marginal is None
-                            else row_precision_marginal + contribution
-                        )
-                    if profile["grouped"] is not None:
-                        contribution = scale * np.asarray(
-                            profile["grouped"], dtype=float
-                        )
-                        grouped_precision_marginal = (
-                            contribution
-                            if grouped_precision_marginal is None
-                            else grouped_precision_marginal + contribution
-                        )
+                row_precision_marginal = _add_gmrf_marginal(
+                    row_precision_marginal, profile["row"], slope
+                )
+                grouped_precision_marginal = _add_gmrf_marginal(
+                    grouped_precision_marginal, profile["grouped"], slope
+                )
                 continue
             if not (
                 isinstance(uncertainty, ContinuousPredictorUncertainty)
@@ -1578,6 +1569,13 @@ def _eiv_precision_marginals(diagonal, updates, row, grouped, groups):
     if grouped is not None:
         grouped = grouped_mean_covariance_diagonal(nonprecision, groups) + grouped
     return row, grouped
+
+
+def _add_gmrf_marginal(current, unit_marginal, slope):
+    if unit_marginal is None:
+        return current
+    contribution = scale_covariance_by_slope(unit_marginal, slope)
+    return contribution if current is None else current + contribution
 
 
 def _refine_eiv_variance_boundaries(function, result, bounds, num_coefficients):
@@ -1777,11 +1775,12 @@ def fit_conditional_eiv_gaussian(
     lower_variance = max(response_scale * 1e-12, np.finfo(float).tiny)
     upper_variance = max(response_scale * 1e6, lower_variance * 1e6)
     num_coefficients = design.shape[1]
-    gmrf_marginal_profiles = _gmrf_likelihood_marginal_profiles(
+    gmrf_marginal_profiles = _prepare_eiv_gmrf_components(
         predictor_uncertainties,
         predictor_columns,
         num_coefficients,
         likelihood_groups,
+        structured=structured,
         use_row_marginals=(
             likelihood_groups is not None
             and any(
