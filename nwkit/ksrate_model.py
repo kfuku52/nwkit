@@ -1,6 +1,7 @@
 """Family-aware focal-lineage Ks correction on a rooted species tree."""
 
 from dataclasses import dataclass
+from functools import lru_cache
 
 import numpy as np
 from scipy.stats import binom
@@ -219,6 +220,25 @@ def bootstrap_corrections(pairs, trios, draws, seed):
     return results
 
 
+@lru_cache(maxsize=256)
+def _median_interval_rank(n, error_probability):
+    # The binomial tail increases with rank. Keep the same inclusive tail
+    # comparison, including when the requested error equals a discrete tail.
+    half = n // 2
+    # For small samples one vectorized call costs less than repeated CDF calls.
+    if half <= 1024:
+        ranks = np.arange(half)
+        return int(np.count_nonzero(2 * binom.cdf(ranks, n, 0.5) <= error_probability))
+    low, high = 0, half + 1
+    while low + 1 < high:
+        rank = (low + high) // 2
+        if 2 * binom.cdf(rank - 1, n, 0.5) <= error_probability:
+            low = rank
+        else:
+            high = rank
+    return low
+
+
 def median_order_statistic_interval(values, error_probability):
     """Noninterpolated finite-sample interval for an iid population median."""
     values = np.asarray(values, dtype=float)
@@ -230,14 +250,13 @@ def median_order_statistic_interval(values, error_probability):
         or not 0 < error_probability < 1
     ):
         raise ValueError("Median intervals need finite samples and error in (0,1).")
-    values = np.sort(values)
     n = len(values)
-    ranks = np.arange(1, n // 2 + 1)
-    admissible = ranks[2 * binom.cdf(ranks - 1, n, 0.5) <= error_probability]
-    if not len(admissible):
+    rank = _median_interval_rank(n, np.asarray(error_probability).item())
+    if rank == 0:
         return float("nan"), float("nan")
-    k = int(admissible[-1])
-    return float(values[k - 1]), float(values[n - k])
+    lower, upper = rank - 1, n - rank
+    selected = np.partition(values, (lower, upper))
+    return float(selected[lower]), float(selected[upper])
 
 
 def simultaneous_median_corrections(pairs, trios, ci_level):
