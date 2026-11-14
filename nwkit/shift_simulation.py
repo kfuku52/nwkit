@@ -35,6 +35,9 @@ class ShiftSimulation:
     missing: np.ndarray
 
     def validate(self):
+        self._validated_geometry()
+
+    def _validated_geometry(self):
         n, p = len(self.tree.leaf_names), len(self.trait_names)
         if (
             np.shape(self.alpha_height) != (p,)
@@ -71,7 +74,7 @@ class ShiftSimulation:
         eigenvalues = np.linalg.eigvalsh(self.measurement_covariance)
         if eigenvalues.min() < -1e-12 * max(1.0, np.max(np.abs(eigenvalues))):
             raise ValueError("Measurement covariance must be positive semidefinite.")
-        joint_covariance_geometry(
+        return joint_covariance_geometry(
             self.tree, self.alpha_height, self.covariance_coordinate, self.root_model
         )
 
@@ -109,7 +112,7 @@ def simulation_from_fit(data, result):
 
 def simulate_shift(spec, replicates=1, *, seed=1):
     """Return observed (replicate,tip,trait) and latent (replicate,node,trait)."""
-    spec.validate()
+    slopes, innovations, root, _, _ = spec._validated_geometry()
     if (
         isinstance(replicates, bool)
         or not isinstance(replicates, (int, np.integer))
@@ -119,9 +122,6 @@ def simulate_shift(spec, replicates=1, *, seed=1):
     if isinstance(seed, bool) or not isinstance(seed, (int, np.integer)) or seed < 0:
         raise ValueError("Simulation seed must be a nonnegative integer.")
     process_seed, error_seed = np.random.SeedSequence(int(seed)).spawn(2)
-    slopes, innovations, root, _, _ = joint_covariance_geometry(
-        spec.tree, spec.alpha_height, spec.covariance_coordinate, spec.root_model
-    )
     p = len(spec.trait_names)
     weights = np.column_stack(
         [mean_geometry(spec.tree, float(alpha))[1] for alpha in spec.alpha_height]
@@ -141,7 +141,10 @@ def simulate_shift(spec, replicates=1, *, seed=1):
     }
     process = VectorProcess(spec.tree.compiled.tree, p, transitions, baseline, root)
     _, latent = simulate_vector_process(
-        process, replicates, seed=int(process_seed.generate_state(1)[0])
+        process,
+        replicates,
+        seed=int(process_seed.generate_state(1)[0]),
+        compiled_tree=spec.tree.compiled,
     )
     values = latent[:, spec.tree.compiled.leaf_indices, :].copy()
     rng = np.random.default_rng(error_seed)

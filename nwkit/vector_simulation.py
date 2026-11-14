@@ -5,7 +5,9 @@ import numpy as np
 from nwkit.compiled_tree import CompiledTree
 
 
-def simulate_vector_process(process, num_samples=1, *, seed=None, root_values=None):
+def simulate_vector_process(
+    process, num_samples=1, *, seed=None, root_values=None, compiled_tree=None
+):
     """Simulate all nodes; a flat root requires explicitly supplied root values."""
     if (
         isinstance(num_samples, bool)
@@ -13,7 +15,10 @@ def simulate_vector_process(process, num_samples=1, *, seed=None, root_values=No
         or num_samples < 1
     ):
         raise ValueError("num_samples must be a positive integer.")
-    compiled = CompiledTree.from_tree(process.tree)
+    compiled = (
+        CompiledTree.from_tree(process.tree) if compiled_tree is None else compiled_tree
+    )
+    compiled.require_tree(process.tree)
     rng = np.random.default_rng(seed)
     dimension = process.dimension
     result = np.empty((num_samples, len(compiled.nodes), dimension))
@@ -38,11 +43,10 @@ def simulate_vector_process(process, num_samples=1, *, seed=None, root_values=No
                 "root_values must be a finite vector or one vector per sample."
             )
         result[:, 0] = roots
-    indices = {node: index for index, node in enumerate(compiled.nodes)}
     for index, node in enumerate(compiled.nodes[1:], 1):
         transition = process.transitions[node]
         result[:, index] = (
-            result[:, indices[node.up]] @ transition.slope.T
+            result[:, compiled.parents[index]] @ transition.slope.T
             + transition.intercept
             + rng.multivariate_normal(
                 np.zeros(dimension),
