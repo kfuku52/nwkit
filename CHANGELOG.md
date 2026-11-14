@@ -34,6 +34,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Profile-likelihood intervals resolve crossings near the edge of the finite
   likelihood domain, across extreme parameter ranges, and when the maximum
   log likelihood is large relative to the cutoff drop.
+- Search regression profile-likelihood intervals in units of each
+  coefficient's standard error.
 - Scale extreme Gaussian posterior predictive values before computing moments
   to avoid overflowing statistics that are finite in the original units.
 - Fit shared MV-OU attraction in normalized time units so the initialization
@@ -125,6 +127,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   species in errors-in-variables regression.
 - Read singleton likelihood-group variances directly from the dense
   covariance diagonal and index larger groups once.
+- Reuse sparse precision solves for marginal variances when multiple
+  observations load the same latent state.
 
 ## [0.43.6] - 2026-09-08
 

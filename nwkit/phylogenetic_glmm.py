@@ -1836,33 +1836,50 @@ def _optimize_with_fixed_coefficient(
     return float(result.fun)
 
 
+def _coefficient_profile_scale(estimate, standard_error):
+    if standard_error > 0.0:
+        return max(standard_error, math.ulp(estimate))
+    return max(abs(estimate), 0.1)
+
+
 def _profile_endpoint(
     objective: Callable[[np.ndarray], float],
     optimized: np.ndarray,
     bounds: Sequence[tuple[float | None, float | None]],
     coefficient_index: int,
     standard_error: float,
-    target: float,
+    fitted_objective: float,
+    likelihood_drop: float,
     direction: float,
 ) -> float:
     estimate = float(optimized[coefficient_index])
+    scale = _coefficient_profile_scale(estimate, standard_error)
 
-    def difference(value: float) -> float:
+    def difference(offset: float) -> float:
+        value = estimate + direction * scale * offset
         return (
             _optimize_with_fixed_coefficient(
                 objective, optimized, bounds, coefficient_index, value
             )
-            - target
+            - fitted_objective
+            - likelihood_drop
         )
 
-    inner = estimate
-    outer = estimate + direction * max(standard_error, 0.1)
+    outer = 1.0
     for _attempt in range(12):
         value = difference(outer)
-        if np.isfinite(value) and value >= 0.0:
-            lower, upper = sorted((inner, outer))
-            return float(brentq(difference, lower, upper, maxiter=60))
-        outer = estimate + 2.0 * (outer - estimate)
+        if 0.0 <= value < math.inf:
+            endpoint = float(
+                brentq(
+                    lambda offset: difference(offset) if offset else -likelihood_drop,
+                    0.0,
+                    outer,
+                    xtol=1e-12,
+                    maxiter=100,
+                )
+            )
+            return estimate + direction * scale * endpoint
+        outer *= 2.0
     return float("nan")
 
 
@@ -1883,7 +1900,7 @@ def _coefficient_likelihood_inference(
     p_values = np.empty(coefficient_count, dtype=float)
     lower = np.full(coefficient_count, np.nan, dtype=float)
     upper = np.full(coefficient_count, np.nan, dtype=float)
-    profile_target = fitted_objective + 0.5 * float(chi2.ppf(confidence_level, 1))
+    likelihood_drop = 0.5 * float(chi2.ppf(confidence_level, 1))
     for index in range(coefficient_count):
         null_objective = _optimize_with_fixed_coefficient(
             objective, optimized, bounds, index, 0.0
@@ -1900,7 +1917,8 @@ def _coefficient_likelihood_inference(
                 bounds,
                 index,
                 standard_error,
-                profile_target,
+                fitted_objective,
+                likelihood_drop,
                 -1.0,
             )
             upper[index] = _profile_endpoint(
@@ -1909,7 +1927,8 @@ def _coefficient_likelihood_inference(
                 bounds,
                 index,
                 standard_error,
-                profile_target,
+                fitted_objective,
+                likelihood_drop,
                 1.0,
             )
     return statistics, p_values, lower, upper

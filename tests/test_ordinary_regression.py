@@ -25,6 +25,7 @@ from nwkit.ordinary_regression import (
 from nwkit.phylogenetic_glmm import (
     MAX_DENSE_GLMM_TIPS,
     _censored_gaussian_log_likelihood,
+    _profile_endpoint,
     fit_phylogenetic_glmm,
 )
 from nwkit.sparse_laplace import (
@@ -2140,6 +2141,25 @@ def test_non_gaussian_factor_omnibus_is_explicitly_labeled_wald():
     omnibus = result[result["term_test"] == "omnibus"].iloc[0]
     assert set(coefficients["inference_method"]) == {"likelihood-ratio"}
     assert omnibus["inference_method"] == "wald"
+
+
+@pytest.mark.parametrize("scale", [1e-18, 1e18])
+@pytest.mark.parametrize("direction", [-1.0, 1.0])
+def test_regression_profile_likelihood_crosses_in_coefficient_units(scale, direction):
+    def objective(parameters):
+        return 1e9 + 0.5 * ((parameters[0] / scale) ** 2 + parameters[1] ** 2)
+
+    endpoint = _profile_endpoint(
+        objective,
+        np.zeros(2),
+        [(None, None)] * 2,
+        0,
+        scale,
+        1e9,
+        1.920729410347062,
+        direction,
+    )
+    assert endpoint / scale == pytest.approx(direction * 1.95996398454, abs=1e-7)
 
 
 def test_non_gaussian_profile_likelihood_reports_asymmetric_intervals():
