@@ -113,6 +113,27 @@ def test_edge_probability_cache_has_exact_keys_and_excludes_invalid_values():
         cached.cache_clear()
 
 
+def test_birth_death_rescales_subnormal_rate_difference():
+    loss = 2.0**-1040
+    duplication = 2.0 * loss
+    time = 2.0**1000
+    reference = birth_death_transition(2.0, 1.0, 2.0**-40, 4)
+    actual = birth_death_transition(duplication, loss, time, 4)
+    np.testing.assert_array_equal(actual, reference)
+    assert 0 < actual[1, 0] < actual[1, 2]
+
+
+def test_birth_death_retains_subnormal_critical_survival():
+    rate = 2.0**513
+    target = 2.0**-1026
+    assert wgd_count_model._birth_death_probabilities(rate, rate, rate) == (
+        1.0,
+        1.0,
+        target,
+        target,
+    )
+
+
 def test_likelihood_transition_cache_is_bounded_and_preserves_results(monkeypatch):
     model = CountLikelihood(tree(), np.array([[2.0, 3.0], [1.0, np.nan]]))
     rates = np.array([[0.12, 0.17]])

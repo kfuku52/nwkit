@@ -4,6 +4,7 @@ Finite matrices retain, rather than renormalize, probability outside the state
 space. Callers must check convergence as the maximum count is increased.
 """
 
+import math
 from collections import OrderedDict
 from dataclasses import dataclass
 from functools import lru_cache
@@ -20,6 +21,7 @@ _EDGE_PROBABILITY_CACHE_ENTRIES = 4096
 _EMISSION_CACHE_BYTES = 16 * 1024**2
 _SELECTION_PROBABILITY_FLOOR = np.finfo(float).tiny / np.finfo(float).eps
 _GEOMETRIC_RECURRENCE_MIN_COUNT = 256
+_MIN_NORMAL_FLOAT = float(np.finfo(float).tiny)
 
 
 def _logsum_probabilities(values, axis):
@@ -74,20 +76,36 @@ def _edge_probabilities(duplication, loss, time):
         return 0.0, 0.0, 1.0, 1.0
     if duplication == loss:
         product = duplication * time
-        value = 1.0 if np.isinf(product) else product / (1.0 + product)
+        if math.isinf(product):
+            complement = (1.0 / duplication) / time
+            return 1.0, 1.0, complement, complement
+        value = product / (1.0 + product)
         complement = 1.0 / (1.0 + product)
         return value, value, complement, complement
     delta = abs(duplication - loss)
-    change = -np.expm1(-delta * time)
-    denominator = delta + min(duplication, loss) * change
+    exponent = delta * time
+    change = -np.expm1(-exponent)
+    extinction = loss * change
+    continuation = duplication * change
+    denominator = delta + min(extinction, continuation)
+    if delta < _MIN_NORMAL_FLOAT or exponent < _MIN_NORMAL_FLOAT:
+        # Divide the formula through by the rate difference before either
+        # numerator rounds away. For tiny x, (1-exp(-x))/x rounds to one.
+        if exponent < _MIN_NORMAL_FLOAT:
+            extinction, continuation = loss * time, duplication * time
+        else:
+            extinction = (loss / delta) * change
+            continuation = (duplication / delta) * change
+        denominator = 1.0 + min(extinction, continuation)
+        delta = 1.0
     complement = delta / denominator
-    attenuated = complement * np.exp(-delta * time)
+    attenuated = complement * np.exp(-exponent)
     survival, geometric_success = (
         (complement, attenuated) if duplication > loss else (attenuated, complement)
     )
     return (
-        loss * change / denominator,
-        duplication * change / denominator,
+        extinction / denominator,
+        continuation / denominator,
         survival,
         geometric_success,
     )
