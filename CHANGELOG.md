@@ -25,7 +25,7 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Threshold ASR scales conditional precisions so positive subnormal branch
   lengths retain nonzero innovation standard deviations.
 - Keep rounded threshold liabilities inside their observed categories and
-  accumulate posterior variances without subtracting large squares.
+  accumulate scaled posterior variances so large draws keep finite summaries.
 - Preserve fixed ordinal thresholds exactly in posterior summaries.
 - Report unrepresentable liability draws before they contaminate MCMC
   summaries.
@@ -70,15 +70,18 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Preserve negative-binomial likelihoods and bootstrap draws near the Poisson
   limit.
 - Evaluate large-count Poisson log probabilities without subtracting the
-  large terms shared by the power and factorial of the count.
+  large terms shared by the power and factorial of the count. Preserve small
+  log-mean residuals in extreme Poisson and negative-binomial likelihoods
+  and scores.
 - Preserve likelihoods at extreme Gamma shapes, extreme fixed beta and
-  beta-binomial precisions, and large beta-binomial trial totals. Keep
-  analytic curvature in ordinal-logit tails.
+  beta-binomial precisions, and large beta-binomial trial totals. Preserve
+  log-mean residuals for highly concentrated Gamma likelihoods and analytic
+  curvature in ordinal-logit tails.
   Simulate Gamma and count bootstrap responses in the fitted units.
 - Preserve small sampling variances in replicate estimates and independent
   contrasts. Scale large pooled residuals before summing their squares.
 - Use analytic score and curvature for exact and censored Gaussian responses,
-  including when interval bounds are close together or in the tail.
+  and integrate narrow intervals without subtracting nearly equal CDFs.
 - Apply observation-specific scales when projecting sparse predictor uncertainty
   into a phylogenetic GLMM.
 - Check mean and covariance information separately when determining whether
@@ -113,6 +116,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   so estimated diffusion and trait means remain consistent across trait units.
 - Condition dense and sparse latent Gaussian predictors in normalized trait
   units and retain small posterior variances on diagonal covariances.
+- Preserve sparse Gaussian solves with subnormal sampling variances and small
+  loading-aligned solutions in strongly grouped covariance models.
 - Refine scalar likelihoods in normalized parameter units, prioritizing the
   strongest grid minima and reporting convergence for the selected fit.
 - Keep scalar likelihood evaluations inside bounds that differ by a single
@@ -174,7 +179,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Draw threshold liabilities with scalar log-space normal quantiles when
   supported by SciPy. Reuse liability bounds across sweeps with fixed thresholds.
 - Reuse continuous predictor loadings during dense errors-in-variables PGLS
-  optimization, including automatic evolutionary-parameter searches.
+  optimization, including automatic evolutionary-parameter searches. Reuse
+  augmented sparse systems and fixed predictor precision factors in sparse fits.
 - Reuse projected categorical predictor factors for observations sharing a
   species in errors-in-variables regression.
 - Read singleton likelihood-group variances directly from the dense
@@ -185,8 +191,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Reuse tree covariance and Cholesky factors across phylogenetic GLMM trials.
   Reuse accepted sparse-mode evaluations, batch multinomial curvature
   calculations, and avoid redundant assembly of sparse latent covariance
-  components. Reuse sparse Hessian row indices and build sampling factors
-  only when bootstrapping.
+  components. Reuse sparse Hessian row indices, build multinomial blocks
+  directly in CSR format, and prepare sampling factors only when bootstrapping.
 - Reuse fixed predictor covariance projections in dense regression fits and
   evaluate only coefficient point estimates during GLMM bootstrap refits.
 - Reduce covariance copies and reuse sparse tree components in multivariate
