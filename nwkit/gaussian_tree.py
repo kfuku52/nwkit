@@ -552,9 +552,22 @@ class GaussianTreeProcess:
         common_ancestor = lca.common_ancestor_indices
         ancestor_factor = None
         if not unit_loadings and direct_loadings:
-            with np.errstate(over="ignore", under="ignore", divide="ignore"):
-                ancestor_factor = variances / (cumulative_loading * cumulative_loading)
-            direct_loadings = bool(np.isfinite(ancestor_factor).all())
+            with np.errstate(over="ignore", under="ignore"):
+                squared_loading = cumulative_loading * cumulative_loading
+            # If every squared loading is normal, the product of any two
+            # loadings is also normal or overflowing. A subnormal square
+            # would lose precision before the variance factor can restore it.
+            direct_loadings = bool(
+                np.isfinite(squared_loading).all()
+                and np.all(squared_loading >= float_info.min)
+            )
+            if direct_loadings:
+                with np.errstate(over="ignore", under="ignore"):
+                    ancestor_factor = variances / squared_loading
+                direct_loadings = bool(
+                    np.isfinite(ancestor_factor).all()
+                    and np.all((ancestor_factor >= float_info.min) | (variances == 0))
+                )
         use_blocks = len(nodes) >= 64 and (unit_loadings or direct_loadings)
         allocate = np.zeros if use_blocks and unit_loadings else np.empty
         covariance = allocate((len(nodes), len(nodes)), dtype=float)
