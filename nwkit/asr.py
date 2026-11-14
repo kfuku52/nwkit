@@ -1441,11 +1441,20 @@ def compute_mk_marginals(
     _add_rate_design_fit_metadata(fit, rate_design)
     if not _compute_posterior:
         return {}, fit
-    return _mk_marginals_from_fit(tree, fit), fit
+    return _mk_marginals_from_fit(tree, likelihood_by_leaf, fit), fit
 
 
-def _mk_marginals_from_fit(tree, fit):
-    inside, child_terms, transition_matrices = fit.pop("_inside_messages")
+def _mk_marginals_from_fit(tree, likelihood_by_leaf, fit):
+    messages = fit.pop("_inside_messages", None)
+    if messages is None:
+        inside, _, child_terms, transition_matrices = _compute_inside_likelihoods(
+            tree=tree,
+            likelihood_by_leaf=likelihood_by_leaf,
+            rate_matrix=fit.get("rate_matrix_by_node", fit["rate_matrix"]),
+            log_space=True,
+        )
+    else:
+        inside, child_terms, transition_matrices = messages
     outside = _compute_outside_likelihoods(
         tree=tree,
         child_terms=child_terms,
