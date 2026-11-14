@@ -289,12 +289,20 @@ def response_count_matrix(
 
 def _positive_definite_cholesky(matrix: np.ndarray) -> np.ndarray:
     symmetric = (matrix + matrix.T) / 2.0
-    scale = max(1.0, float(np.max(np.diag(symmetric))))
-    for multiplier in (0.0, 1e-12, 1e-10, 1e-8, 1e-6):
+    try:
+        return np.linalg.cholesky(symmetric)
+    except np.linalg.LinAlgError:
+        return _jittered_cholesky(symmetric)
+
+
+def _jittered_cholesky(symmetric):
+    diagonal = np.diag_indices_from(symmetric)
+    original = symmetric[diagonal]
+    scale = max(1.0, float(np.max(original)))
+    for multiplier in (1e-12, 1e-10, 1e-8, 1e-6):
+        symmetric[diagonal] = original + scale * multiplier
         try:
-            return np.linalg.cholesky(
-                symmetric + np.eye(len(symmetric)) * scale * multiplier
-            )
+            return np.linalg.cholesky(symmetric)
         except np.linalg.LinAlgError:
             continue
     raise np.linalg.LinAlgError("Matrix is not positive definite.")
@@ -744,7 +752,7 @@ def _random_mode(
     family: str,
     thresholds: np.ndarray,
     initial: np.ndarray | None = None,
-) -> tuple[np.ndarray, float, np.ndarray]:
+) -> tuple[np.ndarray, float, np.ndarray, np.ndarray]:
     mode = (
         np.zeros(precision.shape[0], dtype=float)
         if initial is None
@@ -827,10 +835,12 @@ def _random_mode(
         mode = np.asarray(fallback.x, dtype=float)
     log_likelihood, _, weights = terms(mode)
     objective = -log_likelihood + 0.5 * float(mode @ precision @ mode)
-    _positive_definite_cholesky(_dense_weight_matrix(weights) + precision)
+    posterior_factor = _positive_definite_cholesky(
+        _dense_weight_matrix(weights) + precision
+    )
     if not np.isfinite(objective):
         raise RuntimeError("Categorical random-effect mode is non-finite.")
-    return mode, objective, weights
+    return mode, objective, weights, posterior_factor
 
 
 def _initial_coefficients(
@@ -2365,7 +2375,7 @@ def _scalar_random_mode(
     trials: np.ndarray | None,
     censor_lower: np.ndarray | None,
     censor_upper: np.ndarray | None,
-) -> tuple[np.ndarray, float, np.ndarray]:
+) -> tuple[np.ndarray, float, np.ndarray, np.ndarray]:
     mode = np.zeros(len(precision), dtype=float)
 
     def terms(candidate: np.ndarray):
@@ -2465,10 +2475,10 @@ def _scalar_random_mode(
         weights=weights,
         minlength=len(mode),
     )
-    _positive_definite_cholesky(np.diag(mapped_weights) + precision)
+    posterior_factor = _positive_definite_cholesky(np.diag(mapped_weights) + precision)
     if not np.isfinite(objective):
         raise RuntimeError("Scalar random-effect mode is non-finite.")
-    return mode, objective, weights
+    return mode, objective, weights, posterior_factor
 
 
 def _marginal_scalar_coefficient_covariance(
@@ -2766,7 +2776,7 @@ def _fit_scalar_phylogenetic_glmm(
         precision = cho_solve(
             (covariance_cholesky, True), np.eye(n_tips), check_finite=False
         )
-        mode, posterior_objective, weights = _scalar_random_mode(
+        mode, posterior_objective, weights, hessian_cholesky = _scalar_random_mode(
             values,
             (design @ coefficients)[:, 0],
             precision,
@@ -2778,14 +2788,6 @@ def _fit_scalar_phylogenetic_glmm(
             trials=trial_values,
             censor_lower=lower,
             censor_upper=upper,
-        )
-        mapped_weights = np.bincount(
-            observation_to_tip,
-            weights=weights,
-            minlength=n_tips,
-        )
-        hessian_cholesky = _positive_definite_cholesky(
-            np.diag(mapped_weights) + precision
         )
         logdet_random = 2.0 * float(np.sum(np.log(np.diag(covariance_cholesky))))
         logdet_hessian = 2.0 * float(np.sum(np.log(np.diag(hessian_cholesky))))
@@ -3431,15 +3433,13 @@ def fit_phylogenetic_glmm(
         fixed_linear = design @ coefficients
         if family == "ordinal":
             fixed_linear = fixed_linear[:, 0]
-        mode, posterior_objective, weights = _random_mode(
+        mode, posterior_objective, weights, hessian_cholesky = _random_mode(
             counts,
             fixed_linear,
             precision,
             family=family,
             thresholds=thresholds,
         )
-        posterior_hessian = _dense_weight_matrix(weights) + precision
-        hessian_cholesky = _positive_definite_cholesky(posterior_hessian)
         logdet_random = 2.0 * float(np.sum(np.log(np.diag(covariance_cholesky))))
         logdet_hessian = 2.0 * float(np.sum(np.log(np.diag(hessian_cholesky))))
         objective = (
