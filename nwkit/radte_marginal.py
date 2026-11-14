@@ -19,6 +19,39 @@ from scipy.special import logsumexp, roots_hermitenorm
 from nwkit.radte_model import DatingProblem
 
 
+def _rate_covariance(chronology, rho, root_edges):
+    """Construct the stationary AR(1) covariance and root-contrast slope."""
+    count = len(chronology.edges)
+    slope = np.zeros(count)
+    slope[root_edges] = [0.5, -0.5]
+    if rho == 0.0:
+        return np.eye(count), slope, 2.0
+
+    edge_index = {node: index for index, node in enumerate(chronology.edges)}
+    earlier = np.empty(count, dtype=int)
+    covariance = np.eye(count)
+    depth = np.empty(count, dtype=int)
+    for i, node in enumerate(chronology.gene.descendants("preorder")):
+        index = edge_index[node]
+        visited = earlier[:i]
+        if node.up is chronology.gene:
+            depth[index] = 1
+            # The other root edge connects to these branches via the root.
+            correlations = rho ** (1 + depth[visited])
+        else:
+            parent = edge_index[node.up]
+            depth[index] = 1 + depth[parent]
+            slope[index] = rho * slope[parent]
+            correlations = rho * covariance[parent, visited]
+        covariance[index, visited] = covariance[visited, index] = correlations
+        earlier[i] = index
+
+    # The two root-edge rates have correlation rho**2. Computing their
+    # contrast analytically avoids subtracting nearly equal covariances.
+    contrast_variance = 2 * (1 - rho) * (1 + rho)
+    return covariance, slope, contrast_variance
+
+
 @dataclass(frozen=True)
 class _MarginalStructure:
     """Immutable model/edge quantities shared across constrained age fits."""
@@ -114,15 +147,12 @@ class MarginalDatingProblem(DatingProblem):
         # Choose the second root edge as the Gaussian base; the first enters
         # through log(dt_first * exp(z) + dt_second).
         rows_to_edges[root_row] = root_edges[1]
-        contrast = np.zeros(len(self.chronology.edges))
-        contrast[root_edges] = [1, -1]
-        covariance = np.linalg.inv(self.precision.toarray())
-        covariance_contrast = covariance @ contrast
-        contrast_variance = float(contrast @ covariance_contrast)
-        conditional_slope = covariance_contrast / contrast_variance
+        covariance, conditional_slope, contrast_variance = _rate_covariance(
+            self.chronology, self.rho, root_edges
+        )
         conditional_covariance = (
             covariance
-            - np.outer(covariance_contrast, covariance_contrast) / contrast_variance
+            - np.outer(conditional_slope, conditional_slope) * contrast_variance
         )
         projected_covariance = conditional_covariance[
             np.ix_(rows_to_edges, rows_to_edges)
