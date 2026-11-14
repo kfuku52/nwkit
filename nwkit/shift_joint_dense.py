@@ -5,6 +5,7 @@ indices are prepared once per dataset. Large inputs retain tree pruning.
 """
 
 from dataclasses import dataclass
+from functools import cached_property
 
 import numpy as np
 from scipy.linalg import cho_solve, cholesky, solve_triangular
@@ -145,6 +146,10 @@ class DenseJointContext:
         self.same_tip = self.tips[:, None] == self.tips[None, :]
         self.rows, self.columns = self.traits[:, None], self.traits[None, :]
 
+    @cached_property
+    def trait_pairs(self):
+        return (self.rows * self.data.values.shape[1] + self.columns).ravel()
+
     def covariance(self, alpha, covariance, noise, *, gradient=True):
         # Retain the reference geometry's parameter validation and reported
         # diffusion/tip coordinates, including stationary-root restrictions.
@@ -230,8 +235,9 @@ class DenseJointContext:
         inverse = cho_solve((factor.lower, True), np.eye(len(y)), check_finite=False)
         u = cho_solve((factor.lower, True), y - x @ beta, check_finite=False)
         weight = inverse - np.outer(u, u)
-        covariance_score = np.zeros((p, p))
-        np.add.at(covariance_score, (self.rows, self.columns), 0.5 * weight * kernel)
+        covariance_score = np.bincount(
+            self.trait_pairs, weights=(0.5 * weight * kernel).ravel(), minlength=p * p
+        ).reshape(p, p)
         noise_score = np.bincount(
             self.traits, weights=0.5 * weight.diagonal(), minlength=p
         )
