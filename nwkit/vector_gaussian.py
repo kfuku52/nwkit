@@ -54,17 +54,26 @@ class VectorConditioning:
             raise ValueError("num_samples must be a positive integer.")
         rng = np.random.default_rng(seed)
         result = np.empty((num_samples, len(self.nodes), self.means.shape[1]))
+        previous = None
         for index in range(len(self.nodes)):
             covariance = self.conditional_covariances[index]
-            eigenvalues, eigenvectors = np.linalg.eigh((covariance + covariance.T) / 2)
-            tolerance = (
-                np.finfo(float).eps * max(1.0, float(np.max(np.abs(eigenvalues)))) * 100
-            )
-            if np.min(eigenvalues) < -tolerance:
-                raise ValueError(
-                    "Posterior conditional covariance is not positive semidefinite."
+            # Compare the bits so signed zeros cannot alter the seeded basis.
+            bits = covariance.tobytes()
+            if bits != previous:
+                eigenvalues, eigenvectors = np.linalg.eigh(
+                    (covariance + covariance.T) / 2
                 )
-            factor = eigenvectors * np.sqrt(np.maximum(eigenvalues, 0))
+                tolerance = (
+                    np.finfo(float).eps
+                    * max(1.0, float(np.max(np.abs(eigenvalues))))
+                    * 100
+                )
+                if np.min(eigenvalues) < -tolerance:
+                    raise ValueError(
+                        "Posterior conditional covariance is not positive semidefinite."
+                    )
+                factor = eigenvectors * np.sqrt(np.maximum(eigenvalues, 0))
+                previous = bits
             location = self.conditional_intercepts[index]
             if index:
                 location = (
