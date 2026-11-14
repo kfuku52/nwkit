@@ -1,4 +1,4 @@
-"""Compare real CLI startup or Gaussian fits in isolated, single-threaded processes."""
+"""Compare CLI and statistical workloads in isolated, single-threaded processes."""
 
 import argparse
 import contextlib
@@ -19,7 +19,6 @@ CLI_ARGUMENTS = {
     "help": ["--help"],
     "regress-help": ["regress", "--help"],
 }
-NUMERIC_CASES = ("gaussian", "asr-mixture")
 
 
 def gaussian_workload(tips):
@@ -117,6 +116,49 @@ def asr_mixture_workload(tips):
     }
 
 
+def asr_threshold_workload(tips):
+    import numpy as np
+    from benchmark_asr_models import _inputs
+
+    from nwkit.threshold_asr import compute_threshold_marginals
+
+    tree, _, _ = _inputs(tips)
+    states = ("0", "1", "2", "3")
+    indicators = np.eye(len(states))
+    names = list(tree.leaf_names())
+    observed = {name: states[index % len(states)] for index, name in enumerate(names)}
+    likelihoods = {
+        name: indicators[index % len(states)] for index, name in enumerate(names)
+    }
+    start = time.perf_counter()
+    posterior, fit = compute_threshold_marginals(
+        tree,
+        states,
+        observed,
+        likelihoods,
+        burnin=40,
+        num_samples=120,
+        chains=2,
+        seed=14758,
+        _tree_validated=True,
+    )
+    return time.perf_counter() - start, {
+        "thresholds": fit.thresholds,
+        "node_probabilities": [values.tolist() for values in posterior.values()],
+        "liability_moments": [
+            [marginal.mean, marginal.variance]
+            for marginal in fit.liability_marginals.values()
+        ],
+    }
+
+
+STATISTICAL_WORKLOADS = {
+    "gaussian": gaussian_workload,
+    "asr-mixture": asr_mixture_workload,
+    "asr-threshold": asr_threshold_workload,
+}
+
+
 def peak_rss_bytes():
     try:
         import resource
@@ -128,10 +170,8 @@ def peak_rss_bytes():
 
 def worker(args):
     sys.path.insert(0, str(args.checkout))
-    if args.case == "gaussian":
-        elapsed, result = gaussian_workload(args.tips)
-    elif args.case == "asr-mixture":
-        elapsed, result = asr_mixture_workload(args.tips)
+    if args.case in STATISTICAL_WORKLOADS:
+        elapsed, result = STATISTICAL_WORKLOADS[args.case](args.tips)
     else:
         stream = io.StringIO()
         sys.argv = ["nwkit", *CLI_ARGUMENTS[args.case]]
@@ -177,7 +217,7 @@ def equivalent(first, second):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--case", choices=[*CLI_ARGUMENTS, *NUMERIC_CASES], default="version"
+        "--case", choices=[*CLI_ARGUMENTS, *STATISTICAL_WORKLOADS], default="version"
     )
     parser.add_argument("--checkout", type=Path, default=PROJECT_ROOT)
     parser.add_argument("--baseline", type=Path)
@@ -188,6 +228,8 @@ def main(argv=None):
     args.checkout = args.checkout.resolve()
     if args.tips < 3 or args.repeat < 1:
         parser.error("--tips must be at least 3 and --repeat must be positive")
+    if args.case == "asr-threshold" and args.tips < 4:
+        parser.error("--case asr-threshold requires at least four tips")
     if args.worker:
         worker(args)
         return
@@ -237,7 +279,7 @@ def main(argv=None):
         json.dumps(
             {
                 "case": args.case,
-                "tips": args.tips if args.case in NUMERIC_CASES else None,
+                "tips": args.tips if args.case in STATISTICAL_WORKLOADS else None,
                 "equivalent": matched,
                 "records": records,
             },

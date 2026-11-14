@@ -112,6 +112,7 @@ python tools/benchmark.py --case help --baseline /path/to/old/source
 python tools/benchmark.py --case regress-help --baseline /path/to/old/source
 python tools/benchmark.py --case gaussian --tips 512 --repeat 3 --baseline /path/to/old/source
 python tools/benchmark.py --case asr-mixture --tips 128 --repeat 3 --baseline /path/to/old/source
+python tools/benchmark.py --case asr-threshold --tips 64 --repeat 3 --baseline /path/to/old/source
 ```
 
 JSON output includes wall time, process peak RSS, and comparable outputs. CLI
@@ -120,6 +121,10 @@ after imports and fixture construction. RSS includes the entire child process;
 it is reported as `null` on Windows, where `resource` is unavailable. The Gaussian
 case uses a seeded balanced tree, one response/predictor, REML, and automatic
 lambda estimation. It is not a benchmark of every family or tree shape.
+The Mk mixture case fits 16 three-state characters across four rate
+categories. The threshold case fits a four-state character with two seeded
+chains. Its output captures the thresholds, node probabilities and liability
+moments. Convergence diagnostics depend on the ESS method in each revision.
 
 CLI output hashes ignore only the package version. Gaussian coefficients,
 coefficient covariance, likelihood, evolutionary parameter, variance components
