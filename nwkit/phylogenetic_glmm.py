@@ -615,14 +615,14 @@ def _sparse_weight_matrix(weights: np.ndarray) -> sparse.csr_matrix:
     if weights.ndim == 1:
         return sparse.diags(weights, format="csr")
     n_blocks, dimension, _ = weights.shape
-    block_offsets = np.arange(n_blocks, dtype=int) * dimension
-    local_rows = np.repeat(np.arange(dimension, dtype=int), dimension)
-    local_columns = np.tile(np.arange(dimension, dtype=int), dimension)
-    rows = (block_offsets[:, None] + local_rows[None, :]).reshape(-1)
-    columns = (block_offsets[:, None] + local_columns[None, :]).reshape(-1)
+    size = n_blocks * dimension
+    index_type = np.int32 if weights.size <= np.iinfo(np.int32).max else np.int64
+    block_columns = np.arange(size, dtype=index_type).reshape(n_blocks, 1, dimension)
+    columns = np.broadcast_to(block_columns, weights.shape).flatten()
+    row_starts = np.arange(size + 1, dtype=index_type) * dimension
     matrix = sparse.csr_matrix(
-        (weights.reshape(-1), (rows, columns)),
-        shape=(n_blocks * dimension, n_blocks * dimension),
+        (np.array(weights, order="C", copy=True).reshape(-1), columns, row_starts),
+        shape=(size, size),
     )
     matrix.eliminate_zeros()
     return matrix
@@ -685,40 +685,43 @@ def _sparse_latent_mode(
     label,
 ):
     mode = np.zeros(precision.shape[0], dtype=float)
+    loading_transpose = loading.T
 
-    def terms(candidate):
+    def evaluate(candidate):
         linear = fixed_linear + np.asarray(loading @ candidate).reshape(-1)
-        return likelihood_terms(linear)
+        log_likelihood, likelihood_gradient, weights = likelihood_terms(linear)
+        prior_score = precision @ candidate
+        gradient = np.asarray(loading_transpose @ likelihood_gradient).reshape(-1)
+        gradient += prior_score
+        value = -log_likelihood + 0.5 * float(candidate @ prior_score)
+        return value, gradient, weights
 
-    def state(candidate):
-        log_likelihood, likelihood_gradient, weights = terms(candidate)
-        gradient = np.asarray(loading.T @ likelihood_gradient).reshape(-1)
-        gradient += precision @ candidate
-        weight_matrix = _sparse_weight_matrix(weights)
-        hessian = precision + loading.T @ weight_matrix @ loading
-        factor = factor_sparse_positive_definite(hessian)
-        value = -log_likelihood + 0.5 * float(candidate @ (precision @ candidate))
-        return value, gradient, weights, factor
+    def factor_hessian(weights):
+        hessian = precision + _weighted_sparse_hessian(
+            loading, loading_transpose, weights, entry_rows
+        )
+        return factor_sparse_positive_definite(hessian)
 
+    state = evaluate(mode)
+    entry_rows = _scalar_sparse_entry_rows(loading, state[2])
     converged = False
     for _iteration in range(80):
-        value, gradient, _weights, factor = state(mode)
+        value, gradient, weights = state
         if not np.isfinite(gradient).all():
             break
         if float(np.max(np.abs(gradient))) < 1e-7:
             converged = True
             break
-        step = factor.solve(gradient)
+        step = factor_hessian(weights).solve(gradient)
         accepted = False
         step_scale = 1.0
         for _backtrack in range(24):
             candidate = mode - step_scale * step
-            candidate_log_likelihood, _, _ = terms(candidate)
-            candidate_value = -candidate_log_likelihood + 0.5 * float(
-                candidate @ (precision @ candidate)
-            )
+            candidate_state = evaluate(candidate)
+            candidate_value = candidate_state[0]
             if np.isfinite(candidate_value) and candidate_value <= value:
                 mode = candidate
+                state = candidate_state
                 accepted = True
                 break
             step_scale *= 0.5
@@ -730,10 +733,7 @@ def _sparse_latent_mode(
     if not converged:
 
         def value_and_gradient(candidate):
-            log_likelihood, likelihood_gradient, _weights = terms(candidate)
-            gradient = np.asarray(loading.T @ likelihood_gradient).reshape(-1)
-            gradient += precision @ candidate
-            value = -log_likelihood + 0.5 * float(candidate @ (precision @ candidate))
+            value, gradient, _weights = evaluate(candidate)
             return value, gradient
 
         fallback = minimize(
@@ -750,10 +750,11 @@ def _sparse_latent_mode(
                 )
             )
         mode = np.asarray(fallback.x, dtype=float)
-    value, gradient, weights, factor = state(mode)
+        state = evaluate(mode)
+    value, gradient, weights = state
     if not np.isfinite(value) or float(np.max(np.abs(gradient))) >= 1e-5:
         raise RuntimeError("{} random-effect mode did not converge.".format(label))
-    return mode, value, weights, factor
+    return mode, value, weights, factor_hessian(weights)
 
 
 def _sparse_marginal_coefficient_covariance(design, weights, loading, posterior_factor):
@@ -814,7 +815,7 @@ def _random_mode(
         if float(np.max(np.abs(gradient))) < 1e-7:
             converged = True
             break
-        hessian = _dense_weight_matrix(weights) + precision
+        hessian = _weighted_dense_hessian(precision, weights)
         try:
             cholesky = _positive_definite_cholesky(hessian)
         except np.linalg.LinAlgError:
@@ -873,7 +874,7 @@ def _random_mode(
         mode = np.asarray(fallback.x, dtype=float)
     log_likelihood, _, weights = terms(mode)
     objective = -log_likelihood + 0.5 * float(mode @ precision @ mode)
-    _positive_definite_cholesky(_dense_weight_matrix(weights) + precision)
+    _positive_definite_cholesky(_weighted_dense_hessian(precision, weights))
     if not np.isfinite(objective):
         raise RuntimeError("Categorical random-effect mode is non-finite.")
     return mode, objective, weights
@@ -5172,3 +5173,29 @@ def _count_bootstrap_means(linear, offset):
     if not np.isfinite(means).all():
         raise RuntimeError("A count bootstrap mean exceeds the floating-point range.")
     return means
+
+
+def _scalar_sparse_entry_rows(loading, weights):
+    if weights.ndim == 1:
+        return np.repeat(np.arange(loading.shape[0]), np.diff(loading.indptr))
+    return None
+
+
+def _weighted_sparse_hessian(loading, loading_transpose, weights, entry_rows):
+    if weights.ndim == 1:
+        weighted = sparse.csr_matrix(
+            (loading.data * weights[entry_rows], loading.indices, loading.indptr),
+            shape=loading.shape,
+        )
+        return loading_transpose @ weighted
+    return loading_transpose @ _sparse_weight_matrix(weights) @ loading
+
+
+def _weighted_dense_hessian(precision, weights):
+    if weights.ndim == 1:
+        return precision + np.diag(weights)
+    matrix = precision.copy()
+    dimension = weights.shape[1]
+    indices = np.arange(len(weights) * dimension).reshape(-1, dimension)
+    matrix[indices[:, :, None], indices[:, None, :]] += weights
+    return matrix
