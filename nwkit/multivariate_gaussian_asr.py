@@ -8,6 +8,7 @@ from scipy.linalg import cho_factor, cho_solve, solve_triangular
 
 from nwkit.clade_index import LcaIndex
 from nwkit.compiled_tree import CompiledTree
+from nwkit.evolution import _finite_rate_bound
 from nwkit.multivariate_asr import MultivariateGaussianMarginal
 from nwkit.optimization import FitResourceError, deterministic_multistart
 
@@ -27,6 +28,25 @@ def _stationary_diagonal_ou_covariance(covariance, log_alpha):
 def _diagonal_ou_decay(first_rate, first_path, second_rate, second_path):
     with np.errstate(over="ignore"):
         return np.exp(-first_rate * first_path - second_rate * second_path)
+
+
+def _ou_observed_time_scale(distance):
+    # Half the diameter yields a root-to-tip scale for a star. Keep a
+    # positive subnormal diameter when dividing it by two rounds to zero.
+    diameter = float(np.max(distance))
+    return diameter / 2.0 or diameter or 1.0
+
+
+def _multivariate_alpha_bounds(bounds, time_scale, model):
+    if bounds is None:
+        bounds = (
+            _finite_rate_bound(1e-6, time_scale),
+            _finite_rate_bound(50.0, time_scale),
+        )
+    lower, upper = map(float, bounds)
+    if not (math.isfinite(lower) and math.isfinite(upper) and 0.0 < lower < upper):
+        raise ValueError(f"{model} alpha bounds must be increasing and positive.")
+    return lower, upper
 
 
 def _restore_diagonal_ou_diffusion(data, covariance, log_alpha):
@@ -701,7 +721,9 @@ def _posterior(
     trait_covariance = sigma[:, data.trait_indices]
 
     def cross_covariance(shared, left, right):
-        cross = shared if flat_root else np.exp(-alpha * (left + right))
+        cross = (
+            shared if flat_root else _diagonal_ou_decay(alpha, left + right, 0.0, 0.0)
+        )
         return cross[:, None, :] * trait_covariance
 
     adjustment_base = np.zeros((dimension, len(free_mean_indices)), dtype=float)
@@ -1022,17 +1044,8 @@ def fit_dense_mvou(
     geometry = _cached_geometry(data, _geometry_cache)
     # Stationary tip likelihoods do not depend on a shared stem above their
     # MRCA. Use observable distances for units and default attraction bounds.
-    time_scale = float(np.max(geometry.observed_distance)) / 2.0 or 1.0
-    bounds_alpha = (
-        (1e-6 / time_scale, 50.0 / time_scale)
-        if alpha_bounds is None
-        else (float(alpha_bounds[0]), float(alpha_bounds[1]))
-    )
-    if (
-        not all(math.isfinite(value) and value > 0.0 for value in bounds_alpha)
-        or bounds_alpha[0] >= bounds_alpha[1]
-    ):
-        raise ValueError("MV-OU alpha bounds must be increasing and positive.")
+    time_scale = _ou_observed_time_scale(geometry.observed_distance)
+    bounds_alpha = _multivariate_alpha_bounds(alpha_bounds, time_scale, "MV-OU")
     fixed_alpha = None if alpha is None else _finite(alpha, "--alpha")
     if fixed_alpha is not None and fixed_alpha <= 0.0:
         raise ValueError("MV-OU alpha must be positive.")
@@ -1180,7 +1193,7 @@ def fit_dense_mvou_diag(
     dimension = len(data.trait_names)
     _validate_posterior_size(data, compute_posterior)
     geometry = _cached_geometry(data, _geometry_cache)
-    time_scale = float(np.max(geometry.observed_distance)) / 2.0 or 1.0
+    time_scale = _ou_observed_time_scale(geometry.observed_distance)
 
     has_alpha_by_trait = alpha_by_trait is not None and not (
         isinstance(alpha_by_trait, str) and alpha_by_trait == ""
@@ -1197,16 +1210,7 @@ def fit_dense_mvou_diag(
     elif has_alpha_by_trait:
         fixed_alpha = parse_alpha_by_trait(alpha_by_trait, data.trait_names)
 
-    physical_bounds = (
-        (1e-6 / time_scale, 50.0 / time_scale)
-        if alpha_bounds is None
-        else (float(alpha_bounds[0]), float(alpha_bounds[1]))
-    )
-    if (
-        not all(math.isfinite(value) and value > 0.0 for value in physical_bounds)
-        or physical_bounds[0] >= physical_bounds[1]
-    ):
-        raise ValueError("MV-OU-DIAG alpha bounds must be increasing and positive.")
+    physical_bounds = _multivariate_alpha_bounds(alpha_bounds, time_scale, "MV-OU-DIAG")
     free_alpha = fixed_alpha is None
     if free_alpha:
         _validate_mvou_diag_alpha_design(data, geometry)

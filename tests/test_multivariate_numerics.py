@@ -313,6 +313,24 @@ def test_free_mvou_attraction_fit_is_invariant_to_extreme_time_units(scale):
     assert second.fit_status == first.fit_status
 
 
+@pytest.mark.parametrize("fitter", [dense.fit_dense_mvou, dense.fit_dense_mvou_diag])
+def test_fixed_mvou_attraction_accepts_subnormal_tree_time_units(fitter):
+    original = tree()
+    scaled = tree()
+    scale = 1e-308
+    for node in scaled.traverse():
+        if not node.is_root:
+            node.dist *= scale
+    expected, first = fitter(original, VALUES, ("x", "y"), alpha=0.3)
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        posterior, second = fitter(scaled, VALUES, ("x", "y"), alpha=0.3 / scale)
+    assert second.log_likelihood == pytest.approx(first.log_likelihood, abs=1e-9)
+    np.testing.assert_allclose(second.sigma, first.sigma, rtol=1e-5)
+    np.testing.assert_allclose(
+        posterior[scaled].mean, expected[original].mean, atol=1e-6
+    )
+
+
 def test_diagonal_ou_with_extreme_fixed_attraction_has_finite_diffusion():
     original = tree()
     values = np.asarray(list(VALUES.values()))
