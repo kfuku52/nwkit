@@ -223,6 +223,32 @@ def test_log_pruning_matches_scaled_pruning_with_pulse_and_missingness(retention
     )
 
 
+@pytest.mark.parametrize("fraction", [0.0, 0.5, 1.0])
+@pytest.mark.parametrize("retention,multiplicity", [(0, 2), (0.4, 3), (1, 2), (1, 12)])
+def test_log_pulse_transition_matches_explicit_truncated_matrices(
+    fraction, retention, multiplicity
+):
+    model = CountLikelihood(tree(), np.array([[1, 1]]))
+    rates, bound = [[0.6, 0.2]], 7
+    event = MultiplicationEvent(1, retention, fraction, multiplicity)
+    actual = model._log_transitions(rates, 1, bound, event, _split_zero_event=True)
+    time = model.tree.lengths[1]
+    before = birth_death_transition(*rates[0], time * fraction, bound)
+    after = birth_death_transition(*rates[0], time * (1 - fraction), bound)
+    pulse = np.zeros((bound + 1, bound + 1))
+    for count in range(bound + 1):
+        trials = count * (multiplicity - 1)
+        for extra in range(min(trials, bound - count) + 1):
+            pulse[count, count + extra] = (
+                math.comb(trials, extra)
+                * retention**extra
+                * (1 - retention) ** (trials - extra)
+            )
+    expected = before @ pulse @ after
+    np.testing.assert_array_equal(np.isfinite(actual[1]), expected > 0)
+    np.testing.assert_allclose(np.exp(actual[1]), expected, rtol=2e-13, atol=1e-15)
+
+
 def test_time_units_and_semigroup():
     p = birth_death_transition(0.2, 0.4, 1.3, 100)
     np.testing.assert_allclose(

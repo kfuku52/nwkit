@@ -169,6 +169,40 @@ def _log_matrix_product(left, right):
     return np.array([logsumexp(row[:, None] + right, axis=0) for row in left])
 
 
+def _log_pulse_transition(before, after, event):
+    size = len(before)
+    if event.retention in (0.0, 1.0):
+        # The intermediate count is deterministic. Only include states whose
+        # pulse output is within the bound, including for split zero retention.
+        multiplier = 1 if event.retention == 0 else event.multiplicity
+        limit = 1 + (size - 1) // multiplier
+        if event.fraction == 0:
+            result = np.full_like(after, -np.inf)
+            result[:limit] = after[::multiplier]
+            return result
+        if event.fraction == 1:
+            result = np.full_like(before, -np.inf)
+            result[:, ::multiplier] = before[:, :limit]
+            return result
+        return _log_matrix_product(before[:, :limit], after[::multiplier])
+
+    states = np.arange(size)
+    trials = np.array([count * (event.multiplicity - 1) for count in range(size)])
+    pulse = np.empty_like(before)
+    batch = max(1, _PULSE_BATCH_ENTRIES // size)
+    for first in range(0, size, batch):
+        last = min(first + batch, size)
+        extra = states[None, :] - states[first:last, None]
+        pulse[first:last] = binom.logpmf(
+            extra, trials[first:last, None], event.retention
+        )
+    if event.fraction == 0:
+        return _log_matrix_product(pulse, after)
+    if event.fraction == 1:
+        return _log_matrix_product(before, pulse)
+    return _log_matrix_product(_log_matrix_product(before, pulse), after)
+
+
 def multiplication_transition(
     retention: float, multiplicity: int, max_count: int
 ) -> np.ndarray:
@@ -656,16 +690,7 @@ class CountLikelihood:
             after = self._cached_transition(
                 duplication, loss, time * (1 - event.fraction), max_count, log=True
             )
-            pulse = np.full_like(before, -np.inf)
-            for count in range(max_count + 1):
-                pulse[count, count:] = binom.logpmf(
-                    np.arange(max_count - count + 1),
-                    count * (event.multiplicity - 1),
-                    event.retention,
-                )
-            matrices[node] = _log_matrix_product(
-                _log_matrix_product(before, pulse), after
-            )
+            matrices[node] = _log_pulse_transition(before, after, event)
         return matrices
 
     def _prune_log(self, matrices, root_mean, max_count, rows):
