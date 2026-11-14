@@ -325,8 +325,9 @@ def compute_mvbm_marginals(
         sign, log_determinant = np.linalg.slogdet(sigma_scaled)
         if sign <= 0.0 or not math.isfinite(float(log_determinant)):
             raise ValueError("MV-BM fitted covariance is not positive definite.")
-        inverse = np.linalg.inv(sigma_scaled)
-        quadratic = float(np.einsum("ni,ij,nj->", contrasts, inverse, contrasts))
+        # At the profiled covariance S = X.T @ X / df, the Mahalanobis
+        # sum is tr(S^-1 X.T @ X) = df * dimension.
+        quadratic = residual_df * len(trait_names)
         scaled_log_likelihood = -0.5 * (
             residual_df * len(trait_names) * _LOG_2PI
             + len(trait_names) * upward.log_variance
