@@ -951,9 +951,8 @@ def _predictor_error_covariance(
     if isinstance(uncertainty, GmrfPredictorUncertainty):
         if not isinstance(columns, (int, np.integer)):
             raise ValueError("GMRF predictor uncertainty requires one column.")
-        loading, precision, _ = _gmrf_uncertainty_update(
-            beta, int(columns), uncertainty
-        )
+        loading = _gmrf_uncertainty_loading(beta, int(columns), uncertainty)
+        precision = uncertainty.model.precision
         return materialize_sparse_covariance(precision, loading)
     if isinstance(columns, (int, np.integer)):
         matrix = _positive_semidefinite(uncertainty, "Predictor posterior covariance")
@@ -1017,9 +1016,8 @@ def _predictor_error_variance_diagonal(beta, uncertainty, columns, n_observation
         return np.asarray(loading.multiply(loading).sum(axis=1)).reshape(-1)
     if isinstance(uncertainty, GmrfPredictorUncertainty):
         assert isinstance(columns, (int, np.integer))
-        loading, precision, _ = _gmrf_uncertainty_update(
-            beta, int(columns), uncertainty
-        )
+        loading = _gmrf_uncertainty_loading(beta, int(columns), uncertainty)
+        precision = uncertainty.model.precision
         return _sparse_precision_marginal_diagonal(loading, precision)
     return np.diag(
         _predictor_error_covariance(beta, uncertainty, columns, n_observations)
@@ -1227,7 +1225,7 @@ def _structured_uncertainty_loading(beta, columns, uncertainty):
     return joint_predictor_loading(uncertainty, selected)
 
 
-def _gmrf_uncertainty_update(beta, column, uncertainty):
+def _gmrf_uncertainty_loading(beta, column, uncertainty):
     indices = np.asarray(uncertainty.observation_index, dtype=int)
     model = uncertainty.model
     if (
@@ -1237,17 +1235,14 @@ def _gmrf_uncertainty_update(beta, column, uncertainty):
         or not np.isfinite(float(beta[column]))
     ):
         raise ValueError("GMRF predictor uncertainty is malformed.")
-    row_scale = (
-        np.ones(len(indices), dtype=float)
-        if uncertainty.row_scale is None
-        else np.asarray(uncertainty.row_scale, dtype=float)
-    )
+    loading = sparse.csr_matrix(model.tip_loading[indices], dtype=float)
+    slope = float(beta[column])
+    if uncertainty.row_scale is None:
+        return loading * slope
+    row_scale = np.asarray(uncertainty.row_scale, dtype=float)
     if row_scale.shape != indices.shape or not np.isfinite(row_scale).all():
         raise ValueError("GMRF predictor row scale is malformed.")
-    loading = sparse.csr_matrix(model.tip_loading[indices], dtype=float).multiply(
-        (float(beta[column]) * row_scale)[:, None]
-    )
-    return loading.tocsr(), model.precision, model.precision_factor()
+    return loading.multiply((slope * row_scale)[:, None]).tocsr()
 
 
 def _sparse_precision_marginal_diagonal(loading, precision):
@@ -1296,7 +1291,8 @@ def _gmrf_likelihood_marginal_profiles(
         column = int(columns)
         unit_beta = np.zeros(n_coefficients, dtype=float)
         unit_beta[column] = 1.0
-        loading, precision, _ = _gmrf_uncertainty_update(unit_beta, column, uncertainty)
+        loading = _gmrf_uncertainty_loading(unit_beta, column, uncertainty)
+        precision = uncertainty.model.precision
         profiles[index] = {
             "column": column,
             "row": (
@@ -1330,25 +1326,14 @@ def _factor_sparse_precision_eiv(
         identity = sparse.eye(loading.shape[1], format="csc")
         latent_updates.append((loading, identity, identity.tocsr()))
     cholesky = factor_diagonal_sparse_precision_updates(diagonal, latent_updates)
-    loading = sparse.hstack(
-        [sparse.csr_matrix(update[0], dtype=float) for update in latent_updates],
-        format="csr",
-    )
-    precision = sparse.block_diag(
-        [sparse.csc_matrix(update[1], dtype=float) for update in latent_updates],
-        format="csc",
-    )
+    loading = cholesky.loading
+    precision = cholesky.prior_precision
     if marginal_diagonal is not None:
         marginal_diagonal = np.asarray(marginal_diagonal, dtype=float)
     elif compute_marginal:
-        marginal_diagonal = np.asarray(diagonal, dtype=float).copy()
-        start = 0
-        for loading_value, precision_value, _ in latent_updates:
-            width = loading_value.shape[1]
-            marginal_diagonal += _sparse_precision_marginal_diagonal(
-                loading[:, start : start + width], precision_value
-            )
-            start += width
+        marginal_diagonal = diagonal + sparse_precision_update_diagonal(
+            loading, precision, solver=cholesky.prior_factor
+        )
     else:
         marginal_diagonal = None
     covariance = DiagonalSparsePrecisionCovariance(
@@ -1503,8 +1488,13 @@ def _conditional_eiv_covariance(
         ):
             if isinstance(uncertainty, GmrfPredictorUncertainty):
                 assert isinstance(columns, (int, np.integer))
+                model = uncertainty.model
                 precision_updates.append(
-                    _gmrf_uncertainty_update(beta, int(columns), uncertainty)
+                    (
+                        _gmrf_uncertainty_loading(beta, int(columns), uncertainty),
+                        model.precision,
+                        model.precision_factor(),
+                    )
                 )
                 profile = (gmrf_marginal_profiles or {}).get(uncertainty_index)
                 if profile is not None:
@@ -1543,34 +1533,13 @@ def _conditional_eiv_covariance(
             component_factors,
         )
         if precision_updates:
-            nonprecision = DiagonalLowRankCovariance(
-                np.asarray(diagonal, dtype=float),
-                (
-                    sparse.hstack(
-                        [sparse.csr_matrix(update) for update in updates],
-                        format="csr",
-                    )
-                    if updates
-                    else sparse.csr_matrix((n_observations, 0), dtype=float)
-                ),
+            marginal_diagonal, grouped_marginal_diagonal = _eiv_precision_marginals(
+                diagonal,
+                updates,
+                row_precision_marginal,
+                grouped_precision_marginal,
+                likelihood_groups,
             )
-            marginal_diagonal = None
-            if row_precision_marginal is not None:
-                marginal_diagonal = (
-                    np.asarray(covariance_marginal_diagonal(nonprecision), dtype=float)
-                    + row_precision_marginal
-                )
-            grouped_marginal_diagonal = None
-            if grouped_precision_marginal is not None:
-                grouped_marginal_diagonal = (
-                    np.asarray(
-                        grouped_mean_covariance_diagonal(
-                            nonprecision, likelihood_groups
-                        ),
-                        dtype=float,
-                    )
-                    + grouped_precision_marginal
-                )
             return _factor_sparse_precision_eiv(
                 diagonal,
                 updates,
@@ -1591,6 +1560,24 @@ def _conditional_eiv_covariance(
         dense_predictor_uncertainties,
     )
     return covariance, factor_covariance(covariance)
+
+
+def _eiv_precision_marginals(diagonal, updates, row, grouped, groups):
+    if row is None and grouped is None:
+        return None, None
+    loading = (
+        sparse.hstack(
+            [sparse.csr_matrix(update, dtype=float) for update in updates], format="csr"
+        )
+        if updates
+        else sparse.csr_matrix((len(diagonal), 0), dtype=float)
+    )
+    nonprecision = DiagonalLowRankCovariance(diagonal, loading)
+    if row is not None:
+        row = covariance_marginal_diagonal(nonprecision) + row
+    if grouped is not None:
+        grouped = grouped_mean_covariance_diagonal(nonprecision, groups) + grouped
+    return row, grouped
 
 
 def _refine_eiv_variance_boundaries(function, result, bounds, num_coefficients):
