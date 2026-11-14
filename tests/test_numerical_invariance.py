@@ -36,6 +36,7 @@ from nwkit.phylogenetic_glmm import (
     _gamma_scalar_terms,
     _lognormal_scalar_terms,
     _negative_binomial_scalar_terms,
+    _normal_censor_interval_terms,
     _scalar_initial_coefficient,
     _scalar_terms,
     _zero_component_count_scalar_terms,
@@ -641,6 +642,42 @@ def test_gaussian_censoring_scores_keep_tails_and_small_curvature():
     assert score[3] == pytest.approx(8e6 / sd**2, rel=1e-12)
     assert weight[3] == pytest.approx(1 / sd**2, rel=1e-12)
     assert score[4] == weight[4] == 0.0
+
+
+def test_interval_censoring_derivatives_match_high_precision_normal_moments():
+    lower = np.array([-1.25, 8.1, 30.0, -30.2, 0.0])
+    upper = np.array([0.75, 8.3, 30.2, -30.0, math.ulp(0.0)])
+    center = np.array([0.0, 0.0, 0.0, 0.0, 11.0])
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        mass, score, weight = _normal_censor_interval_terms(
+            lower, upper, center, 1.0, derivatives=True
+        )
+    # Reference moments from the normal density and upper-tail integrals
+    # evaluated to 160 decimal digits, plus the limiting narrow-interval case.
+    expected_mass = [
+        -0.40388205087032925,
+        -36.04052541639861,
+        -454.32366048808217,
+        -454.32366048808217,
+        math.log(math.ulp(0.0)) - 60.5 - 0.5 * math.log(math.tau),
+    ]
+    expected_score = [
+        0.17745138198386967,
+        -8.173850602678082,
+        -30.032776307243488,
+        30.032776307243488,
+        11.0,
+    ]
+    expected_weight = [
+        0.7116580399881117,
+        0.997074221430888,
+        0.9989929931365967,
+        0.9989929931365967,
+        1.0,
+    ]
+    np.testing.assert_allclose(mass, expected_mass, rtol=1e-12)
+    np.testing.assert_allclose(score, expected_score, rtol=1e-12)
+    np.testing.assert_allclose(weight, expected_weight, rtol=1e-12)
 
 
 def test_count_intercept_initialization_uses_log_exposure():

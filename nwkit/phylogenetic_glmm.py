@@ -1269,7 +1269,7 @@ def _standardized_censor_bounds(bounds, center, dispersion):
     return result
 
 
-def _normal_censor_interval_log_mass(lower, upper, center, dispersion):
+def _normal_censor_interval_terms(lower, upper, center, dispersion, *, derivatives):
     with np.errstate(over="ignore", under="ignore", invalid="ignore", divide="ignore"):
         standardized_lower = _standardized_censor_bounds(lower, center, dispersion)
         standardized_upper = _standardized_censor_bounds(upper, center, dispersion)
@@ -1292,11 +1292,92 @@ def _normal_censor_interval_log_mass(lower, upper, center, dispersion):
         midpoint_mass = log_width + log_density
         both_outside_range = np.isneginf(upper_cdf)
         log_mass[both_outside_range] = -np.inf
-        return np.where(
-            small_interval | ((lower_cdf == upper_cdf) & ~both_outside_range),
-            midpoint_mass + correction,
-            log_mass,
+        midpoint_rule = small_interval | (
+            (lower_cdf == upper_cdf) & ~both_outside_range
         )
+        log_mass = np.where(midpoint_rule, midpoint_mass + correction, log_mass)
+        if not derivatives:
+            return log_mass, None, None
+        gradient, curvature = _normal_interval_derivatives(
+            standardized_lower,
+            standardized_upper,
+            log_mass,
+            midpoint_rule,
+            midpoint,
+            standardized_width,
+        )
+        return log_mass, gradient, curvature
+
+
+def _normal_interval_derivatives(
+    lower, upper, log_mass, midpoint_rule, midpoint, width
+):
+    upper_tail = (lower > 8.0) & np.isfinite(lower) & ~midpoint_rule
+    lower_tail = (upper < -8.0) & np.isfinite(upper) & ~midpoint_rule
+    regular = ~(midpoint_rule | upper_tail | lower_tail)
+    a, b, log_p = lower[regular], upper[regular], log_mass[regular]
+    log_a = -(0.5 * a) * a - 0.5 * math.log(math.tau)
+    log_b = -(0.5 * b) * b - 0.5 * math.log(math.tau)
+    ratio_a, ratio_b = np.exp(log_a - log_p), np.exp(log_b - log_p)
+    finite_a, finite_b = (
+        np.where(np.isfinite(a), a, 0.0),
+        np.where(np.isfinite(b), b, 0.0),
+    )
+    mean = ratio_a - ratio_b
+    gradient = np.empty_like(log_mass)
+    curvature = np.empty_like(log_mass)
+    gradient[regular] = -mean
+    curvature[regular] = np.clip(
+        mean**2 - finite_a * ratio_a + finite_b * ratio_b, 0.0, 1.0
+    )
+    mean, curvature[upper_tail] = _normal_interval_tail_moments(
+        lower[upper_tail], upper[upper_tail]
+    )
+    gradient[upper_tail] = -mean
+    mean, curvature[lower_tail] = _normal_interval_tail_moments(
+        -upper[lower_tail], -lower[lower_tail]
+    )
+    gradient[lower_tail] = mean
+    _set_small_interval_derivatives(gradient, curvature, midpoint_rule, midpoint, width)
+    return gradient, curvature
+
+
+def _normal_interval_tail_moments(lower, upper):
+    """Standard normal mean and one minus variance in a right-tail interval."""
+    width = upper - lower
+    log_density_ratio = -width * (lower + 0.5 * width)
+    density_ratio = np.exp(log_density_ratio)
+    mills_lower = math.sqrt(math.pi / 2.0) * erfcx(lower / math.sqrt(2.0))
+    mills_upper = math.sqrt(math.pi / 2.0) * erfcx(upper / math.sqrt(2.0))
+    mass_ratio = mills_lower - density_ratio * mills_upper
+    near = _inverse_mills_fraction(lower)
+    excess = 1.0 / (lower + near)
+    q = density_ratio * mills_upper / mass_ratio
+    delta = np.where(np.isfinite(width), width, 0.0)
+    upper_excess = 1.0 / (upper + _inverse_mills_fraction(upper))
+    excess_difference = upper_excess - excess
+    adjustment = q * (delta + excess_difference)
+    shift = excess - adjustment
+    mean = lower + shift
+    tail_weight = 1.0 + excess * (excess - near)
+    # Compute the variance around the lower endpoint. The one-sided moments
+    # at the upper endpoint are shifted by width before their mass is removed.
+    curvature = (
+        tail_weight
+        + (q * delta) * (delta + upper_excess - 2.0 * excess)
+        - (q * excess_difference) * (lower + 2.0 * excess)
+        + adjustment**2
+    )
+    return mean, np.clip(curvature, 0.0, 1.0)
+
+
+def _set_small_interval_derivatives(gradient, curvature, mask, midpoint, width):
+    m, w = midpoint[mask], width[mask]
+    # Differentiate the same midpoint log mass used for the likelihood.
+    normalizer = 1.0 + ((m * w) ** 2 - w**2) / 24.0
+    adjustment = (w**2 / 12.0) / normalizer
+    gradient[mask] = -(m - m * adjustment)
+    curvature[mask] = 1.0 - adjustment + (m * adjustment) ** 2
 
 
 def _censor_observations(size, lower, upper):
@@ -1321,13 +1402,33 @@ def _censored_gaussian_log_likelihood(
     lower, upper, exact, left, right, interval = _censor_observations(
         len(values), censor_lower, censor_upper
     )
-    return _censored_gaussian_log_contributions(
-        values, linear, dispersion, lower, upper, exact, left, right, interval
+    result, _, _ = _censored_gaussian_log_contributions(
+        values,
+        linear,
+        dispersion,
+        lower,
+        upper,
+        exact,
+        left,
+        right,
+        interval,
+        derivatives=False,
     )
+    return result
 
 
 def _censored_gaussian_log_contributions(
-    values, linear, dispersion, lower, upper, exact, left, right, interval
+    values,
+    linear,
+    dispersion,
+    lower,
+    upper,
+    exact,
+    left,
+    right,
+    interval,
+    *,
+    derivatives,
 ):
     result = np.empty(len(values), dtype=float)
     with np.errstate(over="ignore"):
@@ -1345,11 +1446,19 @@ def _censored_gaussian_log_contributions(
         result[right] = log_ndtr(
             _standardized_censor_bounds(linear[right], lower[right], dispersion)
         )
+    interval_score, interval_curvature = None, None
     if np.any(interval):
-        result[interval] = _normal_censor_interval_log_mass(
-            lower[interval], upper[interval], linear[interval], dispersion
+        interval_mass, interval_score, interval_curvature = (
+            _normal_censor_interval_terms(
+                lower[interval],
+                upper[interval],
+                linear[interval],
+                dispersion,
+                derivatives=derivatives,
+            )
         )
-    return result
+        result[interval] = interval_mass
+    return result, interval_score, interval_curvature
 
 
 def _scalar_log_likelihood_contributions(
@@ -1622,16 +1731,6 @@ def _beta_binomial_scalar_terms(values, linear, dispersion, trials):
     return gradient, curvature
 
 
-def _numerical_scalar_terms(contributions, current, linear):
-    step = 1e-5 * np.maximum(1.0, np.abs(linear))
-    plus = contributions(linear + step)
-    minus = contributions(linear - step)
-    with np.errstate(invalid="ignore", over="ignore", divide="ignore"):
-        gradient = -(plus - minus) / (2.0 * step)
-        curvature = -(plus - 2.0 * current + minus) / (step**2)
-    return gradient, curvature
-
-
 def _normal_one_sided_score_and_curvature(standardized):
     """Location terms in units of SD for the event Z >= standardized."""
     lower_mask = standardized < 0.0
@@ -1675,8 +1774,19 @@ def _censored_gaussian_scalar_terms(values, linear, dispersion, lower, upper):
     lower, upper, exact, left, right, interval = _censor_observations(
         len(values), lower, upper
     )
-    current = _censored_gaussian_log_contributions(
-        values, linear, dispersion, lower, upper, exact, left, right, interval
+    current, interval_gradient, interval_curvature = (
+        _censored_gaussian_log_contributions(
+            values,
+            linear,
+            dispersion,
+            lower,
+            upper,
+            exact,
+            left,
+            right,
+            interval,
+            derivatives=True,
+        )
     )
     gradient = np.empty_like(current)
     curvature = np.empty_like(current)
@@ -1692,14 +1802,9 @@ def _censored_gaussian_scalar_terms(values, linear, dispersion, lower, upper):
         _set_one_sided_censor_terms(
             gradient, curvature, linear, dispersion, lower, right, -1.0
         )
-    if np.any(interval):
-        gradient[interval], curvature[interval] = _numerical_scalar_terms(
-            lambda candidate: _normal_censor_interval_log_mass(
-                lower[interval], upper[interval], candidate, dispersion
-            ),
-            current[interval],
-            linear[interval],
-        )
+        if interval_gradient is not None:
+            gradient[interval] = interval_gradient / dispersion
+            curvature[interval] = (interval_curvature / dispersion) / dispersion
     return float(np.sum(current)), gradient, curvature
 
 
