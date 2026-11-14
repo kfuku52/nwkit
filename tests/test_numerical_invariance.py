@@ -114,14 +114,20 @@ def test_latent_predictor_retains_small_correlated_sampling_uncertainty():
     )
 
 
-def test_latent_predictor_keeps_intercept_when_precision_sum_overflows():
-    values = np.array([0.0, 1e-160, 0.3, -0.3])
+@pytest.mark.parametrize("last", [-0.3, -0.1, 0.2])
+@pytest.mark.parametrize("correlation", [0.0, 0.15])
+def test_latent_predictor_keeps_intercept_when_precision_sum_overflows(
+    last, correlation
+):
+    values = np.array([0.0, 1e-160, 0.3, last])
     prior = np.diag([0.0, 0.0, 1.0, 1.0])
+    prior[2, 3] = prior[3, 2] = correlation
     sampling = np.array([1e-310, 1e-310, 0.1, 0.1])
     with np.errstate(over="raise", invalid="raise", divide="raise"):
         fitted = fit_latent_predictor(values, prior, sampling, include_intercept=True)
     assert np.isfinite(fitted.log_likelihood)
     assert fitted.prior_mean == pytest.approx(5e-161, rel=1e-10, abs=0.0)
+    np.testing.assert_allclose(fitted.mean[:2], 5e-161, rtol=1e-10, atol=0.0)
     np.testing.assert_array_equal(fitted.covariance[:2, :2], np.zeros((2, 2)))
 
 

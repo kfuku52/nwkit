@@ -258,10 +258,18 @@ def fit_latent_predictor(
     _, covariance_exponent = math.frexp(float(np.max(evolutionary_diagonal)))
     evolutionary_covariance = np.ldexp(evolutionary_covariance, -covariance_exponent)
     evolutionary_diagonal = np.diag(evolutionary_covariance)
-    observed_offset = float(np.mean(observed)) if include_intercept else 0.0
+    observed_offset = 0.0
+    if include_intercept:
+        lower, upper = float(np.min(observed)), float(np.max(observed))
+        # An unweighted mean offset can erase near-zero observations that
+        # dominate the intercept because their measurement error is small.
+        observed_offset = max(lower, min(0.0, upper))
+    observed_variance = (
+        float(np.var(observed)) if include_intercept else float(np.mean(observed**2))
+    )
     observed = observed - observed_offset
     observed_scale = max(
-        float(np.mean(observed**2)),
+        observed_variance,
         float(np.mean(np.diag(sampling_covariance))),
         np.finfo(float).tiny,
     )
