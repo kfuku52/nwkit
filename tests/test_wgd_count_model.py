@@ -134,6 +134,17 @@ def test_birth_death_retains_subnormal_critical_survival():
     )
 
 
+def test_log_birth_death_preserves_near_zero_complements():
+    log_probabilities = wgd_count_model._birth_death_log_probabilities
+    critical = log_probabilities(2.0**40, 2.0**40, 2.0**40)
+    assert critical[0] == pytest.approx(-np.log1p(2.0**-80), rel=1e-13, abs=0)
+    assert critical[0] == critical[1]
+    subcritical = log_probabilities(1.0, 2.0, 80.0)
+    assert subcritical[0] == pytest.approx(-np.exp(-80) / 2, rel=1e-13, abs=0)
+    short = log_probabilities(1e200, 2e200, 1e-220)
+    assert short[2:] == pytest.approx((-2e-20, -1e-20), rel=1e-13, abs=0)
+
+
 def test_likelihood_transition_cache_is_bounded_and_preserves_results(monkeypatch):
     model = CountLikelihood(tree(), np.array([[2.0, 3.0], [1.0, np.nan]]))
     rates = np.array([[0.12, 0.17]])

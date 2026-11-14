@@ -11,7 +11,12 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.special import logsumexp
 
-from nwkit.wgd_count_model import CountTree, MultiplicationEvent, _validate_fixed_events
+from nwkit.wgd_count_model import (
+    CountTree,
+    MultiplicationEvent,
+    _birth_death_log_probabilities,
+    _validate_fixed_events,
+)
 
 
 @dataclass(frozen=True)
@@ -90,35 +95,7 @@ def lineage_survival(survival, duplication, loss, length):
 
 def lineage_log_parameters(duplication, loss, length):
     """Log extinction, geometric parameter, survival and geometric success."""
-    if length == 0 or duplication == loss == 0:
-        return -np.inf, -np.inf, 0.0, 0.0
-    difference = abs(duplication - loss)
-    if difference == 0:
-        log_product = math.log(duplication) + math.log(length)
-        denominator = float(np.logaddexp(0, log_product))
-        log_a = log_b = log_product - denominator
-        log_survives = log_success = -denominator
-    else:
-        change = -math.expm1(-difference * length)
-        log_change = (
-            math.log(change) if change else math.log(difference) + math.log(length)
-        )
-        denominator = float(
-            np.logaddexp(
-                math.log(difference),
-                math.log(min(duplication, loss)) + log_change
-                if min(duplication, loss)
-                else -np.inf,
-            )
-        )
-        complement = math.log(difference) - denominator
-        log_a = math.log(loss) + log_change - denominator if loss else -np.inf
-        log_b = (
-            math.log(duplication) + log_change - denominator if duplication else -np.inf
-        )
-        log_survives = complement - (difference * length if duplication < loss else 0)
-        log_success = complement - (difference * length if duplication > loss else 0)
-    return log_a, log_b, log_survives, log_success
+    return _birth_death_log_probabilities(duplication, loss, length)
 
 
 def lineage_log_complements(log_survival, log_extinction, duplication, loss, length):

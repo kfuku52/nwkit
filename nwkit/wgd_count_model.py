@@ -206,27 +206,30 @@ def _birth_death_log_probabilities(duplication, loss, time):
     if duplication == loss:
         log_product = np.log(duplication) + np.log(time)
         log_denominator = np.logaddexp(0.0, log_product)
-        log_probability = log_product - log_denominator
+        log_probability = -np.logaddexp(0.0, -log_product)
         return log_probability, log_probability, -log_denominator, -log_denominator
     delta = abs(duplication - loss)
     log_delta = np.log(delta)
     product = delta * time
     with np.errstate(divide="ignore"):
-        log_change = (
-            log_delta + np.log(time)
-            if product < np.finfo(float).tiny
-            else np.log(-np.expm1(-product))
+        # Work with the denominator divided by delta. Subtracting two
+        # nearly equal logarithms would round small hazards to zero.
+        log_factor = (
+            np.log(time)
+            if product < _MIN_NORMAL_FLOAT
+            else np.log(-np.expm1(-product)) - log_delta
         )
-        log_denominator = np.logaddexp(
-            log_delta, np.log(min(duplication, loss)) + log_change
-        )
-        log_a = np.log(loss) + log_change - log_denominator
-        log_b = np.log(duplication) + log_change - log_denominator
-    complement = log_delta - log_denominator
+        log_ratio = np.log(min(duplication, loss)) + log_factor
+    complement = -np.logaddexp(0.0, log_ratio)
     attenuated = complement - product
+    log_small = -np.logaddexp(0.0, -log_ratio)
+    if attenuated < -math.log(2.0):
+        log_large = math.log1p(-math.exp(attenuated))
+    else:
+        log_large = np.log(max(duplication, loss)) + log_factor + complement
     if duplication > loss:
-        return log_a, log_b, complement, attenuated
-    return log_a, log_b, attenuated, complement
+        return log_small, log_large, complement, attenuated
+    return log_large, log_small, attenuated, complement
 
 
 def _log_matrix_product(left, right):
