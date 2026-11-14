@@ -4,6 +4,7 @@ import pytest
 
 from nwkit.cli import main
 from nwkit.threshold_asr import (
+    _truncated_draw,
     build_threshold_process,
     compute_threshold_marginals,
     parse_thresholds,
@@ -44,6 +45,17 @@ def test_threshold_process_is_identified_unit_brownian():
     assert process.root.variance == 1.0
     assert process.transitions[tree["A"]].variance == 1.0
     assert process.transitions[tree["B"]].variance == 2.0
+
+
+def test_disjoint_ordinal_intervals_keep_equal_mass_in_both_far_tails():
+    rng = np.random.default_rng(23)
+    allowed = np.array([0, 2])
+    thresholds = np.array([-40.0, 40.0])
+    draws = np.array(
+        [_truncated_draw(0.0, 1.0, allowed, thresholds, rng) for _ in range(300)]
+    )
+    assert np.all(np.abs(draws) >= 40.0)
+    assert 0.4 < np.mean(draws > 0.0) < 0.6
 
 
 def test_binary_threshold_samples_probabilities_and_liabilities():

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
-from scipy.special import ndtr, ndtri
+from scipy.special import log_ndtr, ndtri
 from scipy.stats import truncnorm
 
 from nwkit.compiled_tree import CompiledTree
@@ -151,30 +151,39 @@ def _allowed_intervals(allowed, thresholds):
     return intervals
 
 
+def _normal_interval_log_mass(lower, upper):
+    # Reflect positive-tail intervals so the log CDF is evaluated in the tail.
+    if lower > 0.0:
+        lower, upper = -upper, -lower
+    log_upper = float(log_ndtr(upper))
+    log_lower = float(log_ndtr(lower))
+    if log_lower < log_upper:
+        return log_upper + math.log(-math.expm1(log_lower - log_upper))
+    if lower < upper and math.isfinite(log_upper):
+        # Near the center, distinct endpoints can round to the same CDF.
+        midpoint = 0.5 * lower + 0.5 * upper
+        return math.log(upper - lower) - 0.5 * (midpoint**2 + math.log(math.tau))
+    return -math.inf
+
+
 def _truncated_draw(mean, sd, allowed, thresholds, rng):
-    intervals = _allowed_intervals(allowed, thresholds)
-    masses = []
-    for lower, upper in intervals:
-        z_lower = -math.inf if lower == -math.inf else (lower - mean) / sd
-        z_upper = math.inf if upper == math.inf else (upper - mean) / sd
-        masses.append(max(0.0, float(ndtr(z_upper) - ndtr(z_lower))))
-    total = math.fsum(masses)
-    if total > 0.0 and math.isfinite(total):
-        interval = intervals[
-            int(rng.choice(len(intervals), p=np.asarray(masses) / total))
-        ]
+    intervals = [
+        ((lower - mean) / sd, (upper - mean) / sd)
+        for lower, upper in _allowed_intervals(allowed, thresholds)
+    ]
+    if len(intervals) == 1:
+        a, b = intervals[0]
     else:
-        interval = min(
-            intervals,
-            key=lambda bounds: (
-                0.0
-                if bounds[0] <= mean <= bounds[1]
-                else min(abs(mean - bounds[0]), abs(mean - bounds[1]))
-            ),
+        log_masses = np.asarray(
+            [_normal_interval_log_mass(*pair) for pair in intervals]
         )
-    lower, upper = interval
-    a = -math.inf if lower == -math.inf else (lower - mean) / sd
-    b = math.inf if upper == math.inf else (upper - mean) / sd
+        largest = float(np.max(log_masses))
+        if not math.isfinite(largest):
+            raise ValueError(
+                "Could not resolve the allowed ordinal liability intervals."
+            )
+        weights = np.exp(log_masses - largest)
+        a, b = intervals[int(rng.choice(len(intervals), p=weights / weights.sum()))]
     return float(truncnorm.rvs(a, b, loc=mean, scale=sd, random_state=rng))
 
 
