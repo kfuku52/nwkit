@@ -10,6 +10,7 @@ from scipy import sparse
 from scipy.linalg import cho_solve, solve_triangular
 from scipy.optimize import minimize
 
+from nwkit.evolution import EvolutionaryCovarianceFactory
 from nwkit.gaussian import (
     DiagonalLowRankCovariance,
     materialize_covariance,
@@ -271,8 +272,22 @@ def _sparse_component_model(component, parameter):
     return model
 
 
+def _prepare_sparse_component_lookup(components):
+    @lru_cache(maxsize=max(1, len(components)))
+    def tree_component(name, parameter):
+        return _sparse_component_model(components[name], parameter)
+
+    def lookup(name, parameter):
+        component = components[name]
+        if type(component) is EvolutionaryCovarianceFactory:
+            return tree_component(name, parameter)
+        return _sparse_component_model(component, parameter)
+
+    return lookup
+
+
 def _sparse_multivariate_latent_model(
-    covariance_components,
+    component_model,
     trait_covariances,
     decoded,
     n_traits,
@@ -282,8 +297,8 @@ def _sparse_multivariate_latent_model(
     loading_blocks = []
     prior_logdet = 0.0
     trait_identity = sparse.eye(n_traits, format="csr")
-    for name, component in covariance_components.items():
-        model = _sparse_component_model(component, decoded)
+    for name in trait_covariances:
+        model = component_model(name, decoded)
         trait_covariance = model.covariance_scale * np.asarray(
             trait_covariances[name], dtype=float
         )
@@ -331,7 +346,7 @@ def _sparse_multivariate_latent_model(
 
 
 def _sparse_multivariate_state(
-    covariance_components,
+    component_model,
     trait_covariances,
     decoded,
     n_traits,
@@ -342,7 +357,7 @@ def _sparse_multivariate_state(
     reml,
 ):
     precision, loading, prior_logdet = _sparse_multivariate_latent_model(
-        covariance_components,
+        component_model,
         trait_covariances,
         decoded,
         n_traits,
@@ -492,6 +507,7 @@ def fit_multivariate_pgls(
     dense_component, fixed_dense = _dense_covariance_inputs(
         covariance_components, n_tips, fixed_covariance, use_sparse
     )
+    sparse_component = _prepare_sparse_component_lookup(covariance_components)
 
     def unpack(parameters: np.ndarray):
         component_covariances = {}
@@ -512,7 +528,7 @@ def fit_multivariate_pgls(
         trait_covariances, decoded = unpack(parameters)
         if use_sparse:
             return _sparse_multivariate_state(
-                covariance_components,
+                sparse_component,
                 trait_covariances,
                 decoded,
                 n_traits,
