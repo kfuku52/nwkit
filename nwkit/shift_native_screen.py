@@ -8,7 +8,7 @@ Every bootstrap search must regenerate this data-dependent candidate set.
 import numpy as np
 
 from nwkit.gaussian_whitening import TreeWhitening
-from nwkit.shift_native_model import covariance_geometry
+from nwkit.shift_native_model import _normalized_ou_duration, covariance_geometry
 
 # Bound temporary whitening storage independently of the number of branches.
 _SCREEN_BLOCK_COLUMNS = 512
@@ -50,23 +50,29 @@ def _interval_design(tips, intervals, branches):
 
 def _effect_design(tree, design, alpha, branches=None):
     """Unstandardized optimum-increment columns, including near-ultrametric tips."""
-    depths = tree.times.copy()
-    for i in range(1, len(depths)):
-        depths[i] += depths[tree.compiled.parents[i]]
     branches = sorted(set(tree.branch_ids) - {0}) if branches is None else branches
-    indices = {branch: i for i, branch in enumerate(tree.branch_ids)}
-    parents = [tree.compiled.parents[indices[b]] for b in branches]
-    ages = np.maximum(
-        0, depths[list(tree.compiled.leaf_indices), None] - depths[parents]
-    )
-    weights = (
-        ages
-        if alpha == 0
-        else np.ones_like(ages)
-        if np.isinf(alpha)
-        else -np.expm1(-alpha * ages) / -np.expm1(-alpha)
-    )
-    return design * weights
+    if np.isinf(alpha):
+        return design.copy()
+    parents = tree.compiled.parents
+    if tree.exact_ultrametric:
+        ages = np.array(
+            [tree.remaining_times[parents[tree.indices_by_branch[b]]] for b in branches]
+        )
+        return design * _normalized_ou_duration(alpha, ages)
+    leaves = tree.compiled.leaf_indices
+    effects = np.zeros_like(design, dtype=float)
+    ages = np.empty(len(tree.times))
+    for column, branch in enumerate(branches):
+        node = tree.indices_by_branch[branch]
+        first, last = tree.tip_intervals[node]
+        ages[node] = tree.times[node]
+        for child in range(node + 1, leaves[last - 1] + 1):
+            ages[child] = ages[parents[child]] + tree.times[child]
+        rows = slice(first, last)
+        effects[rows, column] = design[rows, column] * _normalized_ou_duration(
+            alpha, ages[list(leaves[rows])]
+        )
+    return effects
 
 
 def _whitened_matrices(data, null_fit, memory_limit, *, optimum_increments=False):

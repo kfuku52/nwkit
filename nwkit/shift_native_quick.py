@@ -5,13 +5,15 @@ import math
 import numpy as np
 
 from nwkit.gaussian_whitening import TreeWhitening
-from nwkit.shift_native_model import covariance_geometry
-from nwkit.shift_native_screen import descendant_design
+from nwkit.shift_native_model import _normalized_ou_duration, covariance_geometry
+from nwkit.shift_native_screen import _effect_design, descendant_design
 
 
 class NativeQuickProfile:
     def __init__(self, data, null_fit, branches, fixed_alpha=None):
         self.data = data
+        self.branches = tuple(branches)
+        branches = self.branches
         self.columns = {branch: i for i, branch in enumerate(branches)}
         self.node_indices = {b: i for i, b in enumerate(data.tree.branch_ids)}
         self.age = self._ages()
@@ -35,19 +37,16 @@ class NativeQuickProfile:
 
     def _ages(self):
         tree = self.data.tree
-        remaining = np.zeros(len(tree.branch_ids))
-        for i in tree.compiled.postorder:
-            if i:
-                parent = tree.compiled.parents[i]
-                remaining[parent] = max(remaining[parent], tree.times[i] + remaining[i])
         return {
-            branch: remaining[tree.compiled.parents[i]]
+            branch: tree.remaining_times[tree.compiled.parents[i]]
             for branch, i in self.node_indices.items()
             if i
         }
 
     def _trait_profile(self, trait, alpha, fit, design):
         data = self.data
+        if not data.tree.exact_ultrametric:
+            design = _effect_design(data.tree, design, alpha, self.branches)
         mask = np.isfinite(data.values[:, trait])
         observed = tuple(
             i
@@ -107,16 +106,10 @@ class NativeQuickProfile:
         for profiles in self.profiles:
             total = 0.0
             for alpha, response, matrix, constant, observed_count in profiles:
-                weights = (
-                    ages
-                    if alpha == 0
-                    else (
-                        np.ones(len(ages))
-                        if math.isinf(alpha)
-                        else -np.expm1(-alpha * ages) / -np.expm1(-alpha)
-                    )
-                )
-                predictors = (matrix[:, columns] * weights) @ transform
+                selected = matrix[:, columns]
+                if self.data.tree.exact_ultrametric and not math.isinf(alpha):
+                    selected = selected * _normalized_ou_duration(alpha, ages)
+                predictors = selected @ transform
                 residual = response
                 if predictors.shape[1]:
                     norms = np.linalg.norm(predictors, axis=0)
