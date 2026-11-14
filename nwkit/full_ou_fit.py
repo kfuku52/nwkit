@@ -17,7 +17,7 @@ from nwkit.multivariate_gaussian_asr import (
     _restore_sigma,
     _validate_posterior_size,
 )
-from nwkit.optimization import deterministic_multistart
+from nwkit.optimization import MultistartResult, deterministic_multistart
 from nwkit.vector_fit import normalized_vector_observations, restored_vector_posterior
 from nwkit.vector_gaussian import prepare_vector_conditioning
 from nwkit.vector_mean import stationary_mean_gls
@@ -116,9 +116,9 @@ def fit_full_mvou(
     )
     _validate_posterior_size(data, compute_posterior)
     dimension = len(data.trait_names)
-    time_scale, _ = _ou_geometry(data)
     fixed = _fixed_parameters(data, attraction, diffusion)
-    initial, bounds = ([], []) if fixed is not None else full_ou_initial(dimension)
+    time_scale = _ou_geometry(data)[0] if fixed is None else 1.0
+    initial, bounds = full_ou_initial(dimension) if fixed is None else ([], [])
     covariance_count = len(initial)
     if len(data.values) < covariance_count + dimension:
         raise ValueError(
@@ -131,8 +131,6 @@ def fit_full_mvou(
     )
 
     def decode_matrices(parameters):
-        if fixed is not None:
-            return fixed
         return decode_full_ou(parameters, dimension, time_scale)
 
     def objective(parameters):
@@ -146,8 +144,14 @@ def fit_full_mvou(
         except (ValueError, ArithmeticError, np.linalg.LinAlgError, RuntimeWarning):
             return 1e100
 
-    optimized = deterministic_multistart(objective, initial, bounds, maxiter=1800)
-    matrices = decode_matrices(optimized.x)
+    if fixed is None:
+        optimized = deterministic_multistart(objective, initial, bounds, maxiter=1800)
+        matrices = decode_matrices(optimized.x)
+    else:
+        optimized = MultistartResult(
+            np.zeros(dimension), 0.0, True, "stationary mean solved by GLS", 0, 0, 0
+        )
+        matrices = fixed
     zero_process = vector_ou_process(
         tree, matrices[0], matrices[1], np.zeros(dimension)
     )

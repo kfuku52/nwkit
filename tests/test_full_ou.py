@@ -96,6 +96,8 @@ def test_fixed_full_ou_matches_independent_dense_gls(scale):
         abs=1e-8,
     )
     assert fit.identifiability_status == "fixed_covariance_parameters"
+    assert fit.optimizer_success
+    assert fit.optimizer_starts == 0
     assert posterior[tree].covariance.shape == (2, 2)
 
 
