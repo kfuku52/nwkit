@@ -22,7 +22,7 @@ def _digest(path):
 
 
 def checkpoint_inputs(args):
-    inputs = ("infile", "counts", "detection_tsv", "rate_groups_tsv")
+    inputs: tuple[str, ...] = ("infile", "counts", "detection_tsv", "rate_groups_tsv")
     if getattr(args, "fixed_events_tsv", None):
         inputs += ("fixed_events_tsv",)
     if any(getattr(args, key) == "-" for key in inputs):
