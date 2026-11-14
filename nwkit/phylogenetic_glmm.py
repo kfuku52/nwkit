@@ -647,40 +647,41 @@ def _sparse_latent_mode(
     label,
 ):
     mode = np.zeros(precision.shape[0], dtype=float)
+    loading_transpose = loading.T
 
-    def terms(candidate):
+    def evaluate(candidate):
         linear = fixed_linear + np.asarray(loading @ candidate).reshape(-1)
-        return likelihood_terms(linear)
+        log_likelihood, likelihood_gradient, weights = likelihood_terms(linear)
+        prior_score = precision @ candidate
+        gradient = np.asarray(loading_transpose @ likelihood_gradient).reshape(-1)
+        gradient += prior_score
+        value = -log_likelihood + 0.5 * float(candidate @ prior_score)
+        return value, gradient, weights
 
-    def state(candidate):
-        log_likelihood, likelihood_gradient, weights = terms(candidate)
-        gradient = np.asarray(loading.T @ likelihood_gradient).reshape(-1)
-        gradient += precision @ candidate
+    def factor_hessian(weights):
         weight_matrix = _sparse_weight_matrix(weights)
-        hessian = precision + loading.T @ weight_matrix @ loading
-        factor = factor_sparse_positive_definite(hessian)
-        value = -log_likelihood + 0.5 * float(candidate @ (precision @ candidate))
-        return value, gradient, weights, factor
+        hessian = precision + loading_transpose @ weight_matrix @ loading
+        return factor_sparse_positive_definite(hessian)
 
+    state = evaluate(mode)
     converged = False
     for _iteration in range(80):
-        value, gradient, _weights, factor = state(mode)
+        value, gradient, weights = state
         if not np.isfinite(gradient).all():
             break
         if float(np.max(np.abs(gradient))) < 1e-7:
             converged = True
             break
-        step = factor.solve(gradient)
+        step = factor_hessian(weights).solve(gradient)
         accepted = False
         step_scale = 1.0
         for _backtrack in range(24):
             candidate = mode - step_scale * step
-            candidate_log_likelihood, _, _ = terms(candidate)
-            candidate_value = -candidate_log_likelihood + 0.5 * float(
-                candidate @ (precision @ candidate)
-            )
+            candidate_state = evaluate(candidate)
+            candidate_value = candidate_state[0]
             if np.isfinite(candidate_value) and candidate_value <= value:
                 mode = candidate
+                state = candidate_state
                 accepted = True
                 break
             step_scale *= 0.5
@@ -692,10 +693,7 @@ def _sparse_latent_mode(
     if not converged:
 
         def value_and_gradient(candidate):
-            log_likelihood, likelihood_gradient, _weights = terms(candidate)
-            gradient = np.asarray(loading.T @ likelihood_gradient).reshape(-1)
-            gradient += precision @ candidate
-            value = -log_likelihood + 0.5 * float(candidate @ (precision @ candidate))
+            value, gradient, _weights = evaluate(candidate)
             return value, gradient
 
         fallback = minimize(
@@ -712,10 +710,11 @@ def _sparse_latent_mode(
                 )
             )
         mode = np.asarray(fallback.x, dtype=float)
-    value, gradient, weights, factor = state(mode)
+        state = evaluate(mode)
+    value, gradient, weights = state
     if not np.isfinite(value) or float(np.max(np.abs(gradient))) >= 1e-5:
         raise RuntimeError("{} random-effect mode did not converge.".format(label))
-    return mode, value, weights, factor
+    return mode, value, weights, factor_hessian(weights)
 
 
 def _sparse_marginal_coefficient_covariance(design, weights, loading, posterior_factor):
