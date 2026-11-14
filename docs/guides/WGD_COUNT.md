@@ -118,6 +118,11 @@ estimate is `(1 + exceedances)/(1 + draws)`. Failed simulated refits abort;
 draws are not silently discarded. This handles the finite search and retention
 boundary but remains a plug-in, model-conditional calibration, not a supremum
 test over nuisance parameters or guaranteed composite-null error control.
+The model JSON's `bootstrap_tail_audit` reports the exceedance count and a
+pointwise 95% Clopper-Pearson interval for the underlying simulated tail
+probability. `alpha_resolution=overlaps` means more draws may be needed to
+resolve Monte Carlo uncertainty near `--alpha`. This interval is not a
+confidence interval for a biological event and does not change the TSV call.
 Use `--bootstrap-workers` to run multiple null refits concurrently. Use one
 BLAS thread per worker (for example, set `OPENBLAS_NUM_THREADS=1` and
 `OMP_NUM_THREADS=1` before launching the command) and allow memory for one

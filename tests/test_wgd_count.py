@@ -144,14 +144,53 @@ def test_real_bootstrap_cli_respects_seed_and_search(tmp_path):
     tree, counts = inputs(tmp_path)
     first = tmp_path / "first.tsv"
     second = tmp_path / "second.tsv"
+    metadata = tmp_path / "model.json"
     args = command(tree, counts) + ["--bootstrap", "2", "--seed", "815"]
-    main(args + ["-o", str(first)])
+    main(args + ["-o", str(first), "--model-out", str(metadata)])
     main(args + ["-o", str(second)])
     assert first.read_text() == second.read_text()
     table = pd.read_csv(first, sep="\t")
     assert table.p_value.iloc[0] == pytest.approx(1 / 3)
     assert table.p_value_method.iloc[0] == "plugin-parametric-bootstrap-search-maximum"
     assert table.count_support.iloc[0] == "background_compatible"
+    audit = json.loads(metadata.read_text())["bootstrap_tail_audit"]
+    assert audit["method"] == "pointwise-clopper-pearson"
+    assert audit["minimum_plus_one_p"] == pytest.approx(1 / 3)
+    (candidate,) = audit["candidates"]
+    assert (
+        candidate["num_exceedances"] == 0 and candidate["tail_probability_lower"] == 0
+    )
+    assert candidate["alpha_resolution"] == "overlaps"
+
+
+def test_bootstrap_tail_audit_distinguishes_both_limits():
+    from types import SimpleNamespace
+
+    from nwkit.wgd_count import bootstrap_tail_audit
+
+    result = SimpleNamespace(
+        bootstrap_statistics=(0.0,) * 100,
+        candidates=[
+            SimpleNamespace(node=1, improvement=0.0),
+            SimpleNamespace(node=2, improvement=1.0),
+        ],
+    )
+    audit = bootstrap_tail_audit(result, SimpleNamespace(branch_ids=(0, 10, 20)), 0.05)
+    first, last = audit["candidates"]
+    assert first == {
+        "branch_id": 10,
+        "num_exceedances": 100,
+        "tail_probability_lower": pytest.approx(0.025**0.01),
+        "tail_probability_upper": 1.0,
+        "alpha_resolution": "above",
+    }
+    assert last == {
+        "branch_id": 20,
+        "num_exceedances": 0,
+        "tail_probability_lower": 0.0,
+        "tail_probability_upper": pytest.approx(1 - 0.025**0.01),
+        "alpha_resolution": "below",
+    }
 
 
 def test_real_bootstrap_checkpoint_resumes_holes_and_matches_outputs(

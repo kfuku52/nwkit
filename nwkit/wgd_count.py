@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from scipy.stats import beta
 
 from nwkit import __version__
 from nwkit.clade_index import CladeIndex
@@ -158,6 +159,43 @@ def _fit_json(fit):
             "fraction": fit.event.fraction,
             "multiplicity": fit.event.multiplicity,
         },
+    }
+
+
+def bootstrap_tail_audit(result, design, alpha):
+    """Monte Carlo uncertainty of the simulated tail, not model uncertainty."""
+    if not result.bootstrap_statistics:
+        return None
+    draws = len(result.bootstrap_statistics)
+    details = []
+    for candidate in result.candidates:
+        count = sum(
+            value >= candidate.improvement - 1e-9
+            for value in result.bootstrap_statistics
+        )
+        lower = 0.0 if count == 0 else float(beta.ppf(0.025, count, draws - count + 1))
+        upper = (
+            1.0 if count == draws else float(beta.ppf(0.975, count + 1, draws - count))
+        )
+        details.append(
+            {
+                "branch_id": design.branch_ids[candidate.node],
+                "num_exceedances": count,
+                "tail_probability_lower": lower,
+                "tail_probability_upper": upper,
+                "alpha_resolution": "below"
+                if upper < alpha
+                else "above"
+                if lower > alpha
+                else "overlaps",
+            }
+        )
+    return {
+        "method": "pointwise-clopper-pearson",
+        "level": 0.95,
+        "num_draws": draws,
+        "minimum_plus_one_p": 1 / (1 + draws),
+        "candidates": details,
     }
 
 
@@ -356,6 +394,7 @@ def wgd_count_main(args):
         ],
         "calibration": result.calibration,
         "bootstrap_max_statistics": list(result.bootstrap_statistics),
+        "bootstrap_tail_audit": bootstrap_tail_audit(result, design, args.alpha),
         "seed": args.seed,
         "alpha": args.alpha,
         "ascertainment": f"{args.ascertainment}; conditional on observation, separately for each missingness mask, after mixing family rate categories",
