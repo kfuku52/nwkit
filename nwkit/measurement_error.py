@@ -96,6 +96,20 @@ def _solve(cholesky, values):
     return solve_factor(cholesky, values)
 
 
+def _latent_predictor_units(observed, sampling_covariance):
+    # Scaling each standard deviation also scales both covariance dimensions.
+    if not np.isfinite(sampling_covariance).all():
+        raise ValueError("Predictor sampling covariance must contain finite values.")
+    largest = max(
+        float(np.max(np.abs(observed))),
+        math.sqrt(float(np.max(np.abs(sampling_covariance), initial=0.0))),
+    )
+    _, exponent = math.frexp(largest)
+    scaled = np.ldexp(observed, -exponent)
+    sampling = np.ldexp(sampling_covariance, -2 * exponent)
+    return scaled, sampling, exponent
+
+
 def _latent_predictor_likelihood(
     observed,
     evolutionary_covariance,
@@ -106,7 +120,6 @@ def _latent_predictor_likelihood(
     return_details=False,
 ):
     covariance = rate * evolutionary_covariance + sampling_covariance
-    covariance = (covariance + covariance.T) / 2.0
     try:
         cholesky = factor_covariance(covariance)
         inverse_observed = _solve(cholesky, observed)
@@ -147,6 +160,9 @@ def fit_latent_predictor(
     if isinstance(sampling_covariance, DiagonalLowRankCovariance):
         sampling_covariance = materialize_covariance(sampling_covariance)
     sampling_covariance = np.asarray(sampling_covariance, dtype=float)
+    observed, sampling_covariance, trait_exponent = _latent_predictor_units(
+        observed, sampling_covariance
+    )
     if sampling_covariance.ndim == 1:
         if (
             sampling_covariance.shape != observed.shape
@@ -237,9 +253,7 @@ def fit_latent_predictor(
         observation_diagonal = np.square(observation_cholesky)
         gain = prior_diagonal / observation_diagonal
         posterior_mean = prior_mean + gain * residual
-        posterior_covariance = np.diag(
-            prior_diagonal - np.square(prior_diagonal) / observation_diagonal
-        )
+        posterior_covariance = np.diag(gain * np.diag(sampling_covariance))
     else:
         gain_residual = prior_covariance @ _solve(observation_cholesky, residual)
         posterior_mean = prior_mean + gain_residual
@@ -251,11 +265,12 @@ def fit_latent_predictor(
     )
     boundary = bool(rate <= lower_rate * 10.0 or rate >= upper_rate / 10.0)
     return LatentPredictorPosterior(
-        mean=np.asarray(posterior_mean + observed_offset, dtype=float),
-        covariance=posterior_covariance,
-        prior_mean=float(prior_mean + observed_offset),
-        evolutionary_rate=float(rate),
-        log_likelihood=-float(objective_value),
+        mean=np.ldexp(posterior_mean + observed_offset, trait_exponent),
+        covariance=np.ldexp(posterior_covariance, 2 * trait_exponent),
+        prior_mean=math.ldexp(prior_mean + observed_offset, trait_exponent),
+        evolutionary_rate=math.ldexp(rate, 2 * trait_exponent),
+        log_likelihood=-float(objective_value)
+        - len(observed) * trait_exponent * math.log(2.0),
         optimizer_converged=bool(optimized.success),
         optimizer_message=message,
         boundary_warning=boundary,

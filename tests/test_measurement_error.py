@@ -65,6 +65,32 @@ def test_latent_predictor_posterior_matches_gaussian_conditioning():
     assert np.linalg.eigvalsh(posterior.covariance).min() >= -1e-12
 
 
+@pytest.mark.parametrize("scale", [1e-150, 1e150])
+def test_latent_predictor_preserves_covariance_across_trait_units(scale):
+    values = np.array([2.0, -1.0, 3.0, -3.0])
+    evolutionary = np.diag([1.0, 0.5, 0.8, 1.5])
+    sampling = np.full(len(values), 0.3)
+    expected = fit_latent_predictor(
+        values, evolutionary, sampling, include_intercept=True
+    )
+
+    with np.errstate(over="raise", invalid="raise"):
+        scaled = fit_latent_predictor(
+            values * scale, evolutionary, sampling * scale**2, include_intercept=True
+        )
+
+    np.testing.assert_allclose(scaled.mean / scale, expected.mean, rtol=1e-6)
+    np.testing.assert_allclose(
+        scaled.covariance / scale**2, expected.covariance, rtol=1e-6
+    )
+    assert scaled.evolutionary_rate / scale**2 == pytest.approx(
+        expected.evolutionary_rate, rel=2e-6
+    )
+    assert scaled.log_likelihood + len(values) * np.log(scale) == pytest.approx(
+        expected.log_likelihood, abs=1e-9
+    )
+
+
 def test_latent_predictor_rejects_indefinite_sampling_covariance():
     with pytest.raises(ValueError, match="positive semidefinite"):
         fit_latent_predictor(
