@@ -77,21 +77,12 @@ def lineage_survival(survival, duplication, loss, length):
     """Backward survival under linear DL; avoid subtracting extinction from one."""
     if length == 0 or survival == 0:
         return survival
-    difference = duplication - loss
-    if difference == 0:
-        return survival / (1 + duplication * survival * length)
-    if difference > 0:
-        exponent = math.exp(-difference * length)
-        denominator = (
-            duplication * survival * -math.expm1(-difference * length)
-            + difference * exponent
-        )
-        return survival * difference / denominator
-    exponent = math.exp(difference * length)
-    denominator = -difference + duplication * survival * -math.expm1(
-        difference * length
+    log_survival = math.log(survival)
+    _, log_b, log_survives, log_success = lineage_log_parameters(
+        duplication, loss, length
     )
-    return survival * -difference * exponent / denominator
+    denominator = float(np.logaddexp(log_success, log_b + log_survival))
+    return math.exp(min(0.0, log_survives + log_survival - denominator))
 
 
 @lru_cache(maxsize=4096)

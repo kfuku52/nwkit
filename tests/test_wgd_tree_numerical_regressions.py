@@ -108,6 +108,16 @@ def test_root_normalizer_preserves_underflowed_survival_times_root_mean():
     assert actual == pytest.approx(expected, rel=1e-13, abs=0)
 
 
+def test_lineage_survival_retains_tiny_input_under_subnormal_rates():
+    from nwkit.wgd_tree_model import lineage_survival
+
+    # Per-copy loss along the branch has exponent 2**-40. Duplication has
+    # negligible impact on this downstream probability of observing a copy.
+    initial = 2.0**-200
+    actual = lineage_survival(initial, 2.0**-1040, 2.0**-1039, 2.0**1000)
+    assert actual == pytest.approx(initial * math.exp(-(2.0**-40)), rel=1e-13, abs=0)
+
+
 @pytest.mark.parametrize("tip_count", [32, 64, 128])
 def test_comb_matches_exact_yule_colored_topology_probability(tip_count):
     tip = ("tip", "A")
