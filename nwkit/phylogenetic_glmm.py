@@ -4,7 +4,7 @@ import math
 import warnings
 from dataclasses import dataclass, replace
 from functools import lru_cache
-from typing import Callable, Mapping, Sequence
+from typing import Callable, Mapping, Sequence, cast
 
 import numpy as np
 from scipy import sparse
@@ -2650,30 +2650,28 @@ def _scalar_auxiliary_initial(values: np.ndarray, family: str) -> float:
 
 
 def _fit_scalar_phylogenetic_glmm(
-    response_values: Sequence[object],
-    design: np.ndarray,
-    phylogenetic_covariance: Callable[[float | None], np.ndarray],
-    *,
-    family: str,
-    group_covariance: np.ndarray | None,
-    evolution_parameter: float | None,
-    evolution_parameter_bounds: tuple[float, float] | None,
-    evolution_parameter_decoder: Callable[[float], float],
-    evolution_parameter_initial: float | None,
-    predictor_uncertainties: Sequence[np.ndarray],
-    predictor_columns: Sequence[int | tuple[int, ...]],
-    offset: Sequence[float] | None,
-    trials: Sequence[float] | None,
-    censor_lower: Sequence[float] | None,
-    censor_upper: Sequence[float] | None,
-    dispersion: float | None,
-    zero_probability: float | None,
-    coefficient_penalty: str,
-    coefficient_prior_sd: float | None,
-    inference: str,
-    confidence_level: float,
-    allow_large_dense: bool,
-) -> PhylogeneticGlmmFit:
+    response_values, design, phylogenetic_covariance, options: "_GlmmCallOptions"
+) -> "PhylogeneticGlmmFit | _GlmmRefitEstimates":
+    family = options.family
+    group_covariance = options.group_covariance
+    predictor_uncertainties, predictor_columns = (
+        options.predictor_uncertainties,
+        options.predictor_columns,
+    )
+    evolution_parameter = options.evolution_parameter
+    evolution_parameter_initial = options.evolution_parameter_initial
+    evolution_parameter_bounds = options.evolution_parameter_bounds
+    evolution_parameter_decoder = options.evolution_parameter_decoder
+    coefficient_penalty, coefficient_prior_sd = (
+        options.coefficient_penalty,
+        options.coefficient_prior_sd,
+    )
+    inference, confidence_level = options.inference, options.confidence_level
+    allow_large_dense = options.allow_large_dense
+    offset, trials = options.offset, options.trials
+    censor_lower, censor_upper = options.censor_lower, options.censor_upper
+    dispersion, zero_probability = options.dispersion, options.zero_probability
+
     tip_design = np.asarray(design, dtype=float)
     if tip_design.ndim != 2 or not np.isfinite(tip_design).all():
         raise ValueError("Phylogenetic GLMM design must be a finite matrix.")
@@ -2913,6 +2911,10 @@ def _fit_scalar_phylogenetic_glmm(
     coefficients, fitted_dispersion, fitted_zero, log_variances, decoded = unpack(
         result.x
     )
+    if not options.compute_uncertainty:
+        return _bootstrap_refit_estimates(
+            coefficients, result, coefficient_penalty, coefficient_prior_sd
+        )
     fitted_objective, mode, random_effect_state, phylo_base = state(result.x)
     coefficient_covariance, _unused, covariance_status = _fixed_parameter_covariances(
         objective,
@@ -3016,6 +3018,24 @@ class _GlmmCallOptions:
     bootstrap_replicates: int
     seed: int
     allow_large_dense: bool
+    compute_uncertainty: bool = True
+
+
+@dataclass(frozen=True)
+class _GlmmRefitEstimates:
+    coefficients: np.ndarray
+    log_likelihood: float
+    optimizer_converged: bool
+
+
+def _bootstrap_refit_estimates(coefficients, result, penalty, prior_sd):
+    return _GlmmRefitEstimates(
+        coefficients=coefficients,
+        log_likelihood=_reported_log_likelihood(
+            result.fun, coefficients, penalty, prior_sd
+        ),
+        optimizer_converged=bool(result.success),
+    )
 
 
 def _validate_fixed_dispersion(value: float | None) -> None:
@@ -3101,42 +3121,6 @@ def _validate_glmm_call_options(options: _GlmmCallOptions) -> None:
         raise ValueError("seed must be a non-negative integer.")
 
 
-def _call_phylogenetic_glmm(
-    response_values,
-    design,
-    phylogenetic_covariance,
-    options: _GlmmCallOptions,
-) -> PhylogeneticGlmmFit:
-    return fit_phylogenetic_glmm(
-        response_values,
-        design,
-        phylogenetic_covariance,
-        family=options.family,
-        levels=options.levels,
-        reference=options.reference,
-        group_covariance=options.group_covariance,
-        evolution_parameter=options.evolution_parameter,
-        evolution_parameter_bounds=options.evolution_parameter_bounds,
-        evolution_parameter_decoder=options.evolution_parameter_decoder,
-        evolution_parameter_initial=options.evolution_parameter_initial,
-        predictor_uncertainties=options.predictor_uncertainties,
-        predictor_columns=options.predictor_columns,
-        offset=options.offset,
-        trials=options.trials,
-        censor_lower=options.censor_lower,
-        censor_upper=options.censor_upper,
-        dispersion=options.dispersion,
-        zero_probability=options.zero_probability,
-        coefficient_penalty=options.coefficient_penalty,
-        coefficient_prior_sd=options.coefficient_prior_sd,
-        inference=options.inference,
-        confidence_level=options.confidence_level,
-        bootstrap_replicates=options.bootstrap_replicates,
-        seed=options.seed,
-        allow_large_dense=options.allow_large_dense,
-    )
-
-
 def _draw_bootstrap_responses(
     rng,
     response_values,
@@ -3167,8 +3151,11 @@ def _fit_parametric_bootstrap_glmm(
     options: _GlmmCallOptions,
 ) -> PhylogeneticGlmmFit:
     wald_options = replace(options, inference="wald")
-    fit = _call_phylogenetic_glmm(
-        response_values, design, phylogenetic_covariance, wald_options
+    fit = cast(
+        PhylogeneticGlmmFit,
+        _fit_phylogenetic_glmm(
+            response_values, design, phylogenetic_covariance, wald_options
+        ),
     )
     design_array = np.asarray(design, dtype=float)
     sparse_builder = getattr(phylogenetic_covariance, "sparse_model", None)
@@ -3220,6 +3207,7 @@ def _fit_parametric_bootstrap_glmm(
         wald_options,
         levels=fit.levels or options.levels,
         reference=fit.reference or options.reference,
+        compute_uncertainty=False,
     )
     while len(samples) < options.bootstrap_replicates and attempts < maximum_attempts:
         attempts += 1
@@ -3232,7 +3220,7 @@ def _fit_parametric_bootstrap_glmm(
             rng, response_values, design_array, fit, latent, options
         )
         try:
-            refit = _call_phylogenetic_glmm(
+            refit = _fit_phylogenetic_glmm(
                 simulated, design_array, phylogenetic_covariance, refit_options
             )
         except (ValueError, RuntimeError, np.linalg.LinAlgError):
@@ -3309,36 +3297,50 @@ def fit_phylogenetic_glmm(
         seed=seed,
         allow_large_dense=allow_large_dense,
     )
+    result = _fit_phylogenetic_glmm(
+        response_values, design, phylogenetic_covariance, options
+    )
+    assert isinstance(result, PhylogeneticGlmmFit)
+    return result
+
+
+def _fit_phylogenetic_glmm(
+    response_values, design, phylogenetic_covariance, options: _GlmmCallOptions
+) -> PhylogeneticGlmmFit | _GlmmRefitEstimates:
     _validate_glmm_call_options(options)
-    if inference == "parametric-bootstrap":
+    if options.inference == "parametric-bootstrap":
         return _fit_parametric_bootstrap_glmm(
             response_values, design, phylogenetic_covariance, options
         )
-    if family in SCALAR_RESPONSE_FAMILIES:
+    if options.family in SCALAR_RESPONSE_FAMILIES:
         return _fit_scalar_phylogenetic_glmm(
-            response_values,
-            design,
-            phylogenetic_covariance,
-            family=family,
-            group_covariance=group_covariance,
-            evolution_parameter=evolution_parameter,
-            evolution_parameter_bounds=evolution_parameter_bounds,
-            evolution_parameter_decoder=evolution_parameter_decoder,
-            evolution_parameter_initial=evolution_parameter_initial,
-            predictor_uncertainties=predictor_uncertainties,
-            predictor_columns=predictor_columns,
-            offset=offset,
-            trials=trials,
-            censor_lower=censor_lower,
-            censor_upper=censor_upper,
-            dispersion=dispersion,
-            zero_probability=zero_probability,
-            coefficient_penalty=coefficient_penalty,
-            coefficient_prior_sd=coefficient_prior_sd,
-            inference=inference,
-            confidence_level=confidence_level,
-            allow_large_dense=allow_large_dense,
+            response_values, design, phylogenetic_covariance, options
         )
+    return _fit_categorical_phylogenetic_glmm(
+        response_values, design, phylogenetic_covariance, options
+    )
+
+
+def _fit_categorical_phylogenetic_glmm(
+    response_values, design, phylogenetic_covariance, options: _GlmmCallOptions
+) -> PhylogeneticGlmmFit | _GlmmRefitEstimates:
+    family = options.family
+    levels, reference = options.levels, options.reference
+    group_covariance = options.group_covariance
+    predictor_uncertainties, predictor_columns = (
+        options.predictor_uncertainties,
+        options.predictor_columns,
+    )
+    evolution_parameter = options.evolution_parameter
+    evolution_parameter_initial = options.evolution_parameter_initial
+    evolution_parameter_bounds = options.evolution_parameter_bounds
+    evolution_parameter_decoder = options.evolution_parameter_decoder
+    coefficient_penalty, coefficient_prior_sd = (
+        options.coefficient_penalty,
+        options.coefficient_prior_sd,
+    )
+    inference, confidence_level = options.inference, options.confidence_level
+    allow_large_dense = options.allow_large_dense
     values, design = _validate_glmm_inputs(response_values, design, family)
     sparse_builder = getattr(phylogenetic_covariance, "sparse_model", None)
     sparse_capable = (
@@ -3536,6 +3538,10 @@ def fit_phylogenetic_glmm(
         label="Categorical phylogenetic GLMM",
     )
     coefficients, thresholds, log_variances, decoded_parameter = unpack(result.x)
+    if not options.compute_uncertainty:
+        return _bootstrap_refit_estimates(
+            coefficients, result, coefficient_penalty, coefficient_prior_sd
+        )
     fitted_objective, mode, random_effect_state, phylo_base = state(result.x)
     (
         coefficient_covariance,
