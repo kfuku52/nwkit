@@ -487,8 +487,13 @@ def stationary_distribution(rate_matrix):
 
 
 def _stationary_recurrent_class(rates):
-    """Apply Grassmann–Taksar–Heyman state reduction in log space."""
+    """Apply Grassmann–Taksar–Heyman state reduction to a recurrent class."""
 
+    positive = rates[rates > 0.0]
+    if len(positive) and len(positive) == len(rates) * (len(rates) - 1):
+        largest = float(np.max(positive))
+        if float(np.min(positive)) / largest >= 1e-8:
+            return _stationary_positive_rates(rates / largest)
     with np.errstate(divide="ignore"):
         log_rates = np.log(rates)
     num_states = len(rates)
@@ -509,3 +514,15 @@ def _stationary_recurrent_class(rates):
             log_weights[:index] + log_rates[:index, index]
         )
     return np.exp(log_weights - logsumexp(log_weights))
+
+
+def _stationary_positive_rates(rates):
+    """Use subtraction-free state reduction for well-scaled complete graphs."""
+    for index in range(len(rates) - 1, 0, -1):
+        exits = rates[index, :index]
+        rates[:index, index] /= exits.sum()
+        rates[:index, :index] += rates[:index, index, None] * exits
+    weights = np.ones(len(rates), dtype=float)
+    for index in range(1, len(rates)):
+        weights[index] = weights[:index] @ rates[:index, index]
+    return weights / weights.sum()
