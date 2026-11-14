@@ -20,6 +20,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   mass, including when all allowed intervals lie in the extreme tails.
 - Threshold ASR scales conditional precisions so positive subnormal branch
   lengths retain nonzero innovation standard deviations.
+- Keep rounded threshold liabilities inside their observed categories and
+  accumulate posterior variances without subtracting large squares.
 - Profile-likelihood intervals resolve crossings near the edge of the finite
   likelihood domain and in small parameter units.
 - Fit shared MV-OU attraction in normalized time units so the initialization

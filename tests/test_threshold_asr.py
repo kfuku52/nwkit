@@ -78,6 +78,28 @@ def test_liability_sampling_accepts_a_positive_subnormal_branch_length():
     assert all(np.isfinite(entry.mean) for entry in fit.liability_marginals.values())
 
 
+@pytest.mark.parametrize("threshold", [1e5, 1e8])
+def test_large_fixed_threshold_preserves_category_and_liability_variance(threshold):
+    tree = tree_from("(A:1,B:1,C:1)R;")
+    states = ("low", "high")
+    observed = {"A": "low", "B": "high", "C": None}
+    posterior, fit = compute_threshold_marginals(
+        tree,
+        states,
+        observed,
+        likelihoods(tree, states, observed),
+        thresholds=str(threshold),
+        num_samples=100,
+        burnin=20,
+        chains=2,
+        seed=5,
+    )
+    np.testing.assert_array_equal(posterior[tree["B"]], [0.0, 1.0])
+    marginal = fit.liability_marginals[tree["B"]]
+    assert marginal.mean > threshold
+    assert 0.0 < marginal.variance < (10.0 / threshold) ** 2
+
+
 def test_binary_threshold_samples_probabilities_and_liabilities():
     tree = tree_from("((A:1,B:1):1,(C:1,D:1):1)R;")
     states = ("low", "high")

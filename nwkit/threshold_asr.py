@@ -167,13 +167,10 @@ def _normal_interval_log_mass(lower, upper):
 
 
 def _truncated_draw(mean, sd, allowed, thresholds, rng):
-    intervals = [
-        ((lower - mean) / sd, (upper - mean) / sd)
-        for lower, upper in _allowed_intervals(allowed, thresholds)
-    ]
-    if len(intervals) == 1:
-        a, b = intervals[0]
-    else:
+    bounds = _allowed_intervals(allowed, thresholds)
+    intervals = [((lower - mean) / sd, (upper - mean) / sd) for lower, upper in bounds]
+    index = 0
+    if len(intervals) > 1:
         log_masses = np.asarray(
             [_normal_interval_log_mass(*pair) for pair in intervals]
         )
@@ -183,8 +180,13 @@ def _truncated_draw(mean, sd, allowed, thresholds, rng):
                 "Could not resolve the allowed ordinal liability intervals."
             )
         weights = np.exp(log_masses - largest)
-        a, b = intervals[int(rng.choice(len(intervals), p=weights / weights.sum()))]
-    return float(truncnorm.rvs(a, b, loc=mean, scale=sd, random_state=rng))
+        index = int(rng.choice(len(intervals), p=weights / weights.sum()))
+    a, b = intervals[index]
+    lower, upper = bounds[index]
+    location = float(truncnorm.rvs(a, b, loc=mean, scale=sd, random_state=rng))
+    # Ordinal categories use (lower, upper]. A continuous tail draw can
+    # round onto its excluded endpoint when projected back into trait units.
+    return min(upper, max(location, math.nextafter(lower, math.inf)))
 
 
 def _liability_conditionals(compiled, process):
@@ -371,13 +373,14 @@ def compute_threshold_marginals(
     allowed_by_constraint = tuple(constraints[index] for index in constraints)
     seed_sequences = np.random.SeedSequence(seed).spawn(chains)
     probability_counts = np.zeros((len(compiled.nodes), len(states)), dtype=float)
-    liability_sum = np.zeros(len(compiled.nodes), dtype=float)
-    liability_square_sum = np.zeros(len(compiled.nodes), dtype=float)
+    liability_mean = np.zeros(len(compiled.nodes), dtype=float)
+    liability_m2 = np.zeros(len(compiled.nodes), dtype=float)
     threshold_sum = np.zeros(len(states) - 1, dtype=float)
     diagnostic_traces = np.empty(
         (chains, num_samples, 1 + max(0, len(states) - 2)), dtype=float
     )
     total_sweeps = burnin + num_samples * thin
+    retained_draws = 0
     for chain_index, child_seed in enumerate(seed_sequences):
         rng = np.random.default_rng(child_seed)
         current_thresholds = initial_thresholds.copy()
@@ -406,8 +409,10 @@ def compute_threshold_marginals(
                 continue
             categories = np.searchsorted(current_thresholds, values, side="left")
             probability_counts[np.arange(len(values)), categories] += 1.0
-            liability_sum += values
-            liability_square_sum += values * values
+            retained_draws += 1
+            centered = values - liability_mean
+            liability_mean += centered / retained_draws
+            liability_m2 += centered * (values - liability_mean)
             threshold_sum += current_thresholds
             diagnostic_traces[chain_index, retained, 0] = values[0]
             if len(current_thresholds) > 1:
@@ -418,10 +423,9 @@ def compute_threshold_marginals(
         node: probability_counts[index] / total_draws
         for index, node in enumerate(compiled.nodes)
     }
-    means = liability_sum / total_draws
-    variances = np.maximum(0.0, liability_square_sum / total_draws - means * means)
+    variances = np.maximum(0.0, liability_m2 / total_draws)
     liabilities = {
-        node: GaussianMarginal(float(means[index]), float(variances[index]))
+        node: GaussianMarginal(float(liability_mean[index]), float(variances[index]))
         for index, node in enumerate(compiled.nodes)
     }
     fitted_thresholds = tuple(float(value) for value in threshold_sum / total_draws)
