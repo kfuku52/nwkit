@@ -22,6 +22,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   lengths retain nonzero innovation standard deviations.
 - Keep rounded threshold liabilities inside their observed categories and
   accumulate posterior variances without subtracting large squares.
+- Preserve finite MCMCtree posterior means and medians when intermediate sums
+  overflow.
 - Profile-likelihood intervals resolve crossings near the edge of the finite
   likelihood domain and in small parameter units.
 - Scale extreme Gaussian posterior predictive values before computing moments
@@ -57,6 +59,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Compute transformed and directional-drift Brownian likelihoods without
   reconstructing every node during parameter searches and confidence-interval
   profiling.
+- Share order statistics between MCMCtree posterior medians and credible
+  intervals.
 - Reuse continuous predictor loadings during dense errors-in-variables PGLS
   optimization, including automatic evolutionary-parameter searches.
 - Read singleton likelihood-group variances directly from the dense

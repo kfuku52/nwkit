@@ -335,8 +335,7 @@ def read_mcmctree_posterior(source, tree, burnin=0, thin=1):
     )
 
 
-def _hpd_interval(values, level):
-    ordered = np.sort(np.asarray(values, dtype=float))
+def _hpd_interval(ordered, level):
     count = len(ordered)
     alpha = 1.0 - float(level)
     initial_low = int(count * alpha / 2.0 + 1e-12)
@@ -349,20 +348,30 @@ def _hpd_interval(values, level):
     return float(ordered[start]), float(ordered[start + index_width])
 
 
-def _credible_interval(values, level, kind):
-    kind = str(kind).strip().lower()
+def _age_order_statistics(values, level, kind):
+    count = len(values)
+    middle_low = (count - 1) // 2
+    middle_high = count // 2
     if kind == "hpd":
-        return _hpd_interval(values, level)
-    if kind == "equal-tail":
-        tail = (1.0 - float(level)) / 2.0
-        ordered = np.sort(np.asarray(values, dtype=float))
-        low_index = min(len(ordered) - 1, int(len(ordered) * tail + 1e-12))
-        high_index = min(
-            len(ordered) - 1,
-            int(len(ordered) * (1.0 - tail) + 1e-12),
+        ordered = np.sort(values)
+        low, high = _hpd_interval(ordered, level)
+    else:
+        tail = (1.0 - level) / 2.0
+        low_index = min(count - 1, int(count * tail + 1e-12))
+        high_index = min(count - 1, int(count * (1.0 - tail) + 1e-12))
+        ordered = np.partition(
+            values, sorted({low_index, middle_low, middle_high, high_index})
         )
-        return float(ordered[low_index]), float(ordered[high_index])
-    raise ValueError("'--posterior-ci' must be hpd or equal-tail.")
+        low, high = float(ordered[low_index]), float(ordered[high_index])
+    lower_middle = float(ordered[middle_low])
+    upper_middle = float(ordered[middle_high])
+    total = lower_middle + upper_middle
+    median = (
+        total * 0.5
+        if math.isfinite(total)
+        else lower_middle + (upper_middle - lower_middle) * 0.5
+    )
+    return median, low, high
 
 
 def summarize_mcmctree_posterior(tree, posterior, point="mean", ci="hpd", level=0.95):
@@ -387,9 +396,12 @@ def summarize_mcmctree_posterior(tree, posterior, point="mean", ci="hpd", level=
             node.props["age"] = 0.0
             continue
         values = posterior.values[:, column_by_id[node_id]]
-        mean = float(np.mean(values))
-        median = float(np.median(values))
-        low, high = _credible_interval(values, level=level, kind=ci)
+        with np.errstate(over="ignore"):
+            mean = float(np.mean(values))
+        if math.isinf(mean):
+            max_age = float(np.max(values))
+            mean = max_age * float(np.mean(values / max_age))
+        median, low, high = _age_order_statistics(values, level, ci)
         selected = mean if point == "mean" else median
         age_by_node[node] = selected
         node.props.update(
