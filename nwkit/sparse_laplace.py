@@ -416,7 +416,19 @@ def continuous_predictor_loading(
         if row_scale.shape != (len(indices),) or not np.isfinite(row_scale).all():
             raise ValueError("Continuous predictor row scale is malformed.")
         selected = selected.multiply(row_scale[:, None]).tocsr()
-    return sparse.kron(selected, sparse.csr_matrix(slopes[:, None]), format="csr")
+    return _project_scalar_predictor_loading(selected, slopes)
+
+
+def _project_scalar_predictor_loading(loading, slopes):
+    if len(slopes) != 1 or not np.isfinite(slopes[0]):
+        return sparse.kron(loading, sparse.csr_matrix(slopes[:, None]), format="csr")
+    if slopes[0] == 0.0:
+        return sparse.csr_matrix(
+            loading.shape, dtype=np.result_type(loading.dtype, slopes.dtype)
+        )
+    projected = loading * slopes[0]
+    projected.sum_duplicates()
+    return projected
 
 
 def grouped_predictor_loading(
@@ -520,7 +532,7 @@ def gmrf_predictor_loading(
         raise ValueError("GMRF predictor indices are malformed.")
     selected = uncertainty.model.tip_loading[indices]
     selected = _scale_gmrf_predictor_rows(selected, uncertainty.row_scale)
-    return sparse.kron(selected, sparse.csr_matrix(slopes[:, None]), format="csr")
+    return _project_scalar_predictor_loading(selected, slopes)
 
 
 def _scale_gmrf_predictor_rows(loading, row_scale):
