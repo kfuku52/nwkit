@@ -192,6 +192,27 @@ def test_k_permutation_p_value_matches_refits_for_larger_covariance():
     assert actual.bit_generator.state == reference.bit_generator.state
 
 
+@pytest.mark.parametrize("scale", [1e-200, 1e200])
+def test_blomberg_k_retains_ratio_at_extreme_response_scale(scale):
+    base = np.array([-1.0, 0.0, 0.25, 1.0])
+    matrix = np.diag([1.0, 2.0, 3.0, 4.0])
+    inverse = 1 / matrix.diagonal()
+    residual = base - inverse @ base / inverse.sum()
+    expected = (residual @ residual) / (residual**2 @ inverse)
+    expected /= (matrix.trace() - len(base) / inverse.sum()) / (len(base) - 1)
+    assert k_statistic(matrix, base * scale) == pytest.approx(expected)
+    rng = np.random.default_rng(45)
+    reference = np.random.default_rng(45)
+    assert signal_stats.permutation_test(
+        matrix, base * scale, np.zeros(4), expected, 19, rng
+    ) == (
+        signal_stats.permutation_test(
+            matrix, base, np.zeros(4), expected, 19, reference
+        )
+    )
+    assert rng.bit_generator.state == reference.bit_generator.state
+
+
 @pytest.mark.parametrize("singular", [False, True])
 def test_failed_k_permutation_retains_the_consumed_random_draw(singular):
     from nwkit.signal_stats import permutation_test

@@ -36,11 +36,22 @@ def gls(covariance, values):
 
 
 def k_statistic(covariance, values):
+    values = _scale_k_values(values)
     mean, quadratic, _, precision = gls(covariance, values)
     expected = (np.trace(covariance) - len(values) / precision) / (len(values) - 1)
     if quadratic <= 0 or expected <= 0:
         raise ValueError("K is undefined for constant traits or degenerate covariance.")
     return float(np.sum((values - mean) ** 2) / quadratic / expected)
+
+
+def _scale_k_values(values):
+    values = np.asarray(values)
+    magnitude = float(max(abs(values.min()), abs(values.max())))
+    # K is invariant to a common scaling of the response. Keep both squared
+    # terms away from premature overflow and underflow.
+    if magnitude and not 1e-145 <= magnitude <= 1e145:
+        return np.ldexp(values, -math.frexp(magnitude)[1])
+    return values
 
 
 def _best_scalar(function, grid):
@@ -219,7 +230,7 @@ def _prepared_k_statistic(covariance, count):
             raise ValueError(
                 "K is undefined for constant traits or degenerate covariance."
             )
-        return float(np.sum((values - mean) ** 2) / quadratic / expected)
+        return float(np.sum(residual**2) / quadratic / expected)
 
     return statistic
 
@@ -234,6 +245,7 @@ def permutation_test(covariance, values, errors, observed, simulations, rng):
         order = rng.permutation(len(values))
         if statistic is None and not np.any(errors):
             statistic = _prepared_k_statistic(covariance, len(values))
+            values = _scale_k_values(values)
         if statistic is None:
             value, _ = k_fit(covariance, values[order], errors[order])
         else:
