@@ -11,6 +11,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   their directionality under reciprocal changes of rate and branch-length units.
 - Sparse Mk transition graphs use a nonnegative Poisson series to resolve
   probabilities for endpoints separated by many jumps.
+- Recover slow Mk transitions that would otherwise underflow during the
+  time scaling used to exponentiate generators on very long branches.
 - Compute stationary Mk root probabilities without cancellation when
   transitions between groups of states are much slower than transitions
   within each group.

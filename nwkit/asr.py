@@ -400,11 +400,21 @@ def _general_transition_matrix(rate_matrix, branch_length):
         int(math.ceil(log2_exponent_norm - math.log2(direct_norm))),
     )
     scaled_length = math.ldexp(branch_length, -squarings)
-    scaled_norm = rate_scale * scaled_length * scaled_rate_norm
+    scaled_norm = 2.0 ** (log2_exponent_norm - squarings)
+    exponent = rate_matrix * scaled_length
+    if np.any((rate_matrix > 0.0) & (exponent < np.finfo(float).tiny)):
+        extra_squarings = int(math.ceil(math.log2(direct_norm / 2.0)))
+        return _log_space_transition_matrix(
+            rate_matrix, branch_length, squarings + extra_squarings
+        )
     matrix = _validated_transition_matrix(
-        _exponentiate_generator(rate_matrix * scaled_length, sparse_rates), scaled_norm
+        _exponentiate_generator(exponent, sparse_rates), scaled_norm
     )
     exponent_norm = 2.0**log2_exponent_norm if log2_exponent_norm < 1023.0 else math.inf
+    return _square_markov_matrix(matrix, squarings, exponent_norm)
+
+
+def _square_markov_matrix(matrix, squarings, exponent_norm):
     for _ in range(squarings):
         previous = matrix
         matrix = _validated_transition_matrix(matrix @ matrix, exponent_norm)
@@ -414,6 +424,59 @@ def _general_transition_matrix(rate_matrix, branch_length):
         if np.array_equal(matrix, previous):
             break
     return matrix
+
+
+def _log_matrix_product(first, second):
+    """Multiply nonnegative matrices represented by elementwise logarithms."""
+
+    result = np.full((len(first), len(second)), -math.inf)
+    for index in range(len(second)):
+        np.logaddexp(result, first[:, index, None] + second[index, None, :], out=result)
+    return result
+
+
+def _log_space_transition_matrix(rate_matrix, branch_length, squarings):
+    """Preserve positive rates too small to represent before squaring."""
+
+    num_states = len(rate_matrix)
+    diagonal = np.diag_indices(num_states)
+    time_mantissa, time_exponent = math.frexp(branch_length)
+    intensity = float(np.max(-rate_matrix[diagonal]))
+    intensity_mantissa, intensity_exponent = math.frexp(intensity)
+    scaled_intensity = math.ldexp(
+        intensity_mantissa * time_mantissa,
+        intensity_exponent + time_exponent - squarings,
+    )
+    # Form λI + Qt in log space. Combine binary exponents before converting
+    # to logs so the common shift cannot cancel large log magnitudes.
+    jump_rates = rate_matrix.copy()
+    jump_rates[diagonal] += intensity
+    mantissas, exponents = np.frexp(jump_rates)
+    jump = _log_probabilities(mantissas * time_mantissa) + (
+        exponents.astype(int) + time_exponent - squarings
+    ) * math.log(2.0)
+    term = np.full_like(jump, -math.inf)
+    term[diagonal] = 0.0
+    result = term.copy()
+    for count in range(1, num_states + 32):
+        term = _log_matrix_product(term, jump) - math.log(count)
+        updated = np.logaddexp(result, term)
+        if count >= num_states and np.array_equal(updated, result):
+            break
+        result = updated
+    result -= scaled_intensity
+    log_minimum = math.log(np.finfo(float).tiny)
+    for step in range(squarings):
+        if float(np.min(result[result != -math.inf])) >= log_minimum:
+            # Once all positive entries are representable, finish with ordinary
+            # products to avoid accumulating log rounding at extreme exponents.
+            return _square_markov_matrix(np.exp(result), squarings - step, math.inf)
+        updated = _log_matrix_product(result, result)
+        updated -= logsumexp(updated, axis=1, keepdims=True)
+        if np.array_equal(result, updated):
+            break
+        result = updated
+    return _validated_transition_matrix(np.exp(result), math.inf)
 
 
 def _exponentiate_generator(exponent, sparse_rates):

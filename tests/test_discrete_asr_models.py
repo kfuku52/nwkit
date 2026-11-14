@@ -343,6 +343,21 @@ def test_transition_matrix_preserves_slow_changes_on_extreme_long_branches():
     np.testing.assert_allclose(transition.sum(axis=1), 1.0, atol=1e-15)
 
 
+def test_transition_matrix_keeps_slow_rates_below_scaled_float_range():
+    fast = 1e100
+    slow = 1e-230
+    matrix = np.array(
+        [[-fast, fast, 0.0], [fast, -fast, slow], [0.0, 2 * slow, -2 * slow]]
+    )
+    transition = asr._transition_matrix(matrix, 1e230)
+    # The two fast states equilibrate on a negligible timescale. Their
+    # aggregate exits at slow/2 and the third state exits at 2*slow.
+    stay = 0.2 + 0.8 * math.exp(-2.5)
+    expected = [(1.0 - stay) / 2.0, (1.0 - stay) / 2.0, stay]
+    np.testing.assert_allclose(transition[2], expected, rtol=5e-11)
+    np.testing.assert_allclose(transition.sum(axis=1), 1.0, atol=1e-15)
+
+
 @pytest.mark.parametrize("model", ["ER", "F81", "GTR"])
 def test_prior_only_asr_rejects_fitted_transition_processes(model):
     tree = tree_from("(A:1,B:2,C:3)R;")
