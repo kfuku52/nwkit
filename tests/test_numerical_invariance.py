@@ -632,6 +632,42 @@ def test_beta_binomial_retains_endpoint_and_interior_mass_at_tiny_precision():
     assert simulated.mean() == pytest.approx(3.0, abs=0.16)
 
 
+@pytest.mark.parametrize(
+    "precision, trials, value, linear, expected",
+    [
+        (2e12, 10.0, 0.0, 0.0, (-6.931471805576953, 4.9999999999775, 2.4999999999775)),
+        (1e308, 10.0, 5.0, 0.0, (-1.4020427180880297, 0.0, 2.5)),
+        (1e100, 1e200, 5e199, 0.0, (-345.6135553017516, 0.0, 2.5e99)),
+        (
+            1e308,
+            1e308,
+            1e307,
+            0.0,
+            (-2.0349845015839338e307, 2.118244650968009e307, 1.0119047619047619e307),
+        ),
+    ],
+)
+def test_beta_binomial_preserves_mass_and_derivatives_at_high_precision(
+    precision, trials, value, linear, expected
+):
+    # Values from the log-gamma and polygamma definitions at 770 digits.
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        log_mass, gradient, curvature = _scalar_terms(
+            np.array([value]),
+            np.array([linear]),
+            family="beta-binomial",
+            dispersion=precision,
+            zero_probability=None,
+            offset=np.zeros(1),
+            trials=np.array([trials]),
+            censor_lower=None,
+            censor_upper=None,
+        )
+    np.testing.assert_allclose(
+        [log_mass, gradient[0], curvature[0]], expected, rtol=1e-11
+    )
+
+
 def test_gamma_likelihood_and_derivatives_scale_with_response_units():
     values = np.array([0.75, 2.0, 3.0])
     linear = np.array([0.3, -0.2, 0.6])

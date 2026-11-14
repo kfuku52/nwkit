@@ -1138,7 +1138,7 @@ def _negative_binomial_with_large_counts(
     inverse_total = np.exp(-np.logaddexp(log_count, -log_dispersion))
     peak += _stirling_log_gamma_correction_from_inverse(inverse_total)
     result[large] = peak - _negative_binomial_deviance(
-        log_means[large] - log_count, log_count, log_ratio, dispersion
+        log_means[large] - log_count, log_count, log_ratio, log_dispersion
     )
     return result
 
@@ -1155,7 +1155,7 @@ def _negative_binomial_size_correction(dispersion):
     )
 
 
-def _negative_binomial_deviance(relative, log_count, log_ratio, dispersion):
+def _negative_binomial_deviance(relative, log_count, log_ratio, log_dispersion):
     with np.errstate(over="ignore", invalid="ignore", under="ignore", divide="ignore"):
         log_q = -np.logaddexp(0.0, log_ratio)
         log_p = -np.logaddexp(0.0, -log_ratio)
@@ -1169,7 +1169,11 @@ def _negative_binomial_deviance(relative, log_count, log_ratio, dispersion):
         previous = log_ratio[far]
         new = previous + change
         deviance[far] = _far_negative_binomial_deviance(
-            change, previous, new, log_count[far], dispersion
+            change,
+            previous,
+            new,
+            log_count[far],
+            np.broadcast_to(log_dispersion, relative.shape)[far],
         )
         return np.where(np.isinf(relative), np.inf, deviance)
 
@@ -1188,7 +1192,7 @@ def _nearby_negative_binomial_deviance(relative, log_count, log_q, log_p):
     return remainder + ((scale * direction) * direction) * ratio**2 * correction
 
 
-def _far_negative_binomial_deviance(change, previous, new, log_count, dispersion):
+def _far_negative_binomial_deviance(change, previous, new, log_count, log_dispersion):
     # Orient the softplus difference so that its arguments have a nonpositive
     # average. Keep the multiplication by the shape in logarithmic units.
     mostly_failures = (previous + 0.5 * change) > 0.0
@@ -1202,10 +1206,10 @@ def _far_negative_binomial_deviance(change, previous, new, log_count, dispersion
     tail = high < -36.0
     log_difference = np.log(difference)
     log_difference[tail] = high[tail] + np.log(-np.expm1(low[tail] - high[tail]))
-    coefficient = np.logaddexp(log_count, -math.log(dispersion))
+    coefficient = np.logaddexp(log_count, -log_dispersion)
     log_term = coefficient + log_difference
     log_linear = np.log(np.abs(change)) + np.where(
-        mostly_failures, -math.log(dispersion), log_count
+        mostly_failures, -log_dispersion, log_count
     )
     larger, smaller = np.maximum(log_term, log_linear), np.minimum(log_term, log_linear)
     log_deviance = larger + np.log(-np.expm1(smaller - larger))
@@ -1447,6 +1451,16 @@ def _beta_stirling_terms(shape):
     return normalizer, score, curvature
 
 
+@lru_cache(maxsize=1024)
+def _precise_log_odds(value, total=1.0):
+    with localcontext() as context:
+        context.prec = 80
+        observed = Decimal.from_float(value)
+        logit = observed.ln() - (Decimal.from_float(total) - observed).ln()
+        leading = float(logit)
+        return leading, float(logit - Decimal.from_float(leading))
+
+
 def _beta_weighted_divergence(observed, fitted, difference, precision):
     relative = difference / fitted
     close = np.abs(relative) < 0.1
@@ -1462,16 +1476,6 @@ def _beta_weighted_divergence(observed, fitted, difference, precision):
     return result
 
 
-@lru_cache(maxsize=1024)
-def _beta_observation_logit(value):
-    with localcontext() as context:
-        context.prec = 80
-        observed = Decimal.from_float(value)
-        logit = observed.ln() - (1 - observed).ln()
-        leading = float(logit)
-        return leading, float(logit - Decimal.from_float(leading))
-
-
 def _beta_logit_difference(values, eta, log_values, log_complement):
     observed_logit = log_values - log_complement
     difference = eta - observed_logit
@@ -1479,17 +1483,22 @@ def _beta_logit_difference(values, eta, log_values, log_complement):
     # an ulp of the observed logit. Keep the logit's residual near the mode.
     near = np.abs(difference) < 1e-3 * np.abs(observed_logit)
     for index in np.flatnonzero(near):
-        leading, trailing = _beta_observation_logit(float(values[index]))
+        leading, trailing = _precise_log_odds(float(values[index]))
         difference[index] = (eta[index] - leading) - trailing
     return difference
 
 
-def _large_beta_terms(values, linear, precision):
+def _beta_logit_probabilities(linear):
     logit_lower = math.log(1e-10) - math.log1p(-1e-10)
     max_mean = 1.0 - 1e-10
     logit_upper = math.log(max_mean) - math.log1p(-max_mean)
     eta = np.clip(linear, logit_lower, logit_upper)
-    mean, complement = expit(eta), expit(-eta)
+    active = (linear > logit_lower) & (linear < logit_upper)
+    return eta, expit(eta), expit(-eta), active
+
+
+def _large_beta_terms(values, linear, precision):
+    eta, mean, complement, active = _beta_logit_probabilities(linear)
     log_values, log_complement = np.log(values), np.log1p(-values)
     eta_difference = _beta_logit_difference(values, eta, log_values, log_complement)
     near = np.abs(eta_difference) < 0.1
@@ -1534,12 +1543,167 @@ def _large_beta_terms(values, linear, precision):
             - divergence
         )
         likelihood = float(np.sum(density))
-    active = (linear > logit_lower) & (linear < logit_upper)
     return (
         likelihood,
         np.where(active, gradient, 0.0),
         np.where(active, curvature, 0.0),
     )
+
+
+def _large_beta_binomial_components(counts, trials, mean, shape, residual):
+    """Negative-binomial mass and scaled shape derivative remainders."""
+    inverse_shape = 1.0 / shape
+    # Both count components have the same NB success probability. Choose it
+    # to put their sum at the observed trial count.
+    log_trials = np.log(trials)
+    log_means = log_trials + np.log(mean)
+    log_shape = np.log(shape)
+    log_relative_mean = log_trials - (log_shape - np.log(mean))
+    log_zero = -shape * np.logaddexp(0.0, log_relative_mean)
+    tiny = log_relative_mean < -36.0
+    log_zero[tiny] = -(trials[tiny] * mean[tiny])
+    large = counts >= _LARGE_POISSON_COUNT
+    small = ~large
+    mass = np.empty_like(counts)
+    small_counts = counts[small]
+    mass[small] = (
+        _small_dispersion_log_rising_factorial(small_counts, inverse_shape[small])
+        - gammaln(small_counts + 1.0)
+        + small_counts
+        * (log_means[small] - np.logaddexp(0.0, log_relative_mean[small]))
+        + log_zero[small]
+    )
+    selected = counts[large]
+    log_count = np.log(selected)
+    log_ratio = log_count - log_shape[large]
+    log_total = np.logaddexp(log_count, log_shape[large])
+    log_difference = log_means[large] - log_count
+    with np.errstate(over="ignore"):
+        relative = residual[large] / selected
+    close = np.abs(relative) < 0.1
+    log_difference[close] = np.log1p(relative[close])
+    mass[large] = (
+        -0.5 * (math.log(math.tau) + log_count + np.logaddexp(0.0, log_ratio))
+        - _stirling_log_gamma_correction_from_inverse(inverse_shape[large])
+        - _stirling_log_gamma_correction(selected)
+        + _stirling_log_gamma_correction_from_inverse(np.exp(-log_total))
+        - _negative_binomial_deviance(
+            log_difference, log_count, log_ratio, -log_shape[large]
+        )
+    )
+    log_factor = np.log1p(counts * inverse_shape)
+    score = -0.5 * np.expm1(-log_factor) - (inverse_shape / 12.0) * np.expm1(
+        -2.0 * log_factor
+    )
+    curvature = -0.5 * np.expm1(-2.0 * log_factor) - (inverse_shape / 6.0) * np.expm1(
+        -3.0 * log_factor
+    )
+    return mass, score, curvature
+
+
+def _large_beta_binomial_terms(values, linear, precision, trials):
+    eta, mean, complement, active = _beta_logit_probabilities(linear)
+    a, b = precision * mean, precision * complement
+    failures = trials - values
+    residual = _beta_binomial_residual(values, failures, trials, eta, mean, complement)
+    with np.errstate(over="ignore", divide="ignore", under="ignore"):
+        x_mass, x_score, x_curvature = _large_beta_binomial_components(
+            values, trials, mean, a, -residual
+        )
+        y_mass, y_score, y_curvature = _large_beta_binomial_components(
+            failures, trials, complement, b, residual
+        )
+        inverse_precision = 1.0 / precision
+        log_trial = np.log(trials)
+        relative_scale = np.logaddexp(0.0, log_trial - math.log(precision))
+        trial_correction = _stirling_log_gamma_correction(trials)
+        small_trials = trials < _LARGE_POISSON_COUNT
+        small_n = trials[small_trials]
+        log_n = log_trial[small_trials]
+        trial_correction[small_trials] = (
+            gammaln(small_n + 1.0)
+            - (small_n + 0.5) * log_n
+            + small_n
+            - 0.5 * math.log(math.tau)
+        )
+        total_mass = (
+            -0.5 * (math.log(math.tau) + log_trial + relative_scale)
+            - _stirling_log_gamma_correction_from_inverse(inverse_precision)
+            - trial_correction
+            + _stirling_log_gamma_correction_from_inverse(
+                np.exp(-np.logaddexp(log_trial, math.log(precision)))
+            )
+        )
+        mass = x_mass + y_mass - total_mass
+        relative_success = values / a
+        relative_failure = failures / b
+        difference = np.log1p(relative_success) - np.log1p(relative_failure)
+        nearby = np.abs(difference) < 0.1
+        # The scaled ratio keeps the denominator finite near the upper limit.
+        difference[nearby] = np.log1p(
+            (residual[nearby] / (1.0 + relative_failure[nearby]))
+            / (a[nearby] * complement[nearby])
+        )
+        gradient = (
+            -(a * complement) * difference - complement * x_score + mean * y_score
+        )
+        slope = complement - mean
+        curvature_correction = (
+            complement**2 * x_curvature
+            + mean**2 * y_curvature
+            + slope * (-complement * x_score + mean * y_score)
+        )
+        curvature = (
+            complement**2 * (values / (1.0 + relative_success))
+            + mean**2 * (failures / (1.0 + relative_failure))
+            - slope * (a * complement) * difference
+        ) + curvature_correction
+        # In the binomial limit the leading terms combine to n*m*(1-m).
+        # Expand log1p(s)-log1p(f) around s-f before this combination, so
+        # subtracting a saturated score cannot erase the remaining curvature.
+        small = np.maximum(relative_success, relative_failure) < 0.1
+        ratio = np.expm1(difference[small])
+        log_remainder = (ratio * ratio) * np.polynomial.polynomial.polyval(
+            ratio, _LOG1P_REMAINDER_SERIES
+        )
+        s, f = relative_success[small], relative_failure[small]
+        scaled_success = values[small] * (s / (1.0 + s))
+        scaled_failure = failures[small] * (f / (1.0 + f))
+        score_adjustment = (
+            residual[small] * (f / (1.0 + f))
+            - (a[small] * complement[small]) * log_remainder
+        )
+        curvature[small] = (
+            (trials[small] * mean[small]) * complement[small]
+            - complement[small] ** 2 * scaled_success
+            - mean[small] ** 2 * scaled_failure
+            + slope[small] * score_adjustment
+            + curvature_correction[small]
+        )
+        likelihood = float(np.sum(mass))
+    return (
+        likelihood,
+        np.where(active, gradient, 0.0),
+        np.where(active, curvature, 0.0),
+    )
+
+
+def _beta_binomial_residual(values, failures, trials, eta, mean, complement):
+    residual = np.where(
+        eta > 0.0,
+        trials * complement - failures,
+        values - trials * mean,
+    )
+    interior = (values > 0.0) & (failures > 0.0)
+    near = interior & (np.abs(residual) < 1e-3 * np.minimum(values, failures))
+    for index in np.flatnonzero(near):
+        leading, trailing = _precise_log_odds(
+            float(values[index]), float(trials[index])
+        )
+        change = math.expm1((eta[index] - leading) - trailing)
+        p = values[index] / trials[index]
+        residual[index] = -(p * failures[index]) * (change / (1.0 + p * change))
+    return residual
 
 
 def _standardized_censor_bounds(bounds, center, dispersion):
@@ -2116,6 +2280,8 @@ def _beta_family_terms(values, linear, dispersion, trials, family):
         raise ValueError("Beta-binomial responses require trial counts.")
     if dispersion is not None and 0.0 < dispersion < _SMALL_BETA_PRECISION:
         return _small_beta_binomial_terms(values, linear, dispersion, trials)
+    if dispersion is not None and dispersion >= _LARGE_GAMMA_SHAPE / 1e-10:
+        return _large_beta_binomial_terms(values, linear, dispersion, trials)
     contributions = _beta_binomial_log_likelihood(values, linear, dispersion, trials)
     gradient, curvature = _beta_binomial_scalar_terms(
         values, linear, dispersion, trials
