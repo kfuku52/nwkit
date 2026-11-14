@@ -65,7 +65,8 @@ class _Geometry:
     observed_distance: np.ndarray
     observed_left: np.ndarray
     observed_right: np.ndarray
-    observed_nodes: np.ndarray
+    unique_observed_nodes: np.ndarray
+    observed_node_inverse: np.ndarray
     lca: LcaIndex
     jump_lengths: tuple[np.ndarray, ...]
     time_scale: float = 1.0
@@ -81,15 +82,16 @@ class _Geometry:
 
     def cross(self, node):
         """One node's geometry, using O(observations) temporary storage."""
-        shared = np.empty(len(self.observed_nodes))
+        shared = np.empty(len(self.unique_observed_nodes))
         left = np.empty_like(shared)
         right = np.empty_like(shared)
-        for index, observed in enumerate(self.observed_nodes):
+        for index, observed in enumerate(self.unique_observed_nodes):
             ancestor = self.lca.common_ancestor_indices(node, int(observed))
             shared[index] = self.depths[ancestor]
             left[index] = self.path_length(node, ancestor)
             right[index] = self.path_length(int(observed), ancestor)
-        return shared, left, right
+        inverse = self.observed_node_inverse
+        return shared[inverse], left[inverse], right[inverse]
 
     def rescaled(self, scale):
         return replace(
@@ -256,8 +258,8 @@ def _geometry(data: _ObservationData) -> _Geometry:
         previous = jumps[-1]
         jumps.append(previous + previous[np.asarray(ancestors)])
 
-    observed_nodes = data.node_indices
-    count = len(observed_nodes)
+    unique_nodes, inverse_nodes = np.unique(data.node_indices, return_inverse=True)
+    count = len(unique_nodes)
     shared = np.empty((count, count), dtype=float)
     distance = np.empty((count, count), dtype=float)
     left = np.empty_like(distance)
@@ -269,14 +271,15 @@ def _geometry(data: _ObservationData) -> _Geometry:
         distance,
         left,
         right,
-        observed_nodes,
+        unique_nodes,
+        inverse_nodes,
         lca,
         tuple(jumps),
     )
     for first in range(count):
-        first_index = int(observed_nodes[first])
+        first_index = int(unique_nodes[first])
         for second in range(first + 1):
-            second_index = int(observed_nodes[second])
+            second_index = int(unique_nodes[second])
             ancestor = lca.common_ancestor_indices(first_index, second_index)
             shared_value = depths[ancestor]
             left_value = geometry.path_length(first_index, ancestor)
@@ -288,7 +291,21 @@ def _geometry(data: _ObservationData) -> _Geometry:
             right[first, second] = left[second, first] = right_value
     if np.any(~np.isfinite(distance)):
         raise ValueError("Multivariate tree distances exceed floating-point range.")
-    return geometry
+    return _expand_multivariate_geometry(geometry)
+
+
+def _expand_multivariate_geometry(geometry):
+    inverse = geometry.observed_node_inverse
+    if np.array_equal(inverse, np.arange(len(geometry.unique_observed_nodes))):
+        return geometry
+    indices = np.ix_(inverse, inverse)
+    return replace(
+        geometry,
+        observed_shared_depth=geometry.observed_shared_depth[indices],
+        observed_distance=geometry.observed_distance[indices],
+        observed_left=geometry.observed_left[indices],
+        observed_right=geometry.observed_right[indices],
+    )
 
 
 def _cached_geometry(data, cache):
