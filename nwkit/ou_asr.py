@@ -10,6 +10,7 @@ from scipy.optimize import minimize, minimize_scalar
 
 from nwkit.continuous_asr import (
     GaussianMarginal,
+    _brownian_observation_records,
     _finite_number,
     _ldexp,
     _observations_by_group,
@@ -236,7 +237,8 @@ def _prepare_data(
 ):
     node_groups, parents, lengths = _tree_groups(tree, validated=tree_validated)
     grouped, num_observed, exact_values = _observations_by_group(
-        tree, node_groups, values_by_leaf, standard_errors
+        node_groups,
+        _brownian_observation_records(tree, values_by_leaf, standard_errors),
     )
     all_records = [record for items in grouped.values() for record in items]
     raw_values = [value for value, _ in all_records]

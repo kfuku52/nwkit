@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from nwkit.continuous_asr import _fit_brownian_edges
+from nwkit.continuous_asr import _brownian_observation_records, _fit_brownian_edges
 from nwkit.evolution import (
     _prepare_edge_variance_transform,
     encoded_evolution_parameter,
@@ -119,6 +119,11 @@ def compute_transformed_bm_marginals(
         evolution_parameter = validate_evolution_parameter(model, evolution_parameter)
     # Geometry, including DELTA ultrametricity, is shared by all candidates.
     transform = _prepare_edge_variance_transform(tree, model, allow_zero=True)
+    observation_records = None
+    if evolution_parameter is None:
+        observation_records = tuple(
+            _brownian_observation_records(tree, values_by_leaf, standard_errors)
+        )
 
     def fit_at(parameter, *, compute_posterior=True):
         validated = validate_evolution_parameter(model, parameter)
@@ -137,6 +142,7 @@ def compute_transformed_bm_marginals(
             edge_length=variances.__getitem__,
             tree_validated=_tree_validated,
             compute_posterior=compute_posterior,
+            observation_records=observation_records,
         )
 
     if evolution_parameter is not None:

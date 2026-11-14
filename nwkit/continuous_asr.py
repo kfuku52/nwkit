@@ -198,24 +198,28 @@ def _tree_groups(tree, *, validated=False, edge_length=_raw_brownian_edge_length
     return node_groups, parents, lengths
 
 
-def _observations_by_group(tree, node_groups, values_by_leaf, standard_errors):
+def _brownian_observation_records(tree, values_by_leaf, standard_errors):
+    for leaf in tree.leaves():
+        name = str(leaf.name)
+        raw_value = values_by_leaf.get(name)
+        if raw_value is None:
+            continue
+        value = _finite_number(raw_value, f"Trait value for '{name}'")
+        if standard_errors is not None and name not in standard_errors:
+            raise ValueError(f"A standard error is required for observed tip '{name}'.")
+        error = _finite_number(
+            0.0 if standard_errors is None else standard_errors[name],
+            f"Standard error for '{name}'",
+            nonnegative=True,
+        )
+        yield leaf, value, error
+
+
+def _observations_by_group(node_groups, records):
     grouped: dict[int, list[tuple[float, float]]] = {}
     exact_by_group: dict[int, float] = {}
     num_observed = 0
-    for leaf in tree.leaves():
-        raw_value = values_by_leaf.get(str(leaf.name))
-        if raw_value is None:
-            continue
-        value = _finite_number(raw_value, f"Trait value for '{leaf.name}'")
-        if standard_errors is not None and str(leaf.name) not in standard_errors:
-            raise ValueError(
-                f"A standard error is required for observed tip '{leaf.name}'."
-            )
-        error = _finite_number(
-            0.0 if standard_errors is None else standard_errors[str(leaf.name)],
-            f"Standard error for '{leaf.name}'",
-            nonnegative=True,
-        )
+    for leaf, value, error in records:
         group = node_groups[leaf]
         num_observed += 1
         if error == 0.0 and group in exact_by_group:
@@ -271,12 +275,17 @@ def _prepare_data(
     tree_validated=False,
     edge_length=_raw_brownian_edge_length,
     half_quadratic=False,
+    observation_records=None,
 ):
     node_groups, parents, lengths = _tree_groups(
         tree, validated=tree_validated, edge_length=edge_length
     )
+    if observation_records is None:
+        observation_records = _brownian_observation_records(
+            tree, values_by_leaf, standard_errors
+        )
     grouped, count, exact_values = _observations_by_group(
-        tree, node_groups, values_by_leaf, standard_errors
+        node_groups, observation_records
     )
     center, trait_exponent, time_exponent = _scales(
         grouped, lengths, sigma2, trait_exponent_ceiling
@@ -595,6 +604,7 @@ def _fit_brownian_edges(
     edge_length,
     tree_validated,
     compute_posterior,
+    observation_records=None,
 ):
     if sigma2 is not None:
         sigma2 = _finite_number(sigma2, "--sigma2", nonnegative=True)
@@ -608,6 +618,7 @@ def _fit_brownian_edges(
             trait_exponent_ceiling=trait_exponent_ceiling,
             tree_validated=tree_validated,
             edge_length=edge_length,
+            observation_records=observation_records,
         )
         tree_validated = True
         rate = (
@@ -682,6 +693,7 @@ def _fit_brownian_edges(
             tree_validated=True,
             edge_length=edge_length,
             half_quadratic=True,
+            observation_records=observation_records,
         )
         log_likelihood = _brownian_tail_log_likelihood(
             likelihood_data, rate, residual_df
