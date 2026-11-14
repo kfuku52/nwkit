@@ -184,6 +184,37 @@ def _truncated_quantile(lower, upper, rng):
     return float(_ndtri_exp(min(0.0, log_cdf)))
 
 
+def _narrow_interval_log_mass(lower, upper, a, b, sd):
+    if not math.isfinite(a) or b - a > 1e-12 * (1.0 + abs(a)):
+        return None
+    width = upper - lower
+    # In this regime the normal density changes by at most about one part in
+    # 1e8 across the interval. Work in raw units when CDF inversion loses width.
+    if width <= 0.0 or (width / sd) * (1.0 + abs(a)) > 1e-8:
+        return None
+    midpoint = 0.5 * a + 0.5 * b
+    return (
+        math.log(width)
+        - math.log(sd)
+        - (0.5 * midpoint) * midpoint
+        - 0.5 * math.log(math.tau)
+    )
+
+
+def _interval_log_mass(lower, upper, a, b, sd):
+    narrow_mass = _narrow_interval_log_mass(lower, upper, a, b, sd)
+    return _normal_interval_log_mass(a, b) if narrow_mass is None else narrow_mass
+
+
+def _interval_draw(lower, upper, a, b, mean, sd, rng):
+    narrow_mass = _narrow_interval_log_mass(lower, upper, a, b, sd)
+    if narrow_mass is not None:
+        return lower + float(rng.random()) * (upper - lower)
+    if not a < b:
+        raise ValueError("Could not resolve the allowed ordinal liability interval.")
+    return mean + sd * _truncated_quantile(a, b, rng)
+
+
 def _truncated_draw(mean, sd, allowed, thresholds, rng):
     if not math.isfinite(mean):
         raise ValueError("An ordinal liability conditional mean is not finite.")
@@ -192,7 +223,10 @@ def _truncated_draw(mean, sd, allowed, thresholds, rng):
     index = 0
     if len(intervals) > 1:
         log_masses = np.asarray(
-            [_normal_interval_log_mass(*pair) for pair in intervals]
+            [
+                _interval_log_mass(lower, upper, a, b, sd)
+                for (lower, upper), (a, b) in zip(bounds, intervals, strict=True)
+            ]
         )
         largest = float(np.max(log_masses))
         if not math.isfinite(largest):
@@ -203,9 +237,7 @@ def _truncated_draw(mean, sd, allowed, thresholds, rng):
         index = int(rng.choice(len(intervals), p=weights / weights.sum()))
     a, b = intervals[index]
     lower, upper = bounds[index]
-    if not a < b:
-        raise ValueError("Could not resolve the allowed ordinal liability interval.")
-    location = mean + sd * _truncated_quantile(a, b, rng)
+    location = _interval_draw(lower, upper, a, b, mean, sd, rng)
     if not math.isfinite(location):
         raise ValueError("A sampled ordinal liability exceeds floating-point range.")
     # Ordinal categories use (lower, upper]. A continuous tail draw can

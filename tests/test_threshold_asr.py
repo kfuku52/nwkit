@@ -83,6 +83,34 @@ def test_threshold_draw_reports_unrepresentable_tail_without_nonfinite_samples()
         _truncated_draw(0.0, 1.0, np.array([1]), np.array([1e200]), rng)
 
 
+@pytest.mark.parametrize("mean", [-1.0, 0.0])
+def test_threshold_draw_preserves_width_when_cdf_endpoints_coincide(mean):
+    width = 1e-200
+    rng = np.random.default_rng(3)
+    sample = np.array(
+        [
+            _truncated_draw(mean, 1.0, np.array([1]), np.array([0.0, width]), rng)
+            for _ in range(400)
+        ]
+    )
+    assert np.all((sample > 0.0) & (sample <= width))
+    assert np.mean(sample / width) == pytest.approx(0.5, abs=0.04)
+
+
+def test_disjoint_narrow_ordinal_intervals_are_selected_in_proportion_to_width():
+    width = 1e-200
+    thresholds = width * np.array([0, 1, 2, 4])
+    allowed = np.array([1, 3])
+    rng = np.random.default_rng(7)
+    sample = np.array(
+        [_truncated_draw(-1.0, 1.0, allowed, thresholds, rng) for _ in range(800)]
+    )
+    first = (sample > 0.0) & (sample <= width)
+    second = (sample > 2 * width) & (sample <= 4 * width)
+    assert np.all(first | second)
+    assert np.mean(second) == pytest.approx(2 / 3, abs=0.04)
+
+
 @pytest.mark.parametrize(
     ("lower", "upper"),
     [(-np.inf, -40.0), (40.0, 40.01), (-2.0, 3.0), (0.0, np.inf)],
