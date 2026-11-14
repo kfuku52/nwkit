@@ -134,6 +134,7 @@ _LARGE_NEGATIVE_BINOMIAL_COUNT = 1e6
 # Near 2**53 the log-count rounding error has no measurable likelihood cost.
 # At larger counts it can dominate the local count deviance and score.
 _HIGH_PRECISION_COUNT = 1e20
+_HIGH_PRECISION_GAMMA_SHAPE = 1e20
 _LOG_NORMAL_PROBABILITY_LIMIT = -math.log(np.finfo(float).tiny)
 _EXPONENTIAL_DEVIANCE_SERIES = tuple(
     1.0 / math.factorial(order) for order in range(2, 11)
@@ -1342,7 +1343,7 @@ def _gamma_log_likelihood(values, linear, dispersion):
     if dispersion is None or dispersion <= 0.0:
         raise ValueError("Gamma shape must be positive.")
     log_values = np.log(values)
-    log_ratio = log_values - linear
+    log_ratio = _gamma_log_mean_difference(values, linear, log_values, dispersion)
     return _gamma_log_density(log_values, log_ratio, dispersion)
 
 
@@ -1523,7 +1524,7 @@ def _precise_log_odds(value, total=1.0):
 
 
 @lru_cache(maxsize=1024)
-def _precise_log_count(value):
+def _split_positive_logarithm(value):
     with localcontext() as context:
         context.prec = 80
         logarithm = Decimal.from_float(value).ln()
@@ -1535,8 +1536,18 @@ def _count_log_mean_difference(values, log_means, log_counts):
     difference = log_means - log_counts
     near = (values >= _HIGH_PRECISION_COUNT) & (np.abs(difference) < 0.1)
     for index in np.flatnonzero(near):
-        leading, trailing = _precise_log_count(float(values[index]))
+        leading, trailing = _split_positive_logarithm(float(values[index]))
         difference[index] = (log_means[index] - leading) - trailing
+    return difference
+
+
+def _gamma_log_mean_difference(values, linear, log_values, shape):
+    difference = log_values - linear
+    if shape >= _HIGH_PRECISION_GAMMA_SHAPE:
+        near = (np.abs(difference) < 0.1) & (values != 1.0)
+        for index in np.flatnonzero(near):
+            leading, trailing = _split_positive_logarithm(float(values[index]))
+            difference[index] = (leading - linear[index]) + trailing
     return difference
 
 
@@ -2354,7 +2365,7 @@ def _zero_component_count_scalar_terms(
 
 def _gamma_scalar_terms(values, linear, dispersion):
     assert dispersion is not None
-    log_ratio = np.log(values) - linear
+    log_ratio = _gamma_log_mean_difference(values, linear, np.log(values), dispersion)
     with np.errstate(over="ignore"):
         curvature = np.exp(math.log(dispersion) + log_ratio)
         gradient = np.where(

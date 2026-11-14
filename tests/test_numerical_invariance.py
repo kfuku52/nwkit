@@ -806,6 +806,43 @@ def test_high_shape_gamma_log_density_resolves_variation_near_its_mean(shape):
     np.testing.assert_allclose(result, normal_limit, rtol=0.0, atol=5e-9)
 
 
+@pytest.mark.parametrize(
+    "response,eta,shape,expected",
+    [
+        (
+            2.0,
+            0.6931471805599453,
+            1e200,
+            (-2.6889890624053367e166, -2.3190468138462994e183, 1e200),
+        ),
+        (
+            1e308,
+            709.1962086421661,
+            1e100,
+            (-9.190435967449695e71, 1.3557607434536237e86, 9.999999999999864e99),
+        ),
+        (
+            0.9,
+            -0.10536051565782628,
+            1e100,
+            (-1.1568767549535953e65, -4.81014917638444e82, 1e100),
+        ),
+    ],
+)
+def test_high_shape_gamma_density_keeps_the_log_mean_rounding_residual(
+    response, eta, shape, expected
+):
+    # Reference from the Gamma density and its analytic derivatives at 600
+    # decimal digits, evaluated on the exact binary64 inputs.
+    values, linear = np.array([response]), np.array([eta])
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        likelihood = _gamma_log_likelihood(values, linear, shape)[0]
+        gradient, curvature = _gamma_scalar_terms(values, linear, shape)
+    np.testing.assert_allclose(
+        [likelihood, gradient[0], curvature[0]], expected, rtol=2e-13
+    )
+
+
 def test_lognormal_score_avoids_overflow_in_squared_dispersion():
     gradient, curvature = _lognormal_scalar_terms(
         np.ones(2), np.array([1e308, -1e308]), 1e155
