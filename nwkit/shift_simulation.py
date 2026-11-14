@@ -149,12 +149,14 @@ def simulate_shift(spec, replicates=1, *, seed=1):
         compiled_tree=spec.tree.compiled,
     )
     values = latent[:, spec.tree.compiled.leaf_indices, :].copy()
-    rng = np.random.default_rng(error_seed)
-    for i in range(len(spec.tree.leaf_names)):
-        covariance = spec.measurement_covariance + np.diag(spec.sampling_variances[i])
-        values[:, i] += rng.multivariate_normal(
-            np.zeros(p), covariance, size=replicates, check_valid="raise"
-        )
+    if np.any(spec.measurement_covariance) or np.any(spec.sampling_variances):
+        rng = np.random.default_rng(error_seed)
+        zero = np.zeros(p)
+        for i, sampling in enumerate(spec.sampling_variances):
+            covariance = spec.measurement_covariance + np.diag(sampling)
+            values[:, i] += rng.multivariate_normal(
+                zero, covariance, size=replicates, check_valid="raise"
+            )
     latent += baseline
     values += baseline
     values[:, spec.missing] = np.nan
