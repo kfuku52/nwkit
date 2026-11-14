@@ -98,19 +98,15 @@ def simulated_vector_observations(
         root_values=root_values,
     )
     rng = np.random.default_rng(error_seed)
+    draw = _zero_mean_draws(rng, process.dimension, num_samples)
     result = [dict.fromkeys(observed) for _ in range(num_samples)]
     for index, node in enumerate(nodes):
         name = str(node.name)
         if not node.is_leaf or observed.get(name) is None:
             continue
-        values = latent[:, index].copy()
+        values = latent[:, index]
         if errors is not None:
-            values += rng.multivariate_normal(
-                np.zeros(process.dimension),
-                errors[name],
-                size=num_samples,
-                check_valid="raise",
-            )
+            values = values + draw(errors[name])
         for replicate in range(num_samples):
             result[replicate][name] = [
                 None if original is None else float(value)
