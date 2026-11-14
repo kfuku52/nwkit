@@ -1,6 +1,5 @@
 """Joint multivariate Gaussian phylogenetic regression with missing responses."""
 
-import math
 import warnings
 from dataclasses import dataclass
 from functools import lru_cache
@@ -11,7 +10,11 @@ from scipy import sparse
 from scipy.linalg import cho_solve, solve_triangular
 from scipy.optimize import minimize
 
-from nwkit.gaussian import DiagonalLowRankCovariance, materialize_covariance
+from nwkit.gaussian import (
+    DiagonalLowRankCovariance,
+    materialize_covariance,
+    validate_psd_covariance,
+)
 from nwkit.sparse_laplace import (
     SparseCovarianceModel,
     factor_sparse_nonsingular,
@@ -97,15 +100,7 @@ def _validate_psd_covariance(matrix, size, label):
     matrix = np.asarray(matrix, dtype=float)
     if matrix.shape != (size, size) or not np.isfinite(matrix).all():
         raise ValueError("{} has invalid dimensions or values.".format(label))
-    _, exponent = math.frexp(float(np.max(np.abs(matrix))))
-    scaled = np.ldexp(matrix, -exponent)
-    tolerance = np.finfo(float).eps * size * 100.0
-    if float(np.max(np.abs(scaled - scaled.T))) > tolerance:
-        raise ValueError("{} must be symmetric.".format(label))
-    symmetric = 0.5 * (scaled + scaled.T)
-    if float(np.min(np.linalg.eigvalsh(symmetric))) < -tolerance:
-        raise ValueError("{} must be positive semidefinite.".format(label))
-    return np.where(matrix == matrix.T, matrix, np.ldexp(symmetric, exponent))
+    return validate_psd_covariance(matrix, label)
 
 
 def _fixed_covariance_is_sparse_capable(fixed_covariance):

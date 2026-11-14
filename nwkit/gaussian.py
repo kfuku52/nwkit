@@ -261,6 +261,39 @@ def is_diagonal(matrix: np.ndarray) -> bool:
     return True
 
 
+def validate_psd_covariance(matrix, label, *, zero_roundoff=False):
+    """Validate symmetry and nonnegative eigenvalues in covariance units."""
+    matrix = np.asarray(matrix, dtype=float)
+    if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
+        raise ValueError("{} must be a square matrix.".format(label))
+    if not np.isfinite(matrix).all():
+        raise ValueError("{} must contain finite values.".format(label))
+    relative_tolerance = np.finfo(float).eps * len(matrix) * 100.0
+    if is_diagonal(matrix):
+        diagonal = np.diag(matrix)
+        magnitude = float(np.max(np.abs(diagonal), initial=0.0))
+        _, exponent = math.frexp(magnitude)
+        scaled_diagonal = np.ldexp(diagonal, -exponent)
+        if float(np.min(scaled_diagonal, initial=0.0)) < -relative_tolerance:
+            raise ValueError("{} must be positive semidefinite.".format(label))
+        if zero_roundoff:
+            return np.diag(
+                np.where(np.abs(scaled_diagonal) < relative_tolerance, 0.0, diagonal)
+            )
+        return matrix.copy()
+    _, exponent = math.frexp(float(np.max(np.abs(matrix))))
+    scaled = np.ldexp(matrix, -exponent)
+    if float(np.max(np.abs(scaled - scaled.T))) > relative_tolerance:
+        raise ValueError("{} must be symmetric.".format(label))
+    symmetric = 0.5 * (scaled + scaled.T)
+    if float(np.min(np.linalg.eigvalsh(symmetric))) < -relative_tolerance:
+        raise ValueError("{} must be positive semidefinite.".format(label))
+    restored = np.where(matrix == matrix.T, matrix, np.ldexp(symmetric, exponent))
+    if zero_roundoff:
+        restored[np.abs(symmetric) < relative_tolerance] = 0.0
+    return restored
+
+
 def factor_covariance(covariance: np.ndarray) -> np.ndarray:
     """Factor a positive-definite covariance, preserving diagonal structure."""
     covariance = np.asarray(covariance, dtype=float)

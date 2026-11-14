@@ -15,6 +15,7 @@ from nwkit.evolution import (
 )
 from nwkit.gaussian import DiagonalLowRankCovariance
 from nwkit.measurement_error import (
+    _positive_semidefinite,
     fit_conditional_eiv_gaussian,
     fit_factor_latent_predictor,
     fit_latent_predictor,
@@ -39,6 +40,20 @@ def _data():
     rng = np.random.default_rng(52)
     x = rng.normal(size=40)
     return np.column_stack([np.ones(40), x]), 2.0 + 0.5 * x + rng.normal(size=40)
+
+
+@pytest.mark.parametrize(
+    "validate", [regress._validate_covariance_matrix, _positive_semidefinite]
+)
+@pytest.mark.parametrize("diagonal", [False, True])
+def test_gaussian_covariance_readers_retain_small_variances(validate, diagonal):
+    values = np.ldexp(np.array([[1.0, 0.25], [0.25, 0.5]]), -1050)
+    if diagonal:
+        values = np.diag(np.diag(values))
+    with np.errstate(over="raise", invalid="raise"):
+        np.testing.assert_array_equal(validate(values, "Sampling covariance"), values)
+        with pytest.raises(ValueError, match="positive semidefinite"):
+            validate(-values, "Sampling covariance")
 
 
 @pytest.mark.parametrize("sampling", [0.0, 0.1])

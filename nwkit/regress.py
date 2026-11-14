@@ -28,6 +28,7 @@ from nwkit.gaussian import (
     materialize_covariance,
     residual_variance_scale,
     solve_factor,
+    validate_psd_covariance,
 )
 from nwkit.measurement_error import (
     _predictor_error_variance_diagonal,
@@ -778,24 +779,7 @@ def _prepare_sampling_covariance(
 
 
 def _validate_covariance_matrix(matrix, label):
-    matrix = np.asarray(matrix, dtype=float)
-    if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
-        raise ValueError("{} must be a square matrix.".format(label))
-    if not np.isfinite(matrix).all():
-        raise ValueError("{} must contain finite values.".format(label))
-    symmetric = (matrix + matrix.T) / 2.0
-    asymmetry = float(np.max(np.abs(matrix - matrix.T))) if matrix.size else 0.0
-    scale = max(1.0, float(np.max(np.abs(symmetric))) if matrix.size else 1.0)
-    tolerance = np.finfo(float).eps * scale * max(1, len(matrix)) * 100.0
-    if asymmetry > tolerance:
-        raise ValueError("{} must be symmetric.".format(label))
-    eigenvalues = (
-        np.diag(symmetric) if is_diagonal(symmetric) else np.linalg.eigvalsh(symmetric)
-    )
-    if eigenvalues.size and float(eigenvalues.min()) < -tolerance:
-        raise ValueError("{} must be positive semidefinite.".format(label))
-    symmetric[np.abs(symmetric) < tolerance] = 0.0
-    return symmetric
+    return validate_psd_covariance(matrix, label, zero_roundoff=True)
 
 
 def _validate_factor_covariance(covariance, size, label):

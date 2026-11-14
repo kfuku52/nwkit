@@ -25,6 +25,7 @@ from nwkit.gaussian import (
     residual_variance_scale,
     solve_factor,
     sparse_precision_update_diagonal,
+    validate_psd_covariance,
 )
 from nwkit.optimization import FitResourceError
 from nwkit.sparse_laplace import (
@@ -73,23 +74,7 @@ class SparseLatentPredictorPosterior:
 
 
 def _positive_semidefinite(matrix, label):
-    matrix = np.asarray(matrix, dtype=float)
-    if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
-        raise ValueError("{} must be a square matrix.".format(label))
-    if not np.isfinite(matrix).all():
-        raise ValueError("{} must contain finite values.".format(label))
-    symmetric = (matrix + matrix.T) / 2.0
-    scale = max(1.0, float(np.max(np.abs(symmetric))) if matrix.size else 1.0)
-    tolerance = np.finfo(float).eps * scale * max(1, len(matrix)) * 100.0
-    if matrix.size and float(np.max(np.abs(matrix - matrix.T))) > tolerance:
-        raise ValueError("{} must be symmetric.".format(label))
-    eigenvalues = (
-        np.diag(symmetric) if is_diagonal(symmetric) else np.linalg.eigvalsh(symmetric)
-    )
-    if eigenvalues.size and float(eigenvalues.min()) < -tolerance:
-        raise ValueError("{} must be positive semidefinite.".format(label))
-    symmetric[np.abs(symmetric) < tolerance] = 0.0
-    return symmetric
+    return validate_psd_covariance(matrix, label, zero_roundoff=True)
 
 
 def _solve(cholesky, values):
