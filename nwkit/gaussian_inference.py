@@ -15,6 +15,7 @@ import numpy as np
 
 from nwkit.compiled_tree import CompiledTree
 from nwkit.gaussian_tree import (
+    GaussianTransition,
     GaussianTreeProcess,
     _mean_at_tiny_variance_ratio,
     _propagated_variance,
@@ -687,6 +688,45 @@ def _draw_factor(factor, rng):
     return float(rng.normal(factor.mean, math.sqrt(factor.variance)))
 
 
+def _posterior_draw_parameters(messages: _MessagePass):
+    """Prepare conditional weights and standard deviations for every branch."""
+    parameters: list[
+        tuple[
+            GaussianTransition, _Factor, float, tuple[float, float, float, float] | None
+        ]
+    ] = []
+    for index, node in enumerate(messages.compiled.nodes[1:], start=1):
+        transition = messages.process.transitions[node]
+        factor = messages.inside[index]
+        variance = transition.variance
+        if factor.mean is None or variance == 0.0:
+            parameters.append((transition, factor, math.sqrt(variance), None))
+            continue
+        total = variance + factor.variance
+        if not math.isfinite(total):
+            raise ValueError(
+                "A conditional Gaussian variance exceeds floating-point range."
+            )
+        larger = max(variance, factor.variance)
+        smaller = min(variance, factor.variance)
+        ratio = smaller / larger
+        denominator = 1.0 + ratio
+        conditional_variance = smaller / denominator
+        if factor.variance > 0.0 and conditional_variance == 0.0:
+            raise ValueError("A positive Gaussian variance underflowed during pruning.")
+        prior_weight = (factor.variance / larger) / denominator
+        observed_weight = (variance / larger) / denominator
+        parameters.append(
+            (
+                transition,
+                factor,
+                math.sqrt(conditional_variance),
+                (prior_weight, observed_weight, math.sqrt(total), ratio),
+            )
+        )
+    return parameters
+
+
 def sample_gaussian_posterior(
     process: GaussianTreeProcess,
     values_by_leaf: Mapping[str, float | None],
@@ -712,21 +752,40 @@ def sample_gaussian_posterior(
     )
     rng = np.random.default_rng(seed)
     draws = np.empty((num_samples, len(messages.compiled.nodes)), dtype=float)
-    for sample_index in range(num_samples):
-        draws[sample_index, 0] = _draw_factor(messages.root_posterior, rng)
-        for node_index in range(1, len(messages.compiled.nodes)):
+    branches = _posterior_draw_parameters(messages)
+    for draw in draws:
+        draw[0] = _draw_factor(messages.root_posterior, rng)
+        for node_index, (transition, factor, deviation, prepared) in enumerate(
+            branches, start=1
+        ):
             parent = messages.compiled.parents[node_index]
-            transition = messages.process.transitions[
-                messages.compiled.nodes[node_index]
-            ]
-            prior = _Factor(
-                transition.slope * draws[sample_index, parent] + transition.intercept,
-                transition.variance,
-            )
-            conditional = _combine(prior, messages.inside[node_index])
-            draws[sample_index, node_index] = _draw_factor(conditional, rng)
-    draws = messages.center + np.ldexp(draws, messages.exponent)
-    if np.any(~np.isfinite(draws)):
+            mean = transition.slope * float(draw[parent]) + transition.intercept
+            if factor.mean is None:
+                if deviation > 0.0:
+                    mean = rng.normal(mean, deviation)
+            elif prepared is None:
+                conditional = _combine(_Factor(mean, transition.variance), factor)
+                mean = _draw_factor(conditional, rng)
+            else:
+                prior_weight, observed_weight, overlap_deviation, ratio = prepared
+                # Match _combine's overlap check without evaluating the log density.
+                standardized = (mean - factor.mean) / overlap_deviation
+                if not math.isfinite(standardized * standardized):
+                    raise ValueError("Observed values have zero Gaussian likelihood.")
+                if factor.variance == 0.0:
+                    mean = factor.mean
+                else:
+                    if ratio < float_info.min:
+                        mean = _mean_at_tiny_variance_ratio(
+                            mean, factor.mean, transition.variance, factor.variance
+                        )
+                    else:
+                        mean = prior_weight * mean + observed_weight * factor.mean
+                    mean = rng.normal(mean, deviation)
+            draw[node_index] = mean
+    np.ldexp(draws, messages.exponent, out=draws)
+    np.add(messages.center, draws, out=draws)
+    if not np.isfinite(draws).all():
         raise ValueError("A posterior Gaussian sample exceeds floating-point range.")
     return GaussianSamples(messages.compiled.nodes, draws)
 
