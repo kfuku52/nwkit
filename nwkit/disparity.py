@@ -383,8 +383,7 @@ def _simulate_chunk(payload):
             )
         disparities = _batched_relative_disparities(design, values, counts)
         del values
-        for column in range(replicas):
-            curves[start + column] = design.weights @ disparities[:, column]
+        curves[start : start + replicas] = (design.weights @ disparities).T
         del disparities
     return curves
 
