@@ -17,6 +17,7 @@ _TRANSITION_CACHE_BYTES = 8 * 1024**2
 _TRANSITION_CACHE_ENTRIES = 4096
 _EMISSION_CACHE_BYTES = 16 * 1024**2
 _SELECTION_PROBABILITY_FLOOR = np.finfo(float).tiny / np.finfo(float).eps
+_GEOMETRIC_RECURRENCE_MIN_COUNT = 256
 
 
 def _log_pruning_contribution(matrix, values):
@@ -89,13 +90,31 @@ def birth_death_transition(
     a, b, survival, geometric_success = _birth_death_probabilities(
         duplication, loss, time
     )
+    coefficient = survival * geometric_success
+    if max_count >= _GEOMETRIC_RECURRENCE_MIN_COUNT:
+        return _geometric_transition(a, b, coefficient, max_count)
     one = np.empty(max_count + 1)
     one[0] = a
-    one[1:] = survival * geometric_success * b ** np.arange(max_count)
+    one[1:] = coefficient * b ** np.arange(max_count)
     result = np.zeros((max_count + 1, max_count + 1))
     result[0, 0] = 1.0
     for count in range(1, max_count + 1):
         result[count] = np.convolve(result[count - 1], one)[: max_count + 1]
+    return result
+
+
+def _geometric_transition(extinction, geometric_ratio, coefficient, max_count):
+    from scipy.signal import lfilter
+
+    # Convolution with the geometric tail obeys g[j] = c*p[j-1] + b*g[j-1].
+    # Evaluate it in C for each ancestral count, without subtractive cancellation.
+    result = np.zeros((max_count + 1, max_count + 1))
+    result[0, 0] = 1.0
+    numerator, denominator = (coefficient,), (1.0, -geometric_ratio)
+    for count in range(1, max_count + 1):
+        previous = result[count - 1]
+        result[count] = extinction * previous
+        result[count, 1:] += lfilter(numerator, denominator, previous[:-1])
     return result
 
 

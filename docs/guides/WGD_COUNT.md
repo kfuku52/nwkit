@@ -95,6 +95,11 @@ State probabilities and root tails are never renormalized to hide omitted
 mass. Every fitted model is checked by doubling the maximum count state and
 requiring the maximum per-family log-likelihood change to be below
 `--state-tolerance`. Failed optimization or truncation checks abort the scan.
+The initial upper count is `max(8, largest observed count + 2)`, so
+`--max-states` must allow at least twice that value. If the input does not
+fit, the command reports the largest observed count, its family and species,
+and the lower bound on the required setting. This is not a recommendation to
+discard high-copy families or a guarantee of convergence at that setting.
 This is a numerical convergence diagnostic, not a mathematical uniform error
 bound over all parameter values. Numerical rate bounds and root-mean upper
 bounds are recorded in JSON; inspect `nuisance_bound_reached`.

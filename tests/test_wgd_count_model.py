@@ -174,6 +174,36 @@ def test_log_branching_kernel_matches_probability_kernel(duplication, loss):
 
 
 @pytest.mark.parametrize(
+    "rates_time",
+    [
+        (0, 0, 10),
+        (0, 0.02, 10),
+        (0.03, 0, 10),
+        (0.02, 0.02, 40),
+        (0.01, 0.03, 100),
+        (0.03, 0.01, 100),
+        (1e-8, 0.4, 500),
+        (0.4, 1e-8, 500),
+    ],
+)
+def test_large_count_geometric_recurrence_matches_convolution_and_log_kernel(
+    rates_time, monkeypatch
+):
+    bound = 275
+    actual = birth_death_transition(*rates_time, bound)
+    monkeypatch.setattr(wgd_count_model, "_GEOMETRIC_RECURRENCE_MIN_COUNT", bound + 1)
+    expected = birth_death_transition(*rates_time, bound)
+    assert np.all(actual >= 0)
+    assert np.all(actual.sum(axis=1) <= 1 + 1e-12)
+    np.testing.assert_allclose(actual, expected, rtol=4e-12, atol=5e-323)
+    representable = actual > 1e-280
+    log_probs = _birth_death_log_transition(*rates_time, bound)
+    np.testing.assert_allclose(
+        np.log(actual[representable]), log_probs[representable], rtol=0, atol=2e-11
+    )
+
+
+@pytest.mark.parametrize(
     "duplication,loss", [(0.2, 0.3), (0.2, 0.2), (0.2, 0), (0, 0.3), (1e-8, 0)]
 )
 def test_log_branching_prefix_does_not_depend_on_global_state_bound(duplication, loss):
