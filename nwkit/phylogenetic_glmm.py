@@ -2458,16 +2458,13 @@ def _fitted_random_covariance(
 
 def _draw_categorical_responses(
     rng: np.random.Generator,
-    response_values: Sequence[object],
-    design: np.ndarray,
+    totals: np.ndarray,
+    fixed: np.ndarray,
     fit: PhylogeneticGlmmFit,
     latent: np.ndarray,
 ) -> list[CategoricalObservation]:
-    counts = response_count_matrix(response_values, fit.levels)
-    totals = np.rint(counts.sum(axis=1)).astype(int)
-    fixed = design @ fit.coefficients
     if fit.family == "ordinal":
-        linear = fixed[:, 0] + latent.reshape(len(design))
+        linear = fixed[:, 0] + latent.reshape(len(fixed))
         with np.errstate(over="ignore"):
             centered = fit.thresholds[None, :] - linear[:, None]
         probabilities = np.exp(_ordinal_log_probabilities(centered, fit.thresholds))
@@ -2755,18 +2752,16 @@ def _draw_scalar_observations(
     raise ValueError("Unsupported scalar response family: {}.".format(family))
 
 
-def _draw_scalar_responses(
-    rng: np.random.Generator,
+def _prepare_scalar_bootstrap_responses(
     response_values: Sequence[object],
     design: np.ndarray,
     fit: PhylogeneticGlmmFit,
-    latent: np.ndarray,
     *,
     offset: Sequence[float] | None,
     trials: Sequence[float] | None,
     censor_lower: Sequence[float] | None,
     censor_upper: Sequence[float] | None,
-) -> list[object]:
+) -> Callable[[np.random.Generator, np.ndarray], list[object]]:
     (
         expanded_values,
         expanded_design,
@@ -2786,20 +2781,27 @@ def _draw_scalar_responses(
         censor_lower=expanded_lower,
         censor_upper=expanded_upper,
     )
-    linear = (expanded_design @ fit.coefficients)[:, 0] + latent.reshape(len(design))[
-        observation_to_tip
-    ]
-    simulated = _draw_scalar_observations(
-        rng,
-        linear,
-        family=fit.family,
-        dispersion=fit.dispersion,
-        zero_probability=fit.zero_probability,
-        offset=offsets,
-        trials=trial_values,
-        censor_lower=lower,
-        censor_upper=upper,
-    )
+    fixed = (expanded_design @ fit.coefficients)[:, 0]
+
+    def draw(rng, latent):
+        linear = fixed + latent.reshape(len(design))[observation_to_tip]
+        simulated = _draw_scalar_observations(
+            rng,
+            linear,
+            family=fit.family,
+            dispersion=fit.dispersion,
+            zero_probability=fit.zero_probability,
+            offset=offsets,
+            trials=trial_values,
+            censor_lower=lower,
+            censor_upper=upper,
+        )
+        return _pack_scalar_responses(response_values, simulated)
+
+    return draw
+
+
+def _pack_scalar_responses(response_values, simulated):
     packed: list[object] = []
     position = 0
     for original in response_values:
@@ -3492,22 +3494,23 @@ def _validate_glmm_call_options(options: _GlmmCallOptions) -> None:
         raise ValueError("seed must be a non-negative integer.")
 
 
-def _draw_bootstrap_responses(
-    rng,
+def _prepare_bootstrap_responses(
     response_values,
     design,
     fit,
-    latent,
     options: _GlmmCallOptions,
-) -> Sequence[object]:
+) -> Callable[[np.random.Generator, np.ndarray], Sequence[object]]:
     if options.family not in SCALAR_RESPONSE_FAMILIES:
-        return _draw_categorical_responses(rng, response_values, design, fit, latent)
-    return _draw_scalar_responses(
-        rng,
+        counts = response_count_matrix(response_values, fit.levels)
+        totals = np.rint(counts.sum(axis=1)).astype(int)
+        fixed = design @ fit.coefficients
+        return lambda rng, latent: _draw_categorical_responses(
+            rng, totals, fixed, fit, latent
+        )
+    return _prepare_scalar_bootstrap_responses(
         response_values,
         design,
         fit,
-        latent,
         offset=options.offset,
         trials=options.trials,
         censor_lower=options.censor_lower,
@@ -3580,6 +3583,9 @@ def _fit_parametric_bootstrap_glmm(
         reference=fit.reference or options.reference,
         compute_uncertainty=False,
     )
+    draw_responses = _prepare_bootstrap_responses(
+        response_values, design_array, fit, options
+    )
     while len(samples) < options.bootstrap_replicates and attempts < maximum_attempts:
         attempts += 1
         if sparse_sampler is not None:
@@ -3587,9 +3593,7 @@ def _fit_parametric_bootstrap_glmm(
         else:
             assert random_cholesky is not None
             latent = random_cholesky @ rng.normal(size=len(random_cholesky))
-        simulated = _draw_bootstrap_responses(
-            rng, response_values, design_array, fit, latent, options
-        )
+        simulated = draw_responses(rng, latent)
         try:
             refit = _fit_phylogenetic_glmm(
                 simulated, design_array, phylogenetic_covariance, refit_options
