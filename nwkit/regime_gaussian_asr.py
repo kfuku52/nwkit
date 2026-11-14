@@ -16,6 +16,7 @@ from nwkit.compiled_tree import CompiledTree
 from nwkit.continuous_asr import _ldexp
 from nwkit.gaussian_inference import (
     GaussianConditioningResult,
+    GaussianTreeLikelihood,
     condition_gaussian_tree,
     gaussian_process_parameter_rank,
     gaussian_tree_likelihood,
@@ -778,21 +779,22 @@ def compute_regime_ou_marginals(
             "regime map."
         )
 
-    def objective(parameters):
-        try:
-            return -gaussian_tree_likelihood(
-                process_for(parameters),
-                values_by_leaf,
-                standard_errors=standard_errors,
-                compiled_tree=compiled,
-            ).log_likelihood
-        except (ValueError, ArithmeticError, OverflowError):
-            return 1e100
-
     evaluate = (
         condition_gaussian_tree if _compute_posterior else gaussian_tree_likelihood
     )
     if names:
+        prepared_likelihood = GaussianTreeLikelihood.prepare(
+            compiled, values_by_leaf, standard_errors
+        )
+
+        def objective(parameters):
+            try:
+                return -prepared_likelihood.evaluate(
+                    process_for(parameters)
+                ).log_likelihood
+            except (ValueError, ArithmeticError, OverflowError):
+                return 1e100
+
         optimized = deterministic_multistart(
             objective,
             initial,

@@ -9,6 +9,7 @@ from nwkit.compiled_tree import CompiledTree
 from nwkit.continuous_asr import _ldexp
 from nwkit.gaussian_inference import (
     GaussianConditioningResult,
+    GaussianTreeLikelihood,
     condition_gaussian_tree,
     gaussian_process_parameter_rank,
     gaussian_tree_likelihood,
@@ -221,21 +222,22 @@ def compute_general_ou_marginals(
             "mean/covariance design; fix alpha, sigma2, or theta."
         )
 
-    def objective(parameters):
-        try:
-            result = gaussian_tree_likelihood(
-                process_for(parameters),
-                values_by_leaf,
-                standard_errors=standard_errors,
-                compiled_tree=compiled,
-            )
-        except (ValueError, ArithmeticError, OverflowError):
-            return 1e100
-        if not math.isfinite(result.log_likelihood):
-            return 1e100
-        return -result.log_likelihood
-
     if names:
+        prepared_likelihood = GaussianTreeLikelihood.prepare(
+            compiled, values_by_leaf, standard_errors
+        )
+
+        def objective(parameters):
+            try:
+                result = prepared_likelihood.evaluate(process_for(parameters))
+            except (ValueError, ArithmeticError, OverflowError):
+                return 1e100
+            return (
+                -result.log_likelihood
+                if math.isfinite(result.log_likelihood)
+                else 1e100
+            )
+
         optimized = deterministic_multistart(
             objective, initial, parameter_bounds, maxiter=1000
         )

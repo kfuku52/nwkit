@@ -46,6 +46,34 @@ class GaussianLikelihoodResult:
 
 
 @dataclass(frozen=True, slots=True)
+class GaussianTreeLikelihood:
+    """Fixed tip observations and tree indices for repeated likelihoods."""
+
+    compiled_tree: CompiledTree
+    records: tuple[tuple[int, float, float], ...]
+    center: float
+    observed_size: float
+
+    @classmethod
+    def prepare(
+        cls,
+        compiled_tree: CompiledTree,
+        values_by_leaf: Mapping[str, float | None],
+        standard_errors: Mapping[str, float] | None = None,
+    ) -> "GaussianTreeLikelihood":
+        records = _gaussian_observation_records(
+            compiled_tree, values_by_leaf, standard_errors
+        )
+        center, size = _gaussian_observation_scale(records)
+        return cls(compiled_tree, records, center, size)
+
+    def evaluate(self, process: GaussianTreeProcess) -> GaussianLikelihoodResult:
+        self.compiled_tree.require_tree(process.tree)
+        messages = _message_pass_prepared(process, self, likelihood_only=True)
+        return _summarize_tree_likelihood(messages)
+
+
+@dataclass(frozen=True, slots=True)
 class _Factor:
     """A weighted normalized Gaussian, exact point mass, or constant factor."""
 
@@ -238,12 +266,7 @@ def _finite_number(value, label: str, *, nonnegative: bool = False) -> float:
     return result
 
 
-def _scaled_process_and_observations(
-    process: GaussianTreeProcess,
-    compiled: CompiledTree,
-    values_by_leaf,
-    standard_errors,
-):
+def _gaussian_observation_records(compiled, values_by_leaf, standard_errors):
     records = []
     for index in compiled.leaf_indices:
         name = str(compiled.nodes[index].name)
@@ -259,9 +282,12 @@ def _scaled_process_and_observations(
             nonnegative=True,
         )
         records.append((index, observed, error))
+    return tuple(records)
 
+
+def _gaussian_observation_scale(records):
     if not records:
-        return records, 0.0, 0, process
+        return 0.0, 0.0
     center = min(records, key=lambda item: (item[2], abs(item[1])))[1]
     differences = [value - center for _, value, _ in records]
     if any(not math.isfinite(value) for value in differences):
@@ -274,8 +300,18 @@ def _scaled_process_and_observations(
     if any(not math.isfinite(value) for value in differences):
         raise ValueError("Trait range exceeds floating-point range; rescale units.")
 
-    magnitudes = [abs(value) for value in differences]
-    magnitudes.extend(error for _, _, error in records)
+    return center, max(
+        max(abs(value) for value in differences),
+        max(error for _, _, error in records),
+    )
+
+
+def _scaled_process_and_observations(process, observations):
+    records = observations.records
+    if not records:
+        return records, 0.0, 0, process
+    center = observations.center
+    magnitudes = [observations.observed_size]
     for transition in process.transitions.values():
         if transition.variance:
             magnitudes.append(math.sqrt(transition.variance))
@@ -351,8 +387,18 @@ def _message_pass(
         CompiledTree.from_tree(process.tree) if compiled_tree is None else compiled_tree
     )
     compiled.require_tree(process.tree)
+    prepared = GaussianTreeLikelihood.prepare(compiled, values_by_leaf, standard_errors)
+    return _message_pass_prepared(
+        process, prepared, retain_inside=retain_inside, likelihood_only=likelihood_only
+    )
+
+
+def _message_pass_prepared(
+    process, prepared, *, retain_inside=False, likelihood_only=False
+):
+    compiled = prepared.compiled_tree
     records, center, exponent, scaled_process = _scaled_process_and_observations(
-        process, compiled, values_by_leaf, standard_errors
+        process, prepared
     )
     if not records and scaled_process.root.mode == "flat":
         raise ValueError(
@@ -535,6 +581,10 @@ def gaussian_tree_likelihood(
     messages = _message_pass(
         process, values_by_leaf, standard_errors, compiled_tree, likelihood_only=True
     )
+    return _summarize_tree_likelihood(messages)
+
+
+def _summarize_tree_likelihood(messages):
     rank = messages.root_posterior.density_rank
     log_likelihood = (
         messages.root_posterior.log_weight - rank * messages.exponent * _LOG_2
