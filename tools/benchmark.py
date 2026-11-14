@@ -152,10 +152,40 @@ def asr_threshold_workload(tips):
     }
 
 
+def glmm_poisson_workload(tips):
+    import numpy as np
+    from benchmark_asr_models import _inputs
+
+    from nwkit.evolution import evolutionary_covariance_factory
+    from nwkit.phylogenetic_glmm import fit_phylogenetic_glmm
+
+    tree, _, _ = _inputs(tips)
+    factory = evolutionary_covariance_factory(tree, list(tree.leaf_names()))
+    covariance = factory(None)
+    rng = np.random.default_rng(149)
+    predictor = rng.normal(size=tips)
+    latent = np.linalg.cholesky(covariance) @ rng.normal(size=tips)
+    latent /= np.sqrt(np.diag(covariance).mean())
+    design = np.column_stack([np.ones(tips), predictor])
+    response = rng.poisson(np.exp(0.65 + 0.25 * predictor + 0.9 * latent))
+    start = time.perf_counter()
+    fit = fit_phylogenetic_glmm(response, design, factory, family="poisson")
+    return time.perf_counter() - start, {
+        "coefficients": fit.coefficients.tolist(),
+        "coefficient_covariance": fit.coefficient_covariance.tolist(),
+        "component_variances": dict(fit.component_variances),
+        "random_modes": fit.random_modes.tolist(),
+        "log_likelihood": fit.log_likelihood,
+        "boundary_warning": fit.boundary_warning,
+        "optimizer_converged": fit.optimizer_converged,
+    }
+
+
 STATISTICAL_WORKLOADS = {
     "gaussian": gaussian_workload,
     "asr-mixture": asr_mixture_workload,
     "asr-threshold": asr_threshold_workload,
+    "glmm-poisson": glmm_poisson_workload,
 }
 
 

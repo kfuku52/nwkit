@@ -113,6 +113,7 @@ python tools/benchmark.py --case regress-help --baseline /path/to/old/source
 python tools/benchmark.py --case gaussian --tips 512 --repeat 3 --baseline /path/to/old/source
 python tools/benchmark.py --case asr-mixture --tips 128 --repeat 3 --baseline /path/to/old/source
 python tools/benchmark.py --case asr-threshold --tips 64 --repeat 3 --baseline /path/to/old/source
+python tools/benchmark.py --case glmm-poisson --tips 512 --repeat 3 --baseline /path/to/old/source
 ```
 
 JSON output includes wall time, process peak RSS, and comparable outputs. CLI
@@ -125,6 +126,9 @@ The Mk mixture case fits 16 three-state characters across four rate
 categories. The threshold case fits a four-state character with two seeded
 chains. Its output captures the thresholds, node probabilities and liability
 moments. Convergence diagnostics depend on the ESS method in each revision.
+The Poisson GLMM case uses one predictor and a simulated phylogenetic random
+effect. It compares coefficients, coefficient covariance, variance components,
+random modes, likelihood, and convergence and boundary flags.
 
 CLI output hashes ignore only the package version. Gaussian coefficients,
 coefficient covariance, likelihood, evolutionary parameter, variance components
