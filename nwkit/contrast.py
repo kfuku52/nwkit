@@ -1,6 +1,7 @@
 import csv
 import math
 from io import StringIO
+from sys import float_info
 from typing import Any
 
 import numpy as np
@@ -14,6 +15,7 @@ from nwkit.evolution import (
     validate_evolution_parameter,
 )
 from nwkit.gaussian import DiagonalLowRankCovariance
+from nwkit.gaussian_tree import _product_ratio
 from nwkit.rooting_state import require_rooted, rooting_option_for_input
 from nwkit.util import (
     assign_branch_ids,
@@ -1030,6 +1032,15 @@ def _stable_adjusted_variance(variance1, variance2):
     return smaller / (1.0 + smaller / larger)
 
 
+def _weighted_ancestral_value(value, weight, opposite_variance, total_variance):
+    if weight >= float_info.min:
+        return value * weight
+    return math.copysign(
+        _product_ratio(abs(value), opposite_variance, denominator=total_variance),
+        value,
+    )
+
+
 def calculate_contrasts(
     tree,
     values_by_leaf,
@@ -1097,10 +1108,17 @@ def calculate_contrasts(
         weight1, weight2 = _stable_ancestral_weights(
             numerator_variance, denominator_variance
         )
-        ancestral_estimate = _require_finite(
-            numerator_estimate * weight1 + denominator_estimate * weight2,
-            "ancestral estimate",
-        )
+        if min(weight1, weight2) >= float_info.min:
+            ancestral_estimate = (
+                numerator_estimate * weight1 + denominator_estimate * weight2
+            )
+        else:
+            ancestral_estimate = _weighted_ancestral_value(
+                numerator_estimate, weight1, denominator_variance, contrast_variance
+            ) + _weighted_ancestral_value(
+                denominator_estimate, weight2, numerator_variance, contrast_variance
+            )
+        _require_finite(ancestral_estimate, "ancestral estimate")
         if return_coefficients:
             contrast_coefficients = (
                 coefficient_by_node[numerator] - coefficient_by_node[denominator]

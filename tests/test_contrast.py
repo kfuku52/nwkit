@@ -437,6 +437,23 @@ def test_stable_variance_formula_avoids_overflow_and_underflow():
     )
 
 
+@pytest.mark.parametrize("reverse", [False, True])
+def test_ancestral_estimate_retains_representable_weighted_tip(reverse):
+    from fractions import Fraction
+
+    lengths = (1e-100, 1e300)
+    values = (0.0, 1e300)
+    if reverse:
+        lengths, values = lengths[::-1], values[::-1]
+    tree = Tree(f"(A:{lengths[0]},B:{lengths[1]});", parser=1)
+    result = calculate_contrasts(tree, dict(zip("AB", values, strict=True)))
+    a, b = map(Fraction, lengths)
+    expected = (b * Fraction(values[0]) + a * Fraction(values[1])) / (a + b)
+    assert result[tree]["ancestral_estimate"] == pytest.approx(
+        float(expected), rel=2e-15, abs=0
+    )
+
+
 def test_reconciliation_enum_values_are_validated(tmp_path):
     tree = Tree("(A:1,B:1);", parser=1)
     species = Tree("(A:1,B:1);", parser=1)
