@@ -51,6 +51,15 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Preserve short positive branches under the delta time transformation.
 - Validate custom covariance on relative scales so overflow and tiny input
   units cannot hide invalid entries.
+- Preserve small sampling covariances and avoid cancellation when computing
+  latent predictor posterior uncertainty in Gaussian regression.
+- Fit multivariate PGLS in normalized response units and keep sparse latent
+  precision well scaled near a zero trait variance.
+- Preserve tail likelihoods in ordinal, multinomial, count and interval-censored
+  GLMMs. Keep positive count draws on the support of the truncated distribution
+  when bootstrapping hurdle models.
+- Check mean and covariance information separately when determining whether
+  Gaussian tree parameters are identifiable.
 - Compute OU contrast branch variances directly so short branches and weak
   attraction retain their Brownian-limit behavior.
 - Keep EB and ACDC branch variances finite when an intermediate exponential
@@ -137,6 +146,12 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Reuse sparse precision solves for marginal variances when multiple
   observations load the same latent state.
 - Index comparison groups once when assigning counts in ASR comparison tables.
+- Reuse tree covariance and Cholesky factors across phylogenetic GLMM trials.
+  Batch multinomial curvature calculations and build sparse sampling
+  factors only when bootstrapping.
+- Reduce covariance copies and reuse sparse tree components in multivariate
+  PGLS. Whiten the dense design and response in one triangular solve.
+- Use scalar branch updates for single Gaussian tree simulations.
 
 ## [0.43.6] - 2026-09-08
 
