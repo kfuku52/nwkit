@@ -51,6 +51,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Retain finite OU stationary variances at extreme attraction rates and
   reconstruct diagnostics with the root variance recorded by the fit.
   Preserve fixed diffusion rates during trait scaling in stationary OU fits.
+- Preserve representable affine-Gaussian branch variances when squaring a
+  transition coefficient alone would overflow or underflow.
 - Initialize nonstationary and regime OU attraction from the midpoint of
   the log bounds so multiplying extreme bounds cannot overflow or underflow.
 - Refine scalar likelihoods in normalized parameter units, prioritizing the

@@ -18,6 +18,13 @@ from nwkit.clade_index import LcaIndex
 from nwkit.sparse_laplace import SparseCovarianceModel
 
 
+def _scaled_gaussian_variance(slope, variance):
+    squared = slope * slope
+    if 2.0**-1022 <= squared < math.inf:
+        return squared * variance
+    return slope * (slope * variance)
+
+
 @dataclass(frozen=True, slots=True)
 class GaussianTransition:
     """One branch transition ``child = slope * parent + intercept + error``."""
@@ -139,7 +146,9 @@ def _initial_sparse_state(process, required):
         parent_state = state.state_by_node[node.up]
         parent_scale = state.state_scale_by_node[node.up]
         state.marginal_variance[node] = (
-            transition.slope * transition.slope * state.marginal_variance[node.up]
+            _scaled_gaussian_variance(
+                transition.slope, state.marginal_variance[node.up]
+            )
             + transition.variance
         )
         if transition.variance == 0.0:
@@ -404,7 +413,7 @@ class GaussianTreeProcess:
             transition = self.transitions[node]
             means[node] = transition.slope * means[node.up] + transition.intercept
             variances[node] = (
-                transition.slope * transition.slope * variances[node.up]
+                _scaled_gaussian_variance(transition.slope, variances[node.up])
                 + transition.variance
             )
             if not math.isfinite(means[node]) or not math.isfinite(variances[node]):
@@ -436,7 +445,10 @@ class GaussianTreeProcess:
             parent = lca.ancestors[0][index]
             transition = self.transitions[node]
             slope = transition.slope
-            variances[index] = slope * slope * variances[parent] + transition.variance
+            variances[index] = (
+                _scaled_gaussian_variance(slope, float(variances[parent]))
+                + transition.variance
+            )
             cumulative_loading[index] = cumulative_loading[parent] * slope
             unit_loadings = unit_loadings and slope == 1.0
             direct_loadings = direct_loadings and (

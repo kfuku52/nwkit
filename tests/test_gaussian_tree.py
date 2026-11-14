@@ -166,6 +166,30 @@ def test_batched_covariance_matches_pairs_with_mixed_and_repeated_nodes(
     np.testing.assert_array_equal(result, result.T)
 
 
+@pytest.mark.parametrize("slope,root_variance", [(1e-200, 1e300), (1e200, 1e-300)])
+def test_gaussian_moments_keep_finite_variances_with_extreme_affine_slopes(
+    slope, root_variance
+):
+    tree = tree_from("(A:1,B:1)R;")
+    process = GaussianTreeProcess(
+        tree,
+        {
+            tree["A"]: GaussianTransition(slope, 0.0, 0.0),
+            tree["B"]: GaussianTransition(1.0, 0.0, 0.0),
+        },
+        GaussianRootPrior("gaussian", 0.0, root_variance),
+        "test",
+    )
+    expected = slope * (slope * root_variance)
+    expected_covariance = slope * root_variance
+    with np.errstate(over="raise", under="raise", invalid="raise"):
+        _, variances = process.marginal_moments()
+        covariance = process.tip_covariance(["A", "B"])
+    assert variances[tree["A"]] == expected
+    assert covariance[0, 0] == expected
+    assert covariance[0, 1] == pytest.approx(expected_covariance, rel=1e-12, abs=0.0)
+
+
 def test_positive_asr_eb_uses_the_shared_acdc_branch_process():
     tree = tree_from("((A:0.4,B:1.2)I:0.7,C:1.5,D:0.8)R;")
     values = {"A": -1.0, "B": 2.0, "C": 4.0, "D": None}
