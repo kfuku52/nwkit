@@ -646,6 +646,22 @@ def test_beta_binomial_retains_endpoint_and_interior_mass_at_tiny_precision():
 @pytest.mark.parametrize(
     "precision, trials, value, linear, expected",
     [
+        (2.0, 1e200, 5e199, 0.0, (-460.51701859880916, 0.0, 0.8224670334241132)),
+        (
+            10.0,
+            1e308,
+            1e307,
+            1.0,
+            (-718.6976529276656, 6.536481003750685, -0.7171883569063113),
+        ),
+        (1e-18, 1e308, 1e308, 0.0, (-0.6931471805599456, -0.5, 0.25)),
+        (
+            0.25,
+            1e308,
+            1.0,
+            -11.0,
+            (-12.389289860215717, -0.997004550643891, 0.0029953498783304756),
+        ),
         (2e12, 10.0, 0.0, 0.0, (-6.931471805576953, 4.9999999999775, 2.4999999999775)),
         (1e308, 10.0, 5.0, 0.0, (-1.4020427180880297, 0.0, 2.5)),
         (1e100, 1e200, 5e199, 0.0, (-345.6135553017516, 0.0, 2.5e99)),
@@ -658,7 +674,7 @@ def test_beta_binomial_retains_endpoint_and_interior_mass_at_tiny_precision():
         ),
     ],
 )
-def test_beta_binomial_preserves_mass_and_derivatives_at_high_precision(
+def test_beta_binomial_preserves_mass_and_derivatives_at_extreme_parameters(
     precision, trials, value, linear, expected
 ):
     # Values from the log-gamma and polygamma definitions at 770 digits.
@@ -675,8 +691,20 @@ def test_beta_binomial_preserves_mass_and_derivatives_at_high_precision(
             censor_upper=None,
         )
     np.testing.assert_allclose(
-        [log_mass, gradient[0], curvature[0]], expected, rtol=1e-11
+        [log_mass, gradient[0], curvature[0]], expected, rtol=1e-11, atol=1e-13
     )
+
+
+def test_beta_binomial_initial_intercept_uses_finite_trial_proportion():
+    with np.errstate(over="raise", invalid="raise"):
+        coefficients = _scalar_initial_coefficient(
+            np.array([5e307, 1e308]),
+            np.ones((2, 1)),
+            "beta-binomial",
+            np.zeros(2),
+            np.full(2, 1e308),
+        )
+    assert coefficients[0, 0] == pytest.approx(math.log(3.0))
 
 
 def test_gamma_likelihood_and_derivatives_scale_with_response_units():
