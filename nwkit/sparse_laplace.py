@@ -202,15 +202,27 @@ def factor_sparse_nonsingular(
     return SparsePositiveDefiniteFactor(factor, logdet)
 
 
+def _combine_sampling_factors(components, identity, include_sampling_factor):
+    if not include_sampling_factor:
+        return None
+    factors = [
+        sparse.kron(
+            model.precision_factor() / np.sqrt(variance), identity, format="csr"
+        )
+        for variance, model in components.values()
+    ]
+    return sparse.block_diag(factors, format="csr")
+
+
 def combine_sparse_covariance_models(
     components: Mapping[str, tuple[float, SparseCovarianceModel]],
     *,
     random_dimension: int = 1,
+    include_sampling_factor: bool = True,
 ) -> SparseLatentModel:
     """Combine covariance components in independent latent coordinates."""
     identity = sparse.eye(random_dimension, format="csc")
     precisions = []
-    sampling_factors = []
     loadings = []
     component_slices = {}
     component_loadings = {}
@@ -220,16 +232,12 @@ def combine_sparse_covariance_models(
         if not np.isfinite(variance) or variance <= 0.0:
             raise ValueError("Sparse covariance-component variances must be positive.")
         precision = sparse.kron(model.precision / variance, identity, format="csc")
-        sampling_factor = sparse.kron(
-            model.precision_factor() / np.sqrt(variance), identity, format="csr"
-        )
         loading = sparse.kron(model.tip_loading, identity, format="csr")
         width = precision.shape[0]
         component_slices[name] = slice(position, position + width)
         component_loadings[name] = loading
         position += width
         precisions.append(precision)
-        sampling_factors.append(sampling_factor)
         loadings.append(loading)
         prior_logdet += random_dimension * (
             model.logdet_covariance + model.n_states * np.log(variance)
@@ -239,7 +247,9 @@ def combine_sparse_covariance_models(
     return SparseLatentModel(
         precision=sparse.block_diag(precisions, format="csc"),
         loading=sparse.hstack(loadings, format="csr"),
-        sampling_precision_factor=sparse.block_diag(sampling_factors, format="csr"),
+        sampling_precision_factor=_combine_sampling_factors(
+            components, identity, include_sampling_factor
+        ),
         prior_logdet=float(prior_logdet),
         component_slices=component_slices,
         component_loadings=component_loadings,

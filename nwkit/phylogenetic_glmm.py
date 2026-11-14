@@ -555,16 +555,18 @@ def _sparse_glmm_latent_model(
     predictor_uncertainties=(),
     predictor_columns=(),
     coefficients=None,
+    *,
+    include_sampling_factor=False,
 ):
     if phylogenetic is None:
         return None
     components = {"phylogenetic": (component_variances["phylogenetic"], phylogenetic)}
-    if group_covariance is not None:
-        if not isinstance(group_covariance, SparseCovarianceModel):
-            return None
+    if isinstance(group_covariance, SparseCovarianceModel):
         components["group"] = (component_variances["group"], group_covariance)
     latent = combine_sparse_covariance_models(
-        components, random_dimension=random_dimension
+        components,
+        random_dimension=random_dimension,
+        include_sampling_factor=include_sampling_factor,
     )
     if predictor_uncertainties:
         if coefficients is None:
@@ -583,7 +585,11 @@ def _sparse_glmm_latent_model(
                     uncertainty.model.precision,
                     loading,
                     uncertainty.model.logdet_covariance,
-                    uncertainty.model.precision_factor(),
+                    (
+                        uncertainty.model.precision_factor()
+                        if include_sampling_factor
+                        else None
+                    ),
                 )
             else:
                 latent = append_identity_latent_components(latent, {name: loading})
@@ -3009,6 +3015,7 @@ def _fit_parametric_bootstrap_glmm(
             options.predictor_uncertainties,
             options.predictor_columns,
             fit.coefficients,
+            include_sampling_factor=True,
         )
         if latent_model is None:
             raise ValueError("Sparse phylogenetic covariance is unavailable.")
