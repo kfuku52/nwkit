@@ -2800,16 +2800,18 @@ def _ordinary_predictor_values(
     ordered=(),
     allow_missing=False,
 ):
+    leaf_names = list(tree.leaf_names())
     dataframe, _, _ = read_tip_table(
         args.data,
         option_name="--data",
-        tree_leaf_names=list(tree.leaf_names()),
+        tree_leaf_names=leaf_names,
         required_columns=predictors,
         unmatched=args.unmatched,
         missing_values=args.missing_values,
         duplicate_leaf_names=duplicate_leaf_names,
     )
-    dataframe = dataframe[dataframe["leaf_name"].isin(set(tree.leaf_names()))]
+    dataframe = dataframe[dataframe["leaf_name"].isin(leaf_names)]
+    rows_by_leaf = dataframe.groupby("leaf_name", sort=False, observed=True).indices
     values_by_trait = {}
     for predictor in predictors:
         observed = dataframe[predictor].dropna()
@@ -2820,10 +2822,9 @@ def _ordinary_predictor_values(
             or numeric_observed.isna().any()
         )
         values_by_leaf = {}
-        for leaf_name in tree.leaf_names():
-            selected = dataframe.loc[
-                dataframe["leaf_name"] == str(leaf_name), predictor
-            ]
+        column = dataframe[predictor]
+        for leaf_name in leaf_names:
+            selected = column.iloc[rows_by_leaf.get(str(leaf_name), [])]
             if selected.empty or (selected.isna().any() and not allow_missing):
                 raise ValueError(
                     "Predictor '{}' has missing values for tree tip '{}'.".format(
@@ -2883,60 +2884,63 @@ def _ordinary_auxiliary_values(
 ):
     if not columns:
         return {}
+    leaf_names = list(tree.leaf_names())
     dataframe, _, _ = read_tip_table(
         args.data,
         option_name="--data",
-        tree_leaf_names=list(tree.leaf_names()),
+        tree_leaf_names=leaf_names,
         required_columns=columns,
         unmatched=args.unmatched,
         missing_values=args.missing_values,
         duplicate_leaf_names=duplicate_leaf_names,
     )
-    dataframe = dataframe[dataframe["leaf_name"].isin(set(tree.leaf_names()))]
+    dataframe = dataframe[dataframe["leaf_name"].isin(leaf_names)]
+    return _auxiliary_values_by_leaf(
+        dataframe,
+        leaf_names,
+        columns,
+        getattr(args, "biological_id", None),
+        allow_missing=allow_missing,
+        tip_label="tree tip",
+    )
+
+
+def _auxiliary_values_by_leaf(
+    dataframe, leaf_names, columns, biological_id, *, allow_missing, tip_label
+):
+    rows_by_leaf = dataframe.groupby("leaf_name", sort=False, observed=True).indices
+    groups_by_leaf = (
+        _auxiliary_biological_rows(dataframe, biological_id)
+        if biological_id is not None
+        else {}
+    )
     values_by_column = {}
     for column in columns:
         values_by_leaf = {}
-        for leaf_name in tree.leaf_names():
-            selected_rows = dataframe.loc[dataframe["leaf_name"] == str(leaf_name)]
-            biological_id = getattr(args, "biological_id", None)
+        numeric_column = pd.to_numeric(dataframe[column], errors="coerce").to_numpy(
+            float
+        )
+        for leaf_name in leaf_names:
             if biological_id is None:
-                numeric = pd.to_numeric(
-                    selected_rows[column], errors="coerce"
-                ).to_numpy(float)
+                numeric = numeric_column[rows_by_leaf.get(str(leaf_name), [])]
             else:
-                observations = []
-                for _identifier, group in selected_rows.groupby(
-                    biological_id, sort=False, dropna=False
-                ):
-                    group_values = pd.to_numeric(
-                        group[column], errors="coerce"
-                    ).to_numpy(float)
-                    finite_group = group_values[np.isfinite(group_values)]
-                    if len(finite_group) and np.any(finite_group != finite_group[0]):
-                        raise ValueError(
-                            "Auxiliary response column '{}' differs among technical "
-                            "rows for tree tip '{}'.".format(column, leaf_name)
-                        )
-                    observations.append(
-                        float("nan")
-                        if not len(finite_group)
-                        else float(finite_group[0])
-                    )
-                numeric = np.asarray(observations, dtype=float)
+                numeric = _auxiliary_biological_values(
+                    numeric_column,
+                    groups_by_leaf.get(str(leaf_name), ()),
+                    column,
+                    leaf_name,
+                    tip_label,
+                )
             if not allow_missing and (
                 not len(numeric) or not np.isfinite(numeric).all()
             ):
                 raise ValueError(
-                    "Auxiliary response column '{}' must be finite for tree tip '{}'.".format(
-                        column, leaf_name
-                    )
+                    f"Auxiliary response column '{column}' must be finite for {tip_label} '{leaf_name}'."
                 )
             finite = numeric[np.isfinite(numeric)]
             if biological_id is None and len(finite) and np.any(finite != finite[0]):
                 raise ValueError(
-                    "Auxiliary response column '{}' differs among rows for tree tip '{}'.".format(
-                        column, leaf_name
-                    )
+                    f"Auxiliary response column '{column}' differs among rows for {tip_label} '{leaf_name}'."
                 )
             values_by_leaf[str(leaf_name)] = (
                 ReplicatedObservation(tuple(numeric))
@@ -2947,6 +2951,30 @@ def _ordinary_auxiliary_values(
             )
         values_by_column[column] = values_by_leaf
     return values_by_column
+
+
+def _auxiliary_biological_rows(dataframe, biological_id):
+    groups_by_leaf: dict[str, list[np.ndarray]] = {}
+    groups = dataframe.groupby(
+        ["leaf_name", biological_id], sort=False, dropna=False, observed=True
+    ).indices
+    for (leaf, _), rows in groups.items():
+        groups_by_leaf.setdefault(leaf, []).append(rows)
+    return groups_by_leaf
+
+
+def _auxiliary_biological_values(numeric_column, groups, column, leaf_name, tip_label):
+    observations = []
+    for rows in groups:
+        values = numeric_column[rows]
+        finite = values[np.isfinite(values)]
+        if len(finite) and np.any(finite != finite[0]):
+            raise ValueError(
+                f"Auxiliary response column '{column}' differs among technical "
+                f"rows for {tip_label} '{leaf_name}'."
+            )
+        observations.append(float(finite[0]) if len(finite) else float("nan"))
+    return np.asarray(observations, dtype=float)
 
 
 def _response_auxiliary_mapping(column_by_response, values_by_column):

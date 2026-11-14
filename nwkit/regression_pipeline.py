@@ -40,7 +40,6 @@ from nwkit.gaussian import DiagonalLowRankCovariance, draw_from_factor
 from nwkit.measurement_error import fit_latent_predictor, fit_sparse_latent_predictor
 from nwkit.model_matrix import (
     PredictorTerm,
-    ReplicatedObservation,
     encode_predictors,
     parse_key_values,
     parse_name_list,
@@ -53,6 +52,7 @@ from nwkit.model_matrix import (
 from nwkit.multivariate_pgls import fit_multivariate_pgls
 from nwkit.optimization import ScalarFitCache
 from nwkit.ordinary_regression import (
+    _auxiliary_values_by_leaf,
     _categorical_shape_settings,
     _global_bounded_scalar_minimize,
     estimate_marginal_evolution_parameter,
@@ -555,67 +555,24 @@ def _read_gene_response_inputs(
 def _read_gene_auxiliary_values(args, gene_tree, columns, *, allow_missing=False):
     if not columns:
         return {}
+    leaf_names = list(gene_tree.leaf_names())
     dataframe, _, _ = read_tip_table(
         args.expression,
         option_name="--expression",
-        tree_leaf_names=list(gene_tree.leaf_names()),
+        tree_leaf_names=leaf_names,
         required_columns=columns,
         unmatched=args.unmatched,
         missing_values=args.missing_values,
         duplicate_leaf_names="allow",
     )
-    values_by_column = {}
-    for column in columns:
-        values_by_leaf = {}
-        for leaf_name in gene_tree.leaf_names():
-            selected_rows = dataframe.loc[dataframe["leaf_name"] == str(leaf_name)]
-            biological_id = getattr(args, "biological_id", None)
-            if biological_id is None:
-                numeric = pd.to_numeric(
-                    selected_rows[column], errors="coerce"
-                ).to_numpy(float)
-            else:
-                observations = []
-                for _identifier, group in selected_rows.groupby(
-                    biological_id, sort=False, dropna=False
-                ):
-                    group_values = pd.to_numeric(
-                        group[column], errors="coerce"
-                    ).to_numpy(float)
-                    finite_group = group_values[np.isfinite(group_values)]
-                    if len(finite_group) and np.any(finite_group != finite_group[0]):
-                        raise ValueError(
-                            "Auxiliary response column '{}' differs among technical "
-                            "rows for gene tip '{}'.".format(column, leaf_name)
-                        )
-                    observations.append(
-                        float("nan")
-                        if not len(finite_group)
-                        else float(finite_group[0])
-                    )
-                numeric = np.asarray(observations, dtype=float)
-            finite = numeric[np.isfinite(numeric)]
-            if not allow_missing and (not len(numeric) or len(finite) != len(numeric)):
-                raise ValueError(
-                    "Auxiliary response column '{}' must be finite for gene tip '{}'.".format(
-                        column, leaf_name
-                    )
-                )
-            if biological_id is None and len(finite) and np.any(finite != finite[0]):
-                raise ValueError(
-                    "Auxiliary response column '{}' differs among rows for gene tip '{}'.".format(
-                        column, leaf_name
-                    )
-                )
-            values_by_leaf[str(leaf_name)] = (
-                ReplicatedObservation(tuple(numeric))
-                if biological_id is not None
-                else float("nan")
-                if not len(finite)
-                else float(finite[0])
-            )
-        values_by_column[column] = values_by_leaf
-    return values_by_column
+    return _auxiliary_values_by_leaf(
+        dataframe,
+        leaf_names,
+        columns,
+        getattr(args, "biological_id", None),
+        allow_missing=allow_missing,
+        tip_label="gene tip",
+    )
 
 
 def _map_response_auxiliary(column_by_response, values_by_column):
