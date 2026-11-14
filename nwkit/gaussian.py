@@ -42,6 +42,15 @@ def finite_mean(values):
     return math.ldexp(float(np.mean(np.ldexp(values, -exponent))), exponent)
 
 
+def scale_covariance_by_slope(covariance, slope):
+    """Multiply by a squared slope without overflowing the slope alone."""
+    mantissa, exponent = math.frexp(float(slope))
+    if abs(exponent) < 500:
+        return (slope * slope) * covariance
+    mantissas, exponents = np.frexp(covariance)
+    return np.ldexp(mantissas * (mantissa * mantissa), exponents + 2 * exponent)
+
+
 def residual_variance_scale(response, residual, sampling_diagonal):
     """Choose variance bounds in residual units, independent of a fitted mean."""
     sampling_scale = finite_mean(sampling_diagonal)

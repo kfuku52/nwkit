@@ -24,6 +24,7 @@ from nwkit.gaussian import (
     is_diagonal,
     materialize_covariance,
     residual_variance_scale,
+    scale_covariance_by_slope,
     solve_factor,
     sparse_precision_update_diagonal,
     validate_psd_covariance,
@@ -773,7 +774,7 @@ def _predictor_error_covariance(
         matrix = _positive_semidefinite(uncertainty, "Predictor posterior covariance")
         if matrix.shape != (n_observations, n_observations):
             raise ValueError("Predictor posterior covariance has the wrong dimensions.")
-        return float(beta[int(columns)]) ** 2 * matrix
+        return scale_covariance_by_slope(matrix, float(beta[int(columns)]))
     columns = tuple(int(column) for column in columns)
     coefficients = beta[np.asarray(columns, dtype=int)]
     uncertainty = np.asarray(uncertainty, dtype=float)

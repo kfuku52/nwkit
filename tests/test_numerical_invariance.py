@@ -16,6 +16,7 @@ from nwkit.evolution import (
 from nwkit.gaussian import DiagonalLowRankCovariance
 from nwkit.measurement_error import (
     _positive_semidefinite,
+    _predictor_error_covariance,
     fit_conditional_eiv_gaussian,
     fit_factor_latent_predictor,
     fit_latent_predictor,
@@ -66,6 +67,20 @@ def test_categorical_sampling_loading_preserves_covariance_units(exponent):
     np.testing.assert_allclose(
         np.ldexp(loading @ loading.T, -exponent),
         [[1.0, 0.5], [0.5, 0.25]],
+    )
+
+
+@pytest.mark.parametrize("exponent", [-530, 530])
+def test_dense_predictor_covariance_scales_through_extreme_slope(exponent):
+    base = np.array([[1.0, 0.25], [0.25, 0.5]])
+    covariance_exponent = -1050 if exponent > 0 else 1022
+    covariance = np.ldexp(base, covariance_exponent)
+    with np.errstate(over="raise", invalid="raise"):
+        projected = _predictor_error_covariance(
+            np.array([np.ldexp(1.0, exponent)]), covariance, 0, 2
+        )
+    np.testing.assert_array_equal(
+        projected, np.ldexp(base, covariance_exponent + 2 * exponent)
     )
 
 
