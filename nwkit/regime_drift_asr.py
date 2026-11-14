@@ -6,6 +6,7 @@ from typing import Mapping
 
 import numpy as np
 
+from nwkit.asr_regimes import _observed_split_regime_lengths, _regime_design_rank
 from nwkit.compiled_tree import CompiledTree
 from nwkit.continuous_asr import _ldexp
 from nwkit.gaussian_inference import (
@@ -125,46 +126,6 @@ def _drift_design_rank(observed_leaves, exposures, varying):
         )
     )
     return _regime_design_rank(matrix)
-
-
-def _regime_design_rank(matrix):
-    scales = np.max(np.abs(matrix), axis=0, initial=0.0)
-    nonzero = scales > 0.0
-    if not np.any(nonzero):
-        return 0
-    normalized = matrix[:, nonzero] / scales[nonzero]
-    return int(np.linalg.matrix_rank(normalized / np.linalg.norm(normalized, axis=0)))
-
-
-def _observed_split_regime_lengths(tree, observed_leaves, assignment):
-    """Sum branch lengths by the bipartition they induce on observed tips."""
-    regime_index = {regime: index for index, regime in enumerate(assignment.regimes)}
-    observed = set(observed_leaves)
-    num_observed = len(observed)
-    # Observed tips in depth-first order form a contiguous interval per clade.
-    descendant_counts = {}
-    rows = {}
-    seen = 0
-    for node in tree.traverse(strategy="postorder"):
-        local = int(node in observed)
-        seen += local
-        count = local + sum(descendant_counts.pop(child) for child in node.children)
-        descendant_counts[node] = count
-        if node.is_root or count in {0, num_observed}:
-            continue
-        # Orient each split away from the first observed tip. The complement
-        # of any interval that contains the first tip is also contiguous.
-        start = seen - count
-        if start == 0:
-            split = (seen, num_observed)
-        else:
-            split = (start, seen)
-        row = rows.get(split)
-        if row is None:
-            row = np.zeros(len(regime_index), dtype=float)
-            rows[split] = row
-        row[regime_index[assignment.by_node[node]]] += float(node.dist)
-    return np.asarray(list(rows.values())).reshape(-1, len(regime_index))
 
 
 def _sigma_design_rank(tree, observed_leaves, assignment):
@@ -290,7 +251,7 @@ def compute_regime_drift_marginals(
             max(initial_log_rate - math.log(1e8), min_log_rate),
             min(initial_log_rate + math.log(1e8), max_log_rate),
         )
-        sigma_bounds = tuple(math.exp(bound) for bound in log_sigma_bounds)
+        sigma_bounds = math.exp(log_sigma_bounds[0]), math.exp(log_sigma_bounds[1])
         for regime in regimes:
             names.append(("sigma2", regime))
             initial.append(initial_log_rate)

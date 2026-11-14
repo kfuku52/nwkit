@@ -7,6 +7,7 @@ from typing import Any
 import numpy as np
 from scipy.optimize import minimize
 
+from nwkit.asr_regimes import _observed_split_regime_lengths, _regime_design_rank
 from nwkit.continuous_asr import (
     GaussianMarginal,
     _finite_number,
@@ -229,46 +230,11 @@ def _bms_regime_design_rank(tree, data, regime_assignment):
         group = data.node_groups[leaf]
         if group in observed_groups:
             representative.setdefault(group, leaf)
-    ordered_groups = sorted(observed_groups)
-    regimes = regime_assignment.regimes
-    regime_index = {regime: index for index, regime in enumerate(regimes)}
-    positive_lengths = [
-        float(node.dist)
-        for node in tree.traverse()
-        if not node.is_root and float(node.dist) > 0.0
-    ]
-    length_scale = max(positive_lengths, default=1.0)
-    rng = np.random.default_rng(1729)
-    signatures = []
-    for _ in range(max(8, 4 * len(regimes))):
-        weights = rng.standard_normal(len(ordered_groups))
-        weights -= np.mean(weights)
-        norm = float(np.linalg.norm(weights))
-        if norm == 0.0:
-            continue
-        weights /= norm
-        local = {
-            representative[group]: float(weight)
-            for group, weight in zip(ordered_groups, weights, strict=True)
-        }
-        descendant: dict[Any, float] = {}
-        for node in tree.traverse(strategy="postorder"):
-            descendant[node] = local.get(node, 0.0) + math.fsum(
-                descendant[child] for child in node.children
-            )
-        row = np.zeros(len(regimes), dtype=float)
-        for node in tree.traverse():
-            if node.is_root or float(node.dist) == 0.0:
-                continue
-            index = regime_index[regime_assignment.by_node[node]]
-            row[index] += float(node.dist) / length_scale * descendant[node] ** 2
-        signatures.append(row)
-    matrix = np.vstack(signatures)
-    norms = np.linalg.norm(matrix, axis=0)
-    threshold = 1024.0 * np.finfo(float).eps * max(1.0, float(np.max(norms)))
-    if np.any(norms <= threshold):
-        return int(np.sum(norms > threshold))
-    return int(np.linalg.matrix_rank(matrix / norms))
+    # Pairwise distances determine the lengths of the observed splits. Their
+    # contrasts and the split design therefore have the same nullspace.
+    return _regime_design_rank(
+        _observed_split_regime_lengths(tree, representative.values(), regime_assignment)
+    )
 
 
 def _unique_starts(starts):

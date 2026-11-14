@@ -42,6 +42,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   overflows or underflows at an otherwise representable rate and tree scale.
 - Report EB and ACDC fit boundaries using relative distances within the
   search interval.
+- Check BMS rate identifiability from observed tree splits so a regime remains
+  estimable when its informative branches are much shorter than other branches.
 - Retain finite OU stationary variances at extreme attraction rates and
   reconstruct diagnostics with the root variance recorded by the fit.
   Preserve fixed diffusion rates during trait scaling in stationary OU fits.

@@ -190,6 +190,21 @@ def test_bms_rejects_rate_on_stem_common_to_every_observation():
         )
 
 
+def test_bms_fits_separately_identifiable_rate_on_short_branches():
+    tree = tree_from("(A:1,B:1,C:1e-15,D:2e-15)R;")
+    regimes = assignment(tree, ["long", "long", "long", "short", "short"])
+    values = {"A": -1.0, "B": 1.0, "C": 0.1, "D": 0.10000005}
+    posterior, fit = compute_bms_marginals(tree, values, regimes)
+    # The short branches dominate the flat-root mean, with inverse weights
+    # proportional to their lengths. Their independent contrast has df=1.
+    expected_root = (2.0 * values["C"] + values["D"]) / 3.0
+    expected_short_rate = (values["D"] - values["C"]) ** 2 / 3e-15
+    assert fit.optimizer_success
+    assert fit.sigma2_by_regime["short"] == pytest.approx(expected_short_rate, rel=2e-5)
+    assert fit.sigma2_by_regime["long"] == pytest.approx(1.01, rel=2e-5)
+    assert posterior[tree].mean == pytest.approx(expected_root, abs=1e-12)
+
+
 def test_equal_optimum_oum_matches_single_optimum_ou():
     tree = tree_from("((A:0.4,B:1.2)I:0.7,C:1.5,D:0.8)R;")
     values = {"A": -1.0, "B": 2.0, "C": 4.0, "D": None}
