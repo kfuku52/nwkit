@@ -171,6 +171,24 @@ def test_units_and_translation_invariance(scale):
     )
 
 
+@pytest.mark.parametrize("scale", ["raw", "standardize"])
+def test_trait_transform_handles_overflowing_range(scale):
+    _, design = design_for()
+    values = np.column_stack(
+        ([-1, -0.5, 0.25, 1, 0.5, -0.25, 0.5, -0.5], np.arange(8) / 16)
+    )
+    reference, _, _ = transform_traits(values, scale)
+    with np.errstate(over="raise", invalid="raise"):
+        transformed, center, units = transform_traits(values * 1e308, scale)
+    assert np.isfinite(units).all()
+    np.testing.assert_allclose(
+        transformed, (values - center / 1e308) / (units / 1e308), atol=1e-15
+    )
+    np.testing.assert_allclose(
+        dtt_curve(design, transformed), dtt_curve(design, reference), atol=1e-14
+    )
+
+
 def test_area_duplicate_root_and_interpolated_range():
     times = np.array([0, 0, 0.5, 1])
     curves = np.array([[1, 2, 0, 0], [1, 4, 0, 0]])

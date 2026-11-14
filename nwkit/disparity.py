@@ -127,11 +127,19 @@ def transform_traits(values, scale):
     values = np.asarray(values, dtype=float)
     if values.ndim != 2 or not np.isfinite(values).all():
         raise ValueError("DTT requires a finite numeric trait matrix.")
+    center = values[0].copy()
     with np.errstate(over="ignore"):
-        differences = values - values[0]
-    if not np.isfinite(differences).all():
-        raise ValueError("DTT trait ranges overflow; rescale input units.")
+        differences = values - center
     units = np.max(np.abs(differences), axis=0)
+    if np.isinf(units.max()):
+        overflowed = np.isinf(units)
+        affected = values[:, overflowed]
+        # A midpoint bounds the centered differences by half the range, which
+        # fits even when subtracting the first observation would overflow.
+        center[overflowed] = affected.min(axis=0) / 2 + affected.max(axis=0) / 2
+        centered = affected - center[overflowed]
+        differences[:, overflowed] = centered
+        units[overflowed] = np.max(np.abs(centered), axis=0)
     if np.any(units == 0):
         raise ValueError(
             "DTT requires nonconstant selected columns; remove constant traits."
@@ -139,7 +147,8 @@ def transform_traits(values, scale):
     if scale == "standardize":
         normalized = differences / units
         sd = np.std(normalized, axis=0, ddof=1)
-        scales = units * sd
+        with np.errstate(over="ignore"):
+            scales = units * sd
         transformed = normalized / sd
     elif scale == "raw":
         scales = np.full(values.shape[1], units.max())
@@ -148,7 +157,7 @@ def transform_traits(values, scale):
         raise ValueError("DTT scale must be raw or standardize.")
     if not np.isfinite(scales).all() or np.any(scales <= 0):
         raise ValueError("DTT trait scales cannot be represented; rescale input units.")
-    return transformed, values[0].copy(), scales
+    return transformed, center, scales
 
 
 def fit_brownian(covariance, values):
