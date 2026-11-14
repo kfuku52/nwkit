@@ -8,6 +8,7 @@ from nwkit.asr import _multivariate_fit_status_message
 from nwkit.multivariate_gaussian_asr import (
     _geometry,
     _prepare_observations,
+    _restore_sigma,
     fit_dense_mvbm,
     fit_dense_mvou,
     fit_dense_mvou_diag,
@@ -18,6 +19,26 @@ from nwkit.util import read_tree
 
 def tree_from(source):
     return read_tree(source, "1", True, quiet=True, rooted="yes")
+
+
+def test_covariance_unit_restoration_preserves_mixed_scale_symmetry():
+    data = SimpleNamespace(scales=np.array([2.0**-600, 2.0**500]))
+    sigma = np.array([[1.0, 2.0**-500], [2.0**-500, 1.0]])
+    restored = _restore_sigma(data, sigma)
+    assert restored[0, 1] == restored[1, 0] == 2.0**-600
+
+
+@pytest.mark.parametrize("time_scale", [2.0**-1023, 3.0 * 2.0**-1024])
+def test_brownian_covariance_restores_trait_and_time_units_together(time_scale):
+    data = SimpleNamespace(scales=np.array([2.0**-500, 2.0**-600]))
+    sigma = np.array([[2.0, 0.25], [0.25, 0.5]])
+    # Construct the reference in exponent space so tiny raw variances are
+    # not rounded to zero before dividing by the evolutionary time scale.
+    factor, exponent = math.frexp(time_scale)
+    expected = np.ldexp(
+        sigma / factor, np.array([[-1000, -1100], [-1100, -1200]]) - exponent
+    )
+    assert np.array_equal(_restore_sigma(data, sigma, time_scale=time_scale), expected)
 
 
 def test_dense_mvbm_accepts_partial_vectors_and_errors():

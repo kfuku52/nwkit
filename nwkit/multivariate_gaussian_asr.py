@@ -618,8 +618,24 @@ def _initial_cholesky(dimension):
     return values, bounds
 
 
-def _restore_sigma(data, sigma):
-    return sigma * data.scales[:, None] * data.scales[None, :]
+def _restore_sigma(data, sigma, *, time_scale=1.0):
+    # Merge powers before rescaling so a small first trait scale cannot
+    # round an off-diagonal entry away before the other scale is applied.
+    trait_exponents = np.frexp(data.scales)[1] - 1
+    exponents = trait_exponents[:, None] + trait_exponents[None, :]
+    time_mantissa, time_exponent = math.frexp(time_scale)
+    with np.errstate(over="ignore"):
+        if time_mantissa == 0.5:
+            restored = np.ldexp(sigma, exponents + 1 - time_exponent)
+        else:
+            mantissa, covariance_exponents = np.frexp(sigma)
+            restored = np.ldexp(
+                mantissa / time_mantissa,
+                covariance_exponents + exponents - time_exponent,
+            )
+    if np.any(~np.isfinite(restored)):
+        raise ValueError("Multivariate covariance exceeds floating-point range.")
+    return restored
 
 
 def _likelihood_scale_adjustment(data, *, reml):
@@ -766,11 +782,9 @@ def _restored_posterior_marginals(data, start, nodes, means, covariance):
         means[row, trait] = value
         covariance[row, trait, :] = 0.0
         covariance[row, :, trait] = 0.0
+    covariance = _restore_sigma(data, covariance)
     return {
-        node: MultivariateGaussianMarginal(
-            node_mean,
-            _restore_sigma(data, node_covariance),
-        )
+        node: MultivariateGaussianMarginal(node_mean, node_covariance)
         for node, node_mean, node_covariance in zip(
             nodes, means, covariance, strict=True
         )
@@ -945,7 +959,7 @@ def fit_dense_mvbm(
         if compute_posterior
         else {}
     )
-    sigma = _restore_sigma(data, sigma_scaled / time_scale)
+    sigma = _restore_sigma(data, sigma_scaled, time_scale=time_scale)
     likelihood -= _likelihood_scale_adjustment(data, reml=True)
     # Rank is invariant to trait units.  ``sigma_scaled`` is the covariance in
     # independently normalized trait coordinates; using the restored covariance
