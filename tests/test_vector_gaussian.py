@@ -187,6 +187,37 @@ def test_full_ou_preserves_extreme_finite_branch_covariance():
         )
 
 
+@pytest.mark.parametrize(
+    "rate,diffusion,length",
+    [(1e-190, 1e-308, 1e190), (1.5e170, 1e308, 1e-170)],
+)
+def test_full_ou_rescales_extreme_finite_attraction(rate, diffusion, length):
+    from nwkit.vector_processes import vector_ou_process
+
+    tree = read_tree(f"(A:{length},B:{length})R;", "1", True, quiet=True, rooted="yes")
+    identity = np.eye(2)
+    root_variance = diffusion / (2 * rate)
+    exponent = rate * length
+    with np.errstate(over="raise", invalid="raise"):
+        process = vector_ou_process(
+            tree, rate * identity, diffusion * identity, [1, -2]
+        )
+    np.testing.assert_allclose(
+        process.root_covariance, identity * root_variance, rtol=2e-15, atol=0.0
+    )
+    for transition in process.transitions.values():
+        np.testing.assert_allclose(transition.slope, identity * np.exp(-exponent))
+        np.testing.assert_allclose(
+            transition.covariance,
+            identity * (root_variance * -np.expm1(-2 * exponent)),
+            rtol=2e-15,
+            atol=0.0,
+        )
+        np.testing.assert_allclose(
+            transition.intercept, -np.expm1(-exponent) * np.array([1, -2])
+        )
+
+
 def test_zero_length_branches_preserve_exact_observations():
     from nwkit.vector_processes import vector_brownian_process
 

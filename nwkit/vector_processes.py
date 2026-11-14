@@ -8,7 +8,7 @@ from nwkit.vector_gaussian import (
     VectorProcess,
     VectorTransition,
     _array,
-    _inverse,
+    _cholesky,
     _symmetric_part,
 )
 
@@ -22,6 +22,18 @@ def _short_ou_displacement(exponent):
     return exponent @ (identity - exponent @ series)
 
 
+def _scale_similarity(matrix, numerator, denominator):
+    """Rescale rows and columns without an out-of-range intermediate."""
+    try:
+        with np.errstate(over="raise", under="raise"):
+            return matrix * numerator / denominator
+    except FloatingPointError:
+        mantissa, power = np.frexp(matrix)
+        num, num_power = np.frexp(numerator)
+        den, den_power = np.frexp(denominator)
+        return np.ldexp(mantissa * num / den, power + num_power - den_power)
+
+
 def vector_brownian_process(tree, sigma):
     """Build flat-root correlated Brownian motion, including zero-length edges."""
     sigma = np.asarray(sigma, dtype=float)
@@ -29,7 +41,7 @@ def vector_brownian_process(tree, sigma):
         raise ValueError("Diffusion covariance must be a nonempty square matrix.")
     d = len(sigma)
     sigma = _array(sigma, (d, d), "Diffusion covariance")
-    _inverse(sigma, "Diffusion covariance")
+    _cholesky(sigma, "Diffusion covariance")
     transitions = {}
     for node in CompiledTree.from_tree(tree).nodes[1:]:
         time = float(node.dist)
@@ -53,17 +65,19 @@ def vector_ou_process(tree, attraction, diffusion, theta):
     theta = _array(theta, (d,), "OU theta")
     attraction = _array(attraction, (d, d), "OU attraction")
     diffusion = _array(diffusion, (d, d), "OU diffusion")
-    _inverse(diffusion, "OU diffusion")
+    _cholesky(diffusion, "OU diffusion")
     # Solve in diffusion-standardized trait units: a valid similarity-scaled
     # attraction can otherwise defeat the Lyapunov solver's absolute tolerance.
     scales = np.sqrt(np.diag(diffusion))
-    attraction = attraction * scales[None, :] / scales[:, None]
+    rows, columns = scales[:, None], scales[None, :]
+    attraction = _scale_similarity(attraction, columns, rows)
     diffusion = diffusion / np.outer(scales, scales)
     if np.min(np.linalg.eigvals(attraction).real) <= 0:
         raise ValueError("OU attraction must have strictly positive real eigenvalues.")
     stationary = solve_continuous_lyapunov(attraction, diffusion)
     stationary = _symmetric_part(stationary)
-    _inverse(stationary, "OU stationary covariance")
+    _array(stationary, (d, d), "OU stationary covariance")
+    _cholesky(stationary, "OU stationary covariance")
     transitions = {}
     transition_by_time: dict[float, VectorTransition] = {}
     attraction_norm = np.linalg.norm(attraction, ord=1)
@@ -89,11 +103,11 @@ def vector_ou_process(tree, attraction, diffusion, theta):
         else:
             slope = expm(-attraction * time)
             covariance = stationary - slope @ stationary @ slope.T
-        slope = slope * scales[:, None] / scales[None, :]
+        slope = _scale_similarity(slope, rows, columns)
         covariance = covariance * scale_product
         if exponent_norm <= 1e-4:
             displacement = _short_ou_displacement(attraction * time)
-            intercept = (displacement * scales[:, None] / scales[None, :]) @ theta
+            intercept = _scale_similarity(displacement, rows, columns) @ theta
         else:
             intercept = theta - slope @ theta
         transition = VectorTransition(slope, intercept, _symmetric_part(covariance))
