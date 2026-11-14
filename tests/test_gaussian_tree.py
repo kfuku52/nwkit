@@ -174,6 +174,29 @@ def test_batched_covariance_matches_pairs_with_mixed_and_repeated_nodes(
     np.testing.assert_array_equal(result, result.T)
 
 
+def test_batched_affine_covariance_keeps_disconnections_and_tiny_signed_paths():
+    tree = tree_from("((A:1,B:1)I:1,C:1,D:1)R;")
+    transitions = {
+        tree["I"]: GaussianTransition(-0.5, 0.0, 0.5),
+        tree["A"]: GaussianTransition(-1e-200, 0.0, 0.25),
+        tree["B"]: GaussianTransition(0.5, 0.0, 0.25),
+        tree["C"]: GaussianTransition(0.0, 0.0, 1.0),
+        tree["D"]: GaussianTransition(0.5, 0.0, 0.25),
+    }
+    process = GaussianTreeProcess(
+        tree, transitions, GaussianRootPrior("gaussian", 0.0, 2.0), "test"
+    )
+    nodes = [tree[name] for name in ("A", "B", "C", "D", "I")] + [tree]
+    covariance = process.covariance(nodes * 6)
+    np.testing.assert_array_equal(covariance, covariance.T)
+    np.testing.assert_allclose(
+        covariance[:6, :6], process.covariance(nodes), rtol=2e-13, atol=0.0
+    )
+    assert covariance[0, 1] == pytest.approx(-5e-201, rel=2e-13, abs=0.0)
+    assert covariance[1, 2] == 0.0
+    assert covariance[0, 6] == covariance[0, 0] == 0.25
+
+
 @pytest.mark.parametrize("slope,root_variance", [(1e-200, 1e300), (1e200, 1e-300)])
 def test_gaussian_moments_keep_finite_variances_with_extreme_affine_slopes(
     slope, root_variance

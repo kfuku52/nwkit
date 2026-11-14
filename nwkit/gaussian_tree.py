@@ -357,6 +357,39 @@ def _fill_direct_covariance(
     return True
 
 
+def _fill_log_covariance(
+    covariance, requested, lca, variances, log_loadings, zeros, negative
+):
+    ancestor_at = lca.indexed_ancestors()
+    count = len(requested)
+    batch_size = max(1, 16_384 // count)
+    second = requested[None, :]
+    with np.errstate(over="ignore", under="ignore", divide="ignore", invalid="ignore"):
+        log_variances = np.log(variances)
+        for start in range(0, count, batch_size):
+            stop = min(count, start + batch_size)
+            first = requested[start:stop, None]
+            ancestors = ancestor_at(first, second)
+            log_values = (
+                log_variances[ancestors]
+                + log_loadings[first]
+                + log_loadings[second]
+                - 2.0 * log_loadings[ancestors]
+            )
+            values = np.exp(log_values)
+            values[negative[first] ^ negative[second]] *= -1.0
+            disconnected = (zeros[first] > zeros[ancestors]) | (
+                zeros[second] > zeros[ancestors]
+            )
+            values[disconnected | (variances[ancestors] == 0.0)] = 0.0
+            covariance[start:stop] = np.where(
+                first == second, variances[ancestors], values
+            )
+    # A symmetric pair must use one summation order for its two entries.
+    for row in range(count):
+        covariance[row + 1 :, row] = covariance[row, row + 1 :]
+
+
 @dataclass(frozen=True)
 class GaussianTreeProcess:
     """A rooted scalar linear-Gaussian process in original tree-node space."""
@@ -538,14 +571,25 @@ class GaussianTreeProcess:
                         covariance[first, second] = value
                         covariance[second, first] = value
         if not unit_loadings and not direct_loadings:
-            for first, first_index in enumerate(requested):
-                covariance[first, first] = variances[first_index]
-                for second in range(first + 1, len(nodes)):
-                    second_index = requested[second]
-                    ancestor = common_ancestor(first_index, second_index)
-                    value = stable_covariance(first_index, second_index, ancestor)
-                    covariance[first, second] = value
-                    covariance[second, first] = value
+            if len(requested) >= 32:
+                _fill_log_covariance(
+                    covariance,
+                    np.asarray(requested),
+                    lca,
+                    variances,
+                    path_log_abs,
+                    path_zero_count,
+                    path_negative_parity,
+                )
+            else:
+                for first, first_index in enumerate(requested):
+                    covariance[first, first] = variances[first_index]
+                    for second in range(first + 1, len(nodes)):
+                        second_index = requested[second]
+                        ancestor = common_ancestor(first_index, second_index)
+                        value = stable_covariance(first_index, second_index, ancestor)
+                        covariance[first, second] = value
+                        covariance[second, first] = value
         if not np.isfinite(covariance).all():
             raise ValueError("Gaussian tree covariance exceeds floating-point range.")
         return covariance
