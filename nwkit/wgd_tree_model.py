@@ -7,6 +7,7 @@ with rate log(root_mean), hence a positive geometric count prior at the root.
 
 import math
 from dataclasses import dataclass
+from functools import lru_cache
 
 import numpy as np
 from scipy.special import logsumexp
@@ -93,6 +94,7 @@ def lineage_survival(survival, duplication, loss, length):
     return survival * -difference * exponent / denominator
 
 
+@lru_cache(maxsize=4096)
 def lineage_log_parameters(duplication, loss, length):
     """Log extinction, geometric parameter, survival and geometric success."""
     return _birth_death_log_probabilities(duplication, loss, length)
