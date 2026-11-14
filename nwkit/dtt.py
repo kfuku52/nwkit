@@ -162,6 +162,25 @@ def _read_data(args):
     return retained, columns, used, excluded, values[complete], depths, height
 
 
+def _simulation_envelope(simulations, tail):
+    """Select the median and linear-quantile endpoints in one partition."""
+    positions = np.array([tail, 0.5, 1 - tail]) * (len(simulations) - 1)
+    left = np.floor(positions).astype(int)
+    right = np.ceil(positions).astype(int)
+    ordered = np.array(simulations.T, order="C", copy=True)
+    ordered.partition(np.concatenate((left, right)), axis=-1)
+    lo, hi = ordered[:, left].T, ordered[:, right].T
+    fraction = (positions - left)[:, None]
+    delta = hi - lo
+    # Match NumPy's linear quantile interpolation from the nearer endpoint.
+    limits = np.where(
+        fraction < 0.5, lo + delta * fraction, hi - delta * (1 - fraction)
+    )
+    # The median averages the central pair, including when values are subnormal.
+    median = (lo[1] + hi[1]) / 2
+    return median, limits[0], limits[2]
+
+
 def _result_tables(tree, design, values, simulations, height, interval, args):
     disparities, counts = clade_disparities(design, values)
     relative = disparities / disparities[0]
@@ -202,12 +221,10 @@ def _result_tables(tree, design, values, simulations, height, interval, args):
     null_mdi = np.empty(0)
     if len(simulations):
         tail = (1 - args.ci_level) / 2
-        median = np.median(simulations, axis=0)
+        median, lower, upper = _simulation_envelope(simulations, tail)
         table["bm_mean"] = simulations.mean(axis=0)
         table["bm_median"] = median
-        table["bm_lower"], table["bm_upper"] = np.quantile(
-            simulations, [tail, 1 - tail], axis=0
-        )
+        table["bm_lower"], table["bm_upper"] = lower, upper
         null_mdi = curve_area(design.times, simulations - median, interval)
         summary.update(
             bm_median_area=float(curve_area(design.times, median, interval)),

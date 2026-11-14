@@ -20,7 +20,7 @@ from nwkit.disparity import (
     transform_traits,
     validate_work,
 )
-from nwkit.dtt import _ultrametric_depths, _write_simulation_table
+from nwkit.dtt import _simulation_envelope, _ultrametric_depths, _write_simulation_table
 from nwkit.evolution import build_evolutionary_process
 from nwkit.util import read_tree
 
@@ -176,6 +176,21 @@ def test_area_duplicate_root_and_interpolated_range():
     curves = np.array([[1, 2, 0, 0], [1, 4, 0, 0]])
     assert curve_area(times, curves) == pytest.approx([0.5, 1])
     assert curve_area(times, curves, (0.1, 0.4)) == pytest.approx([0.3, 0.6])
+
+
+def test_simulation_envelope_preserves_median_and_interpolated_quantiles():
+    tiny = np.nextafter(0.0, 1.0)
+    simulations = np.array([[2.0, 0.0], [1.0, tiny], [4.0, 0.0], [3.0, tiny]])
+    for count in (3, 4):
+        sample = simulations[:count]
+        median, lower, upper = _simulation_envelope(sample, 0.15)
+        np.testing.assert_array_equal(median, np.median(sample, axis=0))
+        np.testing.assert_array_equal(
+            [lower, upper], np.quantile(sample, [0.15, 0.85], axis=0)
+        )
+    np.testing.assert_array_equal(
+        simulations, [[2.0, 0.0], [1.0, tiny], [4.0, 0.0], [3.0, tiny]]
+    )
 
 
 def test_simulation_table_keeps_row_order_across_output_batches():
