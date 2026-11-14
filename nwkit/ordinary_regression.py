@@ -1865,9 +1865,7 @@ def _fit_ordinary_multivariate_response(
         if isinstance(covariance, DiagonalLowRankCovariance):
             fixed_diagonal[start : start + len(leaf_names)] = covariance.diagonal
             fixed_loading_blocks.append(sparse.csr_matrix(covariance.low_rank))
-        elif covariance.ndim == 1 or np.array_equal(
-            covariance, np.diag(np.diag(covariance))
-        ):
+        elif covariance.ndim == 1 or is_diagonal(covariance):
             fixed_diagonal[start : start + len(leaf_names)] = (
                 covariance if covariance.ndim == 1 else np.diag(covariance)
             )

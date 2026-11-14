@@ -13,6 +13,7 @@ from scipy.optimize import minimize
 from nwkit.evolution import EvolutionaryCovarianceFactory
 from nwkit.gaussian import (
     DiagonalLowRankCovariance,
+    is_diagonal,
     materialize_covariance,
     symmetric_average,
     validate_psd_covariance,
@@ -118,9 +119,7 @@ def _fixed_covariance_is_sparse_capable(fixed_covariance):
     ):
         return True
     fixed_array = np.asarray(fixed_covariance)
-    return fixed_array.ndim == 1 or np.array_equal(
-        fixed_array, np.diag(np.diag(fixed_array))
-    )
+    return fixed_array.ndim == 1 or is_diagonal(fixed_array)
 
 
 def _select_multivariate_sparse_path(

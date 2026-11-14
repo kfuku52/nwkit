@@ -36,7 +36,7 @@ from nwkit.evolution import (
     parameter_near_boundary,
     transformed_edge_variances,
 )
-from nwkit.gaussian import DiagonalLowRankCovariance, draw_from_factor
+from nwkit.gaussian import DiagonalLowRankCovariance, draw_from_factor, is_diagonal
 from nwkit.measurement_error import fit_latent_predictor, fit_sparse_latent_predictor
 from nwkit.model_matrix import (
     PredictorTerm,
@@ -2729,9 +2729,7 @@ def _fit_reconciled_multivariate_responses(
         if isinstance(covariance, DiagonalLowRankCovariance):
             fixed_diagonal[start : start + len(gene_tip_names)] = covariance.diagonal
             fixed_loading_blocks.append(sparse.csr_matrix(covariance.low_rank))
-        elif covariance.ndim == 1 or np.array_equal(
-            covariance, np.diag(np.diag(covariance))
-        ):
+        elif covariance.ndim == 1 or is_diagonal(covariance):
             fixed_diagonal[start : start + len(gene_tip_names)] = (
                 covariance if covariance.ndim == 1 else np.diag(covariance)
             )
