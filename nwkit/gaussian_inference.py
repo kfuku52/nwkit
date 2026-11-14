@@ -385,6 +385,7 @@ def _message_pass(
     compiled_tree,
     *,
     retain_inside=False,
+    retain_outside_inputs=False,
 ):
     compiled = (
         CompiledTree.from_tree(process.tree) if compiled_tree is None else compiled_tree
@@ -418,13 +419,18 @@ def _message_pass(
         )
         local[index] = _Factor(value, variance, roundoff=roundoff)
         observed_positions.add(latent_positions[index])
-    inside = list(local)
+    inside = list(local) if retain_outside_inputs else local
     upward = [_UNIT_FACTOR] * len(compiled.nodes)
     for index in compiled.postorder:
         factor = inside[index]
         for child in compiled.children[index]:
             factor = _combine(factor, upward[child])
-        inside[index] = factor
+            if not retain_outside_inputs:
+                upward[child] = _UNIT_FACTOR
+        if retain_inside or index == 0:
+            inside[index] = factor
+        elif not retain_outside_inputs:
+            inside[index] = _UNIT_FACTOR
         parent = compiled.parents[index]
         if parent >= 0:
             transition = scaled_process.transitions[compiled.nodes[index]]
@@ -461,9 +467,9 @@ def _message_pass(
         center,
         exponent,
         scaled_process,
-        tuple(local),
+        tuple(local) if retain_outside_inputs else (),
         tuple(inside) if retain_inside else (),
-        tuple(upward),
+        tuple(upward) if retain_outside_inputs else (),
         root_posterior,
         len(observed_positions),
     )
@@ -478,7 +484,13 @@ def condition_gaussian_tree(
 ) -> GaussianConditioningResult:
     """Condition every process node on observed tip values in linear time."""
 
-    messages = _message_pass(process, values_by_leaf, standard_errors, compiled_tree)
+    messages = _message_pass(
+        process,
+        values_by_leaf,
+        standard_errors,
+        compiled_tree,
+        retain_outside_inputs=True,
+    )
     compiled = messages.compiled
     records = messages.records
     center = messages.center
