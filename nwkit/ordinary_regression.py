@@ -36,6 +36,7 @@ from nwkit.gaussian import (
     finite_mean,
     is_diagonal,
     regression_total_quadratic,
+    sample_standard_errors,
 )
 from nwkit.measurement_error import (
     fit_conditional_eiv_gaussian,
@@ -866,7 +867,7 @@ def _ordinary_inference_samples(
         predictor_columns=predictor_columns,
         allow_large_dense=allow_large_dense,
     )
-    return coefficients, np.std(coefficients, axis=0, ddof=1)
+    return coefficients, sample_standard_errors(coefficients)
 
 
 def _ordinary_response_statistics(y, fit, fixed_covariance, *, intercept):

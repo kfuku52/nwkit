@@ -34,6 +34,7 @@ from nwkit.gaussian import (
     rescale_gaussian_covariance,
     residual_variance_scale,
     restore_gaussian_response_units,
+    sample_standard_errors,
     solve_factor,
     validate_psd_covariance,
 )
@@ -3124,7 +3125,7 @@ def _fit_covariance_model(
                 likelihood_logdet_offset=likelihood_logdet_offset,
                 likelihood_groups=likelihood_groups,
             )
-        standard_errors = np.std(bootstrap_coefficients, axis=0, ddof=1)
+        standard_errors = sample_standard_errors(bootstrap_coefficients)
     elif inference == "wald":
         standard_errors = np.sqrt(np.maximum(np.diag(beta_covariance), 0.0))
     else:

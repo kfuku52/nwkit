@@ -42,6 +42,18 @@ def finite_mean(values):
     return math.ldexp(float(np.mean(np.ldexp(values, -exponent))), exponent)
 
 
+def sample_standard_errors(samples):
+    """Column-wise sample standard deviations across the floating-point range."""
+    size = np.max(np.abs(samples), axis=0)
+    _, exponents = np.frexp(size)
+    exponents = np.where(np.abs(exponents) > 450, exponents, 0)
+    if not np.any(exponents):
+        return np.std(samples, axis=0, ddof=1)
+    with np.errstate(under="ignore"):
+        working = np.ldexp(samples, -exponents)
+        return np.ldexp(np.std(working, axis=0, ddof=1), exponents)
+
+
 def symmetric_average(matrix: np.ndarray) -> np.ndarray:
     """Average transposed entries across the finite floating-point range."""
     try:

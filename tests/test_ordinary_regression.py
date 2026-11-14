@@ -83,6 +83,33 @@ def test_ordinary_pgls_null_model_stays_in_working_units_for_tiny_responses(inte
     )
 
 
+def test_ordinary_pgls_bootstrap_keeps_standard_errors_in_tiny_response_units():
+    tree = _tree()
+    x = dict(zip(LEAF_NAMES, [0.0, 1.0, 2.0, 3.0, 4.0], strict=True))
+    response = dict(zip(LEAF_NAMES, [0.7, 1.1, 2.5, 2.9, 4.3], strict=True))
+
+    def fit(scale):
+        return fit_ordinary_regression(
+            tree,
+            {"y": {name: value * scale for name, value in response.items()}},
+            {"x": x},
+            ["y"],
+            ["x"],
+            inference="parametric-bootstrap",
+            bootstrap_replicates=8,
+            seed=7,
+        )
+
+    expected = fit(1.0)
+    scale = 2.0**-532
+    with np.errstate(over="raise", invalid="raise"):
+        actual = fit(scale)
+    np.testing.assert_allclose(
+        actual["standard_error"] / scale, expected["standard_error"], rtol=1e-11
+    )
+    np.testing.assert_array_equal(actual["p_value"], expected["p_value"])
+
+
 @pytest.mark.parametrize("dispersion", [1e-20, 1e-310])
 def test_near_poisson_negative_binomial_bootstrap_draws_keep_count_mean(dispersion):
     rng = np.random.default_rng(18)
