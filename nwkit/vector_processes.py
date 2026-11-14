@@ -4,7 +4,13 @@ import numpy as np
 from scipy.linalg import expm, solve_continuous_lyapunov
 
 from nwkit.compiled_tree import CompiledTree
-from nwkit.vector_gaussian import VectorProcess, VectorTransition, _array, _inverse
+from nwkit.vector_gaussian import (
+    VectorProcess,
+    VectorTransition,
+    _array,
+    _inverse,
+    _symmetric_part,
+)
 
 
 def _short_ou_displacement(exponent):
@@ -56,7 +62,7 @@ def vector_ou_process(tree, attraction, diffusion, theta):
     if np.min(np.linalg.eigvals(attraction).real) <= 0:
         raise ValueError("OU attraction must have strictly positive real eigenvalues.")
     stationary = solve_continuous_lyapunov(attraction, diffusion)
-    stationary = (stationary + stationary.T) / 2
+    stationary = _symmetric_part(stationary)
     _inverse(stationary, "OU stationary covariance")
     transitions = {}
     transition_by_time: dict[float, VectorTransition] = {}
@@ -90,7 +96,7 @@ def vector_ou_process(tree, attraction, diffusion, theta):
             intercept = (displacement * scales[:, None] / scales[None, :]) @ theta
         else:
             intercept = theta - slope @ theta
-        transition = VectorTransition(slope, intercept, (covariance + covariance.T) / 2)
+        transition = VectorTransition(slope, intercept, _symmetric_part(covariance))
         transitions[node] = transition
         transition_by_time[time] = transition
     return VectorProcess(tree, d, transitions, theta, stationary * scale_product)

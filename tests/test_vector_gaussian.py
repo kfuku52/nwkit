@@ -173,6 +173,20 @@ def test_vector_conditioning_preserves_extreme_finite_covariances():
     assert result.log_likelihood == 0.0
 
 
+def test_full_ou_preserves_extreme_finite_branch_covariance():
+    from nwkit.vector_processes import vector_ou_process
+
+    tree = read_tree("(A:4,B:4)R;", "1", True, quiet=True, rooted="yes")
+    diffusion = np.eye(2) * 1.25e308
+    with np.errstate(over="raise", invalid="raise"):
+        process = vector_ou_process(tree, 0.4 * np.eye(2), diffusion, np.zeros(2))
+    np.testing.assert_allclose(process.root_covariance, diffusion / 0.8, rtol=2e-15)
+    for transition in process.transitions.values():
+        np.testing.assert_allclose(
+            transition.covariance, (diffusion / 0.8) * -np.expm1(-3.2), rtol=2e-15
+        )
+
+
 def test_zero_length_branches_preserve_exact_observations():
     from nwkit.vector_processes import vector_brownian_process
 
