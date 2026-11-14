@@ -114,7 +114,9 @@ def _profile_crossing(difference, points, mle):
                 min(inside, outside),
                 max(inside, outside),
                 xtol=math.ulp(0.0),
-                maxiter=200,
+                # A root close to zero may be hundreds of binary scales
+                # closer than the nearest point of the initial profile grid.
+                maxiter=2 * (np.finfo(float).maxexp - np.finfo(float).minexp),
             )
         ), False
     return inside, True

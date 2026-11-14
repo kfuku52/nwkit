@@ -35,6 +35,21 @@ def test_profile_likelihood_interval_resolves_small_parameter_units():
     assert interval.upper / scale == pytest.approx(1.95996398454)
 
 
+def test_profile_likelihood_resolves_a_narrow_crossing_in_a_wide_search_domain():
+    scale = 1e-200
+
+    def log_likelihood(value):
+        standardized = min(abs(value) / scale, 10.0)
+        return -0.5 * standardized**2
+
+    result = profile_likelihood_interval(log_likelihood, 0, (-1.0, 1.0), grid_size=3)
+
+    assert result.lower / scale == pytest.approx(-1.95996398454)
+    assert result.upper / scale == pytest.approx(1.95996398454)
+    assert not result.lower_boundary_limited
+    assert not result.upper_boundary_limited
+
+
 def test_profile_likelihood_interval_works_across_an_overflowing_grid_width():
     def profile(value):
         assert -1e308 <= value <= 1.7e308
