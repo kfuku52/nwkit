@@ -9,6 +9,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Mk transition matrices preserve rare multi-step changes on short branches
   and remain stochastic on very long branches. Asymmetric generators retain
   their directionality under reciprocal changes of rate and branch-length units.
+  Mk rate mixtures combine extreme branch lengths and category rates without
+  first rounding the scaled generator to zero or infinity.
 - Sparse Mk transition graphs use a nonnegative Poisson series to resolve
   probabilities for endpoints separated by many jumps.
 - Recover slow Mk transitions that would otherwise underflow during the
@@ -26,6 +28,7 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   lengths retain nonzero innovation standard deviations.
 - Keep rounded threshold liabilities inside their observed categories and
   accumulate scaled posterior variances so large draws keep finite summaries.
+  Keep estimated cuts within the adjacent representable category boundaries.
 - Preserve fixed ordinal thresholds exactly in posterior summaries.
 - Report unrepresentable liability draws before they contaminate MCMC
   summaries.
@@ -40,6 +43,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   coefficient's standard error.
 - Scale extreme Gaussian posterior predictive values before computing moments
   to avoid overflowing statistics that are finite in the original units.
+- Preserve exact observations and fixed roots across zero-variance identity
+  branches in Gaussian marginals and joint draws.
 - Fit shared MV-OU attraction in normalized time units so the initialization
   and search remain finite under extreme branch-length rescaling.
 - Normalize branch times when computing complete-case MV-BM contrasts so
@@ -50,7 +55,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Restore trait and time scales together for multivariate Gaussian
   covariances, and preserve exact observed trait coordinates after conditioning.
 - Fit diagonal MV-OU with row-scaled diffusion so the stationary covariance
-  and representable diffusion remain finite at extreme attraction rates.
+  and representable diffusion remain finite across extreme attraction rates
+  and rate differences between traits.
 - Fit shared and regime-specific Brownian directional drift in normalized
   trait and time units so branch rescaling preserves the fitted trends.
 - Apply the same ultrametricity tolerance to delta and OU contrasts across
@@ -64,6 +70,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   precision well scaled near a zero trait variance.
 - Fit Gaussian regression in normalized units for extreme responses and
   restore the coefficients, variances, and likelihood to the input units.
+  Keep PGLS null-model statistics and bootstrap standard errors on stable
+  working scales. Use pivoted QR for poorly conditioned dense PGLS designs.
 - Preserve tail likelihoods in ordinal, multinomial, count and interval-censored
   GLMMs. Keep positive count draws on the support of the truncated distribution
   when bootstrapping hurdle models.
@@ -79,7 +87,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   curvature in ordinal-logit tails.
   Simulate Gamma and count bootstrap responses in the fitted units.
 - Preserve small sampling variances in replicate estimates and independent
-  contrasts. Scale large pooled residuals before summing their squares.
+  contrasts. Scale replicate moments so finite means and sampling variances
+  survive overflowing intermediate sums and variances.
 - Use analytic score and curvature for exact and censored Gaussian responses,
   and integrate narrow intervals without subtracting nearly equal CDFs.
 - Apply observation-specific scales when projecting sparse predictor uncertainty
@@ -141,13 +150,14 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Release child likelihood messages after they have contributed to a
   likelihood-only Mk tree traversal.
 - Reuse logged tip likelihoods and parsed branch lengths during Mk rate
-  optimization.
+  optimization. Reuse generator preparation in MK-REGIME and a fixed
+  generator and stationary prior across Mk mixture iterations.
 - Reuse prepared stochastic mapping contexts without copying branch rate
   matrices into each worker specification.
 - Precompute child-state conditional probabilities before sampling
   stochastic maps.
 - Compute Gaussian posterior predictive statistics for all replicates in
-  one pass per statistic.
+  one pass per statistic. Condition only the root for posterior prediction.
 - Retain only observed-tip draws and active parent states during Gaussian
   posterior predictive simulation.
 - Batch joint Gaussian posterior draws using precomputed branch conditionals.
@@ -199,6 +209,13 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   PGLS. Whiten the dense design and response in one triangular solve.
 - Use scalar branch updates for single Gaussian tree simulations.
 - Reuse branch parameters across Gaussian ASR bootstrap simulations.
+- Reuse branch variances, sampling coefficients, and clade metadata across
+  traits in independent contrasts. Reuse the selected PGLS fit when bootstrap
+  replicates estimate an evolutionary parameter.
+- Enumerate wide, dense clade masks by byte while preserving clade IDs and
+  descendant order.
+- Reuse the same covariance across Pagel's lambda trials when tips share no
+  nonzero branch variance.
 - Group regression inputs and replicate observations by tip before processing
   individual traits. Build ancestral and sampling covariance output tables
   by column.
