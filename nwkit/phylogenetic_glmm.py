@@ -39,13 +39,13 @@ from nwkit.sparse_laplace import (
     SparseCovarianceModel,
     SparseLatentModel,
     SparsePositiveDefiniteFactor,
-    append_identity_latent_components,
-    append_latent_component,
+    append_latent_components,
     combine_sparse_covariance_models,
     continuous_predictor_loading,
     factor_sparse_positive_definite,
     gmrf_predictor_loading,
     grouped_predictor_loading,
+    identity_latent_component,
     joint_predictor_loading,
     prepare_sparse_latent_sampler,
 )
@@ -661,29 +661,38 @@ def _sparse_glmm_latent_model(
     if predictor_uncertainties:
         if coefficients is None:
             raise ValueError("Sparse predictor uncertainty requires coefficients.")
-        for index, (uncertainty, selected_columns) in enumerate(
-            zip(predictor_uncertainties, predictor_columns, strict=True)
-        ):
-            name = "predictor_uncertainty_{}".format(index)
-            loading = _structured_predictor_loading(
-                uncertainty, selected_columns, coefficients
-            )
-            if isinstance(uncertainty, GmrfPredictorUncertainty):
-                latent = append_latent_component(
-                    latent,
-                    name,
-                    uncertainty.model.precision,
-                    loading,
-                    uncertainty.model.logdet_covariance,
-                    (
-                        uncertainty.model.precision_factor()
-                        if include_sampling_factor
-                        else None
-                    ),
+        latent = append_latent_components(
+            latent,
+            list(
+                _sparse_predictor_components(
+                    predictor_uncertainties,
+                    predictor_columns,
+                    coefficients,
+                    include_sampling_factor=include_sampling_factor,
                 )
-            else:
-                latent = append_identity_latent_components(latent, {name: loading})
+            ),
+        )
     return latent
+
+
+def _sparse_predictor_components(
+    uncertainties, columns, coefficients, *, include_sampling_factor
+):
+    for index, (uncertainty, selected_columns) in enumerate(
+        zip(uncertainties, columns, strict=True)
+    ):
+        name = "predictor_uncertainty_{}".format(index)
+        loading = _structured_predictor_loading(
+            uncertainty, selected_columns, coefficients
+        )
+        if isinstance(uncertainty, GmrfPredictorUncertainty):
+            model = uncertainty.model
+            factor = model.precision_factor() if include_sampling_factor else None
+            yield name, model.precision, loading, model.logdet_covariance, factor
+        elif loading.shape[1]:
+            yield identity_latent_component(
+                name, loading, sample=include_sampling_factor
+            )
 
 
 def _sparse_latent_mode(

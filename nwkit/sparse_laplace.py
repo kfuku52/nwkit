@@ -1,7 +1,7 @@
 """Sparse latent-Gaussian helpers for large phylogenetic models."""
 
 from dataclasses import dataclass
-from typing import Mapping
+from typing import Mapping, Sequence
 
 import numpy as np
 from scipy import sparse
@@ -132,6 +132,11 @@ class SparseLatentModel:
     @property
     def n_states(self) -> int:
         return int(self.precision.shape[0])
+
+
+_LatentComponent = tuple[
+    str, sparse.spmatrix, sparse.spmatrix, float, sparse.spmatrix | None
+]
 
 
 @dataclass(frozen=True)
@@ -285,44 +290,21 @@ def append_identity_latent_components(
     loadings: Mapping[str, sparse.spmatrix],
 ) -> SparseLatentModel:
     """Append standard-normal latent components with supplied loadings."""
-    if not loadings:
-        return model
-    precision_blocks = [model.precision]
-    sampling_blocks = (
-        None
-        if model.sampling_precision_factor is None
-        else [model.sampling_precision_factor]
-    )
-    loading_blocks = [model.loading]
-    slices = dict(model.component_slices)
-    component_loadings = dict(model.component_loadings)
-    position = model.n_states
+    components = []
+    sample = model.sampling_precision_factor is not None
     for name, loading_value in loadings.items():
         loading = sparse.csr_matrix(loading_value, dtype=float)
         if loading.shape[0] != model.loading.shape[0]:
             raise ValueError("Sparse latent-component loading has the wrong height.")
-        width = loading.shape[1]
-        if width == 0:
-            continue
-        precision_blocks.append(sparse.eye(width, format="csc"))
-        if sampling_blocks is not None:
-            sampling_blocks.append(sparse.eye(width, format="csr"))
-        loading_blocks.append(loading)
-        slices[name] = slice(position, position + width)
-        component_loadings[name] = loading
-        position += width
-    return SparseLatentModel(
-        precision=sparse.block_diag(precision_blocks, format="csc"),
-        loading=sparse.hstack(loading_blocks, format="csr"),
-        sampling_precision_factor=(
-            None
-            if sampling_blocks is None
-            else sparse.block_diag(sampling_blocks, format="csr")
-        ),
-        prior_logdet=model.prior_logdet,
-        component_slices=slices,
-        component_loadings=component_loadings,
-    )
+        if loading.shape[1]:
+            components.append(identity_latent_component(name, loading, sample=sample))
+    return append_latent_components(model, components)
+
+
+def identity_latent_component(name, loading, *, sample) -> _LatentComponent:
+    width = loading.shape[1]
+    sampling_factor = sparse.eye(width, format="csr") if sample else None
+    return name, sparse.eye(width, format="csc"), loading, 0.0, sampling_factor
 
 
 def append_latent_component(
@@ -334,36 +316,66 @@ def append_latent_component(
     sampling_precision_factor: sparse.spmatrix | None = None,
 ) -> SparseLatentModel:
     """Append one general latent GMRF component."""
-    loading = sparse.csr_matrix(loading, dtype=float)
-    precision = sparse.csc_matrix(precision, dtype=float)
-    if loading.shape != (model.loading.shape[0], precision.shape[0]) or (
-        precision.shape[0] != precision.shape[1]
-    ):
-        raise ValueError("Appended sparse latent component has invalid dimensions.")
+    return append_latent_components(
+        model,
+        [(name, precision, loading, logdet_covariance, sampling_precision_factor)],
+    )
+
+
+def append_latent_components(
+    model: SparseLatentModel, components: Sequence[_LatentComponent]
+) -> SparseLatentModel:
+    """Append independent latent components in a single sparse assembly."""
+    if not components:
+        return model
+    precisions = [model.precision]
+    loadings = [model.loading]
+    factors = (
+        None
+        if model.sampling_precision_factor is None
+        else [model.sampling_precision_factor]
+    )
     position = model.n_states
     slices = dict(model.component_slices)
-    slices[name] = slice(position, position + precision.shape[0])
-    loadings = dict(model.component_loadings)
-    loadings[name] = loading
-    combined_sampling_factor = None
-    if (
-        model.sampling_precision_factor is not None
-        and sampling_precision_factor is not None
-    ):
-        sampling_factor = sparse.csr_matrix(sampling_precision_factor, dtype=float)
-        if sampling_factor.shape[1] != precision.shape[0]:
-            raise ValueError("Appended sparse sampling factor has invalid dimensions.")
-        combined_sampling_factor = sparse.block_diag(
-            [model.sampling_precision_factor, sampling_factor], format="csr"
-        )
+    component_loadings = dict(model.component_loadings)
+    prior_logdet = model.prior_logdet
+    for name, precision, loading, logdet, factor in components:
+        loading = sparse.csr_matrix(loading, dtype=float)
+        precision = sparse.csc_matrix(precision, dtype=float)
+        width = precision.shape[0]
+        if (
+            loading.shape != (model.loading.shape[0], width)
+            or precision.shape[1] != width
+        ):
+            raise ValueError("Appended sparse latent component has invalid dimensions.")
+        slices[name] = slice(position, position + width)
+        component_loadings[name] = loading
+        precisions.append(precision)
+        loadings.append(loading)
+        if factors is not None:
+            if factor is None:
+                factors = None
+            else:
+                factors.append(_appended_sampling_factor(factor, width))
+        position += width
+        prior_logdet += float(logdet)
     return SparseLatentModel(
-        precision=sparse.block_diag([model.precision, precision], format="csc"),
-        loading=sparse.hstack([model.loading, loading], format="csr"),
-        sampling_precision_factor=combined_sampling_factor,
-        prior_logdet=model.prior_logdet + float(logdet_covariance),
+        precision=sparse.block_diag(precisions, format="csc"),
+        loading=sparse.hstack(loadings, format="csr"),
+        sampling_precision_factor=(
+            None if factors is None else sparse.block_diag(factors, format="csr")
+        ),
+        prior_logdet=prior_logdet,
         component_slices=slices,
-        component_loadings=loadings,
+        component_loadings=component_loadings,
     )
+
+
+def _appended_sampling_factor(factor, width):
+    factor = sparse.csr_matrix(factor, dtype=float)
+    if factor.shape[1] != width:
+        raise ValueError("Appended sparse sampling factor has invalid dimensions.")
+    return factor
 
 
 def prepare_sparse_latent_sampler(model: SparseLatentModel) -> SparseLatentSampler:
