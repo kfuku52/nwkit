@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 import pytest
 from ete4 import Tree
@@ -15,6 +17,7 @@ from nwkit.gaussian import (
     draw_from_factor,
     factor_diagonal_sparse_precision_updates,
     materialize_covariance,
+    solve_factor,
     sparse_precision_update_diagonal,
 )
 from nwkit.measurement_error import (
@@ -152,6 +155,67 @@ def test_dense_eiv_accepts_an_implicit_evolutionary_component():
     np.testing.assert_allclose(after["beta"], before["beta"], rtol=1e-6, atol=1e-8)
     np.testing.assert_allclose(
         after["covariance"], before["covariance"], rtol=1e-6, atol=1e-8
+    )
+
+
+@pytest.mark.parametrize("exponent", [-500, 500])
+@pytest.mark.parametrize("representation", ["dense", "factor", "precision"])
+def test_conditional_eiv_fits_in_extreme_response_units(exponent, representation):
+    rng = np.random.default_rng(60)
+    size = 22
+    design = np.column_stack((np.ones(size), rng.normal(size=size)))
+    response = design @ [1.0, -0.8] + rng.normal(size=size)
+    fixed = np.full(size, 0.12)
+    components = [("rate", np.ones(size))]
+    diagonal = rng.uniform(0.03, 0.1, size)
+    if representation == "precision":
+        names = [f"t{index}" for index in range(size)]
+        tree = Tree("(" + ",".join(f"{name}:1" for name in names) + ");", parser=1)
+        model = build_sparse_evolutionary_model(tree, names)
+        uncertainty = GmrfPredictorUncertainty(
+            model, np.arange(size), np.sqrt(diagonal)
+        )
+    elif representation == "factor":
+        uncertainty = ContinuousPredictorUncertainty(np.sqrt(diagonal), np.arange(size))
+    else:
+        uncertainty = np.diag(diagonal)
+
+    def fit(values, sampling, start=None):
+        return fit_conditional_eiv_gaussian(
+            values,
+            design,
+            [uncertainty],
+            [1],
+            sampling,
+            components,
+            reml=False,
+            starting_parameters=start,
+        )
+
+    reference = fit(response, fixed)
+    scaled_response = np.ldexp(response, exponent)
+    start = reference["parameters"].copy()
+    start[:2] = np.ldexp(start[:2], exponent)
+    start[2:] += 2 * exponent * math.log(2.0)
+    with np.errstate(over="raise", divide="raise", invalid="raise"):
+        scaled = fit(scaled_response, np.ldexp(fixed, 2 * exponent), start)
+    np.testing.assert_allclose(
+        np.ldexp(scaled["beta"], -exponent), reference["beta"], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        np.ldexp(scaled["beta_covariance"], -2 * exponent),
+        reference["beta_covariance"],
+        rtol=2e-5,
+    )
+    assert scaled["objective"] - size * exponent * math.log(2.0) == pytest.approx(
+        reference["objective"], abs=1e-8
+    )
+    _, recovered_factor = scaled["covariance_for_beta"](scaled["beta"])
+    _, reference_factor = reference["covariance_for_beta"](reference["beta"])
+    np.testing.assert_allclose(
+        np.ldexp(solve_factor(recovered_factor, scaled_response), exponent),
+        solve_factor(reference_factor, response),
+        rtol=1e-5,
     )
 
 

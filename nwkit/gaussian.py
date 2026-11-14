@@ -204,9 +204,88 @@ class ScaledCovarianceFactor:
         | GroupedDiagonalLowRankFactor
         | SparseDiagonalLowRankFactor
         | SparseCovarianceFactor
+        | DiagonalSparsePrecisionFactor
     )
     exponent: int
     dimension: int
+
+
+def _rescale_covariance_loading(loading, exponent):
+    if sparse.issparse(loading):
+        result = loading.copy()
+        result.data = np.ldexp(result.data, exponent)
+        return result
+    return np.ldexp(loading, exponent)
+
+
+def _rescale_optional_variances(values, exponent):
+    return None if values is None else np.ldexp(values, 2 * exponent)
+
+
+def rescale_gaussian_covariance(covariance, exponent):
+    """Change trait units while retaining the covariance representation."""
+    if isinstance(covariance, DiagonalSparsePrecisionCovariance):
+        return DiagonalSparsePrecisionCovariance(
+            np.ldexp(covariance.diagonal, 2 * exponent),
+            _rescale_covariance_loading(covariance.loading, exponent),
+            covariance.precision,
+            _rescale_optional_variances(covariance.marginal_diagonal, exponent),
+            _rescale_optional_variances(covariance.grouped_marginal_diagonal, exponent),
+        )
+    if isinstance(covariance, DiagonalLowRankCovariance):
+        return DiagonalLowRankCovariance(
+            np.ldexp(covariance.diagonal, 2 * exponent),
+            _rescale_covariance_loading(covariance.low_rank, exponent),
+        )
+    return np.ldexp(covariance, 2 * exponent)
+
+
+def gaussian_response_units(response, sampling_diagonal):
+    """Normalize extreme response and sampling scales before fitting."""
+    response_size = float(np.max(np.abs(response), initial=0.0))
+    sampling_size = math.sqrt(float(np.max(sampling_diagonal, initial=0.0)))
+    exponent = math.frexp(max(response_size, sampling_size))[1]
+    if -250 <= exponent <= 250:
+        return response, sampling_diagonal, 0
+    return (
+        np.ldexp(response, -exponent),
+        np.ldexp(sampling_diagonal, -2 * exponent),
+        exponent,
+    )
+
+
+def restore_gaussian_response_units(fit, exponent, effective_likelihood_count):
+    """Restore model estimates and the likelihood Jacobian in original units."""
+    if exponent == 0:
+        return fit
+    log_variance_shift = 2 * exponent * math.log(2.0)
+    try:
+        with np.errstate(over="raise", under="ignore"):
+            fit["beta"] = np.ldexp(fit["beta"], exponent)
+            fit["beta_covariance"] = np.ldexp(fit["beta_covariance"], 2 * exponent)
+            fit["residual"] = np.ldexp(fit["residual"], exponent)
+            fit["inverse_residual"] = np.ldexp(fit["inverse_residual"], -exponent)
+            fit["covariance"] = rescale_gaussian_covariance(fit["covariance"], exponent)
+            fit["component_variances"] = {
+                name: math.ldexp(value, 2 * exponent)
+                for name, value in fit["component_variances"].items()
+            }
+            fit["lower_variance"] = np.ldexp(fit["lower_variance"], 2 * exponent)
+    except (FloatingPointError, OverflowError) as exc:
+        raise ValueError(
+            "Gaussian regression estimates exceed the range of the response units."
+        ) from exc
+    fit["cholesky"] = ScaledCovarianceFactor(
+        fit["cholesky"], exponent, len(fit["residual"])
+    )
+    # Search bounds can extend past representable covariance in trait units.
+    with np.errstate(over="ignore", under="ignore"):
+        fit["upper_variance"] = min(
+            np.finfo(float).max, np.ldexp(fit["upper_variance"], 2 * exponent)
+        )
+    fit["log_variances"] = fit["log_variances"] + log_variance_shift
+    fit["objective"] += 0.5 * effective_likelihood_count * log_variance_shift
+    return fit
 
 
 def _positive_diagonal(values: np.ndarray) -> np.ndarray:

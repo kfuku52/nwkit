@@ -11,6 +11,7 @@ from scipy.optimize import minimize, minimize_scalar
 from nwkit.gaussian import (
     DiagonalLowRankCovariance,
     DiagonalSparsePrecisionCovariance,
+    ScaledCovarianceFactor,
     center_response,
     covariance_marginal_diagonal,
     effective_likelihood_settings,
@@ -19,12 +20,15 @@ from nwkit.gaussian import (
     factor_diagonal_sparse_precision_updates,
     factor_logdet,
     finite_mean,
+    gaussian_response_units,
     grouped_average_marginal_logdet,
     grouped_mean_covariance_diagonal,
     is_diagonal,
     materialize_covariance,
     materialize_low_rank_covariance,
+    rescale_gaussian_covariance,
     residual_variance_scale,
+    restore_gaussian_response_units,
     scale_covariance_by_slope,
     solve_factor,
     sparse_precision_update_diagonal,
@@ -935,9 +939,19 @@ def _prepare_eiv_fixed_covariance(fixed_covariance, n_observations):
     return fixed_input
 
 
-def _eiv_working_fixed_covariance(fixed_covariance, n_observations, structured):
-    fixed = _prepare_eiv_fixed_covariance(fixed_covariance, n_observations)
-    return fixed if structured else materialize_covariance(fixed)
+def _eiv_working_response(response, fixed_covariance, structured):
+    fixed = _prepare_eiv_fixed_covariance(fixed_covariance, len(response))
+    response, sampling_diagonal, exponent = gaussian_response_units(
+        response, covariance_marginal_diagonal(fixed)
+    )
+    if exponent:
+        fixed = rescale_gaussian_covariance(fixed, -exponent)
+    return (
+        response,
+        sampling_diagonal,
+        exponent,
+        fixed if structured else materialize_covariance(fixed),
+    )
 
 
 def _prepare_eiv_components(components, component_factors, n_observations):
@@ -1466,6 +1480,36 @@ def _eiv_parameter_covariance(function, point, bounds):
     return covariance
 
 
+def _restore_eiv_response_units(details, exponent, effective_count):
+    if not exponent:
+        return details
+    coefficient_count = len(details["beta"])
+    covariance = details["parameter_covariance"]
+    exponents = np.zeros(len(covariance), dtype=int)
+    exponents[:coefficient_count] = exponent
+    try:
+        with np.errstate(over="raise", under="ignore"):
+            details["parameter_covariance"] = np.ldexp(
+                covariance, exponents[:, None] + exponents
+            )
+    except FloatingPointError as exc:
+        raise ValueError(
+            "Errors-in-variables coefficient covariance exceeds floating-point range."
+        ) from exc
+    details = restore_gaussian_response_units(details, exponent, effective_count)
+    details["parameters"] = np.concatenate((details["beta"], details["log_variances"]))
+    return details
+
+
+def _eiv_covariance_in_response_units(covariance, factor, exponent, size):
+    if not exponent:
+        return covariance, factor
+    return (
+        rescale_gaussian_covariance(covariance, exponent),
+        ScaledCovarianceFactor(factor, exponent, size),
+    )
+
+
 def fit_conditional_eiv_gaussian(
     response,
     design,
@@ -1527,8 +1571,8 @@ def fit_conditional_eiv_gaussian(
         )
     if len(response) > MAX_DENSE_EIV_OBSERVATIONS and not structured:
         _validate_conditional_eiv_size(len(response), allow_large_dense)
-    fixed_covariance = _eiv_working_fixed_covariance(
-        fixed_covariance, len(response), structured
+    response, sampling_diagonal, response_exponent, fixed_covariance = (
+        _eiv_working_response(response, fixed_covariance, structured)
     )
     if len(predictor_uncertainties) != len(predictor_columns):
         raise ValueError("Each uncertain predictor requires coefficient columns.")
@@ -1549,7 +1593,7 @@ def fit_conditional_eiv_gaussian(
     response_scale = residual_variance_scale(
         centered_response,
         ordinary_residual,
-        covariance_marginal_diagonal(fixed_covariance),
+        sampling_diagonal,
     )
     lower_variance = max(response_scale * 1e-12, np.finfo(float).tiny)
     upper_variance = max(response_scale * 1e6, lower_variance * 1e6)
@@ -1679,7 +1723,10 @@ def fit_conditional_eiv_gaussian(
         ]
     else:
         start = np.asarray(starting_parameters, dtype=float).copy()
-        start[:num_coefficients] -= beta_offset
+        start[:num_coefficients] = (
+            np.ldexp(start[:num_coefficients], -response_exponent) - beta_offset
+        )
+        start[num_coefficients:] -= 2 * response_exponent * math.log(2.0)
         starts = [start]
     candidates = []
     with warnings.catch_warnings():
@@ -1747,8 +1794,8 @@ def fit_conditional_eiv_gaussian(
     fitted_variances = np.exp(details["log_variances"])
 
     def covariance_for_beta(beta):
-        return _conditional_eiv_covariance(
-            np.asarray(beta, dtype=float),
+        covariance, factor = _conditional_eiv_covariance(
+            np.ldexp(np.asarray(beta, dtype=float), -response_exponent),
             fitted_variances,
             fixed_covariance,
             normalized_components,
@@ -1762,6 +1809,9 @@ def fit_conditional_eiv_gaussian(
             likelihood_groups=likelihood_groups,
             dense_continuous_loadings=dense_continuous_loadings,
         )
+        return _eiv_covariance_in_response_units(
+            covariance, factor, response_exponent, len(response)
+        )
 
     details["covariance_for_beta"] = covariance_for_beta
     details["optimizer_converged"] = bool(result.success)
@@ -1771,4 +1821,6 @@ def fit_conditional_eiv_gaussian(
         np.any(np.exp(details["log_variances"]) <= lower_variance * 10.0)
         or np.any(np.exp(details["log_variances"]) >= upper_variance / 10.0)
     )
-    return details
+    return _restore_eiv_response_units(
+        details, response_exponent, effective_likelihood_count
+    )
