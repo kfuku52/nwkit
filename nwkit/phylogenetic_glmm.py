@@ -3,6 +3,7 @@
 import math
 import warnings
 from dataclasses import dataclass, replace
+from decimal import Decimal, localcontext
 from functools import lru_cache
 from typing import Callable, Mapping, Sequence, cast
 
@@ -125,6 +126,7 @@ _NB_LOG_GAMMA_RATIO_SERIES = (0.0,) + tuple(
     (-1.0) ** (order + 1) / (order * (order + 1)) for order in range(1, 9)
 )
 _SMALL_BETA_PRECISION = 1e-20
+_LARGE_BETA_PRECISION = 1e6
 _LARGE_GAMMA_SHAPE = 128.0
 _LARGE_POISSON_COUNT = 128.0
 _LARGE_NEGATIVE_BINOMIAL_COUNT = 1e6
@@ -1424,6 +1426,121 @@ def _small_beta_terms(values, linear, dispersion):
     return float(np.sum(contributions)), gradient, curvature
 
 
+def _beta_stirling_terms(shape):
+    """Scaled log-gamma, digamma, and trigamma remainders."""
+    large = shape >= _LARGE_GAMMA_SHAPE
+    inverse = 1.0 / shape[large]
+    inverse2 = inverse * inverse
+    normalizer = np.empty_like(shape)
+    score = np.empty_like(shape)
+    curvature = np.empty_like(shape)
+    normalizer[large] = _stirling_log_gamma_correction_from_inverse(inverse)
+    score[large] = -0.5 - inverse * (1.0 / 12.0 - inverse2 / 120.0)
+    curvature[large] = 0.5 + inverse * (1.0 / 6.0 - inverse2 / 30.0)
+    small = shape[~large]
+    log_shape = np.log(small)
+    normalizer[~large] = (
+        gammaln(small) - (small - 0.5) * log_shape + small - 0.5 * math.log(math.tau)
+    )
+    score[~large] = small * (digamma(small) - log_shape)
+    curvature[~large] = small * (small * polygamma(1, small) - 1.0)
+    return normalizer, score, curvature
+
+
+def _beta_weighted_divergence(observed, fitted, difference, precision):
+    relative = difference / fitted
+    close = np.abs(relative) < 0.1
+    change = relative[close]
+    result = np.empty_like(observed)
+    weight = precision * fitted
+    result[close] = -((weight[close] * change) * change) * (
+        np.polynomial.polynomial.polyval(change, _LOG1P_REMAINDER_SERIES)
+    )
+    far = ~close
+    log_ratio = np.log(observed[far]) - np.log(fitted[far])
+    result[far] = weight[far] * (relative[far] - log_ratio)
+    return result
+
+
+@lru_cache(maxsize=1024)
+def _beta_observation_logit(value):
+    with localcontext(prec=80):
+        observed = Decimal.from_float(value)
+        logit = observed.ln() - (1 - observed).ln()
+        leading = float(logit)
+        return leading, float(logit - Decimal.from_float(leading))
+
+
+def _beta_logit_difference(values, eta, log_values, log_complement):
+    observed_logit = log_values - log_complement
+    difference = eta - observed_logit
+    # Highly concentrated densities resolve differences much smaller than
+    # an ulp of the observed logit. Keep the logit's residual near the mode.
+    near = np.abs(difference) < 1e-3 * np.abs(observed_logit)
+    for index in np.flatnonzero(near):
+        leading, trailing = _beta_observation_logit(float(values[index]))
+        difference[index] = (eta[index] - leading) - trailing
+    return difference
+
+
+def _large_beta_terms(values, linear, precision):
+    logit_lower = math.log(1e-10) - math.log1p(-1e-10)
+    max_mean = 1.0 - 1e-10
+    logit_upper = math.log(max_mean) - math.log1p(-max_mean)
+    eta = np.clip(linear, logit_lower, logit_upper)
+    mean, complement = expit(eta), expit(-eta)
+    log_values, log_complement = np.log(values), np.log1p(-values)
+    eta_difference = _beta_logit_difference(values, eta, log_values, log_complement)
+    near = np.abs(eta_difference) < 0.1
+    # Subtract probabilities through their log odds where the mean is close
+    # to the observation, even when expit(eta) rounds to the observation.
+    change = np.expm1(eta_difference[near])
+    near_values = values[near]
+    proportion = 1.0 - values
+    difference = np.where(eta > 0.0, proportion - complement, mean - values)
+    difference[near] = (near_values * (1.0 - near_values)) * (
+        change / (1.0 + near_values * change)
+    )
+    a_correction, a_score, a_curvature = _beta_stirling_terms(precision * mean)
+    b_correction, b_score, b_curvature = _beta_stirling_terms(precision * complement)
+    slope = -np.tanh(0.5 * eta)
+    information = (precision * mean) * complement
+    score_correction = complement * a_score - mean * b_score
+    with np.errstate(over="ignore"):
+        divergence = _beta_weighted_divergence(values, mean, -difference, precision)
+        divergence += _beta_weighted_divergence(
+            proportion, complement, difference, precision
+        )
+        gradient = information * eta_difference + score_correction
+        curvature = information * (1.0 + slope * eta_difference) + (
+            complement**2 * a_curvature
+            + mean**2 * b_curvature
+            + slope * score_correction
+        )
+        density = (
+            0.5
+            * (
+                math.log(precision)
+                + np.log(mean)
+                + np.log(complement)
+                - math.log(math.tau)
+            )
+            - log_values
+            - log_complement
+            + _stirling_log_gamma_correction(precision)
+            - a_correction
+            - b_correction
+            - divergence
+        )
+        likelihood = float(np.sum(density))
+    active = (linear > logit_lower) & (linear < logit_upper)
+    return (
+        likelihood,
+        np.where(active, gradient, 0.0),
+        np.where(active, curvature, 0.0),
+    )
+
+
 def _standardized_censor_bounds(bounds, center, dispersion):
     difference = bounds - center
     result = difference / dispersion
@@ -1989,6 +2106,8 @@ def _beta_family_terms(values, linear, dispersion, trials, family):
     if family == "beta":
         if dispersion is not None and 0.0 < dispersion < _SMALL_BETA_PRECISION:
             return _small_beta_terms(values, linear, dispersion)
+        if dispersion is not None and dispersion >= _LARGE_BETA_PRECISION:
+            return _large_beta_terms(values, linear, dispersion)
         contributions = _beta_log_likelihood(values, linear, dispersion)
         gradient, curvature = _beta_scalar_terms(values, linear, dispersion)
         return float(np.sum(contributions)), gradient, curvature

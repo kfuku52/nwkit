@@ -111,6 +111,51 @@ def test_continuous_beta_fit_keeps_finite_likelihood_at_subnormal_precision():
         )
 
 
+@pytest.mark.parametrize(
+    "precision, observed, linear, expected",
+    [
+        (
+            1e6,
+            1e-8,
+            -20.0,
+            (12.217885585130778, -0.9916907861504306, 0.008316181088950499),
+        ),
+        (1e308, 0.5, 1e-154, (354.2473129684383, 2.5e153, 2.5e307)),
+        (
+            1e308,
+            0.125,
+            -1.9459101490553132,
+            (-2.9331594110336317e274, 8.010172414895993e290, 1.09375e307),
+        ),
+    ],
+)
+def test_continuous_beta_likelihood_resolves_high_fixed_precision(
+    precision, observed, linear, expected
+):
+    # Reference from the beta log density and its derivatives at 730 digits.
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        log_likelihood, gradient, curvature = _beta_family_terms(
+            np.array([observed]), np.array([linear]), precision, None, "beta"
+        )
+    np.testing.assert_allclose(
+        [log_likelihood, gradient[0], curvature[0]], expected, rtol=1e-11
+    )
+
+
+def test_continuous_beta_fit_converges_at_high_fixed_precision():
+    values = np.full(5, 0.5)
+    fit = fit_phylogenetic_glmm(
+        values,
+        np.ones((5, 1)),
+        evolutionary_covariance_factory(_tree(), LEAF_NAMES),
+        family="beta",
+        dispersion=1e200,
+    )
+    assert fit.optimizer_converged
+    assert np.isfinite(fit.log_likelihood)
+    np.testing.assert_allclose(fit.coefficients, [[0.0]], atol=1e-6)
+
+
 @pytest.mark.parametrize("log_mean", [-710.0, -100.0, 100.0])
 def test_gamma_bootstrap_draws_preserve_response_units(log_mean):
     linear = np.full(5, log_mean)
