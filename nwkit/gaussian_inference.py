@@ -78,10 +78,30 @@ class _MessagePass:
 def _normal_log_density(value: float, mean: float, variance: float) -> float:
     if not math.isfinite(variance) or variance <= 0.0:
         raise ValueError("A Gaussian likelihood variance must be positive and finite.")
-    standardized = (value - mean) / math.sqrt(variance)
+    standard_deviation = math.sqrt(variance)
+    difference = value - mean
+    standardized = (
+        difference / standard_deviation
+        if math.isfinite(difference)
+        else value / standard_deviation - mean / standard_deviation
+    )
     if not math.isfinite(standardized):
         return -math.inf
-    return -0.5 * (_LOG_2PI + math.log(variance) + standardized * standardized)
+    quadratic = standardized * standardized
+    if math.isfinite(quadratic):
+        return -0.5 * (_LOG_2PI + math.log(variance) + quadratic)
+    return -0.5 * (_LOG_2PI + math.log(variance)) - (0.5 * standardized) * standardized
+
+
+def _normal_log_overlap(first, second, variance_sum):
+    if math.isfinite(variance_sum):
+        return _normal_log_density(first.mean, second.mean, variance_sum)
+    largest = max(first.variance, second.variance)
+    relative_sum = 1.0 + min(first.variance, second.variance) / largest
+    standard_deviation = math.sqrt(largest) * math.sqrt(relative_sum)
+    standardized = first.mean / standard_deviation - second.mean / standard_deviation
+    log_variance = math.log(largest) + math.log(relative_sum)
+    return -0.5 * (_LOG_2PI + log_variance) - (0.5 * standardized) * standardized
 
 
 def _combine(first: _Factor, second: _Factor) -> _Factor:
@@ -100,10 +120,6 @@ def _combine(first: _Factor, second: _Factor) -> _Factor:
             first.density_rank + second.density_rank,
         )
     variance_sum = first.variance + second.variance
-    if not math.isfinite(variance_sum):
-        raise ValueError(
-            "A conditional Gaussian variance exceeds floating-point range."
-        )
     base_weight = first.log_weight + second.log_weight
     base_rank = first.density_rank + second.density_rank
     if variance_sum == 0.0:
@@ -113,7 +129,7 @@ def _combine(first: _Factor, second: _Factor) -> _Factor:
                 "Gaussian tree process."
             )
         return _Factor(first.mean, 0.0, base_weight, base_rank)
-    log_overlap = _normal_log_density(first.mean, second.mean, variance_sum)
+    log_overlap = _normal_log_overlap(first, second, variance_sum)
     if not math.isfinite(log_overlap):
         raise ValueError("Observed values have zero Gaussian likelihood.")
     if first.variance == 0.0:
@@ -623,10 +639,6 @@ def _posterior_draw_parameters(transition, inside):
         return 0.0, inside.mean, 0.0
     if variance == 0.0:
         return 1.0, 0.0, 0.0
-    if not math.isfinite(variance + inside.variance):
-        raise ValueError(
-            "A conditional Gaussian variance exceeds floating-point range."
-        )
     larger = max(variance, inside.variance)
     smaller = min(variance, inside.variance)
     denominator = 1.0 + smaller / larger

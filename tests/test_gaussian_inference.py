@@ -6,6 +6,10 @@ import pytest
 from nwkit.compiled_tree import CompiledTree
 from nwkit.evolution import build_evolutionary_process
 from nwkit.gaussian_inference import (
+    _combine,
+    _Factor,
+    _normal_log_density,
+    _posterior_draw_parameters,
     condition_gaussian_tree,
     gaussian_process_parameter_rank,
     gaussian_tree_likelihood,
@@ -22,6 +26,24 @@ from nwkit.util import read_tree
 
 def tree_from(source):
     return read_tree(source, "1", True, quiet=True, rooted="yes")
+
+
+def test_gaussian_overlap_stays_finite_when_variance_sum_overflows():
+    first = _Factor(0.5, 1.7e308)
+    second = _Factor(2.0, 1.7e308)
+    combined = _combine(first, second)
+    assert combined.mean == 1.25
+    assert combined.variance == 8.5e307
+    assert combined.log_weight == pytest.approx(
+        -0.5 * (math.log(math.tau) + math.log(1.7e308) + math.log(2.0))
+    )
+    assert _posterior_draw_parameters(
+        GaussianTransition(1.0, 0.0, first.variance), second
+    ) == (0.5, 1.0, math.sqrt(8.5e307))
+
+
+def test_gaussian_log_density_halves_quadratic_before_overflow():
+    assert _normal_log_density(1.7e154, 0.0, 1.0) == pytest.approx(-1.445e308)
 
 
 @pytest.mark.parametrize("scale", [2.0**-400, 2.0**400])
