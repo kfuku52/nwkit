@@ -10,8 +10,7 @@ import numpy as np
 import pandas as pd
 from scipy.linalg import expm
 from scipy.optimize import OptimizeResult, minimize
-from scipy.special import gammaln, logsumexp
-from scipy.stats import gamma as gamma_distribution
+from scipy.special import gammainc, gammaincinv, gammaln, logsumexp
 from scipy.stats import poisson
 
 from nwkit.asr_input import (
@@ -1498,20 +1497,14 @@ def _transition_matrices_for_tree(tree, rate_matrix, *, prepared_branches=None):
 def _discrete_gamma_category_rates(shape, categories):
     """Return Yang's equal-probability, conditional-mean gamma categories."""
 
-    boundaries = np.concatenate(
-        (
-            np.zeros(1, dtype=float),
-            gamma_distribution.ppf(
-                np.arange(1, categories, dtype=float) / categories,
-                a=shape,
-                scale=1.0 / shape,
-            ),
-            np.full(1, np.inf, dtype=float),
-        )
-    )
+    # Both moments use the unit-scale gamma argument, so the mean-one
+    # scale cancels without constructing distribution or endpoint arrays.
+    boundaries = gammaincinv(shape, np.arange(1, categories, dtype=float) / categories)
     # For X ~ Gamma(shape, scale=1/shape), the partial first moment through x
     # is the CDF of Gamma(shape + 1, scale=1/shape), because E[X] = 1.
-    first_moments = gamma_distribution.cdf(boundaries, a=shape + 1.0, scale=1.0 / shape)
+    first_moments = np.empty(categories + 1, dtype=float)
+    first_moments[0], first_moments[-1] = 0.0, 1.0
+    first_moments[1:-1] = gammainc(shape + 1.0, boundaries)
     rates = categories * np.diff(first_moments)
     rates /= float(np.mean(rates))
     return rates
