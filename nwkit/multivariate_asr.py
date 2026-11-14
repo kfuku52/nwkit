@@ -119,7 +119,7 @@ def _independent_contrasts(tree, vectors, scaled, *, tree_validated=False):
     node_groups, parents, lengths = _tree_groups(tree, validated=tree_validated)
     dimension = len(next(value for value in vectors.values() if value is not None))
     local = [None] * len(parents)
-    exact = {}
+    exact: dict[int, np.ndarray] = {}
     num_observed = 0
     longest = max(lengths)
     time_exponent = math.frexp(longest)[1] - 1 if longest else 0
