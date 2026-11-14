@@ -65,6 +65,29 @@ def test_transition_cache_separates_log_kernels_and_count_bounds(monkeypatch):
     assert model._transition_cache_bytes == probability.nbytes + larger.nbytes
 
 
+def test_emissions_reuse_one_bound_and_refresh_on_observation_changes(monkeypatch):
+    counts = np.array([[1.0, 2.0], [np.nan, 1.0]])
+    detection = np.array([0.9, 1.0])
+    model = CountLikelihood(tree(), counts, detection=detection)
+    first = model._emissions(8)
+    assert model._emissions(8) is first
+    assert model._emissions(16) is not first
+    second = model._emissions(8)
+    assert second is not first
+    np.testing.assert_array_equal(second[1], first[1])
+    counts[0, 0] = 2.0
+    detection[1] = 0.8
+    updated = model._emissions(8)
+    assert updated is not second
+    assert np.any(updated[1] != second[1])
+    assert np.any(updated[2] != second[2])
+    monkeypatch.setattr(wgd_count_model, "_EMISSION_CACHE_BYTES", 0)
+    uncached = model._emissions(8)
+    assert model._emission_cache is None
+    for node in model.tree.tip_nodes:
+        np.testing.assert_array_equal(uncached[node], updated[node])
+
+
 @pytest.mark.parametrize("budget", [1, 1024**2])
 @pytest.mark.parametrize("families", [1, 67])
 def test_log_pruning_tiles_preserve_impossible_states_and_reduction_order(

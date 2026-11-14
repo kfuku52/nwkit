@@ -15,6 +15,7 @@ _LOG_PRUNING_WORKSPACE_BYTES = 1024**2
 _PULSE_BATCH_ENTRIES = 4096
 _TRANSITION_CACHE_BYTES = 8 * 1024**2
 _TRANSITION_CACHE_ENTRIES = 4096
+_EMISSION_CACHE_BYTES = 16 * 1024**2
 _SELECTION_PROBABILITY_FLOOR = np.finfo(float).tiny / np.finfo(float).eps
 
 
@@ -539,6 +540,9 @@ class CountLikelihood:
             tuple[bool, float, float, float, int], np.ndarray
         ] = OrderedDict()
         self._transition_cache_bytes = 0
+        self._emission_cache: (
+            tuple[tuple[int, bytes, bytes], dict[int, np.ndarray]] | None
+        ) = None
 
     def _cached_transition(self, duplication, loss, time, max_count, *, log=False):
         # Optimizer perturbations leave many branch groups unchanged. Cache
@@ -813,12 +817,30 @@ class CountLikelihood:
             root_children, root_mean, self.ascertainment
         )
 
-    def family_log_likelihoods(
-        self, rates, root_mean, max_count, event=None, *, _split_zero_event=False
-    ):
-        if max_count < np.nanmax(self.counts):
-            raise ValueError("Maximum state count is below an observed count.")
-        prior = root_probabilities(root_mean, max_count)
+    def _emissions(self, max_count):
+        # Observations and the count bound determine all tip emissions. Keep
+        # only the current bound and include mutable inputs in the cache key.
+        if np.all(self.detection == 1):
+            self._emission_cache = None
+            return self._build_emissions(max_count)
+        cache_key = None
+        if (
+            self.counts.nbytes * (max_count + 2) + self.detection.nbytes
+            <= _EMISSION_CACHE_BYTES
+        ):
+            cache_key = (max_count, self.counts.tobytes(), self.detection.tobytes())
+            if (
+                self._emission_cache is not None
+                and cache_key == self._emission_cache[0]
+            ):
+                return self._emission_cache[1]
+        self._emission_cache = None
+        emissions = self._build_emissions(max_count)
+        if cache_key is not None:
+            self._emission_cache = (cache_key, emissions)
+        return emissions
+
+    def _build_emissions(self, max_count):
         states = np.arange(max_count + 1)
         emissions = {}
         for column, node in enumerate(self.tree.tip_nodes):
@@ -835,6 +857,15 @@ class CountLikelihood:
                 ]
             matrix[missing] = 1.0
             emissions[node] = matrix
+        return emissions
+
+    def family_log_likelihoods(
+        self, rates, root_mean, max_count, event=None, *, _split_zero_event=False
+    ):
+        if max_count < np.nanmax(self.counts):
+            raise ValueError("Maximum state count is below an observed count.")
+        prior = root_probabilities(root_mean, max_count)
+        emissions = self._emissions(max_count)
         observed_logs, selection_logs = [], []
         for scale in self.rate_scales:
             transitions = self.transitions(
