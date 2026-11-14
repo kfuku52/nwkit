@@ -167,9 +167,18 @@ def _simulation_envelope(simulations, tail):
     positions = np.array([tail, 0.5, 1 - tail]) * (len(simulations) - 1)
     left = np.floor(positions).astype(int)
     right = np.ceil(positions).astype(int)
-    ordered = np.array(simulations.T, order="C", copy=True)
-    ordered.partition(np.concatenate((left, right)), axis=-1)
-    lo, hi = ordered[:, left].T, ordered[:, right].T
+    ranks = np.concatenate((left, right))
+    columns = simulations.shape[1]
+    selected = np.empty((len(ranks), columns), dtype=simulations.dtype)
+    # A time column needs all replicates, but columns can be reduced separately.
+    batch = max(1, 131_072 // len(simulations))
+    for start in range(0, columns, batch):
+        window = slice(start, start + batch)
+        ordered = np.array(simulations[:, window].T, order="C", copy=True)
+        ordered.partition(ranks, axis=-1)
+        selected[:, window] = ordered[:, ranks].T
+        del ordered
+    lo, hi = selected[: len(left)], selected[len(left) :]
     fraction = (positions - left)[:, None]
     delta = hi - lo
     # Match NumPy's linear quantile interpolation from the nearer endpoint.
