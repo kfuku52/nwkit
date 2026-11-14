@@ -931,6 +931,34 @@ def _normalized_covariance_groups(groups, n_observations):
     return groups, counts
 
 
+def _grouped_dense_covariance_diagonal(covariance, groups, counts):
+    if covariance.ndim == 1:
+        row_weights = 1.0 / counts[groups].astype(float)
+        return np.bincount(
+            groups, weights=np.square(row_weights) * covariance, minlength=len(counts)
+        )
+    if covariance.shape != (len(groups), len(groups)):
+        raise ValueError("Covariance has the wrong dimensions.")
+    if len(counts) == len(groups):
+        values = np.empty(len(counts), dtype=float)
+        values[groups] = np.diag(covariance)
+        return values
+
+    result = np.empty(len(counts), dtype=float)
+    singletons = counts[groups] == 1
+    rows = np.flatnonzero(singletons)
+    result[groups[rows]] = covariance[rows, rows]
+    multiple = np.flatnonzero(~singletons)
+    order = multiple[np.argsort(groups[multiple], kind="stable")]
+    ends = np.cumsum(np.where(counts == 1, 0, counts))
+    for group in np.flatnonzero(counts > 1):
+        end = ends[group]
+        count = counts[group]
+        selected = order[end - count : end]
+        result[group] = covariance[np.ix_(selected, selected)].sum() / np.square(count)
+    return result
+
+
 def grouped_mean_covariance_diagonal(
     covariance, groups, *, precision_factor=None
 ) -> np.ndarray:
@@ -942,6 +970,12 @@ def grouped_mean_covariance_diagonal(
     """
     n_observations = _covariance_observation_count(covariance)
     groups, counts = _normalized_covariance_groups(groups, n_observations)
+    if not isinstance(
+        covariance, (DiagonalLowRankCovariance, DiagonalSparsePrecisionCovariance)
+    ):
+        return _grouped_dense_covariance_diagonal(
+            np.asarray(covariance, dtype=float), groups, counts
+        )
     n_groups = len(counts)
     row_weights = 1.0 / counts[groups].astype(float)
     aggregation = sparse.csr_matrix(
@@ -963,44 +997,26 @@ def grouped_mean_covariance_diagonal(
             else np.einsum("ij,ij->i", grouped_loading, grouped_loading, optimize=True)
         ).reshape(-1)
 
-    if isinstance(covariance, DiagonalSparsePrecisionCovariance):
-        if covariance.grouped_marginal_diagonal is not None:
-            grouped = np.asarray(covariance.grouped_marginal_diagonal, dtype=float)
-            if grouped.shape != (n_groups,):
-                raise ValueError("Cached grouped covariance diagonal is malformed.")
-            return grouped.copy()
-        grouped_diagonal = np.bincount(
-            groups,
-            weights=np.square(row_weights) * covariance.diagonal,
-            minlength=n_groups,
-        )
-        grouped_loading = sparse.csr_matrix(aggregation @ covariance.loading)
-        return grouped_diagonal + sparse_precision_update_diagonal(
-            grouped_loading,
-            covariance.precision,
-            solver=(
-                precision_factor.prior_factor
-                if isinstance(precision_factor, DiagonalSparsePrecisionFactor)
-                else None
-            ),
-        )
-
-    covariance = np.asarray(covariance, dtype=float)
-    if covariance.ndim == 1:
-        return np.bincount(
-            groups,
-            weights=np.square(row_weights) * covariance,
-            minlength=n_groups,
-        )
-    if covariance.shape != (n_observations, n_observations):
-        raise ValueError("Covariance has the wrong dimensions.")
-    result = np.empty(n_groups, dtype=float)
-    for group in range(n_groups):
-        selected = np.flatnonzero(groups == group)
-        result[group] = float(
-            covariance[np.ix_(selected, selected)].sum() / np.square(len(selected))
-        )
-    return result
+    if covariance.grouped_marginal_diagonal is not None:
+        grouped = np.asarray(covariance.grouped_marginal_diagonal, dtype=float)
+        if grouped.shape != (n_groups,):
+            raise ValueError("Cached grouped covariance diagonal is malformed.")
+        return grouped.copy()
+    grouped_diagonal = np.bincount(
+        groups,
+        weights=np.square(row_weights) * covariance.diagonal,
+        minlength=n_groups,
+    )
+    grouped_loading = sparse.csr_matrix(aggregation @ covariance.loading)
+    return grouped_diagonal + sparse_precision_update_diagonal(
+        grouped_loading,
+        covariance.precision,
+        solver=(
+            precision_factor.prior_factor
+            if isinstance(precision_factor, DiagonalSparsePrecisionFactor)
+            else None
+        ),
+    )
 
 
 def grouped_average_marginal_logdet(

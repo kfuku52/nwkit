@@ -38,6 +38,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Batch joint Gaussian posterior draws using precomputed branch conditionals.
 - Reuse continuous predictor loadings during dense errors-in-variables PGLS
   optimization, including automatic evolutionary-parameter searches.
+- Read singleton likelihood-group variances directly from the dense
+  covariance diagonal and index larger groups once.
 
 ## [0.43.6] - 2026-09-08
 

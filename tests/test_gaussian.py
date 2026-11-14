@@ -7,6 +7,18 @@ from scipy import sparse
 from nwkit import gaussian
 
 
+@pytest.mark.parametrize("groups", [[2, 0, 1, 4, 3], [1, 0, 1, 2, 0]])
+def test_grouped_dense_covariance_uses_the_correct_rows_in_group_order(groups):
+    loading = np.array([[1, 1], [2, -1], [3, 0], [-1, 2], [0, -1]], dtype=float)
+    covariance = loading @ loading.T
+    membership = np.asarray(groups) == np.arange(max(groups) + 1)[:, None]
+    weights = membership / membership.sum(axis=1, keepdims=True)
+    expected = np.diag(weights @ covariance @ weights.T)
+    np.testing.assert_allclose(
+        gaussian.grouped_mean_covariance_diagonal(covariance, groups), expected
+    )
+
+
 @pytest.mark.parametrize("kind", ["dense", "low-rank", "grouped", "nested"])
 @pytest.mark.parametrize("vector", [True, False])
 def test_cholesky_solves_match_dense_oracle_without_refactorization(
