@@ -258,21 +258,34 @@ def _log_pulse_transition(before, after, event):
             return result
         return _log_matrix_product(before[:, :limit], after[::multiplier])
 
-    states = np.arange(size)
-    trials = np.array([count * (event.multiplicity - 1) for count in range(size)])
-    pulse = np.empty_like(before)
-    batch = max(1, _PULSE_BATCH_ENTRIES // size)
-    for first in range(0, size, batch):
-        last = min(first + batch, size)
-        extra = states[None, :] - states[first:last, None]
-        pulse[first:last] = binom.logpmf(
-            extra, trials[first:last, None], event.retention
-        )
+    kernel = (
+        _cached_log_multiplication_transition
+        if size * size * 8 <= _TRANSITION_CACHE_BYTES // 8
+        else _log_multiplication_transition
+    )
+    pulse = kernel(event.retention, event.multiplicity, size)
     if event.fraction == 0:
         return _log_matrix_product(pulse, after)
     if event.fraction == 1:
         return _log_matrix_product(before, pulse)
     return _log_matrix_product(_log_matrix_product(before, pulse), after)
+
+
+@lru_cache(maxsize=8)
+def _cached_log_multiplication_transition(retention, multiplicity, size):
+    return _log_multiplication_transition(retention, multiplicity, size)
+
+
+def _log_multiplication_transition(retention, multiplicity, size):
+    states = np.arange(size)
+    trials = np.array([count * (multiplicity - 1) for count in range(size)])
+    pulse = np.empty((size, size), dtype=float)
+    batch = max(1, _PULSE_BATCH_ENTRIES // size)
+    for first in range(0, size, batch):
+        last = min(first + batch, size)
+        extra = states[None, :] - states[first:last, None]
+        pulse[first:last] = binom.logpmf(extra, trials[first:last, None], retention)
+    return pulse
 
 
 def _validate_multiplication(retention, multiplicity):
