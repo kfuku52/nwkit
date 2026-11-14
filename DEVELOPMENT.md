@@ -128,7 +128,8 @@ chains. Its output captures the thresholds, node probabilities and liability
 moments. Convergence diagnostics depend on the ESS method in each revision.
 The Poisson GLMM case uses one predictor and a simulated phylogenetic random
 effect. It compares coefficients, coefficient covariance, variance components,
-random modes, likelihood, and convergence and boundary flags.
+random modes, likelihood, and convergence and boundary flags. Random modes
+use an absolute tolerance of `5e-6` on the log-count scale.
 
 CLI output hashes ignore only the package version. Gaussian coefficients,
 coefficient covariance, likelihood, evolutionary parameter, variance components

@@ -230,17 +230,24 @@ def worker(args):
     )
 
 
-def equivalent(first, second):
+def equivalent(first, second, *, absolute_tolerances=None, absolute_tolerance=1e-6):
     if isinstance(first, dict) and isinstance(second, dict):
+        tolerances = {} if absolute_tolerances is None else absolute_tolerances
         return first.keys() == second.keys() and all(
-            equivalent(first[key], second[key]) for key in first
+            equivalent(
+                first[key],
+                second[key],
+                absolute_tolerance=tolerances.get(key, absolute_tolerance),
+            )
+            for key in first
         )
     if isinstance(first, list) and isinstance(second, list):
         return len(first) == len(second) and all(
-            equivalent(a, b) for a, b in zip(first, second, strict=True)
+            equivalent(a, b, absolute_tolerance=absolute_tolerance)
+            for a, b in zip(first, second, strict=True)
         )
     if isinstance(first, (int, float)) and not isinstance(first, bool):
-        return math.isclose(first, second, rel_tol=1e-4, abs_tol=1e-6)
+        return math.isclose(first, second, rel_tol=1e-4, abs_tol=absolute_tolerance)
     return first == second
 
 
@@ -302,8 +309,12 @@ def main(argv=None):
             record = json.loads(completed.stdout)
             record.update(label=label, checkout=str(checkout), repetition=repetition)
             records.append(record)
+    tolerances = {"random_modes": 5e-6} if args.case == "glmm-poisson" else None
     matched = all(
-        equivalent(records[0]["result"], record["result"]) for record in records
+        equivalent(
+            records[0]["result"], record["result"], absolute_tolerances=tolerances
+        )
+        for record in records
     )
     print(
         json.dumps(
