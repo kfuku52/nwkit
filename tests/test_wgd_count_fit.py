@@ -374,3 +374,57 @@ def test_zero_retention_fit_refines_hidden_intermediate_count_bound(monkeypatch)
     assert calls == [8, 16, 32, 64, 128]
     assert fit.max_count == 128
     assert fit.converged and fit.state_error <= 1e-7
+
+
+@pytest.mark.parametrize("retention,gain", [(0.0, 2e-12), (0.1, -0.01)])
+def test_scan_canonicalizes_zero_event_and_checks_split_bound(
+    monkeypatch, retention, gain
+):
+    from dataclasses import replace
+
+    import nwkit.wgd_count_fit as fitting
+
+    data = model([[1, 1, 1]])
+    background = fitting.CountFit(
+        np.array([[0.1, 0.1]]), 1.1, -5.0, 3, 8, 0, True, False, "fit"
+    )
+    reported = replace(
+        background,
+        log_likelihood=background.log_likelihood + gain,
+        num_parameters=4,
+        event=MultiplicationEvent(1, retention, 0.25),
+    )
+    monkeypatch.setattr(fitting, "fit_counts", lambda *a, **kw: reported)
+    checked = []
+
+    def convergence(rates, mean, bound, event):
+        assert event.retention == 0 and event.fraction == 0.25
+        assert rates is background.rates and mean == background.root_mean
+        checked.append(bound)
+        return 1e-4 if bound < 16 else 1e-9
+
+    monkeypatch.setattr(data, "convergence", convergence)
+    observed = scan_counts(
+        data,
+        nodes=(1,),
+        fractions=(0.25,),
+        compare_bursts=False,
+        max_states=32,
+        background=background,
+    )
+    (candidate,) = observed.candidates
+    assert checked == [8, 16]
+    assert candidate.improvement == 0 and candidate.event_fit.event.retention == 0
+    assert candidate.event_fit.log_likelihood == background.log_likelihood
+    assert (
+        candidate.event_fit.max_count == 16 and candidate.event_fit.state_error == 1e-9
+    )
+    with pytest.raises(ValueError, match="zero-retention event"):
+        scan_counts(
+            data,
+            nodes=(1,),
+            fractions=(0.25,),
+            compare_bursts=False,
+            max_states=16,
+            background=background,
+        )

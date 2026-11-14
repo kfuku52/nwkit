@@ -291,6 +291,24 @@ def _burst_model(model, node):
     )
 
 
+def _null_event_fit(model, background, node, fraction, multiplicity, options):
+    event = MultiplicationEvent(node, 0, fraction, multiplicity)
+    bound = background.max_count
+    while 2 * bound <= options["max_states"]:
+        error = model.convergence(background.rates, background.root_mean, bound, event)
+        if error <= options["state_tolerance"]:
+            return replace(
+                background,
+                event=event,
+                num_parameters=background.num_parameters + 1,
+                max_count=bound,
+                state_error=error,
+                message="Zero retention at the fitted background",
+            )
+        bound *= 2
+    raise ValueError("State truncation did not converge for the zero-retention event.")
+
+
 def _scan_candidate(
     model, node, fractions, multiplicity, background, compare_bursts, options
 ):
@@ -308,12 +326,11 @@ def _scan_candidate(
         ),
         key=lambda result: result.log_likelihood,
     )
-    # q=0 is exactly the fitted null even if a local optimizer misses it.
-    if fit.log_likelihood < background.log_likelihood:
-        fit = replace(
-            background,
-            event=MultiplicationEvent(node, 0, fractions[0], multiplicity),
-            num_parameters=background.num_parameters + 1,
+    # At q=0 the event is the fitted null, not an improvement obtained by
+    # comparing independent fits or different state bounds for the same model.
+    if fit.event.retention == 0 or fit.log_likelihood < background.log_likelihood:
+        fit = _null_event_fit(
+            model, background, node, fit.event.fraction, multiplicity, options
         )
     if compare_bursts:
         burst_model = _burst_model(model, node)
