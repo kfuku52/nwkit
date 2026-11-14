@@ -23,6 +23,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Reject COVARION and MK-MIXTURE fits when no positive-length branch can
   affect an informative tip observation.
 - Mk mixture marginals average only categories with positive posterior mass.
+- COVARION, MK-REGIME, and MK-MIXTURE reuse the bounded Powell retry when
+  SciPy rejects a finite-difference point that rounds outside a bound.
 
 ### Performance
 

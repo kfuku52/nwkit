@@ -1145,7 +1145,7 @@ def _fit_regime_rate_matrices(
             initial_logs,
             optimizer_bounds,
             maxiter=800,
-            minimizer=minimize,
+            minimizer=_minimize_mk,
             ftol=None,
             additional_starts=_regime_rate_starts(
                 initial_logs,
@@ -1972,7 +1972,9 @@ def compute_covarion_marginals(
             return 1e100
         return -likelihood if math.isfinite(likelihood) else 1e100
 
-    optimized = deterministic_multistart(objective, initial, bounds, maxiter=1200)
+    optimized = deterministic_multistart(
+        objective, initial, bounds, maxiter=1200, minimizer=_minimize_mk
+    )
     matrix, multipliers = matrix_for(optimized.x)
     base_rate, spread, switching_rate, spread_fraction = unpack(optimized.x)
     effective_rates = base_rate * multipliers
