@@ -9,6 +9,7 @@ all thresholds may be supplied explicitly.
 
 import math
 from dataclasses import dataclass
+from fractions import Fraction
 
 import numpy as np
 import pandas as pd
@@ -206,6 +207,62 @@ def _interval_log_mass(lower, upper, a, b, sd):
     return _normal_interval_log_mass(a, b) if narrow_mass is None else narrow_mass
 
 
+def _relative_tail_log_masses(bounds, mean, sd):
+    # The large-distance normal mass is proportional to exp(-z²/2)/z
+    # times the integrated exponential over the finite interval. Subtract
+    # the nearest interval's exponent before converting to float, keeping
+    # even offsets that disappear in the standardized endpoints.
+    center = Fraction(float(mean))
+    variance = Fraction(float(sd)) ** 2
+    distances = [
+        abs(Fraction(lower if lower > mean else upper) - center)
+        for lower, upper in bounds
+    ]
+    closest = min(distances)
+    return np.asarray(
+        [
+            _relative_tail_log_mass(lower, upper, distance, closest, variance)
+            for (lower, upper), distance in zip(bounds, distances, strict=True)
+        ]
+    )
+
+
+def _relative_tail_log_mass(lower, upper, distance, closest, variance):
+    try:
+        penalty = float((distance - closest) * (distance + closest) / (2 * variance))
+    except OverflowError:
+        return -math.inf
+    log_mass = -penalty + _log_fraction(closest / distance)
+    if not math.isfinite(lower) or not math.isfinite(upper):
+        return log_mass
+    width = Fraction(upper) - Fraction(lower)
+    rate_width = width * distance / variance
+    if rate_width > 36:
+        return log_mass
+    if rate_width < 1e-15:
+        return log_mass + _log_fraction(rate_width)
+    return log_mass + math.log(-math.expm1(-float(rate_width)))
+
+
+def _log_fraction(value):
+    floating = float(value)
+    if floating >= 2.0**-1022:
+        return math.log(floating)
+    return math.log(value.numerator) - math.log(value.denominator)
+
+
+def _disjoint_interval_log_masses(bounds, intervals, mean, sd):
+    nearest = min(max(a, -b) for a, b in intervals)
+    if nearest >= 1e14:
+        return _relative_tail_log_masses(bounds, mean, sd)
+    return np.asarray(
+        [
+            _interval_log_mass(lower, upper, a, b, sd)
+            for (lower, upper), (a, b) in zip(bounds, intervals, strict=True)
+        ]
+    )
+
+
 def _interval_draw(lower, upper, a, b, mean, sd, rng):
     narrow_mass = _narrow_interval_log_mass(lower, upper, a, b, sd)
     if narrow_mass is not None:
@@ -258,12 +315,7 @@ def _truncated_draw(mean, sd, bounds, rng, *, thresholds=None):
         intervals = [
             ((lower - mean) / sd, (upper - mean) / sd) for lower, upper in bounds
         ]
-        log_masses = np.asarray(
-            [
-                _interval_log_mass(lower, upper, a, b, sd)
-                for (lower, upper), (a, b) in zip(bounds, intervals, strict=True)
-            ]
-        )
+        log_masses = _disjoint_interval_log_masses(bounds, intervals, mean, sd)
         largest = float(np.max(log_masses))
         if not math.isfinite(largest):
             raise ValueError(

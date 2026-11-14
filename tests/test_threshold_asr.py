@@ -83,6 +83,30 @@ def test_threshold_draw_rounds_to_first_allowed_value_in_extreme_tail():
     assert result == np.nextafter(1e200, np.inf)
 
 
+def test_disjoint_ordinal_intervals_compare_tails_beyond_log_probability_range():
+    bounds = [(-math.inf, -1e200), (1e200, math.inf)]
+    rng = np.random.default_rng(35)
+    symmetric = [_truncated_draw(0.0, 1.0, bounds, rng) for _ in range(500)]
+    shifted = [_truncated_draw(1e-200, 1.0, bounds, rng) for _ in range(1500)]
+    assert np.all(np.abs(symmetric) >= 1e200)
+    assert np.mean(np.asarray(symmetric) > 0.0) == pytest.approx(0.5, abs=0.07)
+    # The normalized ratio between the tails tends to exp(2 * mean * boundary).
+    assert np.mean(np.asarray(shifted) > 0.0) == pytest.approx(
+        1.0 / (1.0 + math.exp(-2.0)), abs=0.03
+    )
+
+
+def test_disjoint_ordinal_intervals_compare_extreme_tail_widths_after_centering():
+    width = 1e-200
+    bounds = [(0.0, width), (2 * width, 4 * width)]
+    rng = np.random.default_rng(19)
+    draws = np.array([_truncated_draw(-1e16, 1.0, bounds, rng) for _ in range(1200)])
+    first = (draws > 0.0) & (draws <= width)
+    second = (draws > 2 * width) & (draws <= 4 * width)
+    assert np.all(first | second)
+    assert np.mean(second) == pytest.approx(2.0 / 3.0, abs=0.04)
+
+
 def test_threshold_draw_reports_tail_with_no_finite_allowed_value():
     rng = np.random.default_rng(5)
     with pytest.raises(
