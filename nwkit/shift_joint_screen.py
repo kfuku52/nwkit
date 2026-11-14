@@ -74,6 +74,10 @@ def joint_screen_matrix(
 
 
 def joint_path(matrix, response, p, *, iterations, paths):
+    if matrix.shape[0] >= 4 * (matrix.shape[1] + 1):
+        # Orthogonal reduction preserves the loss and gradient for every step.
+        reduced = np.linalg.qr(np.column_stack((response, matrix)), mode="r")
+        response, matrix = reduced[:, 0], reduced[:, 1:]
     groups = matrix.shape[1] // p
     initial_gradient = (matrix.T @ response).reshape(groups, p)
     maximum = float(np.max(np.linalg.norm(initial_gradient, axis=1)))
