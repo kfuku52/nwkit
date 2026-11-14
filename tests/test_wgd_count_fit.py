@@ -130,6 +130,25 @@ def test_parallel_bootstrap_preserves_simulation_stream_and_order():
     ]
 
 
+def test_parallel_scan_matches_serial_fit_results():
+    from nwkit.wgd_count import _fit_json
+
+    data = model(np.tile([[2, 2, 1], [1, 1, 1], [2, np.nan, 1]], (12, 1)))
+    options = dict(nodes=(3, 1, 2), fractions=(0.25, 0.75), max_states=64)
+    serial = scan_counts(data, **options)
+    parallel = scan_counts(data, workers=2, **options)
+    assert _fit_json(parallel.background) == _fit_json(serial.background)
+    assert parallel.fractions == serial.fractions
+    for first, second in zip(serial.candidates, parallel.candidates, strict=True):
+        assert (second.node, second.improvement, second.burst_aic_difference) == (
+            first.node,
+            first.improvement,
+            first.burst_aic_difference,
+        )
+        assert _fit_json(first.event_fit) == _fit_json(second.event_fit)
+        assert _fit_json(first.burst_fit) == _fit_json(second.burst_fit)
+
+
 def test_invalid_scan_and_bound_fail_instead_of_returning_unverified_fit():
     data = model([[1, 1, 1]])
     with pytest.raises(ValueError, match="twice"):
@@ -138,6 +157,8 @@ def test_invalid_scan_and_bound_fail_instead_of_returning_unverified_fit():
         scan_counts(data, fractions=())
     with pytest.raises(ValueError, match="Candidate"):
         scan_counts(data, nodes=(0,))
+    with pytest.raises(ValueError, match="scan workers"):
+        scan_counts(data, workers=0)
     with pytest.raises(ValueError, match="State tolerance"):
         fit_counts(data, state_tolerance=0)
 

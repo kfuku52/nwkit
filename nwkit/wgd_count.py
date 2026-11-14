@@ -182,8 +182,11 @@ def _paths(args):
 def wgd_count_main(args):
     paths = _paths(args)
     workers = getattr(args, "bootstrap_workers", 1)
+    scan_workers = getattr(args, "scan_workers", 1)
     if workers < 1:
         raise ValueError("--bootstrap-workers must be positive.")
+    if scan_workers < 1:
+        raise ValueError("--scan-workers must be positive.")
     if (
         args.bootstrap < 0
         or args.seed < 0
@@ -233,7 +236,7 @@ def wgd_count_main(args):
         state_tolerance=args.state_tolerance,
         max_iterations=args.max_iterations,
     )
-    result = scan_counts(model, nodes=selected, **options)
+    result = scan_counts(model, nodes=selected, workers=scan_workers, **options)
     if args.bootstrap:
 
         def progress(done, total):

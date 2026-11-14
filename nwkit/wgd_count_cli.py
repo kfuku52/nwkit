@@ -69,6 +69,12 @@ def register_wgd_count(subparsers, tree_input, table_output, table_policy):
         ),
         ("seed", 1, int, "Nonnegative seed for local simulation RNG (default 1)."),
         (
+            "scan-workers",
+            1,
+            int,
+            "Concurrent candidate-branch fits before calibration; use one BLAS thread per worker (default 1).",
+        ),
+        (
             "bootstrap-workers",
             1,
             int,

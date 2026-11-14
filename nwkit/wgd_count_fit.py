@@ -292,6 +292,73 @@ def _burst_model(model, node):
     )
 
 
+def _scan_candidate(
+    model, node, fractions, multiplicity, background, compare_bursts, options
+):
+    fit = max(
+        (
+            fit_counts(
+                model,
+                node=node,
+                fraction=fraction,
+                multiplicity=multiplicity,
+                initial=background,
+                **options,
+            )
+            for fraction in fractions
+        ),
+        key=lambda result: result.log_likelihood,
+    )
+    # q=0 is exactly the fitted null even if a local optimizer misses it.
+    if fit.log_likelihood < background.log_likelihood:
+        fit = replace(
+            background,
+            event=MultiplicationEvent(node, 0, fractions[0], multiplicity),
+            num_parameters=background.num_parameters + 1,
+        )
+    if compare_bursts:
+        burst_model = _burst_model(model, node)
+        burst_rates = np.zeros((burst_model.num_groups, 2))
+        for branch in range(1, len(model.tree.parents)):
+            burst_rates[burst_model.branch_groups[branch]] = background.rates[
+                model.branch_groups[branch]
+            ]
+        burst_initial = replace(background, rates=burst_rates)
+        burst = fit_counts(burst_model, initial=burst_initial, **options)
+    else:
+        burst = background
+    return ScanCandidate(
+        node,
+        fit,
+        burst,
+        max(0.0, 2 * (fit.log_likelihood - background.log_likelihood)),
+        burst.aic - fit.aic,
+    )
+
+
+_scan_worker_arguments = None
+
+
+def _init_scan_worker(
+    data, fractions, multiplicity, background, compare_bursts, options
+):
+    global _scan_worker_arguments
+    model = _model_from_data(*data)
+    _scan_worker_arguments = (
+        model,
+        fractions,
+        multiplicity,
+        background,
+        compare_bursts,
+        options,
+    )
+
+
+def _scan_worker(node):
+    model, *options = _scan_worker_arguments
+    return _scan_candidate(model, node, *options)
+
+
 def scan_counts(
     model: CountLikelihood,
     *,
@@ -303,8 +370,11 @@ def scan_counts(
     max_iterations: int = 200,
     background: CountFit | None = None,
     compare_bursts: bool = True,
+    workers: int = 1,
 ) -> CountScan:
     """Scan one event at a time; multiple simultaneous events are not inferred."""
+    if isinstance(workers, bool) or not isinstance(workers, int) or workers < 1:
+        raise ValueError("Count scan workers must be a positive integer.")
     if not fractions or any(not np.isfinite(f) or not 0 <= f <= 1 for f in fractions):
         raise ValueError("Event fractions need a nonempty finite grid in [0, 1].")
     if nodes is None:
@@ -331,47 +401,43 @@ def scan_counts(
         max_iterations=max_iterations,
     )
     background = background or fit_counts(model, **options)
-    candidates = []
-    for node in nodes:
-        fits = [
-            fit_counts(
+    workers = min(workers, len(nodes))
+    if workers == 1:
+        candidates = [
+            _scan_candidate(
                 model,
-                node=node,
-                fraction=fraction,
-                multiplicity=multiplicity,
-                initial=background,
-                **options,
-            )
-            for fraction in fractions
-        ]
-        fit = max(fits, key=lambda result: result.log_likelihood)
-        # q=0 is exactly the fitted null even if a local optimizer misses it.
-        if fit.log_likelihood < background.log_likelihood:
-            fit = replace(
-                background,
-                event=MultiplicationEvent(node, 0, fractions[0], multiplicity),
-                num_parameters=background.num_parameters + 1,
-            )
-        if compare_bursts:
-            burst_model = _burst_model(model, node)
-            burst_rates = np.zeros((burst_model.num_groups, 2))
-            for branch in range(1, len(model.tree.parents)):
-                burst_rates[burst_model.branch_groups[branch]] = background.rates[
-                    model.branch_groups[branch]
-                ]
-            burst_initial = replace(background, rates=burst_rates)
-            burst = fit_counts(burst_model, initial=burst_initial, **options)
-        else:
-            burst = background
-        candidates.append(
-            ScanCandidate(
                 node,
-                fit,
-                burst,
-                max(0.0, 2 * (fit.log_likelihood - background.log_likelihood)),
-                burst.aic - fit.aic,
+                fractions,
+                multiplicity,
+                background,
+                compare_bursts,
+                options,
             )
+            for node in nodes
+        ]
+    else:
+        data = (
+            model.tree,
+            model.counts,
+            model.detection,
+            model.rate_scales,
+            model.branch_groups,
+            model.ascertainment,
         )
+        with ProcessPoolExecutor(
+            max_workers=workers,
+            mp_context=get_context("spawn"),
+            initializer=_init_scan_worker,
+            initargs=(
+                data,
+                fractions,
+                multiplicity,
+                background,
+                compare_bursts,
+                options,
+            ),
+        ) as pool:
+            candidates = list(pool.map(_scan_worker, nodes))
     candidates.sort(
         key=lambda candidate: (
             -candidate.improvement,
@@ -386,16 +452,22 @@ def scan_counts(
     )
 
 
-def _bootstrap_scan_statistic(
-    tree, counts, detection, rate_scales, groups, ascertainment, options
-):
-    simulated = CountLikelihood(
+def _model_from_data(tree, counts, detection, rate_scales, groups, ascertainment):
+    return CountLikelihood(
         tree,
         counts,
         detection=detection,
         rate_scales=rate_scales,
         branch_groups=groups,
         ascertainment=ascertainment,
+    )
+
+
+def _bootstrap_scan_statistic(
+    tree, counts, detection, rate_scales, groups, ascertainment, options
+):
+    simulated = _model_from_data(
+        tree, counts, detection, rate_scales, groups, ascertainment
     )
     result = scan_counts(simulated, **options)
     return max(candidate.improvement for candidate in result.candidates)
