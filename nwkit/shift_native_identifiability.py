@@ -4,6 +4,8 @@ import math
 
 import numpy as np
 
+from nwkit.shift_native_model import _normalized_ou_duration
+
 
 def _observed_pair_heights(data, trait):
     tree = data.tree
@@ -23,14 +25,35 @@ def _observed_pair_heights(data, trait):
 
 
 def _correlation_derivative(alpha, heights, stationary):
+    alpha = float(alpha)
     if math.isinf(alpha):
         return np.zeros(len(heights)), np.zeros(len(heights))
     if alpha == 0:
         return heights, np.zeros(len(heights))
-    correlation = np.exp(-2 * alpha * (1 - heights))
+    double_rate = 2 * alpha
+    distance = 1 - heights
+    with np.errstate(over="ignore"):
+        exponent = (
+            double_rate * distance
+            if math.isfinite(double_rate)
+            else 2 * (alpha * distance)
+        )
+    correlation = np.exp(-exponent)
+    decay_score = np.zeros_like(exponent)
+    np.multiply(-exponent, correlation, where=np.isfinite(exponent), out=decay_score)
     if stationary:
-        return correlation, -2 * alpha * (1 - heights) * correlation
-    correlation *= -np.expm1(-2 * alpha * heights) / -np.expm1(-2 * alpha)
+        return correlation, decay_score
+    with np.errstate(over="ignore"):
+        shared_exponent = (
+            double_rate * heights
+            if math.isfinite(double_rate)
+            else 2 * (alpha * heights)
+        )
+    if math.isfinite(double_rate):
+        fraction = _normalized_ou_duration(double_rate, heights)
+    else:
+        fraction = -np.expm1(-shared_exponent)
+    correlation *= fraction
     if alpha < 1e-3:
         log_derivative = (
             -(1 - heights)
@@ -47,9 +70,10 @@ def _correlation_derivative(alpha, heights, stationary):
             result[x >= 700] = 0
             return result
 
-        log_derivative = (
-            -2 * (1 - heights) + (ratio(2 * alpha * heights) - ratio(2 * alpha)) / alpha
+        derivative = decay_score * fraction + correlation * (
+            ratio(shared_exponent) - ratio(double_rate)
         )
+        return correlation, derivative
     return correlation, alpha * correlation * log_derivative
 
 
@@ -78,7 +102,7 @@ def covariance_identifiability(
         columns.append(np.r_[0.0, fit.process_variance * derivative])
         names.append("alpha")
     matrix = np.column_stack(columns) if columns else np.empty((len(heights) + 1, 0))
-    norms = np.linalg.norm(matrix, axis=0)
+    norms = np.hypot.reduce(matrix, axis=0, initial=0.0)
     np.divide(matrix, norms, out=matrix, where=norms > 0)
 
     def rank(indices):

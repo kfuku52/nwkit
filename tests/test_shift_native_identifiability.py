@@ -49,6 +49,15 @@ def test_balanced_four_tip_tree_cannot_separate_three_free_covariance_parameters
     assert fixed_alpha["variance_decomposition_supported"]
 
 
+@pytest.mark.parametrize("stationary", [False, True])
+def test_extreme_alpha_derivative_retains_zero_and_unit_limits(stationary):
+    value, derivative = _correlation_derivative(
+        1e308, np.array([0.0, 0.5, 1.0]), stationary
+    )
+    np.testing.assert_array_equal(value, [0.0, 0.0, 1.0])
+    np.testing.assert_array_equal(derivative, [0.0, 0.0, 0.0])
+
+
 def test_multiple_mrca_depths_separate_covariances_but_independent_limit_does_not():
     data = sample_data()
     for alpha, expected in [(0.7, True), (1000, False), (float("inf"), False)]:
@@ -57,3 +66,17 @@ def test_multiple_mrca_depths_separate_covariances_but_independent_limit_does_no
             data, 0, fit, alpha_free=True, process_free=True, noise_free=True
         )
         assert result["variance_decomposition_supported"] == expected
+
+
+def test_tiny_nonzero_jacobian_column_keeps_its_direction():
+    data = sample_data()
+    fit = evaluate_trait(data, ShiftLayout.build(data.tree), 0, 1e-250, 1, 0.2)
+    result = covariance_identifiability(
+        data, 0, fit, alpha_free=True, process_free=True, noise_free=True
+    )
+    assert result["rank"] == 3
+    assert result["parameter_supported"] == {
+        "alpha": True,
+        "measurement_variance": True,
+        "process_variance": True,
+    }
