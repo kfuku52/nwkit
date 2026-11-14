@@ -215,6 +215,16 @@ def _condition_dense_predictor(prior, sampling, factor, residual, prior_mean):
     return mean, symmetric_average(covariance)
 
 
+def _center_dense_predictor(observed, include_intercept):
+    if not include_intercept:
+        return observed, 0.0, float(np.mean(observed**2))
+    lower, upper = float(np.min(observed)), float(np.max(observed))
+    # An unweighted mean offset can erase near-zero observations that
+    # dominate the intercept because their measurement error is small.
+    offset = max(lower, min(0.0, upper))
+    return observed - offset, offset, float(np.var(observed))
+
+
 def fit_latent_predictor(
     observed,
     evolutionary_covariance,
@@ -258,16 +268,9 @@ def fit_latent_predictor(
     _, covariance_exponent = math.frexp(float(np.max(evolutionary_diagonal)))
     evolutionary_covariance = np.ldexp(evolutionary_covariance, -covariance_exponent)
     evolutionary_diagonal = np.diag(evolutionary_covariance)
-    observed_offset = 0.0
-    if include_intercept:
-        lower, upper = float(np.min(observed)), float(np.max(observed))
-        # An unweighted mean offset can erase near-zero observations that
-        # dominate the intercept because their measurement error is small.
-        observed_offset = max(lower, min(0.0, upper))
-    observed_variance = (
-        float(np.var(observed)) if include_intercept else float(np.mean(observed**2))
+    observed, observed_offset, observed_variance = _center_dense_predictor(
+        observed, include_intercept
     )
-    observed = observed - observed_offset
     observed_scale = max(
         observed_variance,
         float(np.mean(np.diag(sampling_covariance))),
