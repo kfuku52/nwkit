@@ -458,34 +458,49 @@ def _multinomial_terms(
 def _ordinal_thresholds(parameters: np.ndarray) -> np.ndarray:
     thresholds = np.empty(len(parameters), dtype=float)
     thresholds[0] = parameters[0]
-    if len(parameters) > 1:
+    with np.errstate(over="ignore"):
         thresholds[1:] = parameters[0] + np.cumsum(np.exp(parameters[1:]))
+    if not np.isfinite(thresholds).all():
+        raise ValueError("Ordinal response thresholds must be finite.")
     return thresholds
+
+
+def _ordinal_log_probabilities(
+    centered_thresholds: np.ndarray, thresholds: np.ndarray
+) -> np.ndarray:
+    log_probabilities = np.zeros(
+        (len(centered_thresholds), len(thresholds) + 1), dtype=float
+    )
+    # The logistic interval mass is sigmoid(upper) * sigmoid(-lower)
+    # times (1 - exp(lower - upper)). Its width is independent of the predictor.
+    log_probabilities[:, :-1] = -np.logaddexp(0.0, -centered_thresholds)
+    log_probabilities[:, 1:] -= np.logaddexp(0.0, centered_thresholds)
+    with np.errstate(divide="ignore", over="ignore"):
+        log_probabilities[:, 1:-1] += np.log(-np.expm1(-np.diff(thresholds)))
+    return log_probabilities
 
 
 def _ordinal_terms(
     counts: np.ndarray, linear: np.ndarray, thresholds: np.ndarray
 ) -> tuple[float, np.ndarray, np.ndarray]:
-    negative_infinity = np.full(len(linear), -np.inf)
-    positive_infinity = np.full(len(linear), np.inf)
-    lower = np.column_stack([negative_infinity, thresholds[None, :] - linear[:, None]])
-    upper = np.column_stack([thresholds[None, :] - linear[:, None], positive_infinity])
-    lower_cdf = expit(lower)
-    upper_cdf = expit(upper)
-    probabilities = np.maximum(upper_cdf - lower_cdf, np.finfo(float).tiny)
-    lower_density = lower_cdf * (1.0 - lower_cdf)
-    upper_density = upper_cdf * (1.0 - upper_cdf)
-    first_probability = lower_density - upper_density
-    lower_derivative = lower_density * (1.0 - 2.0 * lower_cdf)
-    upper_derivative = upper_density * (1.0 - 2.0 * upper_cdf)
-    second_probability = upper_derivative - lower_derivative
-    ratios = first_probability / probabilities
-    gradient = -np.sum(counts * ratios, axis=1)
-    curvature = np.sum(
-        counts * (ratios**2 - second_probability / probabilities), axis=1
-    )
+    with np.errstate(over="ignore"):
+        centered = thresholds[None, :] - linear[:, None]
+    log_probabilities = _ordinal_log_probabilities(centered, thresholds)
+    below = expit(centered)
+    above = expit(-centered)
+    gradient = np.sum(counts[:, :-1] * above - counts[:, 1:] * below, axis=1)
+    curvature = np.sum((counts[:, :-1] + counts[:, 1:]) * below * above, axis=1)
     curvature = np.maximum(curvature, 1e-9)
-    log_likelihood = float(np.sum(counts * np.log(probabilities)))
+    log_likelihood = float(
+        np.sum(
+            np.multiply(
+                counts,
+                log_probabilities,
+                out=np.zeros_like(log_probabilities),
+                where=counts != 0.0,
+            )
+        )
+    )
     return log_likelihood, gradient, curvature
 
 
@@ -1984,13 +1999,9 @@ def _draw_categorical_responses(
     fixed = design @ fit.coefficients
     if fit.family == "ordinal":
         linear = fixed[:, 0] + latent.reshape(len(design))
-        lower = np.column_stack(
-            [np.full(len(design), -np.inf), fit.thresholds[None, :] - linear[:, None]]
-        )
-        upper = np.column_stack(
-            [fit.thresholds[None, :] - linear[:, None], np.full(len(design), np.inf)]
-        )
-        probabilities = expit(upper) - expit(lower)
+        with np.errstate(over="ignore"):
+            centered = fit.thresholds[None, :] - linear[:, None]
+        probabilities = np.exp(_ordinal_log_probabilities(centered, fit.thresholds))
     else:
         linear = fixed + latent.reshape(fixed.shape)
         logits = np.column_stack([linear, np.zeros(len(design), dtype=float)])

@@ -25,6 +25,7 @@ from nwkit.ordinary_regression import (
 from nwkit.phylogenetic_glmm import (
     MAX_DENSE_GLMM_TIPS,
     _censored_gaussian_log_likelihood,
+    _ordinal_terms,
     _profile_endpoint,
     fit_phylogenetic_glmm,
 )
@@ -41,6 +42,36 @@ LEAF_NAMES = ["A", "B", "C", "D", "E"]
 
 def _tree():
     return Tree(TREE_TEXT, parser=1)
+
+
+def test_ordinal_likelihood_keeps_logistic_tail_mass_and_gradient():
+    counts = np.array([[0, 1, 0], [0, 1, 0], [1, 0, 0], [0, 0, 1]])
+    linear = np.array([1000.0, -1000.0, 1000.0, -1000.0])
+
+    likelihood, gradient, curvature = _ordinal_terms(
+        counts, linear, np.array([-1.0, 1.0])
+    )
+
+    expected = 2.0 * (-999.0 + np.log(-np.expm1(-2.0))) - 2002.0
+    assert likelihood == pytest.approx(expected, abs=1e-11)
+    np.testing.assert_array_equal(gradient, [1.0, -1.0, 1.0, -1.0])
+    np.testing.assert_array_equal(curvature, np.full(4, 1e-9))
+
+
+def test_ordinal_likelihood_keeps_width_when_centered_thresholds_round_together():
+    thresholds = np.array([0.0, 1e-200])
+    counts = np.array([[0, 1, 0]])
+
+    likelihood, gradient, curvature = _ordinal_terms(
+        counts, np.array([-1.0]), thresholds
+    )
+
+    sigmoid = 1.0 / (1.0 + np.exp(-1.0))
+    assert likelihood == pytest.approx(
+        np.log(1e-200) + np.log(sigmoid * (1.0 - sigmoid)), abs=1e-11
+    )
+    np.testing.assert_allclose(gradient, [1.0 - 2.0 * sigmoid])
+    np.testing.assert_allclose(curvature, [2.0 * sigmoid * (1.0 - sigmoid)])
 
 
 def test_global_scalar_search_checks_multiple_likelihood_basins():
