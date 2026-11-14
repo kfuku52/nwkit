@@ -345,6 +345,7 @@ def _message_pass(
     compiled_tree,
     *,
     retain_inside=False,
+    likelihood_only=False,
 ):
     compiled = (
         CompiledTree.from_tree(process.tree) if compiled_tree is None else compiled_tree
@@ -357,7 +358,7 @@ def _message_pass(
         raise ValueError(
             "A flat-root Gaussian process requires at least one observation."
         )
-    local = [_Factor() for _ in compiled.nodes]
+    local = [_Factor()] * len(compiled.nodes)
     latent_positions = list(range(len(compiled.nodes)))
     for index in range(1, len(compiled.nodes)):
         transition = scaled_process.transitions[compiled.nodes[index]]
@@ -374,22 +375,10 @@ def _message_pass(
             raise ValueError("A positive observation variance underflowed.")
         local[index] = _combine(local[index], _Factor(value, variance))
         observed_positions.add(latent_positions[index])
-    inside = list(local)
-    upward = [_Factor() for _ in compiled.nodes]
-    for index in compiled.postorder:
-        factor = inside[index]
-        for child in compiled.children[index]:
-            factor = _combine(factor, upward[child])
-        inside[index] = factor
-        parent = compiled.parents[index]
-        if parent >= 0:
-            transition = scaled_process.transitions[compiled.nodes[index]]
-            upward[index] = _push_up(
-                factor,
-                transition.slope,
-                transition.intercept,
-                transition.variance,
-            )
+    inside = local if likelihood_only else list(local)
+    upward = _prune_gaussian_messages(
+        scaled_process, compiled, inside, likelihood_only=likelihood_only
+    )
     root = scaled_process.root
     if root.mode == "flat":
         if inside[0].mean is None:
@@ -410,12 +399,32 @@ def _message_pass(
         center,
         exponent,
         scaled_process,
-        tuple(local),
+        tuple(local) if not likelihood_only else (),
         tuple(inside) if retain_inside else (),
-        tuple(upward),
+        tuple(upward) if not likelihood_only else (),
         root_posterior,
         len(observed_positions),
     )
+
+
+def _prune_gaussian_messages(process, compiled, inside, *, likelihood_only):
+    empty = _Factor()
+    upward = inside if likelihood_only else [empty] * len(compiled.nodes)
+    for index in compiled.postorder:
+        factor = inside[index]
+        for child in compiled.children[index]:
+            factor = _combine(factor, upward[child])
+        inside[index] = factor
+        parent = compiled.parents[index]
+        if parent >= 0:
+            transition = process.transitions[compiled.nodes[index]]
+            upward[index] = _push_up(
+                factor,
+                transition.slope,
+                transition.intercept,
+                transition.variance,
+            )
+    return upward
 
 
 def condition_gaussian_tree(
@@ -523,7 +532,9 @@ def gaussian_tree_likelihood(
 ) -> GaussianLikelihoodResult:
     """Evaluate a Gaussian tree likelihood without the smoothing pass."""
 
-    messages = _message_pass(process, values_by_leaf, standard_errors, compiled_tree)
+    messages = _message_pass(
+        process, values_by_leaf, standard_errors, compiled_tree, likelihood_only=True
+    )
     rank = messages.root_posterior.density_rank
     log_likelihood = (
         messages.root_posterior.log_weight - rank * messages.exponent * _LOG_2
