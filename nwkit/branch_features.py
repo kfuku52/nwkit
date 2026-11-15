@@ -460,6 +460,8 @@ def map_internal_support_by_split(
     support_tree,
     support_max=None,
     require_support=False,
+    *,
+    allow_partial=False,
 ):
     """Map edge support by canonical unrooted bipartition.
 
@@ -467,6 +469,8 @@ def map_internal_support_by_split(
     root-child edge), whereas an unrooted tree contains it once.  Canonical
     split keys make the mapping independent of root placement and avoid
     silently assigning values by incompatible rooted clades.
+    When allow_partial is true, omit splits without an explicit support label.
+    Leaf sets, topologies, and supplied values are validated in either mode.
     """
 
     rooted_tips = _tree_tip_names(rooted_tree)
@@ -521,9 +525,9 @@ def map_internal_support_by_split(
             )
         support_by_split[split] = values[0]
 
-    # A partially labelled support tree is more dangerous than a completely
-    # unlabelled tree (the latter is expected for families with <4 sequences).
-    if support_by_split and set(support_by_split) != support_splits:
+    # Some consumers require complete coverage; IQ-TREE may add duplicate tips
+    # back after inference and leave their new internal splits unlabelled.
+    if not allow_partial and 0 < len(support_by_split) < len(support_splits):
         missing = support_splits.difference(support_by_split)
         raise ValueError(
             "Support tree labels only a subset of its internal splits: "
@@ -548,40 +552,6 @@ def map_internal_support_by_split(
                     "Rooted tree node is missing branch_id during support mapping."
                 )
             branch_support[int(branch_id)] = support_by_split[split]
-
-    if branch_support:
-        from nwkit.transfer import transfer_properties
-        from nwkit.util import copy_tree_iteratively
-
-        normalized_source = copy_tree_iteratively(support_tree)
-        for split, nodes in _internal_split_masks(
-            normalized_source, tip_masks, full_mask
-        ).items():
-            if split in support_by_split:
-                for node in nodes:
-                    node.support = support_by_split[split]
-        target = copy_tree_iteratively(rooted_tree)
-        transfer_properties(
-            target,
-            normalized_source,
-            [("support", "support")],
-            target_class="intnode",
-            match_basis="split",
-            align_roots=False,
-            allow_target_reroot=False,
-            exclude_root=True,
-            root_edge_policies={"support": "equal-only"},
-            collect_report=False,
-            equal_value_ambiguity=True,
-        )
-        mapped_support = {
-            int(node.props["branch_id"]): float(node.support)
-            for node in target.traverse()
-            if node.props.get("branch_id") in branch_support
-        }
-
-    if branch_support:
-        branch_support = {key: mapped_support[key] for key in branch_support}
 
     values = list(support_by_split.values())
     diagnostics = {

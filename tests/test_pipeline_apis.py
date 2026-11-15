@@ -97,6 +97,28 @@ def test_strict_support_normalizes_only_verified_edge_representations():
     assert all(node.support is None for node in target.children)
 
 
+def test_partial_support_transfers_only_explicit_values_to_matching_splits():
+    from nwkit.branch_features import ensure_branch_ids, map_internal_support_by_split
+
+    source = Tree("((A,B)0,(C,D),(E,F)97);", parser=0)
+    target = ensure_branch_ids(Tree("(((A,B),(C,D)),(E,F));", parser=1))
+    values, diagnostics = map_internal_support_by_split(
+        target, source, allow_partial=True
+    )
+    assert {
+        frozenset(node.leaf_names()): values[node.props["branch_id"]]
+        for node in target.traverse()
+        if node.props["branch_id"] in values
+    } == {frozenset("AB"): 0.0, frozenset("ABCD"): 97.0, frozenset("EF"): 97.0}
+    assert diagnostics["supported_split_count"] == 2
+    assert diagnostics["internal_split_count"] == 3
+    with pytest.raises(ValueError, match="only a subset"):
+        map_internal_support_by_split(target, source)
+    incompatible = Tree("((A,C)0,(B,D),(E,F)97);", parser=0)
+    with pytest.raises(ValueError, match="incompatible unrooted topologies"):
+        map_internal_support_by_split(target, incompatible, allow_partial=True)
+
+
 def test_convert_astral_retains_properties_and_can_drop_comments():
     from nwkit.convert import convert_tree_text
     from nwkit.util import read_tree

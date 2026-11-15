@@ -4,6 +4,14 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.46.8] - 2026-11-16
+
+### Changed
+
+- Allow callers to transfer explicitly labelled split supports from partially
+  labelled trees. The mapper reuses its validated split index directly,
+  avoiding two tree copies and a second split lookup.
+
 ## [0.46.7] - 2026-11-15
 
 ### Fixed
