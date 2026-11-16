@@ -15,6 +15,90 @@ from nwkit.image import (
 from tests.image_test_support import JSONResponse, make_image_args
 
 
+class TestGBIFProvider:
+    @pytest.mark.parametrize(
+        ("match_type", "rank", "expected"),
+        [
+            ("HIGHERRANK", "GENUS", None),
+            ("EXACT", "GENUS", None),
+            (
+                "EXACT",
+                "SPECIES",
+                {"usage_key": 123, "matched_name": "Bonia amplexicaulis"},
+            ),
+        ],
+    )
+    def test_species_match_checks_returned_rank(
+        self, monkeypatch, match_type, rank, expected
+    ):
+        def respond(*args, **kwargs):
+            return {
+                "matchType": match_type,
+                "rank": rank,
+                "usageKey": 123,
+                "canonicalName": "Bonia amplexicaulis",
+            }
+
+        monkeypatch.setattr(image_module, "provider_json_request", respond)
+        provider = image_module.GBIFProvider(session=None)
+        assert provider._match_taxon("Bonia amplexicaulis", "species") == expected
+
+
+@pytest.mark.parametrize(
+    ("original", "expected"),
+    [
+        (
+            "http://sweetgum.nybg.org/images/specimen.jpg?size=original",
+            "https://sweetgum.nybg.org/images/specimen.jpg?size=original",
+        ),
+        (
+            "http://sweetgum.nybg.org.example.org/image.jpg",
+            "http://sweetgum.nybg.org.example.org/image.jpg",
+        ),
+        (
+            "http://user@sweetgum.nybg.org/image.jpg",
+            "http://user@sweetgum.nybg.org/image.jpg",
+        ),
+    ],
+)
+def test_collection_url_upgrade_has_exact_host_scope(original, expected):
+    assert image_module.normalize_aggregated_media_url(original) == expected
+
+
+class TestWikimediaPreview:
+    @pytest.mark.parametrize(
+        ("edge", "thumbnail", "expected"),
+        [
+            (None, "https://upload.wikimedia.org/preview.jpg", False),
+            (2000, "https://upload.wikimedia.org/preview.jpg", False),
+            (1600, "https://upload.wikimedia.org/preview.jpg", True),
+            (1600, "https://example.org/preview.jpg", False),
+        ],
+    )
+    def test_preview_preserves_rank_and_original_for_other_requests(
+        self, edge, thumbnail, expected
+    ):
+        candidate = {
+            "provider": "wikimedia",
+            "provider_record_id": "123",
+            "media_url": "https://upload.wikimedia.org/original.jpg",
+            "thumbnail_url": thumbnail,
+            "thumbnail_width": 1920,
+            "thumbnail_height": 1280,
+            "width": 6000,
+            "height": 4000,
+            "license_code": "cc-by",
+            "matched_rank": "species",
+            "score": 40,
+        }
+        selected = image_module.select_wikimedia_thumbnail(candidate, edge)
+        assert selected == {
+            **candidate,
+            "media_url": thumbnail if expected else candidate["media_url"],
+        }
+        assert candidate["media_url"].endswith("/original.jpg")
+
+
 class TestBioiconsProvider:
     def test_bioicons_provider_fetches_matching_svg_candidates(self, tmp_path):
         class RoutingSession:

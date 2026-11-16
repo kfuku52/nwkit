@@ -18,7 +18,7 @@ import tarfile
 import tempfile
 import threading
 import time
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 from urllib.parse import quote, urljoin, urlparse
@@ -96,10 +96,17 @@ NCBI_NEWTAXDUMP_URL = (
 )
 NCBI_LEGACY_IMAGE_HOSTS = frozenset(("ncbi.nlm.nih.gov", "www.ncbi.nlm.nih.gov"))
 NCBI_LEGACY_IMAGE_PATH_PREFIX = "/Taxonomy/taxi/images/"
+HTTPS_REPLICA_MEDIA_HOSTS = frozenset(
+    (
+        "fm-digital-assets.fieldmuseum.org",
+        "jbrj-public-img.s3-sa-east-1.amazonaws.com",
+        "sweetgum.nybg.org",
+    )
+)
 REQUEST_TIMEOUT = (10, 60)
 DEFAULT_LOOKUP_WORKERS = 4
 DEFAULT_DOWNLOAD_WORKERS = 4
-IMAGE_QUERY_CACHE_VERSION = 3
+IMAGE_QUERY_CACHE_VERSION = 4
 LOOKUP_FALLBACK_BUFFER = 2
 BIOICONS_CATALOG_CACHE_VERSION = 2
 DEFAULT_QUERY_CACHE_MAX_AGE_HOURS = 168.0
@@ -243,7 +250,7 @@ def build_retry_config():
 
 
 def build_http_session():
-    session = requests.Session()
+    session = _ImageHTTPSession()
     retry = build_retry_config()
     adapter = HTTPAdapter(
         max_retries=retry,
@@ -431,6 +438,44 @@ class _PinnedHTTPSAdapter(HTTPAdapter):
         return self._connection_from_pinned_host()
 
 
+class _ImageHTTPSession(requests.Session):
+    """Own a bounded set of connection pools for independently validated addresses."""
+
+    def __init__(self):
+        super().__init__()
+        self._pinned: OrderedDict[tuple[HTTPAdapter, str, str], _PinnedHTTPSAdapter] = (
+            OrderedDict()
+        )
+
+    def pinned_adapter(self, original, hostname, address):
+        key = (original, hostname, address)
+        adapter = self._pinned.pop(key, None)
+        if adapter is None:
+            adapter = _new_pinned_adapter(original, hostname, address)
+        self._pinned[key] = adapter
+        if len(self._pinned) > HTTP_SESSION_POOL_SIZE:
+            _, evicted = self._pinned.popitem(last=False)
+            evicted.close()
+        return adapter
+
+    def close(self):
+        for adapter in self._pinned.values():
+            adapter.close()
+        self._pinned.clear()
+        super().close()
+
+
+def _new_pinned_adapter(original, hostname, address):
+    return _PinnedHTTPSAdapter(
+        address=address,
+        tls_hostname=hostname,
+        max_retries=getattr(original, "max_retries", 0),
+        pool_connections=getattr(original, "_pool_connections", 1),
+        pool_maxsize=getattr(original, "_pool_maxsize", 1),
+        pool_block=getattr(original, "_pool_block", False),
+    )
+
+
 def _request_pinned_address(
     session, method, url, address, suppress_sensitive_headers=False, **kwargs
 ):
@@ -447,15 +492,20 @@ def _request_pinned_address(
             "validated destination address cannot be pinned safely."
         )
     original_adapter = session.get_adapter(url)
-    adapter = _PinnedHTTPSAdapter(
-        address=address,
-        tls_hostname=hostname,
-        max_retries=getattr(original_adapter, "max_retries", 0),
-        pool_connections=getattr(original_adapter, "_pool_connections", 1),
-        pool_maxsize=getattr(original_adapter, "_pool_maxsize", 1),
-        pool_block=getattr(original_adapter, "_pool_block", False),
+    shared_adapter = isinstance(session, _ImageHTTPSession)
+    adapter = (
+        session.pinned_adapter(original_adapter, hostname, address)
+        if shared_adapter
+        else _new_pinned_adapter(original_adapter, hostname, address)
     )
     pinned_session = requests.Session()
+
+    def close_request_session():
+        if shared_adapter:
+            # Keep the pool on the owning session and discard per-request state.
+            pinned_session.adapters.pop("https://", None)
+        pinned_session.close()
+
     pinned_session.trust_env = False
     session_headers = session.headers
     if suppress_sensitive_headers:
@@ -484,7 +534,7 @@ def _request_pinned_address(
     except Exception:
         if response is not None and hasattr(response, "close"):
             response.close()
-        pinned_session.close()
+        close_request_session()
         raise
 
     original_close = response.close
@@ -493,7 +543,7 @@ def _request_pinned_address(
         try:
             original_close()
         finally:
-            pinned_session.close()
+            close_request_session()
 
     response.close = close_response_and_session
     return response
@@ -1729,6 +1779,14 @@ def validate_candidate_media_url(candidate, resolve_dns=False):
     )
 
 
+def normalize_aggregated_media_url(url):
+    """Upgrade known collection URLs before applying the regular HTTPS checks."""
+    parsed = urlparse(url)
+    if parsed.scheme == "http" and parsed.netloc.lower() in HTTPS_REPLICA_MEDIA_HOSTS:
+        return parsed._replace(scheme="https").geturl()
+    return url
+
+
 def normalize_provider_candidate(candidate, expected_provider=None):
     if not isinstance(candidate, dict):
         raise ValueError("Image provider candidate must be an object.")
@@ -1779,6 +1837,8 @@ def normalize_provider_candidate(candidate, expected_provider=None):
             "Image provider candidate has an invalid '{}' value; "
             "expected true or false.".format(field)
         )
+    if provider in {"gbif", "idigbio", "eol", "openverse"}:
+        candidate["media_url"] = normalize_aggregated_media_url(candidate["media_url"])
     validate_candidate_media_url(candidate, resolve_dns=False)
     return candidate
 
@@ -3330,7 +3390,7 @@ class WikimediaProvider:
                 "gsrlimit": self.result_limit if limit == 10 else limit,
                 "prop": "imageinfo",
                 "iiprop": "url|size|mime|mediatype|extmetadata",
-                "iiurlwidth": 1600,
+                "iiurlwidth": 1920,
                 "format": "json",
             },
             timeout=REQUEST_TIMEOUT,
@@ -3390,6 +3450,9 @@ class WikimediaProvider:
             "attribution": attribution,
             "source_page_url": image_info.get("descriptionurl", ""),
             "media_url": media_url,
+            "thumbnail_url": image_info.get("thumburl"),
+            "thumbnail_width": image_info.get("thumbwidth"),
+            "thumbnail_height": image_info.get("thumbheight"),
             "width": width,
             "height": height,
             "asset_type": asset_type,
@@ -3422,7 +3485,10 @@ class GBIFProvider:
             timeout=REQUEST_TIMEOUT,
             headers=HTTP_HEADERS,
         )
-        if str(payload.get("matchType", "")).upper() not in ("EXACT", "HIGHERRANK"):
+        if (
+            str(payload.get("matchType", "")).upper() != "EXACT"
+            or str(payload.get("rank", "")).lower() != matched_rank
+        ):
             return None
         usage_key = payload.get("usageKey")
         if usage_key is None:
@@ -3631,6 +3697,28 @@ def build_download_session():
     return build_http_session()
 
 
+def select_wikimedia_thumbnail(candidate, max_edge):
+    """Use the provider's smaller rendition when it meets an explicit edge limit."""
+    if candidate["provider"] != "wikimedia" or not max_edge:
+        return candidate
+    url = candidate.get("thumbnail_url")
+    if not isinstance(url, str) or url == candidate["media_url"]:
+        return candidate
+    original = max(candidate["width"], candidate["height"])
+    preview = max(
+        _finite_nonnegative_number(candidate.get("thumbnail_width")),
+        _finite_nonnegative_number(candidate.get("thumbnail_height")),
+    )
+    if not max_edge <= preview < original:
+        return candidate
+    selected = {**candidate, "media_url": url}
+    try:
+        validate_candidate_media_url(selected, resolve_dns=False)
+    except (MediaDownloadError, ValueError):
+        return candidate
+    return selected
+
+
 def collect_candidates_for_species(species_name, args, sources, providers):
     provider_errors = list()
     candidates: list[dict[str, Any]] = []
@@ -3706,7 +3794,9 @@ def collect_candidates_for_species(species_name, args, sources, providers):
                 provider_errors.append(message)
                 continue
             normalized_candidates.append(candidate)
-            candidates.append(candidate)
+            candidates.append(
+                select_wikimedia_thumbnail(candidate, getattr(args, "max_edge", None))
+            )
         if fetched_candidates:
             try:
                 write_cached_provider_candidates(
