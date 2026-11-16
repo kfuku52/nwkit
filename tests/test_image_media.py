@@ -822,6 +822,18 @@ class TestImageSecurityLimits:
             assert not different_host.closed
         assert all(adapter.closed for adapter in created)
 
+    def test_media_limits_connect_retries_without_changing_server_backoff(self):
+        with (
+            image_module.build_http_session() as lookup,
+            image_module.build_download_session() as media,
+        ):
+            url = "https://example.com/image.jpg"
+            lookup_retry = lookup.get_adapter(url).max_retries
+            media_retry = media.get_adapter(url).max_retries
+            assert (lookup_retry.connect, media_retry.connect) == (4, 1)
+            assert media_retry.status_forcelist == lookup_retry.status_forcelist
+            assert media_retry.respect_retry_after_header
+
     def test_pinned_request_rejects_proxy_configuration(self):
         session = requests.Session()
         session.trust_env = False

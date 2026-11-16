@@ -131,6 +131,7 @@ SEMANTIC_MASK_MAX_DIM = 256
 SEMANTIC_ALPHA_THRESHOLD = 16
 SEMANTIC_DIFF_THRESHOLD_FLOOR = 12
 REQUEST_RETRY_TOTAL = 4
+MEDIA_CONNECT_RETRIES = 1
 REQUEST_RETRY_BACKOFF_FACTOR = 1.0
 REQUEST_RETRY_STATUS_CODES = (429, 500, 502, 503, 504)
 HTTP_SESSION_POOL_SIZE = 16
@@ -232,10 +233,10 @@ def _stderr(message):
     sys.stderr.write(str(message).rstrip() + "\n")
 
 
-def build_retry_config():
+def build_retry_config(connect_retries=REQUEST_RETRY_TOTAL):
     retry_kwargs = dict(
         total=REQUEST_RETRY_TOTAL,
-        connect=REQUEST_RETRY_TOTAL,
+        connect=connect_retries,
         read=REQUEST_RETRY_TOTAL,
         status=REQUEST_RETRY_TOTAL,
         backoff_factor=REQUEST_RETRY_BACKOFF_FACTOR,
@@ -249,9 +250,9 @@ def build_retry_config():
         return Retry(method_whitelist=frozenset(["GET"]), **retry_kwargs)
 
 
-def build_http_session():
+def build_http_session(*, connect_retries=REQUEST_RETRY_TOTAL):
     session = _ImageHTTPSession()
-    retry = build_retry_config()
+    retry = build_retry_config(connect_retries)
     adapter = HTTPAdapter(
         max_retries=retry,
         pool_connections=HTTP_SESSION_POOL_SIZE,
@@ -3694,7 +3695,9 @@ def build_providers(args, sources, session=None):
 
 
 def build_download_session():
-    return build_http_session()
+    # After a connection failure, the downloader can try the next ranked asset.
+    # API lookups and server-directed Retry-After retain their normal retry policy.
+    return build_http_session(connect_retries=MEDIA_CONNECT_RETRIES)
 
 
 def select_wikimedia_thumbnail(candidate, max_edge):
