@@ -4,6 +4,20 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.46.9] - 2026-11-16
+
+### Changed
+
+- Reuse validated HTTPS connections for image lookups and downloads, use
+  sufficiently large Wikimedia previews when resizing, and limit connection
+  retries for unreachable media hosts.
+
+### Fixed
+
+- Require GBIF matches at the requested taxonomic rank. Preserve occurrence
+  links for attribution when image references are missing, and use HTTPS for
+  media served by verified collection hosts.
+
 ## [0.46.8] - 2026-11-16
 
 ### Changed
