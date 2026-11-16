@@ -15,6 +15,7 @@ in [`guides/`](guides/):
 - [AngioCal fossil minimum-age constraints](guides/ANGIOCAL.md)
 - [Bounded conditional MUL/MSC estimation](guides/MUL_MSC_FIT.md)
 - [CLI and TSV conventions](guides/CLI_TSV_CONVENTIONS.md)
+- [Collect and verify taxon images](guides/IMAGE.md)
 - [Conditional allopolyploid MUL/MSC prototype](guides/MUL_MSC.md)
 - [Discrete stochastic maps](guides/STOCHASTIC_MAPS.md)
 - [Disparity through time](guides/DTT.md)

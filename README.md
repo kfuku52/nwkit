@@ -65,8 +65,8 @@ pip install "nwkit[image] @ git+https://github.com/kfuku52/nwkit.git"
 From an existing source checkout, use `pip install -e ".[image]"`. If NWKIT
 was installed from Bioconda, install the native Cairo library and then run
 `pip install CairoSVG` in the same environment. These steps enable SVG
-normalization, trimming, resizing with `nwkit image`, and rendering SVG tip
-images with `nwkit draw`.
+normalization, trimming, and resizing with [`nwkit image`](docs/guides/IMAGE.md),
+as well as rendering SVG tip images with `nwkit draw`.
 
 ## First run
 

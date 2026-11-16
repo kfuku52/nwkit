@@ -20,6 +20,8 @@ import threading
 import time
 from collections import OrderedDict, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from copy import copy
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urljoin, urlparse
 
@@ -66,8 +68,22 @@ from nwkit.image_metadata import (
 from nwkit.image_metadata import (
     tokenize_search_terms as tokenize_search_terms,
 )
+from nwkit.image_workflow import (
+    IMAGE_MANIFEST_FIELDS,
+    UNMATCHED_FIELDS,
+    ImageCheckpoints,
+    RequestPacer,
+    copy_selection_to_leaves,
+    declared_rank,
+    infraspecific_label,
+    parent_species,
+    parse_provider_intervals,
+    read_verified_rows,
+    sha256_file,
+    unique_taxon_aliases,
+)
 from nwkit.output_transaction import output_transaction
-from nwkit.species_parser import DEFAULT_SPECIES_REGEX
+from nwkit.species_parser import DEFAULT_SPECIES_REGEX, get_species_parser
 from nwkit.util import (
     acquire_exclusive_lock,
     extract_taxonomy_query,
@@ -83,6 +99,7 @@ from nwkit.util import (
 PHYLIPIC_API_ROOT = "https://api.phylopic.org"
 INATURALIST_API_ROOT = "https://api.inaturalist.org/v1"
 WIKIMEDIA_API_ROOT = "https://commons.wikimedia.org/w/api.php"
+WIKIDATA_API_ROOT = "https://www.wikidata.org/w/api.php"
 GBIF_API_ROOT = "https://api.gbif.org/v1"
 EOL_API_ROOT = "https://eol.org/api"
 IDIGBIO_API_ROOT = "https://search.idigbio.org/v2"
@@ -167,7 +184,7 @@ PROVIDER_API_HOSTS = {
     "phylopic": ("api.phylopic.org",),
     "bioicons": ("api.github.com",),
     "inaturalist": ("api.inaturalist.org",),
-    "wikimedia": ("commons.wikimedia.org",),
+    "wikimedia": ("commons.wikimedia.org", "www.wikidata.org"),
     "gbif": ("api.gbif.org",),
     "eol": ("eol.org",),
     "idigbio": ("search.idigbio.org",),
@@ -690,6 +707,9 @@ def bounded_response_json(response, max_bytes=DEFAULT_MAX_PROVIDER_RESPONSE_BYTE
 
 
 def provider_json_request(session, provider, method, url, **kwargs):
+    pacer = getattr(session, "_nwkit_request_pacer", None)
+    if pacer is not None:
+        pacer.wait(provider)
     kwargs.setdefault("stream", True)
     response = safe_external_request(
         session,
@@ -818,6 +838,13 @@ def extract_species_mapping(
                     out_delim=" ",
                 )
             )
+        if (
+            args is not None
+            and image_workflow_requested(args)
+            and leaf.name not in name_mapping
+            and get_species_parser(args=args).map_overrides.get(leaf.name) is None
+        ):
+            species_name = infraspecific_label(leaf.name) or species_name
         if species_name is None:
             unmatched_rows.append(
                 {
@@ -832,8 +859,105 @@ def extract_species_mapping(
     return leaf_to_species, unmatched_rows
 
 
+def image_workflow_requested(args):
+    return any(
+        getattr(args, field, False)
+        for field in ("verified_images_tsv", "synonyms", "resume", "first_available")
+    )
+
+
+def validate_image_reference(url):
+    """Validate a citation URL without treating it as a media download."""
+    parsed = urlparse(url)
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or any(char.isspace() for char in url)
+    ):
+        raise ValueError(
+            "Verified image references require an HTTP(S) URL without credentials."
+        )
+    return url
+
+
+def read_verified_images(path, leaves, args):
+    candidates: dict[str, dict[str, Any]] = {}
+    if not path:
+        return candidates
+    max_bytes = int(getattr(args, "max_download_bytes", DEFAULT_MAX_DOWNLOAD_BYTES))
+    for row in read_verified_rows(path):
+        leaf = row["leaf_name"]
+        if leaf not in leaves:
+            raise ValueError(f"--verified-images-tsv contains unknown leaf {leaf!r}.")
+        if leaf in candidates:
+            raise ValueError(f"--verified-images-tsv contains duplicate leaf {leaf!r}.")
+        media_url = row.get("media_url", "")
+        local_path = row.get("local_path", "")
+        if bool(media_url) == bool(local_path):
+            raise ValueError(
+                f"Verified image for {leaf!r} requires exactly one media_url or local_path."
+            )
+        source = validate_image_reference(row["source_page_url"])
+        license_url = row.get("license_url", "")
+        license_code = normalize_license_code(
+            raw_code=row.get("license_code"),
+            raw_url=license_url,
+            attribution=row["attribution"],
+        )
+        if license_url:
+            validate_image_reference(license_url)
+            url_code = normalize_license_code(raw_url=license_url)
+            if url_code != "unknown" and url_code != license_code:
+                raise ValueError(
+                    f"Verified image for {leaf!r} has conflicting license metadata."
+                )
+        if not license_allowed(license_code, args.license_max, args.allow_nd):
+            raise ValueError(
+                f"Verified image for {leaf!r} has a disallowed or unknown license."
+            )
+        if not row["attribution"] and license_code != "public-domain":
+            raise ValueError(f"Verified image for {leaf!r} requires attribution.")
+        local_metadata = {}
+        if media_url:
+            validate_external_url(media_url)
+        else:
+            image_path = (Path(path).resolve().parent / local_path).resolve(strict=True)
+            if not image_path.is_file() or image_path.stat().st_size > max_bytes:
+                raise ValueError(
+                    f"Verified image for {leaf!r} must be a file within the size limit."
+                )
+            local_metadata = {
+                "local_source": str(image_path),
+                "local_sha256": sha256_file(image_path),
+            }
+            media_url = image_path.as_uri()
+        name = normalize_species_name(row.get("matched_name")) or leaves[leaf] or leaf
+        rank = row.get("matched_rank") or declared_rank(name)
+        record_id = hashlib.sha256(
+            json.dumps([leaf, media_url, local_metadata], sort_keys=True).encode(
+                "utf-8"
+            )
+        ).hexdigest()[:24]
+        candidates[leaf] = {
+            "provider": "verified",
+            "provider_record_id": record_id,
+            "matched_name": name,
+            "matched_rank": rank,
+            "license_code": license_code,
+            "license_url": license_url or canonical_license_url(license_code),
+            "attribution": row["attribution"],
+            "source_page_url": source,
+            "media_url": media_url,
+            "score": 0,
+            **local_metadata,
+        }
+    return candidates
+
+
 def get_taxonomic_queries(species_name, fallback_rank="none", ncbi=None):
-    queries = [("species", species_name)]
+    queries = [(declared_rank(species_name), species_name)]
     parts = species_name.split()
     genus_name = parts[0] if len(parts) >= 1 else None
     family_name = None
@@ -1695,10 +1819,18 @@ def build_local_media_filename(species_name, candidate, media_url):
     )
 
 
-def build_query_cache_path(cache_dir, provider, species_name, fallback_rank):
-    digest = hashlib.sha256(
-        "{}\0{}\0{}".format(provider, fallback_rank, species_name).encode("utf-8")
-    ).hexdigest()[:16]
+def build_query_cache_path(
+    cache_dir, provider, species_name, fallback_rank, depicts=False
+):
+    identity: tuple[str, ...] = (provider, fallback_rank, species_name)
+    rank = declared_rank(species_name)
+    if rank != "species":
+        identity += (rank,)
+    if provider == "wikimedia":
+        identity += ("name-boundary",)
+        if depicts:
+            identity += ("depicts",)
+    digest = hashlib.sha256("\0".join(identity).encode("utf-8")).hexdigest()[:16]
     filename = "{}__{}__{}__{}.json".format(
         sanitize_filename_component(provider),
         sanitize_filename_component(str(species_name).replace(" ", "_")),
@@ -1824,7 +1956,7 @@ def normalize_provider_candidate(candidate, expected_provider=None):
     candidate["provider_quality"] = int(
         _finite_nonnegative_number(candidate.get("provider_quality"))
     )
-    for field in ("is_primary", "is_vector"):
+    for field in ("is_primary", "is_vector", "subject_match"):
         value = candidate.get(field)
         if value is None:
             continue
@@ -1976,8 +2108,14 @@ def describe_candidate_selection(candidate):
         "species": "exact_species_match",
         "genus": "genus_fallback",
         "family": "family_fallback",
-    }.get(candidate.get("matched_rank"), "taxon_match")
-    if candidate.get("provider") == "phylopic":
+    }.get(candidate.get("matched_rank"), "exact_infraspecific_match")
+    if candidate.get("taxonomic_alias"):
+        rank_reason = "taxonomic_synonym_match"
+    if candidate.get("provider") == "verified":
+        choice_reason = "verified_image"
+    elif candidate.get("subject_match"):
+        choice_reason = "wikimedia_depicts"
+    elif candidate.get("provider") == "phylopic":
         choice_reason = (
             "phylopic_primary_image"
             if candidate.get("is_primary")
@@ -2021,7 +2159,8 @@ def should_stop_after_provider(candidates, args):
         return False
     top_candidates = allowed_candidates[:max_per_species]
     return all(
-        candidate.get("matched_rank") == "species" for candidate in top_candidates
+        candidate.get("matched_rank") not in {"genus", "family"}
+        for candidate in top_candidates
     )
 
 
@@ -2481,12 +2620,14 @@ def candidate_score(candidate, provider_index=0, style="auto"):
     license_code = candidate.get("license_code")
     if not isinstance(license_code, str):
         license_code = ""
-    rank_priority = {"species": 3, "genus": 2, "family": 1}.get(matched_rank, 0)
+    rank_priority = {"genus": 2, "family": 1, "": 0}.get(matched_rank, 3)
     provider_priority = max(
         1,
         100 - int(_finite_nonnegative_number(provider_index)),
     )
-    primary_priority = 1 if candidate.get("is_primary") else 0
+    primary_priority = (
+        1 if candidate.get("is_primary") or candidate.get("subject_match") else 0
+    )
     license_priority = max(0, LICENSE_OPENNESS.get(license_code, 0))
     style_priority = get_style_priority(candidate, style=style)
     vector_priority = 1 if candidate_is_vector(candidate) else 0
@@ -2539,6 +2680,9 @@ class LazyNCBITaxa:
     def get_taxid_translator(self, lineage):
         return self._get_ncbi().get_taxid_translator(lineage)
 
+    def aliases(self, name):
+        return unique_taxon_aliases(self._get_ncbi().db, name)
+
     def close(self):
         if self._ncbi is None:
             return
@@ -2556,7 +2700,7 @@ class PhylopicProvider:
     def _get_taxid(self, query_name):
         name_to_taxid = self.ncbi.get_name_translator([query_name])
         taxids = name_to_taxid.get(query_name, [])
-        return int(taxids[0]) if taxids else None
+        return int(taxids[0]) if len(taxids) == 1 else None
 
     def _resolve_node(self, taxid):
         response = safe_external_request(
@@ -3150,15 +3294,10 @@ class IDigBioProvider:
 
     def _build_record_query(self, query_name, matched_rank):
         normalized = normalize_species_name(query_name)
-        if matched_rank == "species":
-            return {"scientificname": normalized}
-        if matched_rank == "genus":
-            return {"genus": normalized}
-        if matched_rank == "family":
-            return {"family": normalized}
-        raise ValueError(
-            "Unsupported matched rank for iDigBio: {}".format(matched_rank)
+        field = (
+            matched_rank if matched_rank in {"genus", "family"} else "scientificname"
         )
+        return {field: normalized}
 
     def _search_media(self, query_name, matched_rank, limit=None):
         body = {
@@ -3373,11 +3512,15 @@ class WikimediaProvider:
     def __init__(self, session, ncbi=None, args=None):
         self.session = session
         self.ncbi = ncbi
+        self.depicts = bool(getattr(args, "wikimedia_depicts", False))
         self.result_limit = resolve_provider_fetch_limit(
             args=args, minimum=5, maximum=10
         )
 
-    def _search_pages(self, query_name, limit=10):
+    def _search_pages(self, query_name, limit=10, *, taxon_item=None):
+        search = (
+            f"haswbstatement:P180={taxon_item}" if taxon_item else f'"{query_name}"'
+        )
         payload = provider_json_request(
             self.session,
             self.provider_name,
@@ -3386,7 +3529,7 @@ class WikimediaProvider:
             params={
                 "action": "query",
                 "generator": "search",
-                "gsrsearch": '"{}" filetype:bitmap'.format(query_name),
+                "gsrsearch": f"{search} filetype:bitmap",
                 "gsrnamespace": 6,
                 "gsrlimit": self.result_limit if limit == 10 else limit,
                 "prop": "imageinfo",
@@ -3400,21 +3543,92 @@ class WikimediaProvider:
         pages = list(payload.get("query", {}).get("pages", {}).values())
         return sorted(pages, key=lambda page: int(page.get("index", 10**9)))
 
+    def _wikidata_request(self, **params):
+        payload = provider_json_request(
+            self.session,
+            self.provider_name,
+            "get",
+            WIKIDATA_API_ROOT,
+            params=dict(params, format="json"),
+            timeout=REQUEST_TIMEOUT,
+            headers=HTTP_HEADERS,
+        )
+        if "error" in payload:
+            raise ProviderError("Wikidata rejected the taxon lookup.")
+        return payload
+
+    def _taxon_item(self, name):
+        hits = self._wikidata_request(
+            action="wbsearchentities", search=name, language="en", type="item", limit=10
+        )
+        ids = [
+            hit["id"]
+            for hit in hits.get("search", ())
+            if isinstance(hit.get("id"), str)
+            and re.fullmatch(r"Q[1-9][0-9]*", hit["id"])
+        ]
+        if not ids:
+            return None
+        entities = self._wikidata_request(
+            action="wbgetentities", ids="|".join(ids), props="claims"
+        ).get("entities", {})
+        matches = set()
+        for item_id in ids:
+            for claim in entities.get(item_id, {}).get("claims", {}).get("P225", ()):
+                value = claim.get("mainsnak", {}).get("datavalue", {}).get("value")
+                scientific_name = (
+                    normalize_species_name(value) if isinstance(value, str) else None
+                )
+                if (
+                    claim.get("rank") != "deprecated"
+                    and scientific_name
+                    and scientific_name.casefold() == name.casefold()
+                ):
+                    matches.add(item_id)
+        return next(iter(matches)) if len(matches) == 1 else None
+
     def fetch_candidates(self, species_name, fallback_rank="none"):
         candidates = list()
         for matched_rank, query_name in get_taxonomic_queries(
             species_name, fallback_rank=fallback_rank, ncbi=self.ncbi
         ):
-            for page in self._search_pages(query_name=query_name):
+            subject_pages = []
+            if self.depicts and matched_rank not in {"genus", "family"}:
+                try:
+                    taxon_item = self._taxon_item(query_name)
+                    if taxon_item:
+                        subject_pages = self._search_pages(
+                            query_name, taxon_item=taxon_item
+                        )
+                except (
+                    requests.RequestException,
+                    MediaDownloadError,
+                    ProviderError,
+                ) as exc:
+                    _stderr(
+                        f"Wikimedia structured lookup failed for {query_name}: {exc}"
+                    )
+            subject_ids = {page["pageid"] for page in subject_pages}
+            text_pages = self._search_pages(query_name=query_name)
+            for page in subject_pages + [
+                page for page in text_pages if page.get("pageid") not in subject_ids
+            ]:
                 candidate = self._candidate_from_page(
-                    page=page, matched_name=query_name, matched_rank=matched_rank
+                    page=page,
+                    matched_name=query_name,
+                    matched_rank=matched_rank,
+                    subject_match=page.get("pageid") in subject_ids,
                 )
                 if candidate is not None:
                     candidates.append(candidate)
         return candidates
 
-    def _candidate_from_page(self, page, matched_name, matched_rank):
-        if not wikimedia_page_mentions_query(page=page, query_name=matched_name):
+    def _candidate_from_page(
+        self, page, matched_name, matched_rank, subject_match=False
+    ):
+        if not subject_match and not wikimedia_page_mentions_query(
+            page=page, query_name=matched_name
+        ):
             return None
         image_info = (page.get("imageinfo") or [{}])[0]
         media_url = image_info.get("url")
@@ -3458,6 +3672,7 @@ class WikimediaProvider:
             "height": height,
             "asset_type": asset_type,
             "provider_quality": provider_quality,
+            "subject_match": subject_match,
         }
 
 
@@ -3602,10 +3817,9 @@ class NCBIProvider:
     def _get_taxid(self, query_name):
         name_to_taxid = self.ncbi.get_name_translator([query_name])
         taxids = name_to_taxid.get(query_name, [])
-        return int(taxids[0]) if taxids else None
+        return int(taxids[0]) if len(taxids) == 1 else None
 
     def fetch_candidates(self, species_name, fallback_rank="none"):
-        self._ensure_images_database()
         candidates = list()
         for matched_rank, query_name in get_taxonomic_queries(
             species_name, fallback_rank=fallback_rank, ncbi=self.ncbi
@@ -3613,6 +3827,7 @@ class NCBIProvider:
             taxid = self._get_taxid(query_name)
             if taxid is None:
                 continue
+            self._ensure_images_database()
             for record in load_ncbi_images_records(self.images_database_path, taxid):
                 candidates.append(
                     self._candidate_from_record(
@@ -3658,11 +3873,14 @@ class NCBIProvider:
 
 def build_providers(args, sources, session=None):
     session = session or build_http_session()
+    if isinstance(session, _ImageHTTPSession):
+        session._nwkit_request_pacer = getattr(args, "_nwkit_request_pacer", None)
     ncbi = None
     if (
         ("phylopic" in sources)
         or ("ncbi" in sources)
         or (args.fallback_rank == "family")
+        or getattr(args, "synonyms", False)
     ):
         ncbi = LazyNCBITaxa(args=args)
     providers: dict[str, Any] = {}
@@ -3752,6 +3970,7 @@ def collect_candidates_for_species(species_name, args, sources, providers):
             provider=source,
             species_name=species_name,
             fallback_rank=args.fallback_rank,
+            depicts=getattr(args, "wikimedia_depicts", False),
         )
         fetched_candidates = False
         try:
@@ -4273,6 +4492,7 @@ def resolve_lookup_worker_count(args, sources, species_count):
         ("phylopic" in sources)
         or ("ncbi" in sources)
         or (getattr(args, "fallback_rank", "none") == "family")
+        or getattr(args, "synonyms", False)
     )
     default_workers = 2 if uses_taxonomy_db else DEFAULT_LOOKUP_WORKERS
     return min(default_workers, species_count)
@@ -4347,7 +4567,7 @@ class SharedMediaMaterializer:
         self._session_lock = threading.Lock()
         self._managed_sessions: list[Any] = []
         self._lock = threading.Lock()
-        self._tasks: dict[str, dict[str, Any]] = {}
+        self._tasks: dict[object, dict[str, Any]] = {}
 
     def _get_download_session(self):
         if self.session_factory is None:
@@ -4375,10 +4595,7 @@ class SharedMediaMaterializer:
             except Exception as exc:
                 warn_cleanup_failure("HTTP session", exc)
 
-    def _download_candidate(self, media_url):
-        plan_entry = self.media_plan.get(media_url)
-        if plan_entry is None:
-            raise KeyError("Missing media plan for {}".format(media_url))
+    def _download_candidate(self, media_url, plan_entry):
         species_name = plan_entry["species_name"]
         candidate = plan_entry["candidate"]
         filename = build_local_media_filename(
@@ -4395,17 +4612,22 @@ class SharedMediaMaterializer:
                 provider=candidate["provider"],
                 provider_record_id=candidate["provider_record_id"],
             )
-        download_result = download_media(
-            session=self._get_download_session(),
-            media_url=media_url,
-            destination_path=absolute_local_path,
-            cache_path=cache_path,
-            max_download_bytes=getattr(
-                self.args, "max_download_bytes", DEFAULT_MAX_DOWNLOAD_BYTES
-            ),
-            provider=candidate.get("provider"),
-            reuse_destination=False,
-        )
+        max_bytes = getattr(self.args, "max_download_bytes", DEFAULT_MAX_DOWNLOAD_BYTES)
+        if candidate.get("local_source"):
+            download_result = self._copy_verified_image(
+                candidate, absolute_local_path, max_bytes
+            )
+        else:
+            provider = candidate.get("provider")
+            download_result = download_media(
+                session=self._get_download_session(),
+                media_url=media_url,
+                destination_path=absolute_local_path,
+                cache_path=cache_path,
+                max_download_bytes=max_bytes,
+                provider=None if provider == "verified" else provider,
+                reuse_destination=False,
+            )
         resolved_cache_path = None
         if isinstance(download_result, dict):
             download_status = download_result["status"]
@@ -4433,30 +4655,70 @@ class SharedMediaMaterializer:
             "download_status": download_status,
         }
 
+    def _copy_verified_image(self, candidate, destination, max_bytes):
+        source = candidate["local_source"]
+        extension = infer_extension(source, default_ext=".bin")
+        destination = replace_extension(destination, extension)
+        # Validate a temporary copy so a malformed input cannot replace an old output.
+        final_path = replace_extension(
+            destination, output_extension_for_path(destination, self.args)
+        )
+        for path in (destination, final_path):
+            if os.path.exists(path) and os.path.samefile(source, path):
+                raise ValueError("A verified image cannot replace its input file.")
+        verify_path = make_temporary_sibling_path(destination)
+        try:
+            if os.path.getsize(source) > max_bytes:
+                raise MediaDownloadError("Verified image exceeds the size limit.")
+            shutil.copyfile(source, verify_path)
+            if sha256_file(verify_path) != candidate["local_sha256"]:
+                raise MediaDownloadError(
+                    "Verified image changed since the input was read."
+                )
+            actual_extension = validate_media_file(
+                verify_path, max_download_bytes=max_bytes
+            )
+            validated_path = replace_extension(destination, actual_extension)
+            if os.path.exists(validated_path) and os.path.samefile(
+                source, validated_path
+            ):
+                raise ValueError("A verified image cannot replace its input file.")
+            os.chmod(verify_path, output_file_mode(validated_path))
+            os.replace(verify_path, validated_path)
+        finally:
+            remove_temporary_path(verify_path, "verified image staging copy")
+        return {"status": "copied", "destination_path": validated_path}
+
     def materialize(self, species_name, candidate):
         media_url = candidate["media_url"]
-        plan_entry = self.media_plan.get(
-            media_url, {"species_name": species_name, "candidate": candidate}
+        fallback = {"species_name": species_name, "candidate": candidate}
+        plan_entry = (
+            fallback
+            if self.media_plan is None
+            else self.media_plan.get(media_url, fallback)
         )
+        key = (species_name, media_url) if self.media_plan is None else media_url
+        if candidate.get("provider") == "verified":
+            key = (candidate["provider_record_id"], media_url)
         owner = False
         with self._lock:
-            task = self._tasks.get(media_url)
+            task = self._tasks.get(key)
             if task is None:
                 task = {
                     "event": threading.Event(),
                     "result": None,
                     "error": None,
                 }
-                self._tasks[media_url] = task
+                self._tasks[key] = task
                 owner = True
         if owner:
             try:
-                task["result"] = self._download_candidate(media_url=media_url)
+                task["result"] = self._download_candidate(media_url, plan_entry)
             except Exception as exc:
                 task["error"] = exc
                 with self._lock:
-                    if self._tasks.get(media_url) is task:
-                        self._tasks.pop(media_url, None)
+                    if self._tasks.get(key) is task:
+                        self._tasks.pop(key, None)
             finally:
                 task["event"].set()
         else:
@@ -4562,7 +4824,9 @@ def process_species_assets(
                 "license_url": candidate["license_url"],
                 "attribution": candidate["attribution"],
                 "source_page_url": candidate["source_page_url"],
-                "media_url": candidate["media_url"],
+                "media_url": ""
+                if candidate.get("local_source")
+                else candidate["media_url"],
                 "local_path": materialized["local_path"],
                 "score": "{:.1f}".format(candidate["score"]),
                 "status": materialized["download_status"],
@@ -4585,62 +4849,9 @@ def process_species_assets(
     return manifest_rows, selected_assets, unmatched_rows
 
 
-def image_main(args):
-    validate_args(args)
-    sources = parse_sources(style=args.style, source_arg=args.source)
-    out_dir, images_dir, manifest_path, attribution_path, unmatched_path = (
-        default_output_paths(args)
-    )
-    validate_distinct_output_paths(
-        [
-            ("--out-dir", out_dir),
-            ("images directory", images_dir),
-            ("--manifest-out", manifest_path),
-            ("--attribution-out", attribution_path),
-            ("unmatched output", unmatched_path),
-        ]
-    )
-    validate_outputs_do_not_replace_inputs(
-        [
-            ("--infile", args.infile),
-            ("--species-name-tsv", getattr(args, "species_name_tsv", None)),
-            ("--name-tsv", getattr(args, "name_tsv", None)),
-            ("--species-map-tsv", getattr(args, "species_map_tsv", None)),
-            ("--taxid-tsv", getattr(args, "taxid_tsv", None)),
-        ],
-        [
-            ("--manifest-out", manifest_path),
-            ("--attribution-out", attribution_path),
-            ("unmatched output", unmatched_path),
-        ],
-    )
-    shared_cache_dir = resolve_image_cache_dir(args)
-    ensure_directory(out_dir)
-    ensure_directory(images_dir)
-    ensure_directory(shared_cache_dir)
-
-    species_name_tsv = getattr(args, "species_name_tsv", None) or getattr(
-        args, "name_tsv", None
-    )
-    name_mapping = read_name_tsv(species_name_tsv) if species_name_tsv else None
-    tree = read_tree(
-        args.infile,
-        args.format,
-        args.quoted_node_names,
-        quiet=True,
-        rooted=getattr(args, "input_rooted", "auto"),
-    )
-    leaf_to_species, unmatched_rows = extract_species_mapping(
-        tree,
-        name_mapping=name_mapping,
-        args=args,
-    )
-    leaf_names_by_species = defaultdict(list)
-    for leaf_name, species_name in leaf_to_species.items():
-        leaf_names_by_species[species_name].append(leaf_name)
-
-    manifest_rows = list()
-    selected_assets = list()
+def acquire_ranked_images(
+    args, sources, out_dir, images_dir, shared_cache_dir, leaf_names_by_species
+):
     species_names = sorted(leaf_names_by_species.keys())
     lookup_results = collect_candidates_for_species_map(
         species_names=species_names, args=args, sources=sources
@@ -4692,37 +4903,324 @@ def image_main(args):
                 for future in as_completed(future_to_species):
                     download_results[future_to_species[future]] = future.result()
 
-        for species_name in species_names:
-            species_manifest_rows, species_selected_assets, species_unmatched_rows = (
-                download_results[species_name]
-            )
-            manifest_rows.extend(species_manifest_rows)
-            selected_assets.extend(species_selected_assets)
-            unmatched_rows.extend(species_unmatched_rows)
+        return [download_results[name] for name in species_names]
     finally:
         if materializer is not None:
             materializer.close()
 
-    manifest_fieldnames = [
-        "leaf_name",
-        "species_name",
-        "provider",
-        "provider_record_id",
-        "matched_name",
-        "matched_rank",
-        "is_primary",
-        "is_vector",
-        "selection_reason",
-        "license_code",
-        "license_url",
-        "attribution",
-        "source_page_url",
-        "media_url",
-        "local_path",
-        "score",
-        "status",
+
+def _select_query_images(query, args, sources, providers, materializer, ncbi):
+    selected: list[dict[str, Any]] = []
+    failures: list[dict[str, Any]] = []
+    attempted: set[str] = set()
+    limit = int(args.max_per_species)
+    exact_args = copy(args)
+    exact_args.fallback_rank = "none"
+    source_groups = (
+        [(source,) for source in dict.fromkeys(sources)]
+        if getattr(args, "first_available", False)
+        else [sources]
+    )
+
+    def try_query(name, lookup_args, reason=None):
+        for group in source_groups:
+            candidates, errors = collect_candidates_for_species(
+                name, lookup_args, group, providers
+            )
+            usable = [
+                candidate
+                for candidate in candidates
+                if candidate["media_url"] not in attempted
+            ]
+            allowed = allowed_candidates_from_scored_candidates(usable, args)
+            attempted.update(candidate["media_url"] for candidate in allowed)
+            if reason == "taxonomic_synonym_match":
+                for candidate in usable:
+                    candidate["taxonomic_alias"] = True
+            limit_args = copy(args)
+            limit_args.max_per_species = limit - len(selected)
+            rows, _, misses = process_species_assets(
+                query, [""], usable, errors, limit_args, materializer
+            )
+            if reason == "infraspecific_identity_unconfirmed":
+                for row in rows:
+                    row["selection_reason"] = f"species_fallback;{reason}"
+            selected.extend(rows)
+            failures.extend(misses)
+            if len(selected) >= limit:
+                return True
+        return False
+
+    if try_query(query, exact_args):
+        return selected, failures
+    if getattr(args, "synonyms", False) and ncbi is not None:
+        try:
+            aliases = ncbi.aliases(query)
+        except (
+            OSError,
+            ValueError,
+            RuntimeError,
+            sqlite3.Error,
+            requests.RequestException,
+        ) as exc:
+            message = f"Taxonomic synonym lookup failed for {query}: {exc}"
+            _stderr(message)
+            failures.append({"reason": "provider_error", "details": message})
+            aliases = []
+        for alias in aliases:
+            if try_query(alias, exact_args, "taxonomic_synonym_match"):
+                return selected, failures
+    if declared_rank(query) not in {"species", "genus"}:
+        parent = parent_species(query)
+        if (
+            parent
+            and parent != query
+            and try_query(parent, exact_args, "infraspecific_identity_unconfirmed")
+        ):
+            return selected, failures
+    if args.fallback_rank != "none":
+        try_query(query, args)
+    return selected, failures
+
+
+def _workflow_result(
+    query, leaves, args, sources, providers, materializer, checkpoints, candidate, ncbi
+):
+    count = 1 if candidate else int(args.max_per_species)
+    if checkpoints is not None:
+        cached = checkpoints.load(query, candidate, count)
+        if cached is not None:
+            rows = copy_selection_to_leaves(cached, leaves, resumed=True)
+            return rows, rows, []
+    if candidate:
+        rows, _, failures = process_species_assets(
+            query, [""], [candidate], [], args, materializer
+        )
+    else:
+        rows, failures = _select_query_images(
+            query, args, sources, providers, materializer, ncbi
+        )
+    if checkpoints is not None:
+        checkpoints.save(query, candidate, rows, count)
+    if rows:
+        selected = copy_selection_to_leaves(rows, leaves)
+        return selected, selected, []
+    priority = {
+        "download_error": 3,
+        "provider_error": 2,
+        "only disallowed-license candidates found": 1,
+    }
+    reason = max(
+        (miss["reason"] for miss in failures), key=lambda value: priority.get(value, 0)
+    )
+    details = "; ".join(
+        dict.fromkeys(miss["details"] for miss in failures if miss["details"])
+    )
+    misses = [
+        {"leaf_name": leaf, "species_name": query, "reason": reason, "details": details}
+        for leaf in leaves
     ]
-    unmatched_fieldnames = ["leaf_name", "species_name", "reason", "details"]
+    return [], [], misses
+
+
+def _workflow_batch(jobs, args, sources, materializer, checkpoints):
+    session, ncbi, providers = build_providers(args=args, sources=sources)
+    try:
+        return {
+            key: _workflow_result(
+                query,
+                leaves,
+                args,
+                sources,
+                providers,
+                materializer,
+                checkpoints,
+                candidate,
+                ncbi,
+            )
+            for key, query, leaves, candidate in jobs
+        }
+    finally:
+        _close_provider_bundle(session, ncbi)
+
+
+def acquire_image_workflow(
+    args, sources, out_dir, images_dir, shared_cache_dir, leaf_to_species, verified
+):
+    by_query = defaultdict(list)
+    for leaf, query in leaf_to_species.items():
+        if leaf not in verified:
+            by_query[query].append(leaf)
+    jobs = [((query, ""), query, by_query[query], None) for query in sorted(by_query)]
+    for leaf, candidate in verified.items():
+        query = leaf_to_species.get(leaf, candidate["matched_name"])
+        jobs.append(((query, leaf), query, [leaf], candidate))
+    if not jobs:
+        return []
+    checkpoints = (
+        ImageCheckpoints(out_dir, images_dir, args, sources)
+        if getattr(args, "resume", False)
+        else None
+    )
+    materializer = SharedMediaMaterializer(
+        args=args,
+        out_dir=out_dir,
+        images_dir=images_dir,
+        shared_cache_dir=shared_cache_dir,
+        media_plan=None,
+        session_factory=build_download_session,
+    )
+    workers = min(
+        resolve_lookup_worker_count(args, sources, len(jobs)),
+        resolve_download_worker_count(len(jobs)),
+    )
+    results = {}
+    try:
+        if workers <= 1:
+            results = _workflow_batch(jobs, args, sources, materializer, checkpoints)
+        else:
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                futures = [
+                    executor.submit(
+                        _workflow_batch,
+                        jobs[offset::workers],
+                        args,
+                        sources,
+                        materializer,
+                        checkpoints,
+                    )
+                    for offset in range(workers)
+                ]
+                for future in as_completed(futures):
+                    results.update(future.result())
+    finally:
+        materializer.close()
+    return [results[key] for key, *_ in jobs]
+
+
+def note_species_level_match(row, query):
+    precise_query = query and declared_rank(query) not in {"species", "genus"}
+    exact_synonym = precise_query and row["selection_reason"].startswith(
+        "taxonomic_synonym_match"
+    )
+    if (
+        row["matched_rank"] == "species"
+        and not exact_synonym
+        and "infraspecific_identity_unconfirmed" not in row["selection_reason"]
+        and (precise_query or infraspecific_label(row["leaf_name"]))
+    ):
+        row["selection_reason"] += ";infraspecific_identity_unconfirmed"
+
+
+def image_main(args):
+    validate_args(args)
+    sources = parse_sources(style=args.style, source_arg=args.source)
+    args = copy(args)
+    args._nwkit_request_pacer = RequestPacer(
+        parse_provider_intervals(
+            getattr(args, "provider_interval", None), SUPPORTED_SOURCES
+        )
+    )
+    if getattr(args, "resume", False):
+        lock = os.path.join(
+            os.path.realpath(args.out_dir), ".nwkit-cache", "image-run.lock"
+        )
+        with acquire_exclusive_lock(lock, lock_label="NWKIT image"):
+            return _image_main(args, sources)
+    return _image_main(args, sources)
+
+
+def _image_main(args, sources):
+    out_dir, images_dir, manifest_path, attribution_path, unmatched_path = (
+        default_output_paths(args)
+    )
+    validate_distinct_output_paths(
+        [
+            ("--out-dir", out_dir),
+            ("images directory", images_dir),
+            ("--manifest-out", manifest_path),
+            ("--attribution-out", attribution_path),
+            ("unmatched output", unmatched_path),
+        ]
+    )
+    validate_outputs_do_not_replace_inputs(
+        [
+            ("--infile", args.infile),
+            ("--species-name-tsv", getattr(args, "species_name_tsv", None)),
+            ("--name-tsv", getattr(args, "name_tsv", None)),
+            ("--species-map-tsv", getattr(args, "species_map_tsv", None)),
+            ("--taxid-tsv", getattr(args, "taxid_tsv", None)),
+            ("--verified-images-tsv", getattr(args, "verified_images_tsv", None)),
+        ],
+        [
+            ("--manifest-out", manifest_path),
+            ("--attribution-out", attribution_path),
+            ("unmatched output", unmatched_path),
+        ],
+    )
+    shared_cache_dir = resolve_image_cache_dir(args)
+    ensure_directory(out_dir)
+    ensure_directory(images_dir)
+    ensure_directory(shared_cache_dir)
+
+    species_name_tsv = getattr(args, "species_name_tsv", None) or getattr(
+        args, "name_tsv", None
+    )
+    name_mapping = read_name_tsv(species_name_tsv) if species_name_tsv else None
+    tree = read_tree(
+        args.infile,
+        args.format,
+        args.quoted_node_names,
+        quiet=True,
+        rooted=getattr(args, "input_rooted", "auto"),
+    )
+    leaf_to_species, unmatched_rows = extract_species_mapping(
+        tree,
+        name_mapping=name_mapping,
+        args=args,
+    )
+    verified_path = getattr(args, "verified_images_tsv", None)
+    leaves = dict.fromkeys(tree.leaf_names())
+    leaves.update(leaf_to_species)
+    verified = read_verified_images(verified_path, leaves, args)
+    validate_outputs_do_not_replace_inputs(
+        [
+            (f"Verified image for {leaf}", candidate.get("local_source"))
+            for leaf, candidate in verified.items()
+        ],
+        [
+            ("--manifest-out", manifest_path),
+            ("--attribution-out", attribution_path),
+            ("unmatched output", unmatched_path),
+        ],
+    )
+    unmatched_rows = [row for row in unmatched_rows if row["leaf_name"] not in verified]
+    leaf_names_by_species = defaultdict(list)
+    for leaf_name, species_name in leaf_to_species.items():
+        leaf_names_by_species[species_name].append(leaf_name)
+
+    manifest_rows = list()
+    selected_assets = list()
+    if image_workflow_requested(args):
+        results = acquire_image_workflow(
+            args,
+            sources,
+            out_dir,
+            images_dir,
+            shared_cache_dir,
+            leaf_to_species,
+            verified,
+        )
+    else:
+        results = acquire_ranked_images(
+            args, sources, out_dir, images_dir, shared_cache_dir, leaf_names_by_species
+        )
+    for rows, assets, misses in results:
+        for row in rows:
+            note_species_level_match(row, leaf_to_species.get(row["leaf_name"]))
+        manifest_rows.extend(rows)
+        selected_assets.extend(assets)
+        unmatched_rows.extend(misses)
 
     manifest_output_rows = rebase_local_paths_for_output(
         manifest_rows,
@@ -4737,8 +5235,8 @@ def image_main(args):
     with output_transaction(
         [manifest_path, unmatched_path, attribution_path], create_parents=True
     ) as staged:
-        write_tsv(staged[manifest_path], manifest_output_rows, manifest_fieldnames)
-        write_tsv(staged[unmatched_path], unmatched_rows, unmatched_fieldnames)
+        write_tsv(staged[manifest_path], manifest_output_rows, IMAGE_MANIFEST_FIELDS)
+        write_tsv(staged[unmatched_path], unmatched_rows, UNMATCHED_FIELDS)
         write_attribution_markdown(staged[attribution_path], attribution_output_assets)
 
     if unmatched_rows and args.fail_on_missing:

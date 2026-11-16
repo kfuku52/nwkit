@@ -3317,6 +3317,49 @@ pimage.add_argument(
     "When ncbi appears after other providers, it is used as a lazy fallback because it may download the NCBI taxonomy image dump.",
 )
 pimage.add_argument(
+    "--verified-images-tsv",
+    "--verified_images_tsv",
+    metavar="PATH",
+    help="Use one verified image per listed leaf, with source, attribution, and license metadata.",
+)
+pimage.add_argument(
+    "--synonyms",
+    metavar="yes|no",
+    type=strtobool,
+    default=False,
+    help="Try unambiguous NCBI Taxonomy names for the same TaxID after direct searches fail.",
+)
+pimage.add_argument(
+    "--wikimedia-depicts",
+    "--wikimedia_depicts",
+    metavar="yes|no",
+    type=strtobool,
+    default=False,
+    help="Prefer Commons files with a structured depiction of the matching scientific name.",
+)
+pimage.add_argument(
+    "--first-available",
+    "--first_available",
+    metavar="yes|no",
+    type=strtobool,
+    default=False,
+    help="Stop querying providers once enough images have been saved for a taxon.",
+)
+pimage.add_argument(
+    "--resume",
+    metavar="yes|no",
+    type=strtobool,
+    default=False,
+    help="Checkpoint completed taxa and reuse their verified local images on a compatible run.",
+)
+pimage.add_argument(
+    "--provider-interval",
+    "--provider_interval",
+    metavar="SOURCE=SECONDS",
+    action="append",
+    help="Set minimum spacing between a provider's API requests across lookup workers. Repeat for different providers.",
+)
+pimage.add_argument(
     "--license-max",
     "--license_max",
     dest="license_max",

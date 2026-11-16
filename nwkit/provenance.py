@@ -154,6 +154,7 @@ INPUT_PATH_ARGUMENTS = frozenset(
         "species_list",
         "species_map_tsv",
         "species_name_tsv",
+        "verified_images_tsv",
         "species_tree",
         "species_traits",
         "support_source",
@@ -397,8 +398,27 @@ def _declared_input_path_candidates(args):
     return candidates
 
 
+def _verified_image_input_paths(args):
+    path = getattr(args, "verified_images_tsv", None)
+    if (
+        getattr(args, "command", None) != "image"
+        or not path
+        or not os.path.isfile(path)
+    ):
+        return []
+    from nwkit.image_workflow import read_verified_rows
+
+    directory = os.path.dirname(os.path.realpath(path))
+    return [
+        ("verified_images_tsv:asset", os.path.join(directory, row["local_path"]))
+        for row in read_verified_rows(path)
+        if row.get("local_path")
+    ]
+
+
 def _input_path_candidates(args):
     candidates = _declared_input_path_candidates(args)
+    candidates.extend(_verified_image_input_paths(args))
     if getattr(args, "command", None) == "draw" and getattr(args, "comparison", None):
         from nwkit.reconciliation_view import read_comparison
 

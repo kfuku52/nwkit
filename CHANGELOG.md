@@ -4,6 +4,17 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.46.10] - 2026-11-16
+
+### Added
+
+- Import verified leaf images from local files or HTTPS URLs with source,
+  attribution, and license metadata.
+- Retry unambiguous same-TaxID names, preserve infraspecific queries, and
+  optionally prioritize Wikimedia Commons structured depiction matches.
+- Checkpoint completed images per taxon, optionally stop provider lookup
+  after successful downloads, and pace API requests across worker threads.
+
 ## [0.46.9] - 2026-11-16
 
 ### Changed
