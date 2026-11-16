@@ -4,6 +4,15 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.46.11] - 2026-11-16
+
+### Changed
+
+- Rank photos that show the organism ahead of preserved specimens, product
+  packaging, and other fallback photos using provider metadata.
+- Try later providers for suitable images before downloading fallback photos
+  in first-available mode.
+
 ## [0.46.10] - 2026-11-16
 
 ### Added

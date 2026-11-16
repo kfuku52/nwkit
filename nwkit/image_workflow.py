@@ -207,8 +207,11 @@ class ImageCheckpoints:
         self.options["sources"] = list(sources)
 
     def _path(self, query, candidate):
+        selection_version = (
+            1 if candidate is not None or self.options["style"] == "silhouette" else 2
+        )
         return self.directory / (
-            _fingerprint([1, self.options, query, candidate]) + ".json"
+            _fingerprint([selection_version, self.options, query, candidate]) + ".json"
         )
 
     def _image_path(self, row):

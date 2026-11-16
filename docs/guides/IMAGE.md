@@ -13,13 +13,25 @@ nwkit image -i species.nwk --out-dir species-images \
   --provider-interval wikimedia=0.5 --output-format jpg --max-edge 1600
 ```
 
-With `--first-available yes`, NWKIT attempts materialization in provider order
-and stops after saving `--max-per-species` images. Unusable or unreachable
-media do not prevent trying the next provider. Direct matches are attempted
-before synonyms and broader fallbacks. The normal ranked mode remains the
-default. `--provider-interval` can be repeated to set the minimum spacing
+With `--first-available yes`, NWKIT tries providers in order and stops after
+saving `--max-per-species` suitable images. It tries later providers when
+earlier media are unreachable or identified as fallback photos. Direct matches
+are attempted before synonyms and broader fallbacks. The normal ranked mode
+remains the default. Repeat `--provider-interval` to set the minimum spacing
 between API calls for each provider across the workers in one run. iNaturalist
 uses at least one second between calls.
+
+## Prefer photos that show the organism
+
+For the same taxonomic match, the default ranking places photos identified as
+specimen sheets, product packaging, and similar material behind other images.
+With `--style photo`, the ranked mode also prioritizes explicit descriptions
+of the organism, such as flowering branches and whole plants. NWKIT uses
+source metadata for this estimate. Descriptions with little detail keep their
+ordinary rank. A flagged photo can still fill a match when better candidates
+are unavailable. Look for `organism_photo` or `secondary_photo_fallback` in
+the manifest's `selection_reason`. `--style silhouette` keeps its existing
+ranking.
 
 ## Verify and reuse individual images
 
@@ -66,3 +78,6 @@ selection and image settings to reuse saved files after checking their SHA-256
 hashes. New tips can be added to the tree without repeating completed queries.
 Missing or damaged files and unfinished taxa are retried. Use
 `--refresh-cache yes` to repeat selection for all taxa.
+The photo ranking update reselects earlier automatic photo results once, using
+fresh provider metadata. Existing pinned results can resume from their
+validated checkpoints.

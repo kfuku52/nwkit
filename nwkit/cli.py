@@ -3343,7 +3343,7 @@ pimage.add_argument(
     metavar="yes|no",
     type=strtobool,
     default=False,
-    help="Stop querying providers once enough images have been saved for a taxon.",
+    help="Stop after saving enough suitable images. Defer known fallback photos until other providers have been tried.",
 )
 pimage.add_argument(
     "--resume",

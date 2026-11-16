@@ -40,6 +40,7 @@ from nwkit.image_metadata import (
     bioicons_index_keys_for_name,
     bioicons_match_quality,
     canonical_license_url,
+    classify_photo_subject,
     classify_wikimedia_asset,
     infer_extension,
     infer_extension_from_bytes_prefix,
@@ -123,7 +124,7 @@ HTTPS_REPLICA_MEDIA_HOSTS = frozenset(
 REQUEST_TIMEOUT = (10, 60)
 DEFAULT_LOOKUP_WORKERS = 4
 DEFAULT_DOWNLOAD_WORKERS = 4
-IMAGE_QUERY_CACHE_VERSION = 4
+IMAGE_QUERY_CACHE_VERSION = 5
 LOOKUP_FALLBACK_BUFFER = 2
 BIOICONS_CATALOG_CACHE_VERSION = 2
 DEFAULT_QUERY_CACHE_MAX_AGE_HOURS = 168.0
@@ -1956,6 +1957,8 @@ def normalize_provider_candidate(candidate, expected_provider=None):
     candidate["provider_quality"] = int(
         _finite_nonnegative_number(candidate.get("provider_quality"))
     )
+    if candidate.get("photo_subject") not in ("organism", "secondary"):
+        candidate.pop("photo_subject", None)
     for field in ("is_primary", "is_vector", "subject_match"):
         value = candidate.get(field)
         if value is None:
@@ -2123,7 +2126,11 @@ def describe_candidate_selection(candidate):
         )
     else:
         choice_reason = "provider_ranked_candidate"
-    return "{};{}".format(rank_reason, choice_reason)
+    subject_reason = {
+        "organism": ";organism_photo",
+        "secondary": ";secondary_photo_fallback",
+    }.get(candidate.get("photo_subject"), "")
+    return "{};{}{}".format(rank_reason, choice_reason, subject_reason)
 
 
 def dedupe_sorted_candidates(candidates):
@@ -2160,6 +2167,10 @@ def should_stop_after_provider(candidates, args):
     top_candidates = allowed_candidates[:max_per_species]
     return all(
         candidate.get("matched_rank") not in {"genus", "family"}
+        and (
+            getattr(args, "style", "auto") == "silhouette"
+            or candidate.get("photo_subject") != "secondary"
+        )
         for candidate in top_candidates
     )
 
@@ -2621,6 +2632,14 @@ def candidate_score(candidate, provider_index=0, style="auto"):
     if not isinstance(license_code, str):
         license_code = ""
     rank_priority = {"genus": 2, "family": 1, "": 0}.get(matched_rank, 3)
+    # A specimen or package is a fallback even if it is from a preferred
+    # source. Positive evidence can reorder photos in explicit photo mode.
+    photo_subject = candidate.get("photo_subject")
+    photo_priority = 0
+    if photo_subject == "secondary" and style != "silhouette":
+        photo_priority = -1
+    elif photo_subject == "organism" and style == "photo":
+        photo_priority = 1
     provider_priority = max(
         1,
         100 - int(_finite_nonnegative_number(provider_index)),
@@ -2642,6 +2661,7 @@ def candidate_score(candidate, provider_index=0, style="auto"):
     provider_quality = max(0, min(get_provider_quality_bonus(candidate), 99))
     score = (
         rank_priority * 10**15
+        + photo_priority * 10**14
         + provider_priority * 10**12
         + primary_priority * 10**11
         + license_priority * 10**9
@@ -3139,6 +3159,9 @@ class INaturalistProvider:
             "width": dimensions.get("width"),
             "height": dimensions.get("height"),
             "asset_type": "photo",
+            "photo_subject": classify_photo_subject(
+                description=observation.get("description"),
+            ),
             "provider_quality": quality_grade_bonus + popularity_bonus,
         }
 
@@ -3278,6 +3301,10 @@ class EOLProvider:
             "width": data_object.get("width"),
             "height": data_object.get("height"),
             "asset_type": "photo",
+            "photo_subject": classify_photo_subject(
+                title=data_object.get("title"),
+                description=data_object.get("description"),
+            ),
             "provider_quality": vetted_bonus + rating_bonus,
         }
 
@@ -3415,6 +3442,13 @@ class IDigBioProvider:
             "width": width,
             "height": height,
             "asset_type": "photo",
+            "photo_subject": classify_photo_subject(
+                title=data.get("dc:title") or data.get("dcterms:title"),
+                description=data.get("dc:description")
+                or data.get("dcterms:description"),
+                basis_of_record=data.get("dwc:basisOfRecord")
+                or index_terms.get("basisofrecord"),
+            ),
             "provider_quality": dqs_bonus + provider_bonus + exact_name_bonus,
         }
 
@@ -3502,6 +3536,7 @@ class OpenverseProvider:
             "width": result.get("width"),
             "height": result.get("height"),
             "asset_type": "photo",
+            "photo_subject": classify_photo_subject(title=result.get("title")),
             "provider_quality": provider_quality,
         }
 
@@ -3671,6 +3706,12 @@ class WikimediaProvider:
             "width": width,
             "height": height,
             "asset_type": asset_type,
+            "photo_subject": classify_photo_subject(
+                title=page.get("title"),
+                description=metadata.get("ImageDescription", {}).get("value"),
+            )
+            if asset_type == "photo"
+            else "",
             "provider_quality": provider_quality,
             "subject_match": subject_match,
         }
@@ -3794,6 +3835,12 @@ class GBIFProvider:
             "width": None,
             "height": None,
             "asset_type": "photo",
+            "photo_subject": classify_photo_subject(
+                title=media.get("title"),
+                description=media.get("description")
+                or occurrence.get("occurrenceRemarks"),
+                basis_of_record=occurrence.get("basisOfRecord"),
+            ),
             "provider_quality": provider_quality,
         }
 
@@ -3867,6 +3914,7 @@ class NCBIProvider:
             "width": None,
             "height": None,
             "asset_type": "photo",
+            "photo_subject": classify_photo_subject(title=record.get("title")),
             "provider_quality": provider_quality,
         }
 
@@ -4921,8 +4969,26 @@ def _select_query_images(query, args, sources, providers, materializer, ncbi):
         if getattr(args, "first_available", False)
         else [sources]
     )
+    prefer_subject = (
+        getattr(args, "first_available", False) and args.style != "silhouette"
+    )
 
     def try_query(name, lookup_args, reason=None):
+        deferred = []
+
+        def materialize(candidates, errors):
+            limit_args = copy(args)
+            limit_args.max_per_species = limit - len(selected)
+            rows, _, misses = process_species_assets(
+                query, [""], candidates, errors, limit_args, materializer
+            )
+            if reason == "infraspecific_identity_unconfirmed":
+                for row in rows:
+                    row["selection_reason"] = f"species_fallback;{reason}"
+            selected.extend(rows)
+            failures.extend(misses)
+            return len(selected) >= limit
+
         for group in source_groups:
             candidates, errors = collect_candidates_for_species(
                 name, lookup_args, group, providers
@@ -4937,17 +5003,23 @@ def _select_query_images(query, args, sources, providers, materializer, ncbi):
             if reason == "taxonomic_synonym_match":
                 for candidate in usable:
                     candidate["taxonomic_alias"] = True
-            limit_args = copy(args)
-            limit_args.max_per_species = limit - len(selected)
-            rows, _, misses = process_species_assets(
-                query, [""], usable, errors, limit_args, materializer
-            )
-            if reason == "infraspecific_identity_unconfirmed":
-                for row in rows:
-                    row["selection_reason"] = f"species_fallback;{reason}"
-            selected.extend(rows)
-            failures.extend(misses)
-            if len(selected) >= limit:
+            if prefer_subject:
+                secondary = [
+                    candidate
+                    for candidate in allowed
+                    if candidate.get("photo_subject") == "secondary"
+                ]
+                if secondary:
+                    deferred.append(secondary)
+                    usable = [
+                        candidate
+                        for candidate in usable
+                        if candidate.get("photo_subject") != "secondary"
+                    ]
+            if materialize(usable, errors):
+                return True
+        for candidates in deferred:
+            if materialize(candidates, []):
                 return True
         return False
 
