@@ -3549,9 +3549,13 @@ class GBIFProvider:
             or occurrence.get("rightsHolder")
             or ""
         )
-        provider_record_id = (
-            media.get("references") or occurrence.get("key") or media_url
+        occurrence_key = occurrence.get("key")
+        occurrence_page = (
+            f"https://www.gbif.org/occurrence/{occurrence_key}"
+            if isinstance(occurrence_key, int)
+            else ""
         )
+        provider_record_id = media.get("references") or occurrence_key or media_url
         provider_quality = 0
         if media.get("publisher"):
             provider_quality += 5
@@ -3570,7 +3574,7 @@ class GBIFProvider:
             "attribution": attribution,
             "source_page_url": media.get("references")
             or occurrence.get("references")
-            or "",
+            or occurrence_page,
             "media_url": media_url,
             "width": None,
             "height": None,

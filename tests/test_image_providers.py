@@ -43,6 +43,17 @@ class TestGBIFProvider:
         provider = image_module.GBIFProvider(session=None)
         assert provider._match_taxon("Bonia amplexicaulis", "species") == expected
 
+    def test_media_keeps_occurrence_link_when_references_are_missing(self):
+        provider = image_module.GBIFProvider(session=None)
+        candidate = provider._candidate_from_media(
+            occurrence={"key": 123},
+            media={"identifier": "https://example.org/specimen.jpg"},
+            matched_name="Bonia amplexicaulis",
+            matched_rank="species",
+        )
+        assert candidate["provider_record_id"] == "123"
+        assert candidate["source_page_url"] == "https://www.gbif.org/occurrence/123"
+
 
 @pytest.mark.parametrize(
     ("original", "expected"),
