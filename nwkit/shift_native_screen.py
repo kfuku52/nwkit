@@ -8,7 +8,7 @@ Every bootstrap search must regenerate this data-dependent candidate set.
 import numpy as np
 
 from nwkit.gaussian_whitening import TreeWhitening
-from nwkit.shift_native_model import covariance_geometry
+from nwkit.shift_native_model import _normalized_ou_duration, covariance_geometry
 
 # Bound temporary whitening storage independently of the number of branches.
 _SCREEN_BLOCK_COLUMNS = 512
@@ -21,52 +21,53 @@ def _screen_block_width(factor):
     return min(4096, max(_SCREEN_BLOCK_COLUMNS, traversal_width))
 
 
-def _descendant_intervals(tree):
-    ranges = {node: (i, i + 1) for i, node in enumerate(tree.compiled.leaf_indices)}
-    for index in tree.compiled.postorder:
-        children = tree.compiled.children[index]
-        if children:
-            ranges[index] = (ranges[children[0]][0], ranges[children[-1]][1])
-    return {tree.branch_ids[index]: interval for index, interval in ranges.items()}
-
-
 def descendant_design(tree, branches=None):
     """Construct only requested columns using contiguous descendant intervals."""
     branches = tuple(
         sorted(set(tree.branch_ids) - {0}) if branches is None else branches
     )
-    return _interval_design(
-        len(tree.leaf_names), _descendant_intervals(tree), branches
-    ), branches
+    return _interval_design(tree, branches), branches
 
 
-def _interval_design(tips, intervals, branches):
-    matrix = np.zeros((tips, len(branches)))
+def _interval_design(tree, branches):
+    matrix = np.zeros((len(tree.compiled.leaf_indices), len(branches)))
     for column, branch in enumerate(branches):
-        first, last = intervals[branch]
+        try:
+            index = int(branch)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise KeyError(branch) from exc
+        if index != branch or not 0 <= index < len(tree.indices_by_branch):
+            raise KeyError(branch)
+        first, last = tree.tip_intervals[tree.indices_by_branch[index]]
         matrix[first:last, column] = 1
     return matrix
 
 
 def _effect_design(tree, design, alpha, branches=None):
     """Unstandardized optimum-increment columns, including near-ultrametric tips."""
-    depths = tree.times.copy()
-    for i in range(1, len(depths)):
-        depths[i] += depths[tree.compiled.parents[i]]
     branches = sorted(set(tree.branch_ids) - {0}) if branches is None else branches
-    indices = {branch: i for i, branch in enumerate(tree.branch_ids)}
-    parents = [tree.compiled.parents[indices[b]] for b in branches]
-    ages = np.maximum(
-        0, depths[list(tree.compiled.leaf_indices), None] - depths[parents]
-    )
-    weights = (
-        ages
-        if alpha == 0
-        else np.ones_like(ages)
-        if np.isinf(alpha)
-        else -np.expm1(-alpha * ages) / -np.expm1(-alpha)
-    )
-    return design * weights
+    if np.isinf(alpha):
+        return design.copy()
+    parents = tree.compiled.parents
+    if tree.exact_ultrametric:
+        ages = np.array(
+            [tree.remaining_times[parents[tree.indices_by_branch[b]]] for b in branches]
+        )
+        return design * _normalized_ou_duration(alpha, ages)
+    leaves = tree.compiled.leaf_indices
+    effects = np.zeros_like(design, dtype=float)
+    ages = np.empty(len(tree.times))
+    for column, branch in enumerate(branches):
+        node = tree.indices_by_branch[branch]
+        first, last = tree.tip_intervals[node]
+        ages[node] = tree.times[node]
+        for child in range(node + 1, leaves[last - 1] + 1):
+            ages[child] = ages[parents[child]] + tree.times[child]
+        rows = slice(first, last)
+        effects[rows, column] = design[rows, column] * _normalized_ou_duration(
+            alpha, ages[list(leaves[rows])]
+        )
+    return effects
 
 
 def _whitened_matrices(data, null_fit, memory_limit, *, optimum_increments=False):
@@ -81,7 +82,6 @@ def _whitened_matrices(data, null_fit, memory_limit, *, optimum_increments=False
             f"Group-lasso screening needs approximately {estimated} bytes; increase --search-memory-mb or reduce the input."
         )
     branches = tuple(sorted(set(data.tree.branch_ids) - {0}))
-    intervals = _descendant_intervals(data.tree)
     matrices, responses = [], []
     for trait, fit in enumerate(null_fit["fits"]):
         mask = np.isfinite(data.values[:, trait])
@@ -106,7 +106,7 @@ def _whitened_matrices(data, null_fit, memory_limit, *, optimum_increments=False
         block_width = _screen_block_width(factor)
         for first in range(0, len(branches), block_width):
             selected = branches[first : first + block_width]
-            design = _interval_design(n, intervals, selected)
+            design = _interval_design(data.tree, selected)
             if optimum_increments:
                 design = _effect_design(data.tree, design, fit.alpha_height, selected)
             if first == 0:
@@ -154,8 +154,9 @@ def _loss_gradient(matrices, responses, coefficients):
     return loss, gradient
 
 
-def _proximal_step(matrices, responses, coefficients, strength, step):
-    loss, gradient = _loss_gradient(matrices, responses, coefficients)
+def _proximal_step(
+    matrices, responses, coefficients, strength, step, *, loss, gradient
+):
     for _ in range(40):
         trial = coefficients - step * gradient
         norms = np.linalg.norm(trial, axis=1)
@@ -171,7 +172,7 @@ def _proximal_step(matrices, responses, coefficients, strength, step):
             + float(np.sum(delta**2)) / (2 * step)
         )
         if trial_loss <= bound + 1e-12 * max(1, loss):
-            return trial, trial_gradient, step
+            return trial, trial_loss, trial_gradient, step
         step *= 0.5
     raise ValueError("Group-lasso backtracking could not verify its quadratic bound.")
 
@@ -202,6 +203,7 @@ def group_lasso_screen(
     preliminary = np.argsort(-correlation, kind="stable")[:preliminary_count]
     matrices = [x[:, preliminary] for x in matrices]
     coefficients = np.zeros((preliminary_count, len(responses)))
+    loss, gradient = _loss_gradient(matrices, responses, coefficients)
     maximum = float(np.max(correlation))
     magnitudes = np.zeros(preliminary_count)
     records = []
@@ -210,8 +212,14 @@ def group_lasso_screen(
         strength = maximum * fraction
         residual = 0.0
         for _iteration in range(iterations):
-            coefficients, gradient, step = _proximal_step(
-                matrices, responses, coefficients, strength, step
+            coefficients, loss, gradient, step = _proximal_step(
+                matrices,
+                responses,
+                coefficients,
+                strength,
+                step,
+                loss=loss,
+                gradient=gradient,
             )
             residual = _kkt_residual(coefficients, gradient, strength)
             if residual <= 1e-5 * max(1, maximum):

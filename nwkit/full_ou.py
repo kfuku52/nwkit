@@ -71,23 +71,26 @@ def observation_moment_design(data, *, limit=4096):
     lca = LcaIndex(data.compiled.tree)
     designs: set[tuple[float, float, int, int]] = set()
     coordinates = tuple(zip(data.node_indices, data.trait_indices, strict=True))
+    distance_by_pair: dict[tuple[int, int], tuple[float, float]] = {}
     examined = 0
     for first, (left_index, left_trait) in enumerate(coordinates):
         left = data.compiled.nodes[left_index]
-        for right_index, right_trait in coordinates[first:]:
+        for second in range(first, len(coordinates)):
             if examined >= 4 * limit:
                 return tuple(sorted(designs)), False
             examined += 1
-            right = data.compiled.nodes[right_index]
-            ancestor = lca.common_ancestor(left, right)
-            designs.add(
-                (
+            right_index, right_trait = coordinates[second]
+            pair = int(left_index), int(right_index)
+            distances = distance_by_pair.get(pair)
+            if distances is None:
+                right = data.compiled.nodes[right_index]
+                ancestor = lca.common_ancestor(left, right)
+                distances = (
                     _distance_to_ancestor(left, ancestor),
                     _distance_to_ancestor(right, ancestor),
-                    int(left_trait),
-                    int(right_trait),
                 )
-            )
+                distance_by_pair[pair] = distances
+            designs.add((*distances, int(left_trait), int(right_trait)))
             if len(designs) > limit:
                 return tuple(sorted(designs)[:limit]), False
     return tuple(sorted(designs)), True

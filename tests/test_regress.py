@@ -5,6 +5,7 @@ import sys
 import threading
 import warnings
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -33,9 +34,34 @@ from nwkit.regression_pipeline import (
     write_regression_bundle,
 )
 from nwkit.sparse_laplace import (
+    ContinuousPredictorUncertainty,
     JointPredictorUncertainty,
     continuous_predictor_loading,
 )
+
+
+def test_predictor_uncertainty_report_averages_large_finite_variances():
+    scale = 1e308
+    posterior = SimpleNamespace(
+        evolutionary_rate=1.0,
+        optimizer_converged=True,
+        optimizer_message="test",
+        boundary_warning=False,
+    )
+    state = {
+        "posterior": posterior,
+        "mean_sampling_variance": scale,
+        "mean_prior_variance": scale,
+    }
+    uncertainty = ContinuousPredictorUncertainty(
+        np.full(4, np.sqrt(scale)), np.arange(4)
+    )
+    with np.errstate(over="raise", invalid="raise"):
+        result = regression_mod._predictor_measurement_result_fields(
+            "x", {"x": uncertainty}, {"x": state}, {}, 0.0
+        )
+    assert result["mean_latent_predictor_variance"] == pytest.approx(scale)
+    assert result["predictor_uncertainty_fraction"] == pytest.approx(1.0)
 
 
 @pytest.mark.parametrize(
@@ -302,6 +328,32 @@ def test_large_structured_gaussian_fit_remains_available(monkeypatch):
         reml=False,
     )
     assert np.isfinite(result["objective"])
+
+
+def test_dense_gaussian_regression_accepts_implicit_variance_components():
+    response = np.array([1.0, 2.0, 4.0, 8.0, 6.0, 9.0])
+    design = np.column_stack((np.ones(len(response)), np.arange(len(response))))
+    fixed = 0.12 * np.eye(len(response)) + 0.03
+    loading = sparse.csr_matrix(np.eye(len(response)) + 0.04)
+    evolutionary = (loading @ loading.T).toarray()
+    reference = _profile_covariance_fit(
+        response, design, fixed, [("evolutionary_rate", evolutionary)], reml=True
+    )
+    implicit = _profile_covariance_fit(
+        response,
+        design,
+        fixed,
+        [("evolutionary_rate", None)],
+        reml=True,
+        component_factors={"evolutionary_rate": loading},
+    )
+    assert implicit["objective"] == pytest.approx(reference["objective"], abs=1e-10)
+    np.testing.assert_allclose(
+        implicit["beta"], reference["beta"], rtol=1e-6, atol=1e-8
+    )
+    np.testing.assert_allclose(
+        implicit["covariance"], reference["covariance"], rtol=1e-6, atol=1e-8
+    )
 
 
 def test_pgls_matches_standard_pic_regression_for_one_to_one_orthologs():
@@ -825,6 +877,28 @@ def test_pgls_fits_each_tree_and_response_separately():
     assert result.loc["OG1", "coefficient"] == pytest.approx(2.0)
     assert result.loc["OG2", "coefficient"] == pytest.approx(-1.0)
     assert set(result["model_id"]) == {"OG1:expression", "OG2:expression"}
+
+
+def test_reconciled_pgls_reports_scale_invariant_uncentered_fit():
+    predictors = _predictor_table(values=(1.0, 2.0, 3.0, 4.0))
+
+    def fit(scale):
+        rows = [
+            _response_row(index, value * scale)
+            for index, value in enumerate((0.8, 2.3, 2.7, 4.4), start=1)
+        ]
+        return fit_reconciled_pgls(
+            pd.DataFrame(rows), predictors, ["expression"], ["body_size"]
+        ).iloc[0]
+
+    expected = fit(1.0)
+    scale = 1e-158
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        actual = fit(scale)
+    assert actual["coefficient"] / scale == pytest.approx(expected["coefficient"])
+    assert actual["r_squared_uncentered"] == pytest.approx(
+        expected["r_squared_uncentered"], abs=1e-14
+    )
 
 
 def test_pgls_supports_multiple_predictors():

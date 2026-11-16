@@ -202,6 +202,11 @@ def test_gaussian_mixture_extreme_confidence_uses_stable_survival_tail():
     assert result.lower == pytest.approx(-expected)
 
 
+def test_gaussian_mixture_interval_can_fall_inside_an_atom():
+    result = gaussian_mixture_summary([0, 0], [0, 1], [0.99, 0.01])
+    assert (result.lower, result.upper) == (0.0, 0.0)
+
+
 def test_compatible_weights_reject_different_root_groups():
     assert compatible_model_weights([10, 12], ["BM:flat", "BM:flat"]) == pytest.approx(
         [1 / (1 + np.exp(-1)), 1 / (1 + np.exp(1))]
@@ -223,6 +228,21 @@ def test_tree_mapping_uses_clades_not_branch_order():
     assert align_ensemble_nodes(reference, different, mapping="mrca")[node] is different
     with pytest.raises(ValueError, match="exactly the reference tip set"):
         align_ensemble_nodes(reference, tree_from("(A:1,B:1)R;"))
+
+
+def test_tree_mapping_keeps_deepest_exact_clade_and_supports_attached_trees():
+    reference = tree_from("(((A:1,B:1)AB:1,D:1)ABD:1,C:1)R;")
+    wrapper = tree_from("(E:1,(((A:1,B:1)ab:1)unary:1,(C:1,D:1)cd:1)S:1)W;")
+    sampled = wrapper.children[1]
+    by_name = {node.name: node for node in reference.traverse()}
+
+    exact = align_ensemble_nodes(reference, sampled)
+    mapped = align_ensemble_nodes(reference, sampled, mapping="mrca")
+
+    assert exact[by_name["AB"]].name == "ab"
+    assert by_name["ABD"] not in exact
+    assert mapped[by_name["ABD"]] is sampled
+    assert mapped[reference] is sampled
 
 
 def test_tree_ensemble_reports_clade_support_and_between_tree_uncertainty():

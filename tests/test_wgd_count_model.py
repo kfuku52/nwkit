@@ -12,6 +12,7 @@ from nwkit.wgd_count_model import (
     CountTree,
     MultiplicationEvent,
     _birth_death_log_transition,
+    _logsum_probabilities,
     birth_death_parameters,
     birth_death_transition,
     multiplication_transition,
@@ -24,6 +25,264 @@ def tree():
     return CountTree(
         (-1, 0, 0), (0.0, 0.4, 0.7), (1, 2), ("A", "B"), (0, 1, 2), ("AB", "A", "B")
     )
+
+
+@pytest.mark.parametrize("axis", [0, 1])
+def test_log_probability_sum_retains_tiny_terms_ties_and_impossible_rows(axis):
+    values = np.array(
+        [[0.0, -50.0, -np.inf], [-50.0, -50.0, -51.0], [-np.inf, -np.inf, -np.inf]]
+    )
+    if axis == 0:
+        values = values.T
+    with np.errstate(invalid="raise", divide="raise"):
+        actual = _logsum_probabilities(values, axis=axis)
+    np.testing.assert_allclose(actual, logsumexp(values, axis=axis), rtol=1e-14, atol=0)
+    assert actual[0] == np.log1p(np.exp(-50.0)) > 0
+    assert np.isneginf(actual[-1])
+
+
+@pytest.mark.parametrize(
+    "retention,split_zero,expected_calls",
+    [(0.0, False, 0), (0.0, True, 1), (0.4, False, 1), (1.0, False, 1)],
+)
+def test_likelihood_reuses_the_same_event_matrix_across_rate_scales(
+    monkeypatch, retention, split_zero, expected_calls
+):
+    model = CountLikelihood(tree(), [[1, 2], [1, np.nan]], rate_scales=[0.25, 1, 2])
+    event = MultiplicationEvent(1, retention, 0.5, 3)
+    rates, root, bound = [[0.12, 0.2]], 1.2, 8
+    prior = root_probabilities(root, bound)
+    emissions = model._emissions(bound)
+    observed = [
+        model._prune(
+            emissions,
+            model.transitions(rates, scale, bound, event, _split_zero_event=split_zero),
+            prior,
+        )
+        for scale in model.rate_scales
+    ]
+    selected = [
+        model._selection_logs(rates, scale, root, event) for scale in model.rate_scales
+    ]
+    expected = (logsumexp(observed, axis=0) - np.log(3)) - (
+        logsumexp(selected, axis=0) - np.log(3)
+    )[model.pattern_index]
+    calls = []
+
+    def counted(*args):
+        calls.append(args)
+        return multiplication_transition(*args)
+
+    monkeypatch.setattr(wgd_count_model, "multiplication_transition", counted)
+    actual = model.family_log_likelihoods(
+        rates, root, bound, event, _split_zero_event=split_zero
+    )
+    np.testing.assert_array_equal(actual, expected)
+    assert calls == [(retention, 3, bound)] * expected_calls
+
+
+def test_multiplication_event_validates_without_allocating_a_transition(monkeypatch):
+    def reject_allocation(*_args):
+        pytest.fail("validation allocated a transition matrix")
+
+    monkeypatch.setattr(wgd_count_model, "multiplication_transition", reject_allocation)
+    assert MultiplicationEvent(1, 0.5, multiplicity=3).retention == 0.5
+    with pytest.raises(ValueError, match="Retention"):
+        MultiplicationEvent(1, float("nan"))
+    with pytest.raises(ValueError, match="Multiplicity"):
+        MultiplicationEvent(1, 0.5, multiplicity=True)
+
+
+def test_edge_probability_cache_has_exact_keys_and_excludes_invalid_values():
+    cached = wgd_count_model._edge_probabilities
+    cached.cache_clear()
+    try:
+        first = birth_death_parameters(0.25, 0.2, 0.5)
+        assert birth_death_parameters(np.float64(0.25), 0.2, 0.5) == first
+        assert cached.cache_info().hits == 1
+        other = birth_death_parameters(0.25, 0.2, np.nextafter(0.5, np.inf))
+        assert all(value >= prior for value, prior in zip(other, first, strict=True))
+        assert cached.cache_info().currsize == 2
+        with pytest.raises(ValueError, match="finite"):
+            birth_death_parameters(0.25, 0.2, float("nan"))
+        assert cached.cache_info().currsize == 2
+        for i in range(cached.cache_info().maxsize + 4):
+            birth_death_parameters(0.25, 0.2, float(i))
+        assert cached.cache_info().currsize == cached.cache_info().maxsize
+    finally:
+        cached.cache_clear()
+
+
+def test_birth_death_rescales_subnormal_rate_difference():
+    loss = 2.0**-1040
+    duplication = 2.0 * loss
+    time = 2.0**1000
+    reference = birth_death_transition(2.0, 1.0, 2.0**-40, 4)
+    actual = birth_death_transition(duplication, loss, time, 4)
+    np.testing.assert_array_equal(actual, reference)
+    assert 0 < actual[1, 0] < actual[1, 2]
+
+
+def test_birth_death_retains_subnormal_critical_survival():
+    rate = 2.0**513
+    target = 2.0**-1026
+    assert wgd_count_model._birth_death_probabilities(rate, rate, rate) == (
+        1.0,
+        1.0,
+        target,
+        target,
+    )
+
+
+def test_log_birth_death_preserves_near_zero_complements():
+    log_probabilities = wgd_count_model._birth_death_log_probabilities
+    critical = log_probabilities(2.0**40, 2.0**40, 2.0**40)
+    assert critical[0] == pytest.approx(-np.log1p(2.0**-80), rel=1e-13, abs=0)
+    assert critical[0] == critical[1]
+    subcritical = log_probabilities(1.0, 2.0, 80.0)
+    assert subcritical[0] == pytest.approx(-np.exp(-80) / 2, rel=1e-13, abs=0)
+    short = log_probabilities(1e200, 2e200, 1e-220)
+    assert short[2:] == pytest.approx((-2e-20, -1e-20), rel=1e-13, abs=0)
+
+
+def test_log_pure_birth_and_loss_match_exact_combinatorial_weights():
+    from math import comb, log
+
+    rate = 760.0
+    log_transition = wgd_count_model._birth_death_log_transition
+    birth = log_transition(rate, 0.0, 1.0, 64)
+    loss = log_transition(0.0, rate, 1.0, 64)
+    # The geometric continuation and extinction differ from one by less
+    # than a representable amount, but log survival and success remain finite.
+    assert birth[15, 61] == pytest.approx(log(comb(60, 14)) - 15 * rate)
+    assert loss[61, 15] == pytest.approx(log(comb(61, 15)) - 15 * rate)
+    assert birth[61, 15] == loss[15, 61] == -np.inf
+
+
+def test_likelihood_transition_cache_is_bounded_and_preserves_results(monkeypatch):
+    model = CountLikelihood(tree(), np.array([[2.0, 3.0], [1.0, np.nan]]))
+    rates = np.array([[0.12, 0.17]])
+    event = MultiplicationEvent(1, 0.3, 0.5, 2)
+    bound = 8
+    matrix_bytes = (bound + 1) ** 2 * np.dtype(float).itemsize
+    monkeypatch.setattr(wgd_count_model, "_TRANSITION_CACHE_BYTES", 0)
+    expected = model.family_log_likelihoods(rates, 1.4, bound, event)
+    assert not model._transition_cache
+    monkeypatch.setattr(wgd_count_model, "_TRANSITION_CACHE_BYTES", 2 * matrix_bytes)
+    np.testing.assert_array_equal(
+        model.family_log_likelihoods(rates, 1.4, bound, event), expected
+    )
+    assert len(model._transition_cache) == 2
+    assert model._transition_cache_bytes == 2 * matrix_bytes
+    # Public kernels remain independent mutable arrays, even on a cache hit.
+    matrix = model.transitions(rates, 1.0, bound)[2]
+    matrix[:] = np.nan
+    np.testing.assert_array_equal(
+        model.family_log_likelihoods(rates, 1.4, bound, event), expected
+    )
+    # Oversized entries do not displace the cached working set.
+    model._cached_transition(*rates[0], 0.7, 20)
+    assert model._transition_cache_bytes == 2 * matrix_bytes
+
+
+def test_transition_cache_separates_log_kernels_and_count_bounds(monkeypatch):
+    model = CountLikelihood(tree(), np.array([[1.0, 1.0]]))
+    monkeypatch.setattr(wgd_count_model, "_TRANSITION_CACHE_ENTRIES", 2)
+    probability = model._cached_transition(0.2, 0.3, 0.5, 8)
+    log = model._cached_transition(0.2, 0.3, 0.5, 8, log=True)
+    np.testing.assert_allclose(np.exp(log), probability, rtol=1e-12, atol=1e-14)
+    assert model._cached_transition(0.2, 0.3, 0.5, 8) is probability
+    larger = model._cached_transition(0.2, 0.3, 0.5, 16)
+    assert larger.shape == (17, 17)
+    assert list(model._transition_cache.values())[0] is probability
+    assert model._transition_cache_bytes == probability.nbytes + larger.nbytes
+
+
+def test_emissions_reuse_one_bound_and_refresh_on_observation_changes(monkeypatch):
+    counts = np.array([[1.0, 2.0], [np.nan, 1.0]])
+    detection = np.array([0.9, 1.0])
+    model = CountLikelihood(tree(), counts, detection=detection)
+    first = model._emissions(8)
+    assert model._emissions(8) is first
+    assert model._emissions(16) is not first
+    second = model._emissions(8)
+    assert second is not first
+    np.testing.assert_array_equal(second[1], first[1])
+    counts[0, 0] = 2.0
+    detection[1] = 0.8
+    updated = model._emissions(8)
+    assert updated is not second
+    assert np.any(updated[1] != second[1])
+    np.testing.assert_array_equal(second[2], [2, 1])
+    assert updated[2].shape == (2, 9)
+    assert np.all(updated[2][np.arange(2), second[2]] < 1)
+    monkeypatch.setattr(wgd_count_model, "_EMISSION_CACHE_BYTES", 0)
+    uncached = model._emissions(8)
+    assert model._emission_cache is None
+    for node in model.tree.tip_nodes:
+        np.testing.assert_array_equal(uncached[node], updated[node])
+
+
+@pytest.mark.parametrize("detection", [[1, 1], [0.82, 1], [1, 0.9]])
+@pytest.mark.parametrize("retention", [0.0, 0.3])
+def test_deterministic_tip_indices_match_dense_emissions(detection, retention):
+    counts = np.array([[0, 1], [3, 0], [np.nan, 2], [2, np.nan], [1, 3]])
+    model = CountLikelihood(tree(), counts, detection=np.array(detection))
+    bound = 8
+    rates = np.array([[0.12, 0.2]])
+    event = MultiplicationEvent(2, retention, 0.5, 2)
+    transitions = model.transitions(rates, 1, bound, event)
+    emissions = model._emissions(bound)
+    assert [emissions[i].ndim for i in tree().tip_nodes] == [
+        1 if p == 1 else 2 for p in detection
+    ]
+    dense = {}
+    for column, node in enumerate(tree().tip_nodes):
+        observed_counts = counts[:, column]
+        emission = (observed_counts[:, None] == np.arange(bound + 1)).astype(float)
+        emission[np.isnan(observed_counts)] = 1
+        dense[node] = emission if detection[column] == 1 else emissions[node]
+    prior = root_probabilities(1.3, bound)
+    np.testing.assert_array_equal(
+        model._prune(emissions, transitions, prior),
+        model._prune(dense, transitions, prior),
+    )
+
+
+@pytest.mark.parametrize("ascertainment", ["observed", "root-clades"])
+@pytest.mark.parametrize("detection", [[1, 0.93, 0.8], [1e-180, 1e-190, 1e-170]])
+@pytest.mark.parametrize("loss", [0.15, 1700])
+def test_shared_missingness_selection_matches_batched_path(
+    ascertainment, detection, loss
+):
+    design = CountTree(
+        (-1, 0, 1, 1, 0),
+        (0.0, 0.1, 0.4, 0.5, 0.6),
+        (2, 3, 4),
+        ("A", "B", "C"),
+        (0, 1, 2, 3, 4),
+        ("ABC", "AB", "A", "B", "C"),
+    )
+    observations = [[np.nan, 1.0, 1.0], [np.nan, 2.0, 1.0]]
+    scalar = CountLikelihood(
+        design, observations, detection=detection, ascertainment=ascertainment
+    )
+    batched = CountLikelihood(
+        design,
+        [*observations, [1.0, 2.0, 1.0]],
+        detection=detection,
+        ascertainment=ascertainment,
+    )
+    which = batched.pattern_index[0]
+    for event in (
+        None,
+        MultiplicationEvent(1, 0.4, 0.25, 3),
+        MultiplicationEvent(3, 1.0, 0, 2),
+    ):
+        args = (np.array([[0.05, loss]]), 1.8, 1.2, event)
+        np.testing.assert_array_equal(
+            scalar._selection_logs(*args), batched._selection_logs(*args)[[which]]
+        )
 
 
 @pytest.mark.parametrize("budget", [1, 1024**2])
@@ -81,6 +340,36 @@ def test_log_branching_kernel_matches_probability_kernel(duplication, loss):
     expected = birth_death_transition(duplication, loss, 0.9, 20)
     np.testing.assert_allclose(np.exp(actual), expected, atol=2e-14, rtol=2e-12)
     assert not np.any(np.isnan(actual))
+
+
+@pytest.mark.parametrize(
+    "rates_time",
+    [
+        (0, 0, 10),
+        (0, 0.02, 10),
+        (0.03, 0, 10),
+        (0.02, 0.02, 40),
+        (0.01, 0.03, 100),
+        (0.03, 0.01, 100),
+        (1e-8, 0.4, 500),
+        (0.4, 1e-8, 500),
+    ],
+)
+def test_large_count_geometric_recurrence_matches_convolution_and_log_kernel(
+    rates_time, monkeypatch
+):
+    bound = 275
+    actual = birth_death_transition(*rates_time, bound)
+    monkeypatch.setattr(wgd_count_model, "_GEOMETRIC_RECURRENCE_MIN_COUNT", bound + 1)
+    expected = birth_death_transition(*rates_time, bound)
+    assert np.all(actual >= 0)
+    assert np.all(actual.sum(axis=1) <= 1 + 1e-12)
+    np.testing.assert_allclose(actual, expected, rtol=4e-12, atol=5e-323)
+    representable = actual > 1e-280
+    log_probs = _birth_death_log_transition(*rates_time, bound)
+    np.testing.assert_allclose(
+        np.log(actual[representable]), log_probs[representable], rtol=0, atol=2e-11
+    )
 
 
 @pytest.mark.parametrize(
@@ -146,19 +435,50 @@ def test_loss_free_fully_detected_pulse_has_certain_selection(
 
 
 @pytest.mark.parametrize("retention", [0.0, 0.3, 1.0])
-def test_log_pruning_matches_scaled_pruning_with_pulse_and_missingness(retention):
+@pytest.mark.parametrize("detection", [(0.8, 0.9), (1.0, 0.9), (1.0, 1.0)])
+def test_log_pruning_matches_scaled_pruning_with_pulse_and_missingness(
+    retention, detection
+):
     model = CountLikelihood(
-        tree(), np.array([[1, 2], [0, 1], [1, np.nan]]), detection=np.array([0.8, 0.9])
+        tree(),
+        np.array([[1, 2], [0, 1], [1, np.nan], [np.nan, 1]]),
+        detection=np.array(detection),
     )
     rates, root_mean, bound = [[0.2, 0.3]], 1.5, 40
     event = MultiplicationEvent(1, retention)
     matrices = model._log_transitions(rates, 1, bound, event)
-    unconditional = model._prune_log(matrices, root_mean, bound, np.arange(3))
+    unconditional = model._prune_log(matrices, root_mean, bound, np.arange(4))
     expected = model.family_log_likelihoods(rates, root_mean, bound, event)
     selection = model._selection_logs(rates, 1, root_mean, event)
     np.testing.assert_allclose(
         unconditional - selection[model.pattern_index], expected, atol=2e-12
     )
+
+
+@pytest.mark.parametrize("fraction", [0.0, 0.5, 1.0])
+@pytest.mark.parametrize("retention,multiplicity", [(0, 2), (0.4, 3), (1, 2), (1, 12)])
+def test_log_pulse_transition_matches_explicit_truncated_matrices(
+    fraction, retention, multiplicity
+):
+    model = CountLikelihood(tree(), np.array([[1, 1]]))
+    rates, bound = [[0.6, 0.2]], 7
+    event = MultiplicationEvent(1, retention, fraction, multiplicity)
+    actual = model._log_transitions(rates, 1, bound, event, _split_zero_event=True)
+    time = model.tree.lengths[1]
+    before = birth_death_transition(*rates[0], time * fraction, bound)
+    after = birth_death_transition(*rates[0], time * (1 - fraction), bound)
+    pulse = np.zeros((bound + 1, bound + 1))
+    for count in range(bound + 1):
+        trials = count * (multiplicity - 1)
+        for extra in range(min(trials, bound - count) + 1):
+            pulse[count, count + extra] = (
+                math.comb(trials, extra)
+                * retention**extra
+                * (1 - retention) ** (trials - extra)
+            )
+    expected = before @ pulse @ after
+    np.testing.assert_array_equal(np.isfinite(actual[1]), expected > 0)
+    np.testing.assert_allclose(np.exp(actual[1]), expected, rtol=2e-13, atol=1e-15)
 
 
 def test_time_units_and_semigroup():
@@ -172,14 +492,17 @@ def test_time_units_and_semigroup():
     np.testing.assert_allclose(composed[:5], p[:5], atol=2e-14)
 
 
-def test_event_limits_and_tail_not_renormalized():
-    np.testing.assert_array_equal(multiplication_transition(0, 2, 8), np.eye(9))
-    full = multiplication_transition(1, 3, 8)
+@pytest.mark.parametrize("bound", [8, 70])
+def test_event_limits_and_tail_not_renormalized(bound):
+    np.testing.assert_array_equal(
+        multiplication_transition(0, 2, bound), np.eye(bound + 1)
+    )
+    full = multiplication_transition(1, 3, bound)
     assert full[2, 6] == 1
-    assert full[3].sum() == 0
-    partial = multiplication_transition(0.5, 2, 8)
+    assert full[bound // 3 + 1].sum() == 0
+    partial = multiplication_transition(0.5, 2, bound)
     np.testing.assert_allclose(partial[2, 2:5], [0.25, 0.5, 0.25])
-    assert partial[8].sum() == pytest.approx(0.5**8)
+    assert partial[bound].sum() == pytest.approx(0.5**bound, rel=1e-12, abs=0)
     assert root_probabilities(4, 3).sum() == pytest.approx(1 - 0.75**3)
 
 
@@ -232,6 +555,29 @@ def test_missing_is_not_zero_and_observation_conditioning_normalizes():
         missing.family_log_likelihoods([[0.1, 0.3]], 1, bound)[0]
         > missing.family_log_likelihoods([[0.1, 0.3]], 1, bound)[1]
     )
+
+
+def test_missing_patterns_keep_tip_order_across_byte_boundary():
+    design = CountTree(
+        (-1, 0, *([1] * 8), 0),
+        (0.0, *([1.0] * 10)),
+        tuple(range(10, 1, -1)),
+        tuple(f"T{i}" for i in range(9)),
+        tuple(range(11)),
+        tuple(f"C{i}" for i in range(11)),
+    )
+    rows = np.ones((5, 9))
+    rows[[0, 2], -1] = np.nan
+    rows[1, 0] = np.nan
+    rows[4, [3, 8]] = np.nan
+    missing = np.isnan(rows)
+    expected_patterns, expected_index = np.unique(missing, axis=0, return_inverse=True)
+    model = CountLikelihood(design, rows)
+
+    assert model.root_clade_columns == [list(range(1, 9)), [0]]
+    assert model.patterns.dtype == bool
+    np.testing.assert_array_equal(model.patterns, expected_patterns)
+    np.testing.assert_array_equal(model.pattern_index, expected_index)
 
 
 def test_rate_mixture_conditioned_after_mixing():
@@ -403,6 +749,50 @@ def test_root_clade_selection_matches_positive_geometric_sum(tips, mean, loss):
         )
 
 
+@pytest.mark.parametrize("loss", [740.0, 1000.0])
+def test_rare_observed_selection_preserves_pulse_mixture_and_missingness(loss):
+    design = CountTree(
+        (-1, 0, 0, 0),
+        (0.0, 0.0, 1.0, 1.0),
+        (1, 2, 3),
+        ("A", "B", "C"),
+        (0, 1, 2, 3),
+        ("ABC", "A", "B", "C"),
+    )
+    model = CountLikelihood(
+        design,
+        np.array([[np.nan, 1, 0], [1, np.nan, np.nan]]),
+        rate_scales=np.array([1.0, 1.5]),
+    )
+    event = MultiplicationEvent(3, 0.5)
+    actual = model.family_log_likelihoods([[0.0, loss]], 2.0, 96, event)
+    # In this rare-survival limit a single copy survives. At either rate,
+    # its relative chances in B and C are 1 and 1.5 because C has a pulse.
+    # With only the zero-length A observed, the likelihood is the root prior.
+    np.testing.assert_allclose(actual, np.log([1 / 2.5, 1 / 2]), atol=1e-12)
+
+
+@pytest.mark.parametrize("rare_clades,root_moment", [(1, 2), (2, 6)])
+def test_rare_root_clade_selection_preserves_size_biased_root(rare_clades, root_moment):
+    tips = 1 + rare_clades
+    design = CountTree(
+        (-1,) + (0,) * tips,
+        (0.0, 0.0) + (1.0,) * rare_clades,
+        tuple(range(1, tips + 1)),
+        tuple(f"S{i}" for i in range(tips)),
+        tuple(range(tips + 1)),
+        tuple(f"clade{i}" for i in range(tips + 1)),
+    )
+    counts = np.ones((2, tips))
+    counts[1, 0] = 2
+    model = CountLikelihood(design, counts, ascertainment="root-clades")
+    # Observing all rare clades weights each possible root count n by
+    # n**rare_clades. The first two moments of Geometric(1/2) are 2 and 6.
+    expected = np.log([0.5 / root_moment, 0.25 * 2**rare_clades / root_moment])
+    actual = model.family_log_likelihoods([[0.0, 1000.0]], 2.0, 8)
+    np.testing.assert_allclose(actual, expected, atol=1e-12)
+
+
 @pytest.mark.parametrize(
     "nodes,names",
     [((1, 2, 2), ("A", "B", "B")), ((1, 1, 2), ("A", "A", "B")), ((1, 2), ("A", "A"))],
@@ -446,6 +836,53 @@ def test_missing_subtree_is_marginalized_per_family_not_per_tip():
     logs = model.family_log_likelihoods([[0.2, 0.0]], 1.0, 8)
     assert logs[0] == pytest.approx(-0.2, abs=1e-14)
     assert logs[1] < -20
+
+
+def test_scaled_pruning_leaves_impossible_rows_at_negative_infinity():
+    model = CountLikelihood(tree(), np.array([[1.0, 1.0], [0.0, 1.0], [np.nan, 1.0]]))
+    rates, bound = [[0.0, 0.0]], 8
+    scaled = model.family_log_likelihoods(rates, 1.0, bound)
+    np.testing.assert_array_equal(scaled, [0.0, -np.inf, 0.0])
+
+
+def test_fixed_pulses_with_an_additional_event_keep_the_exact_count_law():
+    fixed = MultiplicationEvent(1, 0.7, 0.25, 3)
+    candidate = MultiplicationEvent(2, 0.4, 0.75)
+    data = np.array([[3.0, 1.0], [2.0, np.nan], [np.nan, 2.0], [1.0, 2.0]])
+    base = CountLikelihood(tree(), data)
+    model = CountLikelihood(tree(), data, fixed_events=(fixed,))
+    rates, bound = [[0.0, 0.0]], 8
+    np.testing.assert_array_equal(
+        model.family_log_likelihoods(rates, 1.0, bound),
+        base.family_log_likelihoods(rates, 1.0, bound, fixed),
+    )
+    # No SSD, loss or sampling error: each observed tip is one plus its independent binomial extras.
+    expected = np.log([0.7**2 * 0.6, 2 * 0.7 * 0.3, 0.4, 0.3**2 * 0.4])
+    np.testing.assert_allclose(
+        model.family_log_likelihoods(rates, 1.0, bound, candidate), expected, atol=1e-14
+    )
+    for i in range(10):
+        a = model.simulate(rates, 1.0, np.random.default_rng(i), candidate)
+        assert np.array_equal(np.isnan(a), np.isnan(data))
+        assert np.nanmin(a) >= 1 and np.nanmax(a[:, 0]) <= 3 and np.nanmax(a[:, 1]) <= 2
+    with pytest.raises(ValueError, match="overlap"):
+        model.family_log_likelihoods(rates, 1.0, bound, fixed)
+    with pytest.raises(ValueError, match="distinct positive-length"):
+        CountLikelihood(tree(), data, fixed_events=(fixed, fixed))
+
+
+@pytest.mark.parametrize("partial", [False, True])
+def test_fixed_pulses_match_single_candidate_under_rare_detection(partial):
+    data = np.array([[1.0, 1.0], [1.0, np.nan if partial else 1.0]])
+    pulse = MultiplicationEvent(1, 0.8, 0.43)
+    parameters = dict(detection=np.array([1e-200, 1e-200]))
+    base = CountLikelihood(tree(), data, **parameters)
+    fixed = CountLikelihood(tree(), data, **parameters, fixed_events=(pulse,))
+    rates = [[0.1, 600.0]]
+    np.testing.assert_array_equal(
+        fixed.family_log_likelihoods(rates, 1.1, 8),
+        base.family_log_likelihoods(rates, 1.1, 8, pulse),
+    )
 
 
 @pytest.mark.parametrize("node", [0, -1, True, 1.5])

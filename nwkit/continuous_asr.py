@@ -8,17 +8,14 @@ input branch-length unit; no tip-variance normalization is applied.
 
 import math
 from dataclasses import dataclass, replace
+from sys import float_info
 from typing import Any
 
 import numpy as np
 from scipy.optimize import minimize_scalar
 
 from nwkit.continuous_asr_optimize import minimize_brownian_rate
-from nwkit.gaussian_tree import (
-    GaussianRootPrior,
-    GaussianTreeProcess,
-    brownian_transition,
-)
+from nwkit.gaussian_tree import _mean_at_tiny_variance_ratio
 from nwkit.rooting_state import require_rooted
 from nwkit.util import validate_unique_named_leaves
 
@@ -66,9 +63,15 @@ class _PruningResult:
     log_variance: float
     quadratic: float
     residual_df: int
+    half_quadratic: bool = False
 
     @property
     def log_likelihood(self):
+        if self.half_quadratic:
+            return (
+                -0.5 * (self.residual_df * _LOG_2PI + self.log_variance)
+                - self.quadratic
+            )
         return -0.5 * (self.residual_df * _LOG_2PI + self.log_variance + self.quadratic)
 
 
@@ -114,7 +117,7 @@ def _nonnegative_sum(values):
         return math.inf
 
 
-def _merge(first, second_mean, second_variance):
+def _merge(first, second_mean, second_variance, half_quadratic=False):
     """Multiply Gaussian messages without allocating an incoming wrapper."""
     if first is None:
         return GaussianMarginal(second_mean, second_variance), 0.0, 0.0, 0
@@ -126,18 +129,27 @@ def _merge(first, second_mean, second_variance):
                 "zero-length branches or under sigma2=0."
             )
         return first, 0.0, 0.0, 0
-    ratio = min(first.variance, second_variance) / larger
+    smaller = min(first.variance, second_variance)
+    ratio = smaller / larger
     denominator = 1.0 + ratio
     first_weight = (second_variance / larger) / denominator
     second_weight = (first.variance / larger) / denominator
     mean = first_weight * first.mean + second_weight * second_mean
-    variance = min(first.variance, second_variance) / denominator
-    if min(first.variance, second_variance) > 0.0 and variance == 0.0:
+    if 0.0 < smaller and ratio < float_info.min:
+        mean = _mean_at_tiny_variance_ratio(
+            first.mean, second_mean, first.variance, second_variance
+        )
+    variance = smaller / denominator
+    if smaller > 0.0 and variance == 0.0:
         raise ValueError(
             "A positive conditional variance underflowed; rescale the input units."
         )
     standardized = (first.mean - second_mean) / math.sqrt(larger)
-    quadratic = (standardized * standardized) / denominator
+    quadratic = (
+        (0.5 * standardized) * (standardized / denominator)
+        if half_quadratic
+        else (standardized * standardized) / denominator
+    )
     return (
         GaussianMarginal(mean, variance),
         math.log(larger) + math.log1p(ratio),
@@ -146,49 +158,42 @@ def _merge(first, second_mean, second_variance):
     )
 
 
-def _tree_groups(tree, *, validated=False, process=None):
-    """Contract only exactly zero-length edges, without modifying the tree."""
-    if not validated:
-        validate_unique_named_leaves(tree, option_name="--infile", context=" for 'asr'")
-        require_rooted(tree, "ASR requires a rooted tree.")
-    raw_lengths = {}
+def _raw_brownian_edge_length(node):
+    if node.dist is None:
+        raise ValueError("ASR requires branch lengths for all non-root nodes.")
+    return _finite_number(node.dist, "Branch lengths", nonnegative=True)
+
+
+def _brownian_group_edge_length(tree, process):
     if process is None:
-        for node in tree.traverse(strategy="preorder"):
-            if node.is_root:
-                continue
-            if validated:
-                length = float(node.dist)
-            else:
-                if node.dist is None:
-                    raise ValueError(
-                        "ASR requires branch lengths for all non-root nodes."
-                    )
-                length = _finite_number(node.dist, "Branch lengths", nonnegative=True)
-            raw_lengths[node] = length
-        process = GaussianTreeProcess(
-            tree=tree,
-            transitions={
-                node: brownian_transition(length)
-                for node, length in raw_lengths.items()
-            },
-            root=GaussianRootPrior("flat", 0.0, None),
-            model="brownian",
-        )
+        return _raw_brownian_edge_length
     if process.tree is not tree:
         raise ValueError("The Gaussian ASR process must use the input tree.")
     if process.root.mode != "flat":
         raise ValueError("Brownian ASR requires a flat-root Gaussian process.")
-    node_groups = {tree: 0}
-    parents, lengths = [-1], [0.0]
-    for node in tree.traverse(strategy="preorder"):
-        if node.is_root:
-            continue
+
+    def edge_length(node):
         transition = process.transitions[node]
         if transition.slope != 1.0 or transition.intercept != 0.0:
             raise ValueError(
                 "Brownian ASR requires unit-slope zero-intercept branches."
             )
-        length = transition.variance
+        return transition.variance
+
+    return edge_length
+
+
+def _tree_groups(tree, *, validated=False, edge_length=_raw_brownian_edge_length):
+    """Contract only exactly zero-length edges, without modifying the tree."""
+    if not validated:
+        validate_unique_named_leaves(tree, option_name="--infile", context=" for 'asr'")
+        require_rooted(tree, "ASR requires a rooted tree.")
+    node_groups = {tree: 0}
+    parents, lengths = [-1], [0.0]
+    for node in tree.traverse(strategy="preorder"):
+        if node.is_root:
+            continue
+        length = edge_length(node)
         parent = node_groups[node.up]
         if length == 0.0:
             node_groups[node] = parent
@@ -200,24 +205,28 @@ def _tree_groups(tree, *, validated=False, process=None):
     return node_groups, parents, lengths
 
 
-def _observations_by_group(tree, node_groups, values_by_leaf, standard_errors):
+def _brownian_observation_records(tree, values_by_leaf, standard_errors):
+    for leaf in tree.leaves():
+        name = str(leaf.name)
+        raw_value = values_by_leaf.get(name)
+        if raw_value is None:
+            continue
+        value = _finite_number(raw_value, f"Trait value for '{name}'")
+        if standard_errors is not None and name not in standard_errors:
+            raise ValueError(f"A standard error is required for observed tip '{name}'.")
+        error = _finite_number(
+            0.0 if standard_errors is None else standard_errors[name],
+            f"Standard error for '{name}'",
+            nonnegative=True,
+        )
+        yield leaf, value, error
+
+
+def _observations_by_group(node_groups, records):
     grouped: dict[int, list[tuple[float, float]]] = {}
     exact_by_group: dict[int, float] = {}
     num_observed = 0
-    for leaf in tree.leaves():
-        raw_value = values_by_leaf.get(str(leaf.name))
-        if raw_value is None:
-            continue
-        value = _finite_number(raw_value, f"Trait value for '{leaf.name}'")
-        if standard_errors is not None and str(leaf.name) not in standard_errors:
-            raise ValueError(
-                f"A standard error is required for observed tip '{leaf.name}'."
-            )
-        error = _finite_number(
-            0.0 if standard_errors is None else standard_errors[str(leaf.name)],
-            f"Standard error for '{leaf.name}'",
-            nonnegative=True,
-        )
+    for leaf, value, error in records:
         group = node_groups[leaf]
         num_observed += 1
         if error == 0.0 and group in exact_by_group:
@@ -249,14 +258,21 @@ def _scales(grouped, lengths, sigma2, trait_exponent_ceiling=None):
     time_exponent = math.frexp(maximum_length)[1] - 1 if maximum_length > 0.0 else 0
     if time_exponent > 0:
         minimum_length = min(length for length in lengths if length > 0.0)
-        # Scaling the longest edge towards one must not erase a representable
-        # subnormal short edge before its compensating rate scale is applied.
-        while time_exponent > 0 and math.ldexp(minimum_length, -time_exponent) == 0.0:
-            time_exponent -= 1
+        # Keep short normal edges out of the subnormal range before the
+        # compensating rate scale is applied. Preserve existing subnormals.
+        max_shift = math.frexp(minimum_length)[1] - float_info.min_exp
+        time_exponent = min(time_exponent, max(0, max_shift))
     size = max(spread, error)
     trait_exponent = math.frexp(size)[1] - 1 if size > 0.0 else 0
     if sigma2 is not None and sigma2 > 0.0:
         process_exponent = (math.frexp(sigma2)[1] + time_exponent + 1) // 2
+        if maximum_length > 0.0:
+            # Time normalization may be capped to preserve the shortest edge.
+            # Still allow room for the largest scaled evolutionary variance.
+            variance_exponent = math.frexp(sigma2)[1] + math.frexp(maximum_length)[1]
+            process_exponent = max(
+                process_exponent, (variance_exponent - float_info.max_exp + 1) // 2
+            )
         trait_exponent = max(trait_exponent, process_exponent)
     if trait_exponent_ceiling is not None:
         trait_exponent = min(trait_exponent, trait_exponent_ceiling)
@@ -271,13 +287,19 @@ def _prepare_data(
     *,
     trait_exponent_ceiling=None,
     tree_validated=False,
-    process=None,
+    edge_length=_raw_brownian_edge_length,
+    half_quadratic=False,
+    observation_records=None,
 ):
     node_groups, parents, lengths = _tree_groups(
-        tree, validated=tree_validated, process=process
+        tree, validated=tree_validated, edge_length=edge_length
     )
+    if observation_records is None:
+        observation_records = _brownian_observation_records(
+            tree, values_by_leaf, standard_errors
+        )
     grouped, count, exact_values = _observations_by_group(
-        tree, node_groups, values_by_leaf, standard_errors
+        node_groups, observation_records
     )
     center, trait_exponent, time_exponent = _scales(
         grouped, lengths, sigma2, trait_exponent_ceiling
@@ -294,7 +316,7 @@ def _prepare_data(
                     "A positive measurement variance underflowed; rescale the input units."
                 )
             message, log_variance, quadratic, df = _merge(
-                observations[group], mean, variance
+                observations[group], mean, variance, half_quadratic
             )
             observations[group] = message
             log_variances.append(log_variance)
@@ -332,7 +354,9 @@ def _edge_variance(rate, length, *, allow_underflow=False):
     return variance
 
 
-def _prune(data, rate, *, allow_edge_underflow=False, collect_inside=True):
+def _prune(
+    data, rate, *, allow_edge_underflow=False, collect_inside=True, half_quadratic=False
+):
     if rate == 0.0 and len(set(data.exact_values.values())) > 1:
         raise _ExactConstraintError(
             "Conflicting exact observations have zero likelihood under sigma2=0."
@@ -367,18 +391,24 @@ def _prune(data, rate, *, allow_edge_underflow=False, collect_inside=True):
         if not math.isfinite(variance):
             raise ValueError("An ancestral variance exceeds floating-point range.")
         parent = parents[index]
+        parent_message = inside[parent]
+        if parent_message is None:
+            inside[parent] = GaussianMarginal(message.mean, variance)
+            continue
         merged, log_variance, quadratic, df = _merge(
-            inside[parent], message.mean, variance
+            inside[parent], message.mean, variance, half_quadratic
         )
         inside[parent] = merged
-        log_variances.append(log_variance)
-        quadratics.append(quadratic)
-        residual_df += df
+        if df:
+            log_variances.append(log_variance)
+            quadratics.append(quadratic)
+            residual_df += df
     return _PruningResult(
         tuple(inside) if collect_inside else (),
         math.fsum(log_variances),
         _nonnegative_sum(quadratics),
         residual_df,
+        half_quadratic,
     )
 
 
@@ -532,6 +562,28 @@ def _fit_rate(data):
     return _optimize_noisy_rate(fitting_data, upper, _zero_rate_result(fitting_data))
 
 
+def _brownian_marginals(data, rate, inside):
+    smoothed = _smooth(data, rate, inside)
+    restored = [
+        GaussianMarginal(
+            data.trait_center
+            + _ldexp(item.mean, data.trait_exponent, "Ancestral mean"),
+            _ldexp(item.variance, 2 * data.trait_exponent, "Ancestral variance"),
+        )
+        for item in smoothed
+    ]
+    if any(not math.isfinite(item.mean) for item in restored):
+        raise ValueError("An ancestral mean exceeds floating-point range.")
+    # Exact observations retain the original floating-point value, including
+    # after centering/scaling; all members of a zero-edge group share it.
+    return {
+        node: GaussianMarginal(data.exact_values[group], 0.0)
+        if group in data.exact_values
+        else restored[group]
+        for node, group in data.node_groups.items()
+    }
+
+
 def compute_bm_marginals(
     tree,
     values_by_leaf,
@@ -540,6 +592,7 @@ def compute_bm_marginals(
     standard_errors=None,
     _tree_validated=False,
     _process=None,
+    _compute_posterior=True,
 ):
     """Return all-node Gaussian marginals and a fixed-rate or REML BM fit.
 
@@ -550,12 +603,31 @@ def compute_bm_marginals(
     boundary has no ordinary residual density, reported as None, not a
     regular finite likelihood on a different-dimensional support.
     """
+    return _fit_brownian_edges(
+        tree,
+        values_by_leaf,
+        sigma2,
+        standard_errors,
+        edge_length=_brownian_group_edge_length(tree, _process),
+        tree_validated=_tree_validated,
+        compute_posterior=_compute_posterior,
+    )
+
+
+def _fit_brownian_edges(
+    tree,
+    values_by_leaf,
+    sigma2,
+    standard_errors,
+    *,
+    edge_length,
+    tree_validated,
+    compute_posterior,
+    observation_records=None,
+):
     if sigma2 is not None:
         sigma2 = _finite_number(sigma2, "--sigma2", nonnegative=True)
     trait_exponent_ceiling = None
-    # The private fast path is used only by the CLI after its shared ASR tree
-    # validation; direct library calls always validate here.
-    tree_validated = _tree_validated
     while True:
         data = _prepare_data(
             tree,
@@ -564,7 +636,8 @@ def compute_bm_marginals(
             sigma2,
             trait_exponent_ceiling=trait_exponent_ceiling,
             tree_validated=tree_validated,
-            process=_process,
+            edge_length=edge_length,
+            observation_records=observation_records,
         )
         tree_validated = True
         rate = (
@@ -595,10 +668,8 @@ def compute_bm_marginals(
         # The retry changes no mathematical units and strictly lowers the
         # exponent, so genuinely unrepresentable final models still reach the
         # explicit error in `_prune` below.
-        original_underflow = any(
-            node.dist > 0.0 and fitted_sigma2 * node.dist == 0.0
-            for node in tree.traverse()
-            if not node.is_root
+        original_underflow = _brownian_has_underflowing_edge(
+            tree, edge_length, fitted_sigma2
         )
         if original_underflow:
             break
@@ -620,26 +691,10 @@ def compute_bm_marginals(
         ):
             break
         trait_exponent_ceiling = candidate_exponent
-    upward = _prune(data, rate)
-    smoothed = _smooth(data, rate, upward.inside)
-    restored = [
-        GaussianMarginal(
-            data.trait_center
-            + _ldexp(item.mean, data.trait_exponent, "Ancestral mean"),
-            _ldexp(item.variance, 2 * data.trait_exponent, "Ancestral variance"),
-        )
-        for item in smoothed
-    ]
-    if any(not math.isfinite(item.mean) for item in restored):
-        raise ValueError("An ancestral mean exceeds floating-point range.")
-    # Exact observations retain the original floating-point value, including
-    # after centering/scaling; all members of a zero-edge group share it.
-    posterior = {
-        node: GaussianMarginal(data.exact_values[group], 0.0)
-        if group in data.exact_values
-        else restored[group]
-        for node, group in data.node_groups.items()
-    }
+    upward = _prune(data, rate, collect_inside=compute_posterior)
+    posterior = (
+        _brownian_marginals(data, rate, upward.inside) if compute_posterior else {}
+    )
     residual_df = data.num_effective - 1
     singular = upward.residual_df < residual_df
     log_likelihood = (
@@ -648,8 +703,19 @@ def compute_bm_marginals(
         else upward.log_likelihood - residual_df * data.trait_exponent * _LOG_2
     )
     if log_likelihood is not None and not math.isfinite(log_likelihood):
-        raise ValueError(
-            "Brownian residual log-likelihood is not finite; check the rate and input scales."
+        likelihood_data = _prepare_data(
+            tree,
+            values_by_leaf,
+            standard_errors,
+            sigma2,
+            trait_exponent_ceiling=trait_exponent_ceiling,
+            tree_validated=True,
+            edge_length=edge_length,
+            half_quadratic=True,
+            observation_records=observation_records,
+        )
+        log_likelihood = _brownian_tail_log_likelihood(
+            likelihood_data, rate, residual_df
         )
     fit = BrownianFit(
         sigma2=fitted_sigma2,
@@ -665,3 +731,24 @@ def compute_bm_marginals(
         else "ok",
     )
     return posterior, fit
+
+
+def _brownian_tail_log_likelihood(data, rate, residual_df):
+    # Accumulate the half-quadratic directly when the full residual sum
+    # overflows even though its contribution to log-likelihood can be finite.
+    upward = _prune(data, rate, collect_inside=False, half_quadratic=True)
+    log_likelihood = upward.log_likelihood - residual_df * data.trait_exponent * _LOG_2
+    if not math.isfinite(log_likelihood):
+        raise ValueError(
+            "Brownian residual log-likelihood is not finite; check the rate and input scales."
+        )
+    return log_likelihood
+
+
+def _brownian_has_underflowing_edge(tree, edge_length, rate):
+    for node in tree.traverse():
+        if not node.is_root:
+            length = edge_length(node)
+            if length > 0.0 and rate * length == 0.0:
+                return True
+    return False

@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import nwkit.asr as asr
 from nwkit.asr import _covarion_parameter_setup, compute_covarion_marginals
 from nwkit.cli import main
 from nwkit.hidden_rate_asr import covarion_rate_matrix
@@ -92,6 +93,41 @@ def test_covarion_fixed_rate_must_leave_room_for_hidden_spread():
             rate=10.0,
             rate_bounds=(1e-4, 10.0),
         )
+
+
+def test_covarion_rejects_data_without_an_informative_positive_branch():
+    tree = tree_from("((A:0)I:0,B:1)R;")
+    with pytest.raises(ValueError, match="positive-length branch ancestral"):
+        compute_covarion_marginals(
+            tree,
+            ["0", "1"],
+            {"A": "0", "B": None},
+            {"A": np.array([1.0, 0.0]), "B": np.ones(2)},
+            rate=0.4,
+        )
+
+
+def test_covarion_uses_powell_when_scipy_rejects_a_bound_roundoff(monkeypatch):
+    minimize = asr.minimize
+    failed_starts = 0
+
+    def fail_first_lbfgsb(*args, **kwargs):
+        nonlocal failed_starts
+        if kwargs["method"] == "L-BFGS-B" and not failed_starts:
+            failed_starts += 1
+            raise ValueError("`x0` violates bound constraints.")
+        return minimize(*args, **kwargs)
+
+    monkeypatch.setattr(asr, "minimize", fail_first_lbfgsb)
+    tree = tree_from("(((A:1,B:1):1,C:1):1,((D:1,E:1):1,F:1):1)R;")
+    states = ["0", "1"]
+    observed, tip_likelihoods = likelihoods(states)
+    _, fit = compute_covarion_marginals(
+        tree, states, observed, tip_likelihoods, rate=0.4, rate_bounds=(1e-4, 10.0)
+    )
+    assert failed_starts == 1
+    assert fit["optimizer_success"]
+    assert fit["optimizer_converged_starts"] == fit["optimizer_starts"]
 
 
 def test_covarion_rejects_fractional_or_excessive_hidden_state_spaces():

@@ -5,9 +5,25 @@ from nwkit.phylogenetic_predictive import sister_clade_contrast
 from nwkit.util import read_tree
 from nwkit.vector_processes import vector_brownian_process, vector_ou_process
 from nwkit.vector_simulation import (
+    _zero_mean_draws,
     simulate_vector_process,
     simulated_vector_observations,
 )
+
+
+@pytest.mark.parametrize("count", [1, 7])
+def test_reused_vector_draw_factor_preserves_seeded_stream(count):
+    covariance = np.array([[1.0, 1.0], [1.0, 1.0]])
+    zero = np.zeros((2, 2))
+    reference = np.random.default_rng(31)
+    draw = _zero_mean_draws(np.random.default_rng(31), 2, count)
+    for matrix in (covariance, covariance.copy(), zero, zero, covariance):
+        expected = reference.multivariate_normal(
+            np.zeros(2), matrix, size=count, check_valid="raise"
+        )
+        np.testing.assert_array_equal(draw(matrix), expected)
+    with pytest.raises(ValueError, match="positive-semidefinite"):
+        draw(np.array([[1.0, 2.0], [2.0, 1.0]]))
 
 
 def test_vector_simulation_preserves_joint_covariance():

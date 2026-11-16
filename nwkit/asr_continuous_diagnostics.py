@@ -10,6 +10,7 @@ from nwkit.compiled_tree import CompiledTree
 from nwkit.continuous_asr_process import fitted_scalar_process
 from nwkit.gaussian_inference import (
     condition_gaussian_tree,
+    prepare_gaussian_single_draw,
     sample_gaussian_posterior,
     simulate_gaussian_process,
 )
@@ -38,26 +39,66 @@ def posterior_samples_table(tree, samples, trait):
         raise ValueError("Posterior samples do not follow the input tree order.")
     ids = assign_branch_ids(tree)
     num_samples, num_nodes = samples.values.shape
-    node_indices = np.tile(np.arange(num_nodes), num_samples)
-    sample_indices = np.repeat(np.arange(num_samples), num_nodes)
     nodes = compiled.nodes
     return pd.DataFrame(
         {
-            "sample": sample_indices,
-            "branch_id": [ids[nodes[index]] for index in node_indices],
-            "parent": [
-                -1 if nodes[index].is_root else ids[nodes[index].up]
-                for index in node_indices
-            ],
-            "node_class": [get_node_class(nodes[index]) for index in node_indices],
-            "name": [
-                "" if nodes[index].name in (None, "") else str(nodes[index].name)
-                for index in node_indices
-            ],
+            "sample": np.repeat(np.arange(num_samples), num_nodes),
+            "branch_id": np.tile([ids[node] for node in nodes], num_samples),
+            "parent": np.tile(
+                [-1 if node.is_root else ids[node.up] for node in nodes],
+                num_samples,
+            ),
+            "node_class": np.tile(
+                np.asarray([get_node_class(node) for node in nodes], dtype=object),
+                num_samples,
+            ),
+            "name": np.tile(
+                np.asarray(
+                    [
+                        "" if node.name in (None, "") else str(node.name)
+                        for node in nodes
+                    ],
+                    dtype=object,
+                ),
+                num_samples,
+            ),
             "trait": trait,
             "value": samples.values.reshape(-1),
         }
     )
+
+
+def _tip_bootstrap_simulator(process, observed, errors):
+    compiled = CompiledTree.from_tree(process.tree)
+    root_values = None
+    if process.root.mode == "flat":
+        conditioned = condition_gaussian_tree(
+            process, observed, standard_errors=errors, compiled_tree=compiled
+        )
+        root_values = conditioned.marginals[process.tree].mean
+    records = [
+        (name, index, 0.0 if errors is None else float(errors[name]))
+        for name, index in compiled.leaf_index_by_name.items()
+        if observed.get(name) is not None
+    ]
+    draw = prepare_gaussian_single_draw(process, compiled, root_values)
+    names = [item[0] for item in records]
+    indices = np.asarray([item[1] for item in records], dtype=int)
+    deviations = np.asarray([item[2] for item in records], dtype=float)
+    noisy = deviations > 0.0
+    positive_deviations = deviations[noisy]
+
+    def simulate(seed):
+        process_seed, error_seed = np.random.SeedSequence(seed).spawn(2)
+        rng = np.random.default_rng(int(process_seed.generate_state(1)[0]))
+        values = draw(rng)[indices]
+        error_rng = np.random.default_rng(error_seed)
+        values[noisy] += error_rng.normal(0.0, positive_deviations)
+        result = dict.fromkeys(observed)
+        result.update(zip(names, values.tolist(), strict=True))
+        return result
+
+    return simulate
 
 
 def _simulated_tip_data(process, observed, errors, seed, *, include_latent=False):
@@ -114,6 +155,7 @@ def _refit(tree, simulated, errors, args, settings, original_fit, regime_assignm
             sigma2=None if original_fit.sigma2_estimated else original_fit.sigma2,
             standard_errors=errors,
             _tree_validated=True,
+            _compute_posterior=False,
         )[1]
     if model == "BMS":
         from nwkit.regime_continuous_asr import compute_bms_marginals
@@ -127,15 +169,21 @@ def _refit(tree, simulated, errors, args, settings, original_fit, regime_assignm
             else original_fit.sigma2_by_regime,
             standard_errors=errors,
             _tree_validated=True,
+            _compute_posterior=False,
         )[1]
     if model == "BMS-DRIFT":
-        from nwkit.asr_regimes import read_regime_parameters
         from nwkit.regime_drift_asr import compute_regime_drift_marginals
 
-        fixed = read_regime_parameters(
-            getattr(args, "regime_parameters", None),
-            regime_assignment.regimes,
-            ("sigma2", "drift"),
+        fixed = (
+            None
+            if original_fit.regime_parameters_source is None
+            else {
+                regime: {
+                    "sigma2": original_fit.sigma2_by_regime[regime],
+                    "drift": original_fit.drift_by_regime[regime],
+                }
+                for regime in regime_assignment.regimes
+            }
         )
         return compute_regime_drift_marginals(
             tree,
@@ -143,10 +191,11 @@ def _refit(tree, simulated, errors, args, settings, original_fit, regime_assignm
             regime_assignment,
             sigma2=getattr(args, "sigma2", None),
             drift=getattr(args, "drift", None),
-            regime_parameters=None if fixed is None else fixed[0],
-            regime_parameters_source=None if fixed is None else fixed[1],
+            regime_parameters=fixed,
+            regime_parameters_source=original_fit.regime_parameters_source,
             standard_errors=errors,
             _tree_validated=True,
+            _compute_posterior=False,
         )[1]
     if model in {"LAMBDA", "KAPPA", "DELTA", "EB", "ACDC"}:
         from nwkit.transformed_continuous_asr import compute_transformed_bm_marginals
@@ -164,6 +213,7 @@ def _refit(tree, simulated, errors, args, settings, original_fit, regime_assignm
             evolution_parameter_bounds=original_fit.evolution_parameter_bounds,
             standard_errors=errors,
             _tree_validated=True,
+            _compute_posterior=False,
         )[1]
     if model == "BM-DRIFT":
         from nwkit.nonstationary_continuous_asr import compute_bm_drift_marginals
@@ -175,6 +225,7 @@ def _refit(tree, simulated, errors, args, settings, original_fit, regime_assignm
             drift=None if original_fit.drift_estimated else original_fit.drift,
             standard_errors=errors,
             _tree_validated=True,
+            _compute_posterior=False,
         )[1]
     if model == "OU":
         if settings.root_prior == "stationary":
@@ -189,6 +240,7 @@ def _refit(tree, simulated, errors, args, settings, original_fit, regime_assignm
                 alpha_bounds=original_fit.alpha_bounds,
                 standard_errors=errors,
                 _tree_validated=True,
+                _compute_posterior=False,
             )[1]
         from nwkit.general_ou_asr import compute_general_ou_marginals
 
@@ -207,18 +259,29 @@ def _refit(tree, simulated, errors, args, settings, original_fit, regime_assignm
             theta=None if original_fit.theta_estimated else original_fit.theta,
             alpha_bounds=original_fit.alpha_bounds,
             standard_errors=errors,
+            _compute_posterior=False,
         )[1]
     if model in {"OUM", "OUMA", "OUMV", "OUMVA"}:
-        from nwkit.asr_regimes import read_regime_parameters
         from nwkit.regime_gaussian_asr import (
             compute_regime_ou_marginals,
             regime_parameter_columns,
         )
 
-        fixed = read_regime_parameters(
-            getattr(args, "regime_parameters", None),
-            regime_assignment.regimes,
-            regime_parameter_columns(model),
+        fitted_maps = {
+            "alpha": original_fit.alpha_by_regime,
+            "sigma2": original_fit.sigma2_by_regime,
+            "theta": original_fit.theta_by_regime,
+        }
+        fixed = (
+            None
+            if original_fit.regime_parameters_source is None
+            else {
+                regime: {
+                    column: fitted_maps[column][regime]
+                    for column in regime_parameter_columns(model)
+                }
+                for regime in regime_assignment.regimes
+            }
         )
         return compute_regime_ou_marginals(
             tree,
@@ -228,11 +291,12 @@ def _refit(tree, simulated, errors, args, settings, original_fit, regime_assignm
             alpha=getattr(args, "alpha", None),
             sigma2=getattr(args, "sigma2", None),
             theta=getattr(args, "theta", None),
-            regime_parameters=None if fixed is None else fixed[0],
-            regime_parameters_source=None if fixed is None else fixed[1],
+            regime_parameters=fixed,
+            regime_parameters_source=original_fit.regime_parameters_source,
             alpha_bounds=original_fit.alpha_bounds,
             standard_errors=errors,
             _tree_validated=True,
+            _compute_posterior=False,
         )[1]
     raise ValueError(f"Parametric bootstrap is unavailable for --model {model}.")
 
@@ -378,9 +442,7 @@ def write_continuous_diagnostics(
             100,
         )
         rows, failures = parametric_bootstrap(
-            lambda replicate_seed: _simulated_tip_data(
-                process, observed, errors, replicate_seed
-            ),
+            _tip_bootstrap_simulator(process, observed, errors),
             lambda values: _refit(
                 tree,
                 values,

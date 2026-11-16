@@ -6,8 +6,12 @@ from typing import Mapping
 
 import numpy as np
 
+from nwkit.asr_regimes import _observed_split_regime_lengths, _regime_design_rank
 from nwkit.compiled_tree import CompiledTree
+from nwkit.continuous_asr import _ldexp
 from nwkit.gaussian_inference import (
+    GaussianConditioningResult,
+    GaussianTreeLikelihood,
     condition_gaussian_tree,
     gaussian_tree_likelihood,
 )
@@ -123,37 +127,33 @@ def _drift_design_rank(observed_leaves, exposures, varying):
             np.vstack([exposures[leaf] for leaf in observed_leaves])[:, varying],
         )
     )
-    scales = np.linalg.norm(matrix, axis=0)
-    if np.any(scales == 0.0):
-        return int(np.sum(scales > 0.0))
-    return int(np.linalg.matrix_rank(matrix / scales))
+    return _regime_design_rank(matrix)
 
 
-def _sigma_design_rank(observed_leaves, exposures, varying):
-    if not len(varying):
-        return 0
-    rows = []
-    for first_index, first in enumerate(observed_leaves):
-        first_path = {}
-        node = first
-        while node is not None:
-            first_path[node] = exposures[first] - exposures[node]
-            node = node.up
-        for second in observed_leaves[:first_index]:
-            node = second
-            while node not in first_path:
-                node = node.up
-            path = (exposures[first] - exposures[node]) + (
-                exposures[second] - exposures[node]
-            )
-            rows.append(path[varying])
-    if not rows:
-        return 0
-    matrix = np.vstack(rows)
-    scales = np.linalg.norm(matrix, axis=0)
-    if np.any(scales == 0.0):
-        return int(np.sum(scales > 0.0))
-    return int(np.linalg.matrix_rank(matrix / scales))
+def _sigma_design_rank(tree, observed_leaves, assignment):
+    # The pairwise distance vector determines the lengths of all distinct
+    # splits of the observed subtree, so both designs have the same nullspace.
+    return _regime_design_rank(
+        _observed_split_regime_lengths(tree, observed_leaves, assignment)
+    )
+
+
+def _drift_fit_scales(tree, observed_values):
+    positive_times = [
+        float(node.dist)
+        for node in tree.traverse()
+        if not node.is_root and float(node.dist) > 0.0
+    ]
+    _, time_exponent = math.frexp(max(positive_times, default=1.0))
+    _, trait_exponent = math.frexp(float(np.max(np.abs(observed_values))))
+    normalized = np.ldexp(observed_values, -trait_exponent)
+    variance = max(float(np.var(normalized)), np.finfo(float).eps)
+    mean_time = (
+        float(np.mean(np.ldexp(positive_times, -time_exponent)))
+        if positive_times
+        else 1.0
+    )
+    return math.log(variance / mean_time), trait_exponent, time_exponent
 
 
 def compute_regime_drift_marginals(
@@ -167,6 +167,7 @@ def compute_regime_drift_marginals(
     regime_parameters_source=None,
     standard_errors=None,
     _tree_validated=False,
+    _compute_posterior=True,
 ):
     """Fit and condition regime-specific Brownian rates and drifts."""
 
@@ -214,18 +215,16 @@ def compute_regime_drift_marginals(
     )
     if len(observed_values) < 2 or np.any(~np.isfinite(observed_values)):
         raise ValueError("BMS-DRIFT requires at least two finite observed tips.")
-    exposures = _path_exposures(tree, regime_assignment)
     varying = np.arange(len(regimes), dtype=int)
-    if (
-        fixed_drift is None
-        and _drift_design_rank(observed_leaves, exposures, varying) < len(regimes) + 1
-    ):
-        raise ValueError(
-            "BMS-DRIFT regime drifts are not identifiable from the observed "
-            "root-to-tip regime-time design; fix drifts or revise the regime map."
-        )
+    if fixed_drift is None:
+        exposures = _path_exposures(tree, regime_assignment)
+        if _drift_design_rank(observed_leaves, exposures, varying) < len(regimes) + 1:
+            raise ValueError(
+                "BMS-DRIFT regime drifts are not identifiable from the observed "
+                "root-to-tip regime-time design; fix drifts or revise the regime map."
+            )
     if fixed_sigma is None and _sigma_design_rank(
-        observed_leaves, exposures, varying
+        tree, observed_leaves, regime_assignment
     ) < len(regimes):
         raise ValueError(
             "BMS-DRIFT regime rates are not identifiable from observed pairwise "
@@ -239,29 +238,27 @@ def compute_regime_drift_marginals(
             "BMS-DRIFT has too many free parameters for the observed tips; "
             "fix rates/drifts or supply more data."
         )
-    positive_lengths = [
-        float(node.dist)
-        for node in tree.traverse()
-        if not node.is_root and float(node.dist) > 0.0
-    ]
-    mean_length = float(np.mean(positive_lengths)) if positive_lengths else 1.0
-    trait_variance = max(
-        float(np.var(observed_values)),
-        np.finfo(float).eps * max(1.0, float(np.max(np.abs(observed_values)))) ** 2,
+    initial_log_rate, trait_exponent, time_exponent = _drift_fit_scales(
+        tree, observed_values
     )
-    initial_sigma = max(trait_variance / mean_length, np.finfo(float).tiny)
-    sigma_bounds = (
-        max(initial_sigma * 1e-8, np.finfo(float).tiny),
-        min(initial_sigma * 1e8, np.finfo(float).max / max(1.0, mean_length)),
-    )
+    drift_exponent = trait_exponent - time_exponent
     names: list[tuple[str, str]] = []
     initial: list[float] = []
     bounds: list[tuple[float | None, float | None]] = []
     if fixed_sigma is None:
+        initial_log_rate += (2 * trait_exponent - time_exponent) * math.log(2.0)
+        min_log_rate = math.log(math.ulp(0.0))
+        max_log_rate = math.log(np.finfo(float).max)
+        initial_log_rate = min(max_log_rate, max(min_log_rate, initial_log_rate))
+        log_sigma_bounds = (
+            max(initial_log_rate - math.log(1e8), min_log_rate),
+            min(initial_log_rate + math.log(1e8), max_log_rate),
+        )
+        sigma_bounds = math.exp(log_sigma_bounds[0]), math.exp(log_sigma_bounds[1])
         for regime in regimes:
             names.append(("sigma2", regime))
-            initial.append(math.log(initial_sigma))
-            bounds.append((math.log(sigma_bounds[0]), math.log(sigma_bounds[1])))
+            initial.append(initial_log_rate)
+            bounds.append(log_sigma_bounds)
     if fixed_drift is None:
         for regime in regimes:
             names.append(("drift", regime))
@@ -281,7 +278,12 @@ def compute_regime_drift_marginals(
         drift_map = (
             dict(fixed_drift)
             if fixed_drift is not None
-            else {regime: supplied[("drift", regime)] for regime in regimes}
+            else {
+                regime: _ldexp(
+                    supplied[("drift", regime)], drift_exponent, "BMS-DRIFT trend"
+                )
+                for regime in regimes
+            }
         )
         return sigma_map, drift_map
 
@@ -294,25 +296,29 @@ def compute_regime_drift_marginals(
             drift_by_regime=drift_map,
         )
 
-    def objective(parameters):
-        try:
-            return -gaussian_tree_likelihood(
-                process_for(parameters),
-                values_by_leaf,
-                standard_errors=standard_errors,
-                compiled_tree=compiled,
-            ).log_likelihood
-        except (ValueError, ArithmeticError, OverflowError):
-            return 1e100
-
     if names:
+        prepared_likelihood = GaussianTreeLikelihood.prepare(
+            compiled, values_by_leaf, standard_errors
+        )
+
+        def objective(parameters):
+            try:
+                return -prepared_likelihood.evaluate(
+                    process_for(parameters)
+                ).log_likelihood
+            except (ValueError, ArithmeticError, OverflowError):
+                return 1e100
+
         optimized = deterministic_multistart(objective, initial, bounds, maxiter=1200)
     else:
         fixed_parameters = np.asarray(initial, dtype=float)
         optimized = MultistartResult(
             fixed_parameters, 0.0, True, "all parameters fixed", 0, 0, 0
         )
-    conditioned = condition_gaussian_tree(
+    evaluate = (
+        condition_gaussian_tree if _compute_posterior else gaussian_tree_likelihood
+    )
+    conditioned = evaluate(
         process_for(optimized.x),
         values_by_leaf,
         standard_errors=standard_errors,
@@ -362,4 +368,9 @@ def compute_regime_drift_marginals(
             None if fixed_sigma is not None else dict.fromkeys(regimes, sigma_bounds)
         ),
     )
-    return conditioned.marginals, fit
+    posterior = (
+        conditioned.marginals
+        if isinstance(conditioned, GaussianConditioningResult)
+        else {}
+    )
+    return posterior, fit

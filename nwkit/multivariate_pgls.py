@@ -3,18 +3,25 @@
 import warnings
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Callable, Mapping
+from typing import Callable, Mapping, cast
 
 import numpy as np
 from scipy import sparse
 from scipy.linalg import cho_solve, solve_triangular
 from scipy.optimize import minimize
 
-from nwkit.gaussian import DiagonalLowRankCovariance, materialize_covariance
+from nwkit.evolution import EvolutionaryCovarianceFactory
+from nwkit.gaussian import (
+    DiagonalLowRankCovariance,
+    is_diagonal,
+    materialize_covariance,
+    symmetric_average,
+    validate_psd_covariance,
+)
 from nwkit.sparse_laplace import (
     SparseCovarianceModel,
     factor_sparse_nonsingular,
-    factor_sparse_positive_definite,
+    materialize_sparse_covariance,
 )
 
 MAX_DENSE_MULTIVARIATE_DIMENSION = 2000
@@ -36,10 +43,7 @@ class SparseFittedCovariance:
 
     def materialize(self) -> np.ndarray:
         """Materialize the covariance when a caller explicitly requests it."""
-        factor = factor_sparse_positive_definite(self.precision)
-        solved = factor.solve(self.loading.T.toarray())
-        covariance = np.asarray(self.loading @ solved, dtype=float)
-        return (covariance + covariance.T) / 2.0
+        return materialize_sparse_covariance(self.precision, self.loading)
 
 
 @dataclass(frozen=True)
@@ -61,10 +65,20 @@ class MultivariatePglsFit:
 
 
 def _positive_cholesky(matrix: np.ndarray) -> np.ndarray:
-    symmetric = (matrix + matrix.T) / 2.0
+    symmetric = symmetric_average(matrix)
     # A diagonal nugget changes the statistical model and can be exploited by
     # the variance optimizer. Singular exact observations must not acquire noise.
     return np.linalg.cholesky(symmetric)
+
+
+def _coefficient_covariance(information_factor, compute):
+    if not compute:
+        return None
+    return cho_solve(
+        (information_factor, True),
+        np.eye(len(information_factor)),
+        check_finite=False,
+    )
 
 
 def _trait_cholesky(parameters: np.ndarray, dimension: int) -> np.ndarray:
@@ -96,14 +110,7 @@ def _validate_psd_covariance(matrix, size, label):
     matrix = np.asarray(matrix, dtype=float)
     if matrix.shape != (size, size) or not np.isfinite(matrix).all():
         raise ValueError("{} has invalid dimensions or values.".format(label))
-    scale = max(1.0, float(np.max(np.abs(matrix))))
-    tolerance = np.finfo(float).eps * scale * max(1, size) * 100.0
-    if float(np.max(np.abs(matrix - matrix.T))) > tolerance:
-        raise ValueError("{} must be symmetric.".format(label))
-    matrix = (matrix + matrix.T) / 2.0
-    if float(np.min(np.linalg.eigvalsh(matrix))) < -tolerance:
-        raise ValueError("{} must be positive semidefinite.".format(label))
-    return matrix
+    return validate_psd_covariance(matrix, label)
 
 
 def _fixed_covariance_is_sparse_capable(fixed_covariance):
@@ -112,9 +119,7 @@ def _fixed_covariance_is_sparse_capable(fixed_covariance):
     ):
         return True
     fixed_array = np.asarray(fixed_covariance)
-    return fixed_array.ndim == 1 or np.array_equal(
-        fixed_array, np.diag(np.diag(fixed_array))
-    )
+    return fixed_array.ndim == 1 or is_diagonal(fixed_array)
 
 
 def _select_multivariate_sparse_path(
@@ -274,38 +279,33 @@ def _sparse_component_model(component, parameter):
     return model
 
 
-def _sparse_multivariate_latent_model(
-    covariance_components,
-    trait_covariances,
-    decoded,
-    n_traits,
-    fixed_covariance,
-):
+def _prepare_sparse_component_lookup(components, n_traits):
+    trait_identity = sparse.eye(n_traits, format="csr")
+
+    def component_matrices(name, parameter):
+        model = _sparse_component_model(components[name], parameter)
+        precision = sparse.kron(trait_identity, model.precision, format="csc")
+        return model, precision
+
+    @lru_cache(maxsize=max(1, len(components)))
+    def tree_component(name, parameter):
+        return component_matrices(name, parameter)
+
+    def lookup(name, parameter):
+        component = components[name]
+        if isinstance(component, SparseCovarianceModel):
+            return tree_component(name, None)
+        if type(component) is EvolutionaryCovarianceFactory:
+            return tree_component(name, parameter)
+        return component_matrices(name, parameter)
+
+    return lookup
+
+
+def _sparse_sampling_blocks(fixed_covariance, use_sparse):
     precision_blocks = []
     loading_blocks = []
-    prior_logdet = 0.0
-    trait_identity = sparse.eye(n_traits, format="csr")
-    for name, component in covariance_components.items():
-        model = _sparse_component_model(component, decoded)
-        trait_covariance = model.covariance_scale * np.asarray(
-            trait_covariances[name], dtype=float
-        )
-        trait_sign, trait_logdet = np.linalg.slogdet(trait_covariance)
-        if trait_sign <= 0.0:
-            raise np.linalg.LinAlgError(
-                "Multivariate trait covariance is not positive definite."
-            )
-        trait_precision = np.linalg.inv(trait_covariance)
-        precision_blocks.append(
-            sparse.kron(trait_precision, model.precision, format="csc")
-        )
-        loading_blocks.append(
-            sparse.kron(trait_identity, model.tip_loading, format="csr")
-        )
-        prior_logdet += (
-            model.n_states * trait_logdet + n_traits * model.logdet_covariance
-        )
-    if fixed_covariance is not None:
+    if use_sparse and fixed_covariance is not None:
         if isinstance(fixed_covariance, DiagonalLowRankCovariance):
             diagonal = np.asarray(fixed_covariance.diagonal, dtype=float)
             fixed_loading = sparse.csr_matrix(fixed_covariance.low_rank, dtype=float)
@@ -328,28 +328,59 @@ def _sparse_multivariate_latent_model(
         if fixed_loading.shape[1]:
             precision_blocks.append(sparse.eye(fixed_loading.shape[1], format="csc"))
             loading_blocks.append(fixed_loading)
+    return precision_blocks, loading_blocks
+
+
+def _sparse_multivariate_latent_model(
+    component_model,
+    trait_covariances,
+    decoded,
+    n_traits,
+    sampling_blocks,
+):
+    precision_blocks = []
+    loading_blocks = []
+    prior_logdet = 0.0
+    for name in trait_covariances:
+        model, precision = component_model(name, decoded)
+        # Mix independent latent traits through the observation loading.
+        # Precision then remains well scaled when trait variance is near zero.
+        trait_covariance = np.asarray(trait_covariances[name], dtype=float)
+        trait_factor = _positive_cholesky(trait_covariance)
+        trait_transform = trait_factor * np.sqrt(model.covariance_scale)
+        precision_blocks.append(precision)
+        loading_blocks.append(
+            sparse.kron(trait_transform, model.tip_loading, format="csr")
+        )
+        prior_logdet += n_traits * model.logdet_covariance
+    sampling_precision, sampling_loading = sampling_blocks
+    precision_blocks.extend(sampling_precision)
+    loading_blocks.extend(sampling_loading)
     precision = sparse.block_diag(precision_blocks, format="csc")
     loading = sparse.hstack(loading_blocks, format="csr")
     return precision, loading, float(prior_logdet)
 
 
 def _sparse_multivariate_state(
-    covariance_components,
+    component_model,
     trait_covariances,
     decoded,
     n_traits,
-    fixed_covariance,
+    sampling_blocks,
     observed_indices,
     observed_design,
     observed_response,
+    observed_rhs,
     reml,
+    *,
+    compute_covariance,
 ):
     precision, loading, prior_logdet = _sparse_multivariate_latent_model(
-        covariance_components,
+        component_model,
         trait_covariances,
         decoded,
         n_traits,
-        fixed_covariance,
+        sampling_blocks,
     )
     observed_loading = loading[observed_indices]
     zero = sparse.csc_matrix((len(observed_indices), len(observed_indices)))
@@ -372,13 +403,15 @@ def _sparse_multivariate_state(
         result = -solved[n_states:]
         return result[:, 0] if vector else result
 
-    inverse_design = inverse(observed_design)
+    inverse_rhs = inverse(observed_rhs)
+    inverse_design = inverse_rhs[:, :-1]
     information = observed_design.T @ inverse_design
     information_factor = _positive_cholesky(information)
-    beta_covariance = cho_solve(
-        (information_factor, True), np.eye(len(information)), check_finite=False
+    coefficients = cho_solve(
+        (information_factor, True),
+        observed_design.T @ inverse_rhs[:, -1],
+        check_finite=False,
     )
-    coefficients = beta_covariance @ (observed_design.T @ inverse(observed_response))
     residual = observed_response - observed_design @ coefficients
     quadratic = float(residual @ inverse(residual))
     logdet_covariance = factor.logdet + prior_logdet
@@ -392,12 +425,8 @@ def _sparse_multivariate_state(
         quadratic + logdet_covariance + normalizing_count * np.log(2.0 * np.pi)
     )
     if reml:
-        information_sign, information_logdet = np.linalg.slogdet(information)
-        if information_sign <= 0.0:
-            raise np.linalg.LinAlgError(
-                "Multivariate fixed-effect information is singular."
-            )
-        objective += 0.5 * information_logdet
+        objective += float(np.sum(np.log(np.diag(information_factor))))
+    beta_covariance = _coefficient_covariance(information_factor, compute_covariance)
     return (
         objective,
         coefficients,
@@ -428,6 +457,108 @@ def _dense_covariance_inputs(components, n_tips, fixed_covariance, use_sparse):
         )
 
     return component_covariance, fixed_dense
+
+
+def _observed_trait_design(design, observed_indices, n_traits):
+    n_tips, columns = design.shape
+    trait_indices, tip_indices = np.divmod(observed_indices, n_tips)
+    observed_design = np.zeros((len(observed_indices), n_traits * columns))
+    target_columns = trait_indices[:, None] * columns + np.arange(columns)
+    observed_design[np.arange(len(observed_indices))[:, None], target_columns] = design[
+        tip_indices
+    ]
+    return observed_design
+
+
+def _rescale_covariance_rows(matrix, exponents):
+    if sparse.issparse(matrix):
+        scaled = matrix.tocoo(copy=True)
+        scaled.data = np.ldexp(scaled.data, exponents[scaled.row])
+        return scaled.tocsr()
+    return np.ldexp(matrix, exponents[:, None])
+
+
+def _rescale_fixed_covariance(covariance, exponents):
+    if covariance is None:
+        return None
+    if isinstance(covariance, DiagonalLowRankCovariance):
+        return DiagonalLowRankCovariance(
+            np.ldexp(covariance.diagonal, 2 * exponents),
+            _rescale_covariance_rows(covariance.low_rank, exponents),
+        )
+    if covariance.ndim == 1:
+        return np.ldexp(covariance, 2 * exponents)
+    return np.ldexp(covariance, exponents[:, None] + exponents)
+
+
+def _fixed_covariance_size_by_row(covariance):
+    if isinstance(covariance, DiagonalLowRankCovariance):
+        loading = covariance.low_rank
+        if loading.shape[1] == 0:
+            largest_loading = 0.0
+        elif sparse.issparse(loading):
+            largest_loading = np.asarray(abs(loading).max(axis=1).toarray()).ravel()
+        else:
+            largest_loading = np.max(np.abs(loading), initial=0.0, axis=1)
+        return np.maximum(np.sqrt(covariance.diagonal), largest_loading)
+    diagonal = covariance if covariance.ndim == 1 else np.diag(covariance)
+    return np.sqrt(np.maximum(diagonal, 0.0))
+
+
+def _multivariate_response_units(responses, fixed_covariance):
+    magnitude = np.nanmax(np.abs(responses), axis=0)
+    if fixed_covariance is not None:
+        sampling_size = _fixed_covariance_size_by_row(fixed_covariance)
+        magnitude = np.maximum(
+            magnitude,
+            np.max(sampling_size.reshape(responses.shape, order="F"), axis=0),
+        )
+    _, exponent = np.frexp(magnitude)
+    cells = np.repeat(exponent, len(responses))
+    if not np.any(exponent):
+        return responses, fixed_covariance, exponent, cells
+    return (
+        np.ldexp(responses, -exponent),
+        _rescale_fixed_covariance(fixed_covariance, -cells),
+        exponent,
+        cells,
+    )
+
+
+def _restore_multivariate_response_units(
+    coefficients,
+    coefficient_covariance,
+    fitted_covariance,
+    components,
+    exponent,
+    cells,
+):
+    if not np.any(exponent):
+        return coefficients, coefficient_covariance, fitted_covariance, components
+    coefficient_exponents = np.repeat(exponent, coefficients.shape[1])
+    try:
+        with np.errstate(over="raise", under="ignore"):
+            coefficients = np.ldexp(coefficients, exponent[:, None])
+            coefficient_covariance = np.ldexp(
+                coefficient_covariance,
+                coefficient_exponents[:, None] + coefficient_exponents,
+            )
+            components = {
+                name: np.ldexp(matrix, exponent[:, None] + exponent)
+                for name, matrix in components.items()
+            }
+            if isinstance(fitted_covariance, SparseFittedCovariance):
+                fitted_covariance = SparseFittedCovariance(
+                    fitted_covariance.precision,
+                    _rescale_covariance_rows(fitted_covariance.loading, cells),
+                )
+            else:
+                fitted_covariance = _rescale_fixed_covariance(fitted_covariance, cells)
+    except FloatingPointError as exc:
+        raise ValueError(
+            "Multivariate PGLS estimates exceed the range of the response units."
+        ) from exc
+    return coefficients, coefficient_covariance, fitted_covariance, components
 
 
 def fit_multivariate_pgls(
@@ -463,6 +594,9 @@ def fit_multivariate_pgls(
         allow_large_dense,
     )
     n_tips, n_traits = responses.shape
+    responses, fixed_covariance, trait_exponents, cell_exponents = (
+        _multivariate_response_units(responses, fixed_covariance)
+    )
     trait_parameter_count = n_traits * (n_traits + 1) // 2
     initial_trait = _initial_trait_parameters(responses)
     initial = np.tile(initial_trait, len(covariance_components))
@@ -489,11 +623,13 @@ def fit_multivariate_pgls(
     response_vector = responses.reshape(-1, order="F")
     observed_indices = np.flatnonzero(observed.reshape(-1, order="F"))
     observed_response = response_vector[observed_indices]
-    full_design = np.kron(np.eye(n_traits), design)
-    observed_design = full_design[observed_indices]
+    observed_design = _observed_trait_design(design, observed_indices, n_traits)
+    observed_rhs = np.column_stack([observed_design, observed_response])
     dense_component, fixed_dense = _dense_covariance_inputs(
         covariance_components, n_tips, fixed_covariance, use_sparse
     )
+    sparse_component = _prepare_sparse_component_lookup(covariance_components, n_traits)
+    sampling_blocks = _sparse_sampling_blocks(fixed_covariance, use_sparse)
 
     def unpack(parameters: np.ndarray):
         component_covariances = {}
@@ -523,18 +659,21 @@ def fit_multivariate_pgls(
         observed_pairs = (np.ix_(traits, traits), np.ix_(tips, tips))
 
     def state(parameters: np.ndarray, *, full_output=False):
+        compute_covariance = full_output
         trait_covariances, decoded = unpack(parameters)
         if use_sparse:
             return _sparse_multivariate_state(
-                covariance_components,
+                sparse_component,
                 trait_covariances,
                 decoded,
                 n_traits,
-                fixed_covariance,
+                sampling_blocks,
                 observed_indices,
                 observed_design,
                 observed_response,
+                observed_rhs,
                 reml,
+                compute_covariance=compute_covariance,
             )
         if observed_pairs is None or full_output:
             full_covariance = np.zeros((n_tips * n_traits,) * 2, dtype=float)
@@ -564,20 +703,22 @@ def fit_multivariate_pgls(
                     np.ix_(observed_indices, observed_indices)
                 ]
         cholesky = _positive_cholesky(observed_covariance)
-        inverse = cho_solve(
-            (cholesky, True),
-            np.column_stack([observed_design, observed_response]),
+        whitened = solve_triangular(
+            cholesky, observed_rhs, lower=True, check_finite=False
+        )
+        whitened_design = whitened[:, :-1]
+        whitened_response = whitened[:, -1]
+        information = whitened_design.T @ whitened_design
+        information_factor = _positive_cholesky(information)
+        beta_covariance = _coefficient_covariance(
+            information_factor, compute_covariance
+        )
+        coefficients = cho_solve(
+            (information_factor, True),
+            whitened_design.T @ whitened_response,
             check_finite=False,
         )
-        inverse_design = inverse[:, :-1]
-        information = observed_design.T @ inverse_design
-        information_factor = _positive_cholesky(information)
-        beta_covariance = cho_solve(
-            (information_factor, True), np.eye(len(information)), check_finite=False
-        )
-        coefficients = beta_covariance @ (observed_design.T @ inverse[:, -1])
-        residual = observed_response - observed_design @ coefficients
-        whitened = solve_triangular(cholesky, residual, lower=True, check_finite=False)
+        whitened_residual = whitened_response - whitened_design @ coefficients
         degrees_of_freedom = len(observed_response) - observed_design.shape[1]
         if reml and degrees_of_freedom <= 0:
             raise ValueError(
@@ -585,22 +726,17 @@ def fit_multivariate_pgls(
             )
         normalizing_count = degrees_of_freedom if reml else len(observed_response)
         objective = 0.5 * (
-            float(whitened @ whitened)
+            float(whitened_residual @ whitened_residual)
             + 2.0 * float(np.sum(np.log(np.diag(cholesky))))
             + normalizing_count * np.log(2.0 * np.pi)
         )
         if reml:
-            information_sign, information_logdet = np.linalg.slogdet(information)
-            if information_sign <= 0.0:
-                raise np.linalg.LinAlgError(
-                    "Multivariate fixed-effect information is singular."
-                )
-            objective += 0.5 * information_logdet
+            objective += float(np.sum(np.log(np.diag(information_factor))))
         return objective, coefficients, beta_covariance, full_covariance
 
     def objective(parameters: np.ndarray) -> float:
         try:
-            value = float(state(parameters)[0])
+            value = float(state(parameters, full_output=False)[0])
         except (ValueError, np.linalg.LinAlgError, FloatingPointError, OverflowError):
             return 1e100
         return value if np.isfinite(value) else 1e100
@@ -643,8 +779,23 @@ def fit_multivariate_pgls(
         np.min(np.linalg.eigvalsh(covariance)) < 1e-10
         for covariance in component_trait_covariances.values()
     )
+    (
+        coefficients,
+        coefficient_covariance,
+        fitted_covariance,
+        component_trait_covariances,
+    ) = _restore_multivariate_response_units(
+        coefficients.reshape(n_traits, design.shape[1]),
+        cast(np.ndarray, coefficient_covariance),
+        fitted_covariance,
+        component_trait_covariances,
+        trait_exponents,
+        cell_exponents,
+    )
+    contribution_counts = observed.sum(axis=0) - int(reml) * design.shape[1]
+    fitted_objective += float(contribution_counts @ trait_exponents) * np.log(2.0)
     return MultivariatePglsFit(
-        coefficients=coefficients.reshape(n_traits, design.shape[1]),
+        coefficients=coefficients,
         coefficient_covariance=coefficient_covariance,
         component_trait_covariances=component_trait_covariances,
         fitted_covariance=fitted_covariance,

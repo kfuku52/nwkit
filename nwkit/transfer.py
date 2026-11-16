@@ -7,8 +7,8 @@ from typing import Any
 import pandas as pd
 
 from nwkit.clade_mapping import (
+    _projected_masks,
     build_clade_mapping,
-    node_projected_split,
     projected_root_split,
 )
 from nwkit.root import transfer_root_with_taxon_mode
@@ -17,7 +17,6 @@ from nwkit.util import (
     TREE_FORMAT_PROP,
     assign_branch_ids,
     get_node_class,
-    get_subtree_leaf_name_sets,
     get_target_nodes,
     get_tree_property_names,
     is_all_leaf_names_identical,
@@ -319,20 +318,29 @@ def _is_bifurcating_root_pair(nodes):
     return {id(node) for node in nodes} == {id(node) for node in parent.get_children()}
 
 
-def _physical_split_candidates(tree, shared_taxa):
-    candidates: dict[Any, list[Any]] = {}
-    taxon_sets = get_subtree_leaf_name_sets(tree)
+def _physical_split_candidates(tree, taxon_to_bit):
+    masks = _projected_masks(tree, taxon_to_bit, stringify_names=False)
+    all_mask = (1 << len(taxon_to_bit)) - 1
+    candidates: dict[int, list[Any]] = {}
     for node in tree.traverse():
         if node.is_root:
             continue
-        split = node_projected_split(
-            node,
-            shared_taxa=shared_taxa,
-            taxon_sets=taxon_sets,
-        )
-        if split is not None:
-            candidates.setdefault(split, list()).append(node)
+        mask = masks[node]
+        if 0 < mask < all_mask:
+            split = min(mask, all_mask ^ mask)
+            candidates.setdefault(split, []).append(node)
     return {split: tuple(nodes) for split, nodes in candidates.items()}
+
+
+def _length_candidates_by_node(target, source, shared_taxa):
+    taxon_to_bit = {name: 1 << index for index, name in enumerate(sorted(shared_taxa))}
+    target_physical = _physical_split_candidates(target, taxon_to_bit)
+    source_physical = _physical_split_candidates(source, taxon_to_bit)
+    return {
+        node: (nodes, source_physical.get(split, ()))
+        for split, nodes in target_physical.items()
+        for node in nodes
+    }
 
 
 def _candidate_projected_taxa(node, shared_taxa):
@@ -835,31 +843,14 @@ def _write_report(rows, report_path):
     write_table_report(pd.DataFrame(rows, columns=REPORT_COLUMNS), report_path)
 
 
-def _transfer_root_edge_candidates(
-    target_prop,
-    projected_split,
-    match,
-    target_physical_split_candidates,
-    source_physical_split_candidates,
-):
-    if target_prop == "length" and projected_split is not None:
-        return (
-            target_physical_split_candidates.get(projected_split, ()),
-            source_physical_split_candidates.get(projected_split, ()),
-        )
-    return match.target_candidates, match.source_candidates
-
-
 def _transfer_one_property(
     target_node,
     match,
     source_prop,
     target_prop,
     mapping,
-    match_basis,
     collect_report,
-    target_physical_split_candidates,
-    source_physical_split_candidates,
+    length_candidates_by_node,
     target_root_ratios,
     aligned_root_length_resolutions,
     root_edge_policies,
@@ -885,18 +876,15 @@ def _transfer_one_property(
                 source_taxa=match.target_taxa,
             )
     previous_value, _ = _get_property(target_node, target_prop)
-    projected_split = (
-        match.projected_split
-        if collect_report or (match_basis == "split" and target_prop == "length")
-        else None
+    projected_split = match.projected_split if collect_report else None
+    target_candidates, source_candidates = (
+        match.target_candidates,
+        match.source_candidates,
     )
-    target_candidates, source_candidates = _transfer_root_edge_candidates(
-        target_prop,
-        projected_split,
-        match,
-        target_physical_split_candidates,
-        source_physical_split_candidates,
-    )
+    if target_prop == "length":
+        target_candidates, source_candidates = length_candidates_by_node.get(
+            target_node, (target_candidates, source_candidates)
+        )
     root_edge_resolution = _resolve_split_root_edge_property(
         match=match,
         mapping=mapping,
@@ -1133,20 +1121,15 @@ def transfer_properties(
         match_basis=match_basis,
     )
     match_by_target_id = {id(match.target): match for match in mapping.matches}
+    length_candidates_by_node = {}
     if match_basis == "split" and any(
         target_prop == "length" for _, target_prop in property_specs
     ):
-        target_physical_split_candidates = _physical_split_candidates(
+        length_candidates_by_node = _length_candidates_by_node(
             target,
-            mapping.shared_taxa,
-        )
-        source_physical_split_candidates = _physical_split_candidates(
             source,
             mapping.shared_taxa,
         )
-    else:
-        target_physical_split_candidates = dict()
-        source_physical_split_candidates = dict()
     target_root_ratios = dict()
     target_root_children = target.get_children()
     if len(target_root_children) == 2:
@@ -1197,10 +1180,8 @@ def transfer_properties(
                 source_prop,
                 target_prop,
                 mapping,
-                match_basis,
                 collect_report,
-                target_physical_split_candidates,
-                source_physical_split_candidates,
+                length_candidates_by_node,
                 target_root_ratios,
                 aligned_root_length_resolutions,
                 root_edge_policies,

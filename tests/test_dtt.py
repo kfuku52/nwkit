@@ -20,7 +20,7 @@ from nwkit.disparity import (
     transform_traits,
     validate_work,
 )
-from nwkit.dtt import _ultrametric_depths
+from nwkit.dtt import _simulation_envelope, _ultrametric_depths, _write_simulation_table
 from nwkit.evolution import build_evolutionary_process
 from nwkit.util import read_tree
 
@@ -88,6 +88,27 @@ def test_geiger_2011_reference_and_independent_pairwise_oracle():
     )
 
 
+def test_disparity_handles_large_common_trait_offsets():
+    _, design = design_for("(A:1,B:1,C:1);")
+    offset = 2.0**520
+    step = 2.0**472
+    values = np.array([[offset], [offset + step], [offset + 2 * step]])
+    disparities, counts = clade_disparities(design, values)
+
+    assert counts[0] == 3
+    assert disparities[0] == 2 * step * step
+
+
+def test_disparity_stays_finite_when_a_moment_product_overflows():
+    _, design = design_for("(A:1,B:1,C:1);")
+    step = 2.0**511
+    values = np.array([[-step], [0.0], [step]])
+    with np.errstate(over="raise", invalid="raise"):
+        disparities, _ = clade_disparities(design, values)
+    # The pairwise squared differences are step², 4 step² and step².
+    assert disparities[0] == 2.0**1023
+
+
 def test_bm_rate_geiger_and_gls_oracle():
     tree, _ = design_for()
     covariance = build_evolutionary_process(tree).tip_covariance(list("ABCDEFGH"))
@@ -122,12 +143,47 @@ def test_parallel_seed_and_empirical_curve_reference():
     assert (serial[:, -2:] == 0).all()
 
 
+def test_bm_rate_retains_short_sister_branches(tmp_path):
+    model = tmp_path / "rate.json"
+    data = np.array([[0.0, 0.0], [1.0, 0.0], [0.5, 0.0], [0.0, 0.0]])
+    tree = "[&R](((A:1e-24,B:1e-24):1,C:1):1,D:2);"
+    main(command(tmp_path, ["--columns", "x", "--model-out", str(model)], data, tree))
+    result = json.loads(model.read_text())
+    # Relative crown time halves both terminal branches. The A-B contrast has
+    # unit trait difference and variance 1e-24 under unit diffusion.
+    assert result["bm_rate_covariance_transformed"][0][0] == pytest.approx(
+        1 / (3e-24), rel=1e-14
+    )
+    assert result["bm_center_transformed"] == pytest.approx([2 / 7])
+
+
+def test_bm_rate_rejects_zero_length_sister_branches(tmp_path):
+    data = np.array([[0.0, 0.0], [1.0, 0.0], [0.5, 0.0], [0.0, 0.0]])
+    tree = "[&R](((A:0,B:0):1,C:1):1,D:2);"
+    with pytest.raises(ValueError, match="nonsingular tip covariance"):
+        main(command(tmp_path, ["--columns", "x"], data, tree))
+
+
+@pytest.mark.parametrize("scale", [2.0**-550, 2.0**520])
+def test_dtt_simulation_ratio_remains_finite_beyond_disparity_range(scale):
+    _, design = design_for()
+    factor = np.array([[1.0]])
+    expected = simulate_curves(design, factor, 35, seed=17)
+    scaled = factor * scale
+    actual = simulate_curves(design, scaled, 35, seed=17)
+    np.testing.assert_array_equal(actual, expected)
+    np.testing.assert_array_equal(
+        simulate_curves(design, scaled, 1, seed=17), expected[:1]
+    )
+
+
 def test_zero_simulations_do_not_inspect_unused_model_inputs():
     np.testing.assert_array_equal(simulate_curves(None, None, 0), np.empty(0))
 
 
 @pytest.mark.parametrize(
-    "traits,scale", [(1, 1.0), (5, 1e-140), (16, 1e140), (64, 1.0)]
+    "traits,scale",
+    [(1, 1.0), (5, 1e-155), (5, 1e-140), (16, 1e140), (1, 3e153), (64, 1.0)],
 )
 @pytest.mark.parametrize("budget", [1, 8000, 4 * 1024**2])
 def test_batched_simulation_retains_individual_draws_across_workspaces(
@@ -160,11 +216,63 @@ def test_units_and_translation_invariance(scale):
     )
 
 
+@pytest.mark.parametrize("scale", ["raw", "standardize"])
+def test_trait_transform_handles_overflowing_range(scale):
+    _, design = design_for()
+    values = np.column_stack(
+        ([-1, -0.5, 0.25, 1, 0.5, -0.25, 0.5, -0.5], np.arange(8) / 16)
+    )
+    reference, _, _ = transform_traits(values, scale)
+    with np.errstate(over="raise", invalid="raise"):
+        transformed, center, units = transform_traits(values * 1e308, scale)
+    assert np.isfinite(units).all()
+    np.testing.assert_allclose(
+        transformed, (values - center / 1e308) / (units / 1e308), atol=1e-15
+    )
+    np.testing.assert_allclose(
+        dtt_curve(design, transformed), dtt_curve(design, reference), atol=1e-14
+    )
+
+
 def test_area_duplicate_root_and_interpolated_range():
     times = np.array([0, 0, 0.5, 1])
     curves = np.array([[1, 2, 0, 0], [1, 4, 0, 0]])
     assert curve_area(times, curves) == pytest.approx([0.5, 1])
     assert curve_area(times, curves, (0.1, 0.4)) == pytest.approx([0.3, 0.6])
+
+
+def test_simulation_envelope_preserves_median_and_interpolated_quantiles():
+    tiny = np.nextafter(0.0, 1.0)
+    simulations = np.array([[2.0, 0.0], [1.0, tiny], [4.0, 0.0], [3.0, tiny]])
+    for count in (3, 4):
+        sample = simulations[:count]
+        median, lower, upper = _simulation_envelope(sample, 0.15)
+        np.testing.assert_array_equal(median, np.median(sample, axis=0))
+        np.testing.assert_array_equal(
+            [lower, upper], np.quantile(sample, [0.15, 0.85], axis=0)
+        )
+    np.testing.assert_array_equal(
+        simulations, [[2.0, 0.0], [1.0, tiny], [4.0, 0.0], [3.0, tiny]]
+    )
+
+
+def test_simulation_table_keeps_row_order_across_output_batches():
+    times = np.arange(129) / 128
+    simulations = np.arange(130 * len(times)).reshape(130, -1) / 8
+    output = StringIO()
+    _write_simulation_table(output, times, simulations)
+    output.seek(0)
+    table = pd.read_csv(output, sep="\t")
+    assert list(table.columns) == [
+        "simulation",
+        "time_index",
+        "relative_time",
+        "relative_disparity",
+    ]
+    np.testing.assert_array_equal(table.simulation, np.repeat(np.arange(1, 131), 129))
+    np.testing.assert_array_equal(table.time_index, np.tile(np.arange(1, 130), 130))
+    np.testing.assert_array_equal(table.relative_time, np.tile(times, 130))
+    np.testing.assert_array_equal(table.relative_disparity, simulations.ravel())
 
 
 @pytest.mark.parametrize(
@@ -433,13 +541,12 @@ def test_trait_tree_panels_use_retained_original_values(tmp_path, monkeypatch, c
             dtt_axis.transData.transform(endpoints)[:, 0], abs=1e-6
         )
     for index, panel in enumerate(panels):
-        assert np.asarray(panel.collections[0].get_array()) == pytest.approx(
+        dots = panel.collections[-1]
+        assert np.asarray(dots.get_array()) == pytest.approx(
             (DATA[:4, index] - DATA[:4, index].min()) / np.ptp(DATA[:4, index])
         )
         assert [text.get_text().split()[0] for text in panel.texts] == list("ABCD")
-        assert np.asarray(panel.collections[0].get_offsets())[:, 0] == pytest.approx(
-            np.ones(4)
-        )
+        assert np.asarray(dots.get_offsets())[:, 0] == pytest.approx(np.ones(4))
 
 
 @pytest.mark.parametrize("scale", ["raw", "standardize"])

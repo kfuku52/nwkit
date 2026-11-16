@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -72,6 +74,98 @@ def test_pooled_biological_replicates_estimate_tip_sampling_variance():
     assert set(summary["n_technical"]) == {2}
     np.testing.assert_allclose(summary["within_sd"], np.sqrt(2.0))
     assert set(summary["variance_method"]) == {"pooled"}
+
+
+def test_pooled_replicate_sampling_variance_scales_in_tiny_trait_units():
+    data = _raw_replicates()
+    data["expression"] *= 1e-95
+    estimates = estimate_replicate_traits(
+        data, ["A", "B", "C"], ["expression"], biological_id="sample"
+    )
+    np.testing.assert_allclose(
+        estimates.sampling_covariance_by_trait["expression"], 1e-190, atol=0.0
+    )
+    np.testing.assert_allclose(estimates.tip_summary["standard_error"], 1e-95, atol=0.0)
+
+
+@pytest.mark.parametrize("amplitude", [1e154, 1e-160])
+def test_leaf_variance_restores_covariance_and_sd_without_intermediate_loss(amplitude):
+    names = ["A", "B"]
+    data = pd.DataFrame(
+        {
+            "leaf_name": np.repeat(names, 2),
+            "sample": ["x", "y"] * 2,
+            "trait": [-amplitude, amplitude, 0.0, 0.0],
+        }
+    )
+    with np.errstate(over="raise", invalid="raise"):
+        fit = estimate_replicate_traits(
+            data, names, ["trait"], biological_id="sample", within_variance="leaf"
+        )
+    covariance = fit.sampling_covariance_by_trait["trait"]
+    np.testing.assert_array_equal(covariance, [amplitude * amplitude, 0.0])
+    np.testing.assert_allclose(
+        fit.tip_summary["within_sd"], [math.sqrt(2) * amplitude, 0.0], atol=0.0
+    )
+
+
+@pytest.mark.parametrize(
+    "within_variance,batch", [("leaf", None), ("pooled", None), ("pooled", "batch")]
+)
+def test_replicate_means_remain_finite_when_raw_sums_overflow(within_variance, batch):
+    names = ["A", "B"]
+    data = pd.DataFrame(
+        {
+            "leaf_name": np.repeat(names, 6),
+            "sample": np.tile(np.repeat(np.arange(3), 2), 2),
+            "technical": ["x", "y"] * 6,
+            "batch": ["low"] * 4 + ["high"] * 2 + ["low"] * 2 + ["high"] * 4,
+            "trait": [1e308] * 12,
+        }
+    )
+    with np.errstate(over="raise", invalid="raise"):
+        fit = estimate_replicate_traits(
+            data,
+            names,
+            ["trait"],
+            biological_id="sample",
+            technical_id="technical",
+            technical_aggregation="mean",
+            within_variance=within_variance,
+            batch=batch,
+        )
+    np.testing.assert_array_equal(fit.tip_summary["mean"], 1e308)
+    np.testing.assert_array_equal(fit.tip_summary["standard_error"], 0.0)
+
+
+@pytest.mark.parametrize("batch", [None, "batch"])
+def test_pooled_variance_scales_before_summing_squared_residuals(batch):
+    amplitude = 1e154
+    names = ["A", "B", "C"]
+    data = pd.DataFrame(
+        {
+            "leaf_name": np.repeat(names, 4),
+            "sample": np.tile(["r1", "r2", "r3", "r4"], 3),
+            "batch": np.tile(["low", "low", "high", "high"], 3),
+            "trait": np.tile([-amplitude, amplitude, -amplitude, amplitude], 3),
+        }
+    )
+    with np.errstate(over="raise", invalid="raise"):
+        fit = estimate_replicate_traits(
+            data, names, ["trait"], biological_id="sample", batch=batch
+        )
+    df = len(data) - len(names) - int(batch is not None)
+    expected = len(data) / df / 4.0
+    covariance = fit.sampling_covariance_by_trait["trait"]
+    diagonal = (
+        covariance.diagonal
+        if isinstance(covariance, DiagonalLowRankCovariance)
+        else covariance
+    )
+    np.testing.assert_allclose(diagonal / 1e308, expected)
+    np.testing.assert_allclose(
+        fit.tip_summary["standard_error"] / amplitude, np.sqrt(expected)
+    )
 
 
 def test_mixed_replicate_traits_treat_one_observation_as_an_exact_tip_value():
@@ -581,3 +675,21 @@ def test_censored_likelihood_replicates_preserve_missing_observations():
     b_values = estimates.values_by_trait["expression"]["B"].values
     assert a_values[0] == 1.0 and np.isnan(a_values[1])
     assert b_values[0] == 2.0 and np.isnan(b_values[1])
+
+
+def test_likelihood_replicate_summary_preserves_large_finite_moments():
+    dataframe = pd.DataFrame(
+        {
+            "leaf_name": ["A", "A", "B", "B"],
+            "sample": ["a1", "a2", "b1", "b2"],
+            "value": [-1e308, 1e308, 1e308, 1e308],
+        }
+    )
+    with np.errstate(over="raise", invalid="raise"):
+        fit = estimate_likelihood_replicates(
+            dataframe, ["A", "B"], ["value"], biological_id="sample"
+        )
+    np.testing.assert_array_equal(fit.tip_summary["mean"], [0.0, 1e308])
+    np.testing.assert_allclose(
+        fit.tip_summary["within_sd"], [math.sqrt(2.0) * 1e308, 0.0], atol=0.0
+    )

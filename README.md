@@ -65,8 +65,8 @@ pip install "nwkit[image] @ git+https://github.com/kfuku52/nwkit.git"
 From an existing source checkout, use `pip install -e ".[image]"`. If NWKIT
 was installed from Bioconda, install the native Cairo library and then run
 `pip install CairoSVG` in the same environment. These steps enable SVG
-normalization, trimming, resizing with `nwkit image`, and rendering SVG tip
-images with `nwkit draw`.
+normalization, trimming, and resizing with [`nwkit image`](docs/guides/IMAGE.md),
+as well as rendering SVG tip images with `nwkit draw`.
 
 ## First run
 
@@ -113,7 +113,7 @@ minimal worked example, in
 - [`mark`](https://github.com/kfuku52/nwkit/wiki/nwkit-mark): Adding texts to node labels by identifying the targets with a leaf name regex
 - [`mcmctree`](https://github.com/kfuku52/nwkit/wiki/nwkit-mcmctree): Preparing PAML calibrations, importing [AngioCal fossil minima](docs/guides/ANGIOCAL.md), and converting posterior node ages into pipeable dated NHX trees
 - [`monophyly`](https://github.com/kfuku52/nwkit/wiki/nwkit-monophyly): Assessing whether species or trait-defined groups are monophyletic
-- [`mul-reconcile`](https://github.com/kfuku52/nwkit/wiki/nwkit-mul-reconcile): Exact GRAMPA-style MUL-tree D+L parsimony with auditable tied-best node mappings, [conditional MSC fitting](docs/guides/MUL_MSC.md) and [experimental locus DL + ILS comparison with conditional integration](docs/guides/MUL_LOCUS_MC.md)
+- [`mul-reconcile`](https://github.com/kfuku52/nwkit/wiki/nwkit-mul-reconcile): Exact GRAMPA-style MUL-tree D+L parsimony with repeated-subtree reuse and auditable node mappings, [conditional MSC fitting](docs/guides/MUL_MSC.md) and [experimental locus DL + ILS comparison](docs/guides/MUL_LOCUS_MC.md)
 - [`nwk2table`](https://github.com/kfuku52/nwkit/wiki/nwkit-nwk2table): Converting a Newick tree into a parent-child table
 - [`pca`](docs/guides/PCA.md): Phylogenetic PCA with BM or shared lambda, evolutionary loadings, ancestral PC intervals and phylomorphospace figures
 - [`printlabel`](https://github.com/kfuku52/nwkit/wiki/nwkit-printlabel): Searching and printing node labels
@@ -138,8 +138,8 @@ minimal worked example, in
 - [`table2nwk`](https://github.com/kfuku52/nwkit/wiki/nwkit-table2nwk): Converting a parent-child table into a Newick tree
 - [`transfer`](https://github.com/kfuku52/nwkit/wiki/nwkit-transfer): Transferring information between trees
 - [`validate`](https://github.com/kfuku52/nwkit/wiki/nwkit-validate): Validating one or more Newick trees and reporting structural issues
-- [`wgd-count`](https://github.com/kfuku52/nwkit/wiki/nwkit-wgd-count): Experimental native DL/WGM gene-count candidates, branch-burst diagnostics and search-wide bootstrap
-- [`wgd-tree`](https://github.com/kfuku52/nwkit/wiki/nwkit-wgd-tree): Fixed-topology DL/WGD likelihood and conditional node assignments from supplied count fits
+- [`wgd-count`](https://github.com/kfuku52/nwkit/wiki/nwkit-wgd-count): Experimental native DL/WGM gene-count candidates, model adequacy and branch-burst diagnostics, fixed-event sensitivity, and resumable search-wide bootstrap
+- [`wgd-tree`](https://github.com/kfuku52/nwkit/wiki/nwkit-wgd-tree): Fixed-topology DL/WGD likelihood and conditional node assignments, with optional fixed background doublings
 
 See [reconciliation and dating figures](docs/guides/RECONCILIATION_PLOTS.md) for result reports and redrawing saved outputs.
 

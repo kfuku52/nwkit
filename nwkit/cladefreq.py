@@ -4,6 +4,7 @@ from itertools import chain
 
 import pandas as pd
 
+from nwkit.clade_index import names_from_mask as _mask_to_leaf_set
 from nwkit.consensus import (
     _collect_clade_stats_from_tree_strings,
     _read_tree_weights,
@@ -20,26 +21,6 @@ from nwkit.util import (
 )
 
 CLADEFREQ_COLUMNS = ("descendant_taxa", "num_taxa", "weight_sum", "frequency")
-
-
-def _mask_to_leaf_set(mask, leaf_names):
-    names = list()
-    remaining = int(mask)
-    if remaining >= 0 and 4 * remaining.bit_count() >= remaining.bit_length():
-        # Dense masks use a simple scan rather than locating each bit separately.
-        return [
-            leaf_names[index]
-            for index in range(remaining.bit_length())
-            if remaining & (1 << index)
-        ]
-    offset = 0
-    while remaining:
-        # Drop consumed positions before locating the next selected bit.
-        step = (remaining & -remaining).bit_length()
-        offset += step
-        names.append(leaf_names[offset - 1])
-        remaining >>= step
-    return names
 
 
 def cladefreq_main(args):

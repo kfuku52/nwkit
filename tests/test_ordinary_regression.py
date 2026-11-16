@@ -1,6 +1,7 @@
 import hashlib
 import io
 import json
+import math
 import sys
 
 import numpy as np
@@ -16,6 +17,7 @@ from nwkit.model_matrix import CategoricalObservation, encode_predictors
 from nwkit.multivariate_pgls import fit_multivariate_pgls
 from nwkit.ordinary_regression import (
     _global_bounded_scalar_minimize,
+    _ordinary_covariance_builder,
     _prepare_latent_ordinary_predictors,
     build_phylogenetic_covariance,
     estimate_marginal_evolution_parameter,
@@ -24,7 +26,17 @@ from nwkit.ordinary_regression import (
 )
 from nwkit.phylogenetic_glmm import (
     MAX_DENSE_GLMM_TIPS,
+    _beta_family_terms,
     _censored_gaussian_log_likelihood,
+    _censored_gaussian_scalar_terms,
+    _draw_count,
+    _draw_gamma,
+    _draw_mixture_count,
+    _draw_zero_truncated_count,
+    _multinomial_terms,
+    _ordinal_terms,
+    _profile_endpoint,
+    _project_predictor_uncertainty,
     fit_phylogenetic_glmm,
 )
 from nwkit.sparse_laplace import (
@@ -42,6 +54,327 @@ def _tree():
     return Tree(TREE_TEXT, parser=1)
 
 
+def test_profiled_lambda_reuses_fixed_diagonal_covariance_on_a_star_tree():
+    tree = Tree("(A:1,B:2,C:3);", parser=1)
+    covariance_at = _ordinary_covariance_builder(
+        tree,
+        ["C", "A", "B"],
+        evolution_model="lambda",
+        evolution_parameter=None,
+        branch_length="original",
+        custom_covariance=None,
+    )
+    covariance = covariance_at(0.0)
+    assert covariance_at(0.42) is covariance
+    assert covariance_at(1.0) is covariance
+    np.testing.assert_array_equal(covariance, np.diag([3.0, 1.0, 2.0]))
+
+
+@pytest.mark.parametrize("intercept", [True, False])
+def test_ordinary_pgls_null_model_stays_in_working_units_for_tiny_responses(intercept):
+    tree = _tree()
+    x = dict(zip(LEAF_NAMES, [0.0, 1.0, 2.0, 3.0, 4.0], strict=True))
+    response = dict(zip(LEAF_NAMES, [0.7, 1.1, 2.5, 2.9, 4.3], strict=True))
+
+    def fit(scale):
+        return fit_ordinary_regression(
+            tree,
+            {"y": {name: value * scale for name, value in response.items()}},
+            {"x": x},
+            ["y"],
+            ["x"],
+            intercept=intercept,
+        )
+
+    expected = fit(1.0)
+    scale = 1e-158
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        actual = fit(scale)
+    np.testing.assert_allclose(actual["coefficient"] / scale, expected["coefficient"])
+    np.testing.assert_allclose(actual["r_squared"], expected["r_squared"], atol=1e-14)
+    expected_log_jacobian = (len(LEAF_NAMES) - len(expected)) * math.log(scale)
+    np.testing.assert_allclose(
+        actual["log_likelihood"] + expected_log_jacobian,
+        expected["log_likelihood"],
+        atol=1e-10,
+    )
+
+
+def test_ordinary_pgls_bootstrap_keeps_standard_errors_in_tiny_response_units():
+    tree = _tree()
+    x = dict(zip(LEAF_NAMES, [0.0, 1.0, 2.0, 3.0, 4.0], strict=True))
+    response = dict(zip(LEAF_NAMES, [0.7, 1.1, 2.5, 2.9, 4.3], strict=True))
+
+    def fit(scale):
+        return fit_ordinary_regression(
+            tree,
+            {"y": {name: value * scale for name, value in response.items()}},
+            {"x": x},
+            ["y"],
+            ["x"],
+            inference="parametric-bootstrap",
+            bootstrap_replicates=8,
+            seed=7,
+        )
+
+    expected = fit(1.0)
+    scale = 2.0**-532
+    with np.errstate(over="raise", invalid="raise"):
+        actual = fit(scale)
+    np.testing.assert_allclose(
+        actual["standard_error"] / scale, expected["standard_error"], rtol=1e-11
+    )
+    np.testing.assert_array_equal(actual["p_value"], expected["p_value"])
+
+
+@pytest.mark.parametrize("dispersion", [1e-20, 1e-310])
+def test_near_poisson_negative_binomial_bootstrap_draws_keep_count_mean(dispersion):
+    rng = np.random.default_rng(18)
+    means = np.full(1200, 3.0)
+    counts = _draw_count(rng, means, "negative-binomial", dispersion)
+    truncated = _draw_zero_truncated_count(
+        rng, means, "hurdle-negative-binomial", dispersion
+    )
+    assert counts.mean() == pytest.approx(3.0, abs=0.15)
+    assert np.all(truncated > 0.0)
+    assert truncated.mean() == pytest.approx(3.0 / -math.expm1(-3.0), abs=0.15)
+
+
+@pytest.mark.parametrize("dispersion", [1e-150, 1e-310, math.ulp(0.0)])
+def test_continuous_beta_likelihood_keeps_small_precision_derivatives(dispersion):
+    values = np.array([math.ulp(0.0), 0.6, np.nextafter(1.0, 0.0), 0.42, 0.65])
+    linear = np.array([-1.0, 0.0, 1.0, -90.0, 90.0])
+    mean = np.clip(1.0 / (1.0 + np.exp(-linear)), 1e-10, 1.0 - 1e-10)
+    expected = len(values) * math.log(dispersion) + np.sum(
+        np.log(mean) + np.log1p(-mean) - np.log(values) - np.log1p(-values)
+    )
+
+    with np.errstate(invalid="raise", over="raise", divide="raise"):
+        likelihood, gradient, curvature = _beta_family_terms(
+            values, linear, dispersion, None, "beta"
+        )
+
+    assert likelihood == pytest.approx(expected, rel=1e-14)
+    np.testing.assert_allclose(gradient[:3], 2.0 * mean[:3] - 1.0, atol=1e-15)
+    np.testing.assert_allclose(curvature[:3], 2.0 * mean[:3] * (1.0 - mean[:3]))
+    np.testing.assert_array_equal(gradient[3:], [0.0, 0.0])
+    np.testing.assert_array_equal(curvature[3:], [0.0, 0.0])
+
+
+def test_continuous_beta_fit_keeps_finite_likelihood_at_subnormal_precision():
+    values = np.array([0.15, 0.4, 0.68, 0.42, 0.9])
+    design = np.ones((5, 1))
+    covariance = evolutionary_covariance_factory(_tree(), LEAF_NAMES)
+    fit = fit_phylogenetic_glmm(
+        values, design, covariance, family="beta", dispersion=1e-310
+    )
+    assert fit.optimizer_converged
+    assert fit.log_likelihood == pytest.approx(
+        5 * math.log(1e-310) + np.sum(-math.log(4.0) - np.log(values * (1 - values))),
+        abs=1e-4,
+    )
+    np.testing.assert_allclose(fit.coefficients, [[0.0]], atol=1e-3)
+    with pytest.raises(RuntimeError, match="Beta bootstrap draws round to 0 or 1"):
+        fit_phylogenetic_glmm(
+            values,
+            design,
+            covariance,
+            family="beta",
+            dispersion=1e-310,
+            coefficient_penalty="none",
+            inference="parametric-bootstrap",
+            bootstrap_replicates=2,
+        )
+
+
+@pytest.mark.parametrize(
+    "precision, observed, linear, expected",
+    [
+        (
+            1e6,
+            1e-8,
+            -20.0,
+            (12.217885585130778, -0.9916907861504306, 0.008316181088950499),
+        ),
+        (1e308, 0.5, 1e-154, (354.2473129684383, 2.5e153, 2.5e307)),
+        (
+            1e308,
+            0.125,
+            -1.9459101490553132,
+            (-2.9331594110336317e274, 8.010172414895993e290, 1.09375e307),
+        ),
+    ],
+)
+def test_continuous_beta_likelihood_resolves_high_fixed_precision(
+    precision, observed, linear, expected
+):
+    # Reference from the beta log density and its derivatives at 730 digits.
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        log_likelihood, gradient, curvature = _beta_family_terms(
+            np.array([observed]), np.array([linear]), precision, None, "beta"
+        )
+    np.testing.assert_allclose(
+        [log_likelihood, gradient[0], curvature[0]], expected, rtol=1e-11
+    )
+
+
+def test_continuous_beta_fit_converges_at_high_fixed_precision():
+    values = np.full(5, 0.5)
+    fit = fit_phylogenetic_glmm(
+        values,
+        np.ones((5, 1)),
+        evolutionary_covariance_factory(_tree(), LEAF_NAMES),
+        family="beta",
+        dispersion=1e200,
+    )
+    assert fit.optimizer_converged
+    assert np.isfinite(fit.log_likelihood)
+    np.testing.assert_allclose(fit.coefficients, [[0.0]], atol=1e-6)
+
+
+@pytest.mark.parametrize("log_mean", [-710.0, -100.0, 100.0])
+def test_gamma_bootstrap_draws_preserve_response_units(log_mean):
+    linear = np.full(5, log_mean)
+    expected = _draw_gamma(np.random.default_rng(412), np.zeros_like(linear), 2.0)
+    observed = _draw_gamma(np.random.default_rng(412), linear, 2.0)
+    assert np.all(observed > 0.0)
+    np.testing.assert_allclose(observed / np.exp(log_mean), expected, rtol=2e-13)
+
+
+def test_gamma_bootstrap_reports_unrepresentable_positive_draws():
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        with pytest.raises(RuntimeError, match="positive floating-point range"):
+            _draw_gamma(np.random.default_rng(9), np.zeros(5), 1e-310)
+
+
+def test_projection_of_joint_dense_predictor_uncertainty_matches_latent_loading():
+    rng = np.random.default_rng(502)
+    predictors, observations, responses = 3, 4, 2
+    slopes = rng.normal(size=(predictors, responses))
+    loadings = rng.normal(size=(predictors, observations, 5))
+    covariance = np.einsum("pit,qjt->pqij", loadings, loadings)
+    projected_loading = np.einsum("pr,pit->irt", slopes, loadings).reshape(
+        observations * responses, -1
+    )
+    observed = _project_predictor_uncertainty(
+        slopes, [covariance], [(0, 1, 2)], observations
+    )
+    np.testing.assert_allclose(observed, projected_loading @ projected_loading.T)
+
+
+def test_glmm_projection_preserves_sparse_predictor_row_scales():
+    model = evolutionary_covariance_factory(_tree(), LEAF_NAMES).sparse_model(None)
+    indices = np.array([4, 1, 1, 0])
+    scales = np.array([1.2, -0.4, 0.0, 0.75])
+    slopes = np.array([[0.4, -0.3]])
+    uncertainty = GmrfPredictorUncertainty(model, indices, scales)
+    observed = _project_predictor_uncertainty(slopes, [uncertainty], [0], len(indices))
+    covariance = model.materialize()[np.ix_(indices, indices)] * np.outer(
+        scales, scales
+    )
+    np.testing.assert_allclose(
+        observed, np.kron(covariance, slopes.T @ slopes), atol=1e-15
+    )
+
+
+@pytest.mark.parametrize(
+    "family,dispersion",
+    [("hurdle-poisson", None), ("hurdle-negative-binomial", 0.2)],
+)
+def test_truncated_count_draw_preserves_support_and_extreme_upper_quantile(
+    family, dispersion
+):
+    class Uniforms:
+        def random(self, size):
+            assert size == 3
+            return np.array([0.0, 0.5, np.nextafter(1.0, 0.0)])
+
+    result = _draw_zero_truncated_count(
+        Uniforms(), np.full(3, 1e-14), family, dispersion
+    )
+
+    np.testing.assert_array_equal(result, [1.0, 1.0, 2.0])
+
+
+def test_count_bootstrap_passes_the_unclipped_mean_to_the_generator():
+    class PoissonSampler:
+        def poisson(self, rate):
+            return rate
+
+    linear = np.array([31.0, 40.0, -38.0, -1000.0])
+    offset = np.array([1.0, -2.0, -3.0, 5.0])
+    result = _draw_mixture_count(
+        PoissonSampler(), linear, "poisson", None, None, offset
+    )
+    np.testing.assert_array_equal(result, np.exp(linear + offset))
+
+
+@pytest.mark.parametrize(
+    ("family", "dispersion"),
+    [("hurdle-poisson", None), ("hurdle-negative-binomial", 0.2)],
+)
+def test_hurdle_bootstrap_samples_ones_when_the_count_mean_underflows(
+    family, dispersion
+):
+    rng = np.random.default_rng(11)
+    linear = np.array([-1000.0, -715.0])
+    with np.errstate(divide="raise", invalid="raise", over="raise"):
+        result = _draw_mixture_count(
+            rng, linear, family, dispersion, 0.01, np.zeros_like(linear)
+        )
+    np.testing.assert_array_equal(result, [1.0, 1.0])
+
+
+def test_multinomial_likelihood_retains_tail_curvature_of_dominant_category():
+    counts = np.array([[1.0, 0.0, 0.0]])
+    linear = np.array([[50.0, 0.0]])
+    likelihood, gradient, curvature = _multinomial_terms(counts, linear)
+    tail = np.exp(-50.0)
+
+    assert likelihood == pytest.approx(-2.0 * tail, abs=0.0, rel=1e-14)
+    np.testing.assert_allclose(gradient, [-2.0 * tail, tail], atol=0.0)
+    np.testing.assert_allclose(
+        curvature[0], tail * np.array([[2.0, -1.0], [-1.0, 1.0]]), atol=0.0
+    )
+
+
+def test_ordinal_likelihood_keeps_logistic_tail_mass_and_gradient():
+    counts = np.array([[0, 1, 0], [0, 1, 0], [1, 0, 0], [0, 0, 1]])
+    linear = np.array([1000.0, -1000.0, 1000.0, -1000.0])
+
+    likelihood, gradient, curvature = _ordinal_terms(
+        counts, linear, np.array([-1.0, 1.0])
+    )
+
+    expected = 2.0 * (-999.0 + np.log(-np.expm1(-2.0))) - 2002.0
+    assert likelihood == pytest.approx(expected, abs=1e-11)
+    np.testing.assert_array_equal(gradient, [1.0, -1.0, 1.0, -1.0])
+    np.testing.assert_array_equal(curvature, np.zeros(4))
+
+
+def test_ordinal_likelihood_retains_representable_tail_curvature():
+    counts = np.array([[0, 1, 0], [1, 0, 0]])
+    _, _, curvature = _ordinal_terms(counts, np.full(2, 50.0), np.array([-1.0, 1.0]))
+    first, last = np.exp(-np.array([51.0, 49.0]))
+    np.testing.assert_allclose(curvature, [first + last, first], rtol=1e-13, atol=0.0)
+
+
+def test_ordinal_likelihood_keeps_width_when_centered_thresholds_round_together():
+    thresholds = np.array([0.0, 1e-200])
+    counts = np.array([[0, 1, 0]])
+
+    likelihood, gradient, curvature = _ordinal_terms(
+        counts, np.array([-1.0]), thresholds
+    )
+
+    sigmoid = 1.0 / (1.0 + np.exp(-1.0))
+    assert likelihood == pytest.approx(
+        np.log(1e-200) + np.log(sigmoid * (1.0 - sigmoid)), abs=1e-11
+    )
+    np.testing.assert_allclose(gradient, [1.0 - 2.0 * sigmoid])
+    np.testing.assert_allclose(curvature, [2.0 * sigmoid * (1.0 - sigmoid)])
+
+
 def test_global_scalar_search_checks_multiple_likelihood_basins():
     def objective(value):
         return min((value + 1.5) ** 2, 0.1 + (value - 1.5) ** 2)
@@ -51,6 +384,41 @@ def test_global_scalar_search_checks_multiple_likelihood_basins():
     assert result.success
     assert result.x == pytest.approx(-1.5, abs=1e-5)
     assert result.fun == pytest.approx(0.0, abs=1e-10)
+
+
+@pytest.mark.parametrize("offset, width", [(0.0, 1e-20), (1e10, 1.0), (-1e308, 1e308)])
+def test_global_scalar_search_refines_in_relative_parameter_units(offset, width):
+    bounds = (offset, offset + width)
+
+    def objective(value):
+        return ((value - offset) / width - 0.43) ** 2
+
+    result = _global_bounded_scalar_minimize(objective, bounds)
+    assert result.success
+    assert (result.x - offset) / width == pytest.approx(0.43, abs=3e-6)
+    assert result.fun < 1e-10
+
+
+def test_global_scalar_search_prioritizes_promising_basins():
+    def objective(value):
+        shallow = min(1.0 + (value - center) ** 2 for center in (1, 3, 5, 7, 9))
+        return min(shallow, (value - 11.25) ** 2)
+
+    result = _global_bounded_scalar_minimize(objective, (0.0, 16.0))
+    assert result.success
+    assert result.x == pytest.approx(11.25, abs=1e-7)
+
+
+def test_global_scalar_search_keeps_trials_in_ultranarrow_bounds():
+    lower, upper = -2.3425749488735213e50, -2.342574948873521e50
+
+    def objective(value):
+        assert lower <= value <= upper
+        return float(value != upper)
+
+    result = _global_bounded_scalar_minimize(objective, (lower, upper), grid_size=25)
+    assert result.success
+    assert result.x == upper
 
 
 def test_marginal_evolution_parameter_estimation_uses_trait_only_ml():
@@ -1448,6 +1816,100 @@ def test_censored_gaussian_interval_probability_is_stable_in_both_tails():
         assert np.isfinite(value)
 
 
+@pytest.mark.parametrize("sign", [-1.0, 1.0])
+@pytest.mark.parametrize(
+    "distance,width,expected",
+    [
+        (8.0, 0.000125125, (-41.90563631439225, 8.000062552062408, 0.9999999986953113)),
+        (10.0, 0.0001001, (-60.12877986476732, 10.00005004164995, 0.9999999991649992)),
+        (20.0, 0.03, (-204.71066924694435, 20.01350786279471, 0.9999263350600519)),
+        (2.0, 0.2, (-4.727712530306537, 2.093029745061223, 0.9967001938461197)),
+    ],
+)
+def test_censored_gaussian_narrow_band_matches_high_precision_integrals(
+    sign, distance, width, expected
+):
+    # The reference integrates the unnormalized normal density and its
+    # first two moments at 80 decimal digits, relative to the near endpoint.
+    lower, upper = sorted((0.0, sign * width))
+    likelihood, score, curvature = _censored_gaussian_scalar_terms(
+        np.array([np.nan]),
+        np.array([-sign * distance]),
+        1.0,
+        np.array([lower]),
+        np.array([upper]),
+    )
+    np.testing.assert_allclose(
+        [likelihood, -sign * score[0], curvature[0]], expected, rtol=0.0, atol=4e-14
+    )
+
+
+@pytest.mark.parametrize("sign", [-1.0, 1.0])
+def test_censored_gaussian_keeps_finite_tail_mass_when_centering_collapses_endpoints(
+    sign,
+):
+    distance = 1e154
+    # Two exponential tail widths. Both centered endpoints round to the
+    # same value, but the integral has a finite representable logarithm.
+    width = 2.0 / distance
+    lower, upper = sorted((0.0, sign * width))
+    actual, score, curvature = _censored_gaussian_scalar_terms(
+        np.array([np.nan]),
+        np.array([-sign * distance]),
+        1.0,
+        np.array([lower]),
+        np.array([upper]),
+    )
+    assert actual == pytest.approx(-(0.5 * distance) * distance, rel=4e-16)
+    assert score[0] == -sign * distance
+    assert curvature[0] == 1.0
+
+
+@pytest.mark.parametrize("linear", [-40.0, 0.0, 40.0])
+def test_censored_gaussian_retains_subnormal_interval_width(linear):
+    width = np.nextafter(0.0, 1.0)
+    dispersion = 2.0
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        value = _censored_gaussian_log_likelihood(
+            np.array([np.nan]),
+            np.array([linear]),
+            dispersion,
+            np.array([0.0]),
+            np.array([width]),
+        )[0]
+
+    expected = np.log(width) - np.log(dispersion)
+    expected -= 0.5 * ((linear / dispersion) ** 2 + np.log(2.0 * np.pi))
+    assert value == pytest.approx(expected, abs=1e-12)
+
+
+def test_censored_gaussian_interval_scales_before_overflowing_subtraction():
+    actual = _censored_gaussian_log_likelihood(
+        np.array([np.nan]),
+        np.array([1e308]),
+        1e308,
+        np.array([-1e308]),
+        np.array([-9e307]),
+    )[0]
+    expected = np.log(0.5 * (math.erfc(1.9 / np.sqrt(2)) - math.erfc(2 / np.sqrt(2))))
+    assert actual == pytest.approx(expected, abs=1e-12)
+
+
+def test_censored_gaussian_scales_exact_and_one_sided_observations():
+    dispersion = 1e308
+    with np.errstate(over="raise", invalid="raise"):
+        actual = _censored_gaussian_log_likelihood(
+            np.array([-1e308, np.nan, np.nan]),
+            np.array([1e308, 1e308, -1e308]),
+            dispersion,
+            np.array([np.nan, np.nan, 1e308]),
+            np.array([np.nan, -1e308, np.nan]),
+        )
+    exact = -2.0 - math.log(dispersion) - 0.5 * math.log(math.tau)
+    one_sided = math.log(0.5 * math.erfc(math.sqrt(2.0)))
+    np.testing.assert_allclose(actual, [exact, one_sided, one_sided], atol=1e-12)
+
+
 def test_censored_gaussian_never_reports_a_nonfinite_successful_fit():
     try:
         result = fit_ordinary_regression(
@@ -1579,6 +2041,23 @@ def test_sparse_poisson_glmm_matches_dense_fit(monkeypatch):
         sparse.coefficients, dense.coefficients, rtol=2e-4, atol=2e-4
     )
     assert sparse.log_likelihood == pytest.approx(dense.log_likelihood, rel=2e-5)
+
+
+@pytest.mark.parametrize("scale", [2.0**-1060, 2.0**1023])
+def test_glmm_normalizes_covariance_independently_of_input_units(scale):
+    values = np.array([1.0, 2.0, 3.0, 2.0, 5.0])
+    design = np.column_stack([np.ones(5), np.linspace(-1.0, 1.0, 5)])
+    covariance = 0.75 * np.eye(5) + 0.25
+    nominal = fit_phylogenetic_glmm(
+        values, design, lambda _: covariance, family="poisson"
+    )
+    with np.errstate(over="raise", invalid="raise"):
+        scaled = fit_phylogenetic_glmm(
+            values, design, lambda _: scale * covariance, family="poisson"
+        )
+    np.testing.assert_array_equal(scaled.coefficients, nominal.coefficients)
+    np.testing.assert_array_equal(scaled.random_modes, nominal.random_modes)
+    assert scaled.log_likelihood == nominal.log_likelihood
 
 
 @pytest.mark.parametrize(
@@ -2113,6 +2592,25 @@ def test_non_gaussian_factor_omnibus_is_explicitly_labeled_wald():
     omnibus = result[result["term_test"] == "omnibus"].iloc[0]
     assert set(coefficients["inference_method"]) == {"likelihood-ratio"}
     assert omnibus["inference_method"] == "wald"
+
+
+@pytest.mark.parametrize("scale", [1e-18, 1e18])
+@pytest.mark.parametrize("direction", [-1.0, 1.0])
+def test_regression_profile_likelihood_crosses_in_coefficient_units(scale, direction):
+    def objective(parameters):
+        return 1e9 + 0.5 * ((parameters[0] / scale) ** 2 + parameters[1] ** 2)
+
+    endpoint = _profile_endpoint(
+        objective,
+        np.zeros(2),
+        [(None, None)] * 2,
+        0,
+        scale,
+        1e9,
+        1.920729410347062,
+        direction,
+    )
+    assert endpoint / scale == pytest.approx(direction * 1.95996398454, abs=1e-7)
 
 
 def test_non_gaussian_profile_likelihood_reports_asymmetric_intervals():

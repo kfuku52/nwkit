@@ -3,7 +3,6 @@
 import json
 import sys
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -13,6 +12,7 @@ from nwkit.disparity import (
     clade_disparities,
     curve_area,
     fit_brownian,
+    fit_brownian_tree,
     make_design,
     simulate_curves,
     transform_traits,
@@ -20,10 +20,10 @@ from nwkit.disparity import (
 )
 from nwkit.evolution import build_evolutionary_process, tree_depths
 from nwkit.output_transaction import output_transaction, validate_output_targets
-from nwkit.rooting_state import require_rooted, set_rooting_info
-from nwkit.trait_input import numeric_trait_value, parse_trait_columns
+from nwkit.rooting_state import require_rooted
+from nwkit.trait_input import numeric_trait_matrix, parse_trait_columns
 from nwkit.util import (
-    assign_branch_ids,
+    copy_retained_crown,
     get_node_class,
     read_tip_table,
     read_tree,
@@ -107,31 +107,7 @@ def _ultrametric_depths(tree):
 
 
 def _prune_to_crown(tree, names):
-    identifiers = assign_branch_ids(tree)
-    crown = tree.common_ancestor(names)
-    retained = set(names)
-    keep: dict[Any, bool] = {}
-    for node in crown.traverse("postorder"):
-        keep[node] = (
-            node.name in retained
-            if node.is_leaf
-            else any(keep[c] for c in node.children)
-        )
-    # ETE's deepcopy recursively copies child links and fails on valid deep trees.
-    # Copy the retained topology iteratively; node property dictionaries are distinct.
-    copies = {}
-    for node in crown.traverse("preorder"):
-        if not keep[node]:
-            continue
-        copy = type(tree)()
-        copy.props.update(node.props)
-        copy.add_prop(_ID, identifiers[node])
-        copies[node] = copy
-        if node is not crown:
-            copies[node.up].add_child(copy)
-    root = copies[crown]
-    set_rooting_info(root, True, source="operation")
-    return root
+    return copy_retained_crown(tree, names, _ID)
 
 
 def _read_data(args):
@@ -157,17 +133,7 @@ def _read_data(args):
         unmatched=args.unmatched,
     )
     table = table.set_index("leaf_name").reindex(names)
-    values = np.asarray(
-        [
-            [
-                numeric_trait_value(
-                    table.loc[name, column], column, args.missing_values
-                )
-                for column in columns
-            ]
-            for name in names
-        ]
-    )
+    values = numeric_trait_matrix(table, columns, args.missing_values)
     complete = np.isfinite(values).all(axis=1)
     excluded = [name for name, valid in zip(names, complete, strict=True) if not valid]
     if excluded and args.missing == "error":
@@ -197,7 +163,45 @@ def _read_data(args):
     return retained, columns, used, excluded, values[complete], depths, height
 
 
-def _result_tables(tree, design, values, simulations, height, interval, args):
+def _simulation_envelope(simulations, tail):
+    """Select the median and linear-quantile endpoints in one partition."""
+    positions = np.array([tail, 0.5, 1 - tail]) * (len(simulations) - 1)
+    left = np.floor(positions).astype(int)
+    right = np.ceil(positions).astype(int)
+    ranks = np.concatenate((left, right))
+    columns = simulations.shape[1]
+    selected = np.empty((len(ranks), columns), dtype=simulations.dtype)
+    # A time column needs all replicates, but columns can be reduced separately.
+    batch = max(1, 131_072 // len(simulations))
+    for start in range(0, columns, batch):
+        window = slice(start, start + batch)
+        ordered = np.array(simulations[:, window].T, order="C", copy=True)
+        ordered.partition(ranks, axis=-1)
+        selected[:, window] = ordered[:, ranks].T
+        del ordered
+    lo, hi = selected[: len(left)], selected[len(left) :]
+    fraction = (positions - left)[:, None]
+    delta = hi - lo
+    # Match NumPy's linear quantile interpolation from the nearer endpoint.
+    limits = np.where(
+        fraction < 0.5, lo + delta * fraction, hi - delta * (1 - fraction)
+    )
+    # The median averages the central pair, including when values are subnormal.
+    median = (lo[1] + hi[1]) / 2
+    return median, limits[0], limits[2]
+
+
+def _null_mdi_areas(times, simulations, median, interval):
+    # Bound the temporary difference and integration arrays by row batch.
+    batch_size = max(1, 16_384 // len(times))
+    areas = np.empty(len(simulations))
+    for start in range(0, len(simulations), batch_size):
+        rows = slice(start, start + batch_size)
+        areas[rows] = curve_area(times, simulations[rows] - median, interval)
+    return areas
+
+
+def _result_tables(design, values, simulations, height, interval, args):
     disparities, counts = clade_disparities(design, values)
     relative = disparities / disparities[0]
     observed = np.asarray(design.weights @ relative)
@@ -237,13 +241,11 @@ def _result_tables(tree, design, values, simulations, height, interval, args):
     null_mdi = np.empty(0)
     if len(simulations):
         tail = (1 - args.ci_level) / 2
-        median = np.median(simulations, axis=0)
+        median, lower, upper = _simulation_envelope(simulations, tail)
         table["bm_mean"] = simulations.mean(axis=0)
         table["bm_median"] = median
-        table["bm_lower"], table["bm_upper"] = np.quantile(
-            simulations, [tail, 1 - tail], axis=0
-        )
-        null_mdi = curve_area(design.times, simulations - median, interval)
+        table["bm_lower"], table["bm_upper"] = lower, upper
+        null_mdi = _null_mdi_areas(design.times, simulations, median, interval)
         summary.update(
             bm_median_area=float(curve_area(design.times, median, interval)),
             mdi=float(curve_area(design.times, observed - median, interval)),
@@ -254,7 +256,11 @@ def _result_tables(tree, design, values, simulations, height, interval, args):
         for column in ("bm_mean", "bm_median", "bm_lower", "bm_upper"):
             table[column] = ""
     table["num_simulations"] = len(simulations)
-    clades = pd.DataFrame(
+    return table, pd.DataFrame([summary]), relative, counts, null_mdi
+
+
+def _clade_table(tree, relative, counts):
+    return pd.DataFrame(
         [
             {
                 "branch_id": node.props[_ID],
@@ -267,18 +273,28 @@ def _result_tables(tree, design, values, simulations, height, interval, args):
             for i, node in enumerate(tree.traverse("preorder"))
         ]
     )
-    return table, pd.DataFrame([summary]), clades, null_mdi
 
 
-def _simulation_table(times, simulations):
-    return pd.DataFrame(
-        {
-            "simulation": np.repeat(np.arange(1, len(simulations) + 1), len(times)),
-            "time_index": np.tile(np.arange(1, len(times) + 1), len(simulations)),
-            "relative_time": np.tile(times, len(simulations)),
-            "relative_disparity": simulations.ravel(),
-        }
-    )
+def _write_simulation_table(handle, times, simulations):
+    time_count = len(times)
+    time_indices = np.arange(1, time_count + 1)
+    batch_size = max(1, 16_384 // time_count)
+    for start in range(0, len(simulations), batch_size):
+        batch = simulations[start : start + batch_size]
+        count = len(batch)
+        table = pd.DataFrame(
+            {
+                "simulation": np.repeat(
+                    np.arange(start + 1, start + count + 1), time_count
+                ),
+                "time_index": np.tile(time_indices, count),
+                "relative_time": np.tile(times, count),
+                "relative_disparity": batch.ravel(),
+            }
+        )
+        table.to_csv(
+            handle, sep="\t", index=False, float_format="%.12g", header=start == 0
+        )
 
 
 def dtt_main(args):
@@ -290,19 +306,18 @@ def dtt_main(args):
     simulations = np.empty((0, len(design.times)))
     rate = bm_center = None
     if args.n_sim:
-        covariance = build_evolutionary_process(tree, allow_zero=True).tip_covariance(
-            names
-        )
-        bm_center, rate, factor = fit_brownian(covariance, values)
+        bm_center, rate, factor = _fit_brownian_reference(tree, design, names, values)
         simulations = simulate_curves(
             design, factor, args.n_sim, args.seed, args.threads
         )
-    curve, summary, clades, null_mdi = _result_tables(
-        tree, design, values, simulations, height, interval, args
+    curve, summary, relative, counts, null_mdi = _result_tables(
+        design, values, simulations, height, interval, args
     )
-    tables = {"outfile": curve, "summary_out": summary, "clades_out": clades}
-    if args.simulations_out:
-        tables["simulations_out"] = _simulation_table(design.times, simulations)
+    tables = {"outfile": curve}
+    if "summary_out" in paths:
+        tables["summary_out"] = summary
+    if "clades_out" in paths:
+        tables["clades_out"] = _clade_table(tree, relative, counts)
     metadata = {
         "schema_version": 1,
         "nwkit_version": __version__,
@@ -354,6 +369,9 @@ def dtt_main(args):
                     figure_columns=args.figure_columns,
                     figure_scale=args.figure_scale,
                 )
+            elif role == "simulations_out":
+                with Path(staged[path]).open("w", encoding="utf-8") as handle:
+                    _write_simulation_table(handle, design.times, simulations)
             else:
                 Path(staged[path]).write_text(
                     model_json if role == "model_out" else serialized[role],
@@ -364,3 +382,12 @@ def dtt_main(args):
     sys.stderr.write(
         f"DTT: {len(names)} tips, {len(columns)} traits, {args.n_sim} BM simulations; singleton lineages excluded.\n"
     )
+
+
+def _fit_brownian_reference(tree, design, names, values):
+    # Lengths are already in units of crown height. On very short edges, a
+    # covariance assembled from shared depths can lose the independent changes.
+    if np.min(design.lengths[1:]) < np.sqrt(np.finfo(float).eps):
+        return fit_brownian_tree(design, values)
+    covariance = build_evolutionary_process(tree, allow_zero=True).tip_covariance(names)
+    return fit_brownian(covariance, values)

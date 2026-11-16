@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 import pytest
 from ete4 import Tree
@@ -15,6 +17,7 @@ from nwkit.gaussian import (
     draw_from_factor,
     factor_diagonal_sparse_precision_updates,
     materialize_covariance,
+    solve_factor,
     sparse_precision_update_diagonal,
 )
 from nwkit.measurement_error import (
@@ -26,8 +29,22 @@ from nwkit.measurement_error import (
 from nwkit.sparse_laplace import (
     ContinuousPredictorUncertainty,
     GmrfPredictorUncertainty,
+    GroupedPredictorUncertainty,
     factor_sparse_positive_definite,
+    grouped_predictor_loading,
 )
+
+
+def test_grouped_predictor_loading_keeps_order_and_shared_species_factors():
+    factors = (np.array([[1.0], [2.0]]), np.empty((2, 0)), np.array([[3.0], [0.0]]))
+    indices = np.array([2, 0, 1, 2])
+    loading = grouped_predictor_loading(
+        GroupedPredictorUncertainty(factors, indices), np.eye(2)
+    )
+    np.testing.assert_array_equal(
+        loading.toarray(),
+        [[0, 3], [0, 0], [1, 0], [2, 0], [0, 0], [0, 0], [0, 3], [0, 0]],
+    )
 
 
 def test_small_eiv_boundary_factor_preserves_covariance_root():
@@ -78,6 +95,32 @@ def test_latent_predictor_posterior_matches_gaussian_conditioning():
     assert np.linalg.eigvalsh(posterior.covariance).min() >= -1e-12
 
 
+@pytest.mark.parametrize("scale", [1e-150, 1e150])
+def test_latent_predictor_preserves_covariance_across_trait_units(scale):
+    values = np.array([2.0, -1.0, 3.0, -3.0])
+    evolutionary = np.diag([1.0, 0.5, 0.8, 1.5])
+    sampling = np.full(len(values), 0.3)
+    expected = fit_latent_predictor(
+        values, evolutionary, sampling, include_intercept=True
+    )
+
+    with np.errstate(over="raise", invalid="raise"):
+        scaled = fit_latent_predictor(
+            values * scale, evolutionary, sampling * scale**2, include_intercept=True
+        )
+
+    np.testing.assert_allclose(scaled.mean / scale, expected.mean, rtol=1e-6)
+    np.testing.assert_allclose(
+        scaled.covariance / scale**2, expected.covariance, rtol=1e-6
+    )
+    assert scaled.evolutionary_rate / scale**2 == pytest.approx(
+        expected.evolutionary_rate, rel=2e-6
+    )
+    assert scaled.log_likelihood + len(values) * np.log(scale) == pytest.approx(
+        expected.log_likelihood, abs=1e-9
+    )
+
+
 def test_latent_predictor_rejects_indefinite_sampling_covariance():
     with pytest.raises(ValueError, match="positive semidefinite"):
         fit_latent_predictor(
@@ -86,6 +129,158 @@ def test_latent_predictor_rejects_indefinite_sampling_covariance():
             np.asarray([[1.0, 2.0], [2.0, 1.0]]),
             include_intercept=False,
         )
+
+
+def test_dense_eiv_accepts_fixed_covariance_as_a_sampling_factor():
+    rng = np.random.default_rng(873)
+    n = 16
+    design = np.column_stack((np.ones(n), rng.normal(size=n)))
+    response = design @ [0.3, -0.8] + rng.normal(size=n)
+    loading = sparse.csr_matrix(rng.normal(scale=0.1, size=(n, 3)))
+    fixed = DiagonalLowRankCovariance(np.full(n, 0.15), loading)
+    predictor_uncertainty = [np.diag(rng.uniform(0.1, 0.3, n))]
+    components = [("evolutionary_rate", np.ones(n))]
+    before = fit_conditional_eiv_gaussian(
+        response,
+        design,
+        predictor_uncertainty,
+        [1],
+        materialize_covariance(fixed),
+        components,
+        reml=False,
+    )
+    after = fit_conditional_eiv_gaussian(
+        response, design, predictor_uncertainty, [1], fixed, components, reml=False
+    )
+    for key in ("beta", "beta_covariance", "covariance"):
+        np.testing.assert_allclose(after[key], before[key], rtol=1e-7, atol=1e-8)
+    assert after["objective"] == pytest.approx(before["objective"], abs=1e-10)
+
+
+def test_dense_eiv_accepts_an_implicit_evolutionary_component():
+    rng = np.random.default_rng(18)
+    design = np.column_stack((np.ones(12), rng.normal(size=12)))
+    response = design @ [0.3, 0.8] + rng.normal(size=12)
+    loading = sparse.csr_matrix(np.column_stack((np.eye(12), np.ones(12) * 0.25)))
+    matrix = (loading @ loading.T).toarray()
+    uncertainty = [np.eye(12) * 0.05]
+    sampling = np.full(12, 0.1)
+    before = fit_conditional_eiv_gaussian(
+        response, design, uncertainty, [1], sampling, [("rate", matrix)], reml=False
+    )
+    after = fit_conditional_eiv_gaussian(
+        response,
+        design,
+        uncertainty,
+        [1],
+        sampling,
+        [("rate", None)],
+        component_factors={"rate": loading},
+        reml=False,
+    )
+    assert after["objective"] == pytest.approx(before["objective"], abs=1e-9)
+    np.testing.assert_allclose(after["beta"], before["beta"], rtol=1e-6, atol=1e-8)
+    np.testing.assert_allclose(
+        after["covariance"], before["covariance"], rtol=1e-6, atol=1e-8
+    )
+
+
+@pytest.mark.parametrize("exponent", [-500, 500])
+@pytest.mark.parametrize("representation", ["dense", "factor", "precision"])
+def test_conditional_eiv_fits_in_extreme_response_units(exponent, representation):
+    rng = np.random.default_rng(60)
+    size = 22
+    design = np.column_stack((np.ones(size), rng.normal(size=size)))
+    response = design @ [1.0, -0.8] + rng.normal(size=size)
+    fixed = np.full(size, 0.12)
+    components = [("rate", np.ones(size))]
+    diagonal = rng.uniform(0.03, 0.1, size)
+    if representation == "precision":
+        names = [f"t{index}" for index in range(size)]
+        tree = Tree("(" + ",".join(f"{name}:1" for name in names) + ");", parser=1)
+        model = build_sparse_evolutionary_model(tree, names)
+        uncertainty = GmrfPredictorUncertainty(
+            model, np.arange(size), np.sqrt(diagonal)
+        )
+    elif representation == "factor":
+        uncertainty = ContinuousPredictorUncertainty(np.sqrt(diagonal), np.arange(size))
+    else:
+        uncertainty = np.diag(diagonal)
+
+    def fit(values, sampling, start=None):
+        return fit_conditional_eiv_gaussian(
+            values,
+            design,
+            [uncertainty],
+            [1],
+            sampling,
+            components,
+            reml=False,
+            starting_parameters=start,
+        )
+
+    reference = fit(response, fixed)
+    scaled_response = np.ldexp(response, exponent)
+    start = reference["parameters"].copy()
+    start[:2] = np.ldexp(start[:2], exponent)
+    start[2:] += 2 * exponent * math.log(2.0)
+    with np.errstate(over="raise", divide="raise", invalid="raise"):
+        scaled = fit(scaled_response, np.ldexp(fixed, 2 * exponent), start)
+    np.testing.assert_allclose(
+        np.ldexp(scaled["beta"], -exponent), reference["beta"], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        np.ldexp(scaled["beta_covariance"], -2 * exponent),
+        reference["beta_covariance"],
+        rtol=2e-5,
+    )
+    assert scaled["objective"] - size * exponent * math.log(2.0) == pytest.approx(
+        reference["objective"], abs=1e-8
+    )
+    _, recovered_factor = scaled["covariance_for_beta"](scaled["beta"])
+    _, reference_factor = reference["covariance_for_beta"](reference["beta"])
+    np.testing.assert_allclose(
+        np.ldexp(solve_factor(recovered_factor, scaled_response), exponent),
+        solve_factor(reference_factor, response),
+        rtol=1e-5,
+    )
+
+
+@pytest.mark.parametrize("factor_path", [False, True])
+@pytest.mark.parametrize("exponent", [-1023, 1023])
+def test_latent_predictor_normalizes_extreme_evolutionary_covariances(
+    factor_path, exponent
+):
+    observed = np.array([0.4, -0.5, 0.6, 0.0, -0.25, 0.56])
+    variances = np.array([0.75, 0.75, 0.5, 0.5, 0.75, 0.5])
+    if factor_path:
+        fit = fit_factor_latent_predictor
+        evolutionary = variances
+        sampling = DiagonalLowRankCovariance(
+            np.zeros(len(observed)), sparse.eye(len(observed), format="csr") * 0.07
+        )
+    else:
+        fit = fit_latent_predictor
+        distance = np.abs(np.arange(len(observed))[:, None] - np.arange(len(observed)))
+        evolutionary = 0.5 * 0.25**distance + np.diag(variances - 0.5)
+        sampling = np.full(len(observed), 0.005)
+    reference = fit(observed, evolutionary, sampling, include_intercept=True)
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        scaled = fit(
+            observed, np.ldexp(evolutionary, exponent), sampling, include_intercept=True
+        )
+    assert np.ldexp(scaled.evolutionary_rate, exponent) == pytest.approx(
+        reference.evolutionary_rate
+    )
+    assert scaled.log_likelihood == reference.log_likelihood
+    np.testing.assert_array_equal(scaled.mean, reference.mean)
+    if factor_path:
+        np.testing.assert_array_equal(
+            scaled.covariance_model.materialize(),
+            reference.covariance_model.materialize(),
+        )
+    else:
+        np.testing.assert_array_equal(scaled.covariance, reference.covariance)
 
 
 def test_sparse_latent_predictor_matches_dense_conditioning():
@@ -118,7 +313,46 @@ def test_sparse_latent_predictor_matches_dense_conditioning():
     )
 
 
-def test_sparse_latent_predictor_supports_low_rank_batch_sampling_covariance():
+@pytest.mark.parametrize("include_batch", [False, True])
+def test_sparse_predictor_preserves_likelihood_at_tiny_sampling_variance(include_batch):
+    names = list("ABCDEFG")
+    tree = Tree("(((A:1,B:2):1,(C:1,D:2):1):1,((E:1,F:1):2,G:1):1);", parser=1)
+    observed = np.array([-0.4, 0.1, 0.5, 0.7, 1.3, -1.4, 1.0])
+    sampling_diagonal = np.full(len(names), 1e-200)
+    indices = np.arange(len(names))
+    if include_batch:
+        loading = sparse.csr_matrix(
+            (np.full(len(names), 0.12), (indices, indices // 2))
+        )
+        sampling = DiagonalLowRankCovariance(sampling_diagonal, loading)
+    else:
+        sampling = sampling_diagonal
+    dense = fit_latent_predictor(
+        observed,
+        build_evolutionary_covariance(tree, names),
+        sampling,
+        include_intercept=True,
+    )
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        fit = fit_sparse_latent_predictor(
+            observed,
+            build_sparse_evolutionary_model(tree, names),
+            sampling,
+            include_intercept=True,
+        )
+    assert fit.log_likelihood == pytest.approx(dense.log_likelihood, abs=1e-11)
+    assert fit.prior_mean == pytest.approx(dense.prior_mean, abs=1e-9)
+    assert fit.evolutionary_rate == pytest.approx(dense.evolutionary_rate, rel=1e-7)
+    np.testing.assert_allclose(fit.mean, dense.mean, atol=1e-9)
+    posterior = fit.covariance_model.materialize()
+    if include_batch:
+        np.testing.assert_allclose(posterior, dense.covariance, atol=1e-10)
+    else:
+        np.testing.assert_allclose(posterior, np.diag(sampling), atol=0.0, rtol=1e-12)
+
+
+@pytest.mark.parametrize("scale", [1.0, 1e-150, 1e150])
+def test_sparse_latent_predictor_supports_low_rank_batch_sampling_covariance(scale):
     tree = Tree("(((A:1,B:1):1,C:2):1,(D:1,E:1):2);", parser=1)
     names = ["A", "B", "C", "D", "E"]
     observed = np.asarray([1.0, 1.2, 2.0, 3.0, 3.3])
@@ -132,27 +366,38 @@ def test_sparse_latent_predictor_supports_low_rank_batch_sampling_covariance():
         materialize_covariance(sampling),
         include_intercept=True,
     )
-    sparse_fit = fit_sparse_latent_predictor(
-        observed,
-        build_sparse_evolutionary_model(tree, names),
-        sampling,
-        include_intercept=True,
+    scaled_sampling = DiagonalLowRankCovariance(
+        sampling.diagonal * scale**2, sampling.low_rank * scale
     )
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        sparse_fit = fit_sparse_latent_predictor(
+            observed * scale,
+            build_sparse_evolutionary_model(tree, names),
+            scaled_sampling,
+            include_intercept=True,
+        )
 
-    assert sparse_fit.evolutionary_rate == pytest.approx(
-        dense.evolutionary_rate, rel=1e-6
+    assert sparse_fit.evolutionary_rate / scale**2 == pytest.approx(
+        dense.evolutionary_rate, rel=2e-6
     )
-    assert sparse_fit.log_likelihood == pytest.approx(dense.log_likelihood, rel=1e-8)
-    np.testing.assert_allclose(sparse_fit.mean, dense.mean, rtol=1e-6, atol=1e-7)
+    assert sparse_fit.log_likelihood + len(observed) * np.log(scale) == pytest.approx(
+        dense.log_likelihood, rel=1e-8
+    )
     np.testing.assert_allclose(
-        sparse_fit.covariance_model.materialize(),
+        sparse_fit.mean / scale, dense.mean, rtol=1e-6, atol=1e-7
+    )
+    np.testing.assert_allclose(
+        sparse_fit.covariance_model.materialize() / scale**2,
         dense.covariance,
         rtol=1e-6,
         atol=1e-7,
     )
 
 
-def test_factor_latent_predictor_matches_dense_conditioning_without_materializing():
+@pytest.mark.parametrize("scale", [1.0, 1e-150, 1e150])
+def test_factor_latent_predictor_matches_dense_conditioning_without_materializing(
+    scale,
+):
     observed = np.asarray([1.0, 1.2, 2.0, 3.0, 3.3])
     evolutionary = np.asarray([1.0, 1.5, 0.8, 2.0, 1.2])
     loading = sparse.csr_matrix(
@@ -173,20 +418,26 @@ def test_factor_latent_predictor_matches_dense_conditioning_without_materializin
         materialize_covariance(sampling),
         include_intercept=False,
     )
-    structured = fit_factor_latent_predictor(
-        observed,
-        evolutionary,
-        sampling,
-        include_intercept=False,
-    )
+    scaled_sampling = DiagonalLowRankCovariance(sampling.diagonal, loading * scale)
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        structured = fit_factor_latent_predictor(
+            observed * scale,
+            evolutionary,
+            scaled_sampling,
+            include_intercept=False,
+        )
 
-    assert structured.evolutionary_rate == pytest.approx(
+    assert structured.evolutionary_rate / scale**2 == pytest.approx(
         dense.evolutionary_rate, rel=2e-6
     )
-    assert structured.log_likelihood == pytest.approx(dense.log_likelihood, rel=1e-8)
-    np.testing.assert_allclose(structured.mean, dense.mean, rtol=1e-6, atol=1e-7)
+    assert structured.log_likelihood + len(observed) * np.log(scale) == pytest.approx(
+        dense.log_likelihood, rel=1e-8
+    )
     np.testing.assert_allclose(
-        structured.covariance_model.materialize(),
+        structured.mean / scale, dense.mean, rtol=1e-6, atol=1e-7
+    )
+    np.testing.assert_allclose(
+        structured.covariance_model.materialize() / scale**2,
         dense.covariance,
         rtol=1e-6,
         atol=1e-7,
@@ -333,6 +584,43 @@ def test_diagonal_predictor_factor_matches_dense_eiv_covariance():
         np.testing.assert_allclose(
             fit["beta_covariance"], expected_covariance, rtol=1e-5, atol=1e-8
         )
+
+
+def test_dense_eiv_preserves_correlated_predictor_loading_with_repeated_tips():
+    response = np.array([1.1, 0.8, 2.6, 3.3, 4.9, 4.2])
+    predictor = np.array([0.0, 0.0, 1.0, 2.0, 3.0, 3.0])
+    design = np.column_stack((np.ones(len(response)), predictor))
+    loading = np.array([[0.3, 0.1], [0.2, 0.4], [0.0, 0.1], [0.3, 0.5]])
+    indices = np.array([0, 0, 1, 2, 3, 3])
+    scales = np.array([1.0, -1.5, 0.5, 2.0, 1.0, 0.75])
+    selected = loading[indices] * scales[:, None]
+    fixed = np.diag(np.linspace(0.03, 0.09, len(response)))
+    components = [("evolutionary", np.ones(len(response)))]
+    fit = fit_conditional_eiv_gaussian(
+        response,
+        design,
+        [ContinuousPredictorUncertainty(loading, indices, scales)],
+        [1],
+        fixed,
+        components,
+        reml=False,
+    )
+    reference = fit_conditional_eiv_gaussian(
+        response,
+        design,
+        [selected @ selected.T],
+        [1],
+        fixed,
+        components,
+        reml=False,
+    )
+    np.testing.assert_allclose(fit["beta"], reference["beta"], rtol=1e-5)
+    assert fit["objective"] == pytest.approx(reference["objective"], abs=1e-8)
+    for slope in (0.0, 1.2, -0.4):
+        covariance, _ = fit["covariance_for_beta"](np.array([0.0, slope]))
+        expected = fixed + slope**2 * (selected @ selected.T)
+        expected += np.eye(len(response)) * fit["component_variances"]["evolutionary"]
+        np.testing.assert_allclose(covariance, expected, rtol=2e-14, atol=1e-15)
 
 
 def test_sparse_precision_predictor_uncertainty_matches_dense_eiv_covariance():

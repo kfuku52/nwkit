@@ -4,6 +4,7 @@ import pytest
 
 from nwkit.cli import main
 from nwkit.continuous_observation import (
+    prepare_correlated_observations,
     read_measurement_covariances,
     validate_measurement_covariances,
 )
@@ -37,6 +38,31 @@ def test_covariance_tsv_validation(tmp_path):
 def test_invalid_covariance_rejected(matrix):
     with pytest.raises(ValueError, match="covariance|Covariance"):
         validate_measurement_covariances({"A": [0, 1]}, ("x", "y"), {"A": matrix})
+
+
+def test_correlated_observation_normalization_retains_small_cross_covariance():
+    from nwkit.multivariate_gaussian_asr import _restore_sigma
+
+    tree = read_tree("(A:1,B:2,C:3)R;", "1", True, quiet=True, rooted="yes")
+    observations = {"A": [0, 0], "B": [None, 2.0**510], "C": [2.0**-600, 0]}
+    exact_first = np.array([[0.0, 0.0], [0.0, 2.0**1000]])
+    errors = {
+        "A": exact_first,
+        "B": np.array([[2.0**-1074, 2.0**-40], [2.0**-40, 2.0**1000]]),
+        "C": exact_first,
+    }
+    with np.errstate(divide="raise", invalid="raise", over="raise"):
+        data, _, normalized, _ = prepare_correlated_observations(
+            tree, observations, ("x", "y"), errors
+        )
+    np.testing.assert_array_equal(data.scales, [2.0**-600, 2.0**510])
+    np.testing.assert_array_equal(normalized["A"], [[0, 0], [0, 2.0**-20]])
+    np.testing.assert_array_equal(
+        normalized["B"], [[2.0**126, 2.0**50], [2.0**50, 2.0**-20]]
+    )
+    cross = 2.0**-600
+    restored = _restore_sigma(data, np.array([[0, cross], [cross, 0]]))
+    np.testing.assert_array_equal(restored, [[0, 2.0**-690], [2.0**-690, 0]])
 
 
 def test_correlated_fit_matches_independent_dense_likelihood():

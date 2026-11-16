@@ -333,12 +333,14 @@ def test_shape_bootstrap_preserves_tip_noise_when_no_shared_effects_are_added():
     base = np.array([1.0, -2.0, 4.0])
     simulator = {
         "leaf_names": [str(leaf.name) for leaf in leaves],
+        "leaves": leaves,
         "evolutionary_model": SimpleNamespace(
             covariance_scale=1.0, sample=lambda rng, variance: base.copy()
         ),
         "sampling_factor": None,
-        "orientation": {tree: tuple(tree.children), inner: tuple(inner.children)},
-        "weights": {tree: (0.5, 0.5), inner: (0.5, 0.5)},
+        "branches": [
+            (node, *node.children, 2.0, 0.5, 0.5, 1.0, 1.0) for node in (inner, tree)
+        ],
         "selected_nodes": [inner],
     }
     state = {

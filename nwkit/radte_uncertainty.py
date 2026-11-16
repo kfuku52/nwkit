@@ -3,10 +3,11 @@
 from dataclasses import replace
 
 import numpy as np
-from scipy.optimize import brentq, linprog
+from scipy.optimize import brentq
 from scipy.stats import chi2
 
 from nwkit.radte_model import DatingOptimizationError, fit_dates, solve_problem
+from nwkit.radte_studentized import chronology_domain
 
 
 class ProfileApproximationError(ValueError):
@@ -137,22 +138,12 @@ def profile_intervals(fit, problem, *, level=0.95, starts=3, maxiter=2000, seed=
     # One-sided bounds are reported as the feasible endpoint; they are not
     # falsely extrapolated beyond the hard calibration domain.
     boundary_limited = False
+    # Propagating the chronology gives simultaneous feasible extrema. HiGHS'
+    # feasibility tolerance can erase a gap of min_duration at these endpoints.
+    feasible_ends = chronology_domain(c)
+    if np.any(feasible_ends[0] > feasible_ends[1]):
+        raise ValueError("Could not resolve the profile's feasible age domain.")
     for group in problem.free:
-        coordinate = np.zeros(len(c.groups))
-        coordinate[group] = 1
-        feasible_ends = []
-        for sign in [1, -1]:
-            extreme = linprog(
-                sign * coordinate,
-                A_ub=-problem.constraints,
-                b_ub=np.full(problem.constraints.shape[0], -c.min_duration),
-                bounds=list(zip(c.lower, c.upper, strict=True)),
-                method="highs",
-            )
-            if not extreme.success:
-                raise ValueError("Could not resolve the profile's feasible age domain.")
-            feasible_ends.append(extreme.x.copy())
-
         # Every cached age vector is feasible. Convex interpolation with an
         # extreme point preserves all linear chronology constraints.
         cache = {

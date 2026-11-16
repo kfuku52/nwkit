@@ -15,6 +15,7 @@ in [`guides/`](guides/):
 - [AngioCal fossil minimum-age constraints](guides/ANGIOCAL.md)
 - [Bounded conditional MUL/MSC estimation](guides/MUL_MSC_FIT.md)
 - [CLI and TSV conventions](guides/CLI_TSV_CONVENTIONS.md)
+- [Collect and verify taxon images](guides/IMAGE.md)
 - [Conditional allopolyploid MUL/MSC prototype](guides/MUL_MSC.md)
 - [Discrete stochastic maps](guides/STOCHASTIC_MAPS.md)
 - [Disparity through time](guides/DTT.md)
@@ -31,6 +32,7 @@ in [`guides/`](guides/):
 - [SHIFT inference](guides/SHIFT.md)
 - [Targeted gene-tree search and GeneRax evaluation](guides/GENE_TREE_SEARCH.md)
 - [Tree format conversion](guides/CONVERT.md)
+- [VertLife topology, rooting, and divergence ages](guides/VERTLIFE.md)
 
 The complete guide list is available in the directory; filenames retain the
 historical names used by the CLI and examples.

@@ -2,8 +2,10 @@ import math
 import multiprocessing
 import sys
 from collections import defaultdict
+from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor
 from copy import copy
+from functools import partial
 from typing import Any
 
 import numpy as np
@@ -11,8 +13,7 @@ import pandas as pd
 from scipy.linalg import expm
 from scipy.optimize import OptimizeResult, minimize
 from scipy.sparse.csgraph import connected_components
-from scipy.special import logsumexp
-from scipy.stats import gamma as gamma_distribution
+from scipy.special import gammainc, gammaincinv, gammaln, logsumexp
 from scipy.stats import poisson
 
 from nwkit.asr_input import (
@@ -27,6 +28,7 @@ from nwkit.asr_input import (
     resolve_trait_type,
 )
 from nwkit.asr_models import model_names
+from nwkit.compiled_tree import CompiledTree
 from nwkit.discrete_asr_models import (
     FREQUENCY_RATIO_BOUNDS,
     model_equivalence_family,
@@ -65,6 +67,9 @@ _MAX_DIRECT_EXPONENT_NORM = 32.0
 _MAX_HIDDEN_EXPANDED_STATES = 64
 _MAX_COVARION_LOG_SPREAD = math.log(1e4)
 _MAX_FREE_TRANSITION_PARAMETERS = 256
+# A direct, stable reduction avoids SciPy's setup cost for small state spaces.
+_MAX_DIRECT_LOG_SUM_STATES = 16
+_MAX_MIXTURE_EDGE_VALUES = 262_144
 
 
 def _parse_comma_list(value, option_name):
@@ -212,18 +217,17 @@ def _read_tip_states(
     observed_state_by_leaf_input: dict[str, str | None] = {}
     state_set_by_leaf: dict[str, tuple[str, ...] | None] = {}
     observed_state_sets: list[list[str]] = []
-    for _, row in trait_df.iterrows():
-        leaf_name = str(row["leaf_name"])
-        raw_state = row[state_column]
+    separator = "" if ambiguous_separator in ["", None] else str(ambiguous_separator)
+    for leaf_name, raw_state in zip(
+        trait_df["leaf_name"], trait_df[state_column], strict=True
+    ):
+        leaf_name = str(leaf_name)
         if _is_missing_trait_value(raw_state, missing_values):
             observed_state_by_leaf_input[leaf_name] = None
             state_set_by_leaf[leaf_name] = None
             continue
         state_set = _split_state_value(raw_state, ambiguous_separator)
         state_set_by_leaf[leaf_name] = tuple(state_set)
-        separator = (
-            "" if ambiguous_separator in ["", None] else str(ambiguous_separator)
-        )
         observed_state_by_leaf_input[leaf_name] = separator.join(state_set)
         observed_state_sets.append(state_set)
 
@@ -288,7 +292,13 @@ def _er_transition_matrix(branch_length, rate, num_states):
         return np.ones((1, 1), dtype=float)
     if rate < 0.0:
         raise ValueError("Mk transition rate must be non-negative.")
-    exponent = -float(num_states) * (float(rate) * float(branch_length))
+    return _er_transition_from_elapsed_rate(
+        float(rate) * float(branch_length), num_states
+    )
+
+
+def _er_transition_from_elapsed_rate(elapsed_rate, num_states):
+    exponent = -float(num_states) * elapsed_rate
     decay = math.exp(exponent)
     # expm1 preserves tiny positive transitions when exp rounds to one.
     off_diagonal = -math.expm1(exponent) / float(num_states)
@@ -356,10 +366,7 @@ def _transition_matrix(rate_matrix, branch_length):
     branch_length = _validated_branch_length(branch_length)
     if branch_length == 0.0:
         return np.eye(rate_matrix.shape[0], dtype=float)
-    er_rate = _get_er_rate_from_matrix(rate_matrix)
-    if er_rate is not None:
-        return _er_transition_matrix(branch_length, er_rate, rate_matrix.shape[0])
-    return _general_transition_matrix(rate_matrix, branch_length)
+    return _mk_transition_evaluator(rate_matrix)(branch_length)
 
 
 def _validated_branch_length(branch_length):
@@ -372,18 +379,43 @@ def _validated_branch_length(branch_length):
     return value
 
 
-def _general_transition_matrix(rate_matrix, branch_length):
+def _prepare_generator_exponential(rate_matrix):
     absolute_rates = np.abs(rate_matrix)
     rate_scale = float(np.max(absolute_rates))
     if rate_scale == 0.0:
-        return np.eye(rate_matrix.shape[0], dtype=float)
+        return None
     scaled_rate_norm = float(np.max(np.sum(absolute_rates / rate_scale, axis=1)))
     log2_rate_norm = math.log2(rate_scale) + math.log2(scaled_rate_norm)
-    log2_exponent_norm = log2_rate_norm + math.log2(branch_length)
-    if log2_exponent_norm <= math.log2(_MAX_DIRECT_EXPONENT_NORM):
+    # Use a nonnegative Poisson series for sparse state graphs. Padé
+    # approximants can give large relative errors for endpoints that require
+    # many jumps, even while their absolute error meets the expm tolerance.
+    sparse_rates = np.count_nonzero(rate_matrix) < rate_matrix.size
+    direct_norm = 2.0 if sparse_rates else _MAX_DIRECT_EXPONENT_NORM
+    return log2_rate_norm, sparse_rates, direct_norm
+
+
+def _transition_from_generator(
+    rate_matrix, branch_length, prepared, time_multiplier=1.0
+):
+    if prepared is None:
+        return np.eye(rate_matrix.shape[0], dtype=float)
+    log2_rate_norm, sparse_rates, direct_norm = prepared
+    if time_multiplier == 1.0:
+        log2_time = math.log2(branch_length)
+    else:
+        time_mantissa, time_exponent = _mk_scaled_time(branch_length, time_multiplier)
+        log2_time = math.log2(time_mantissa) + time_exponent
+    log2_exponent_norm = log2_rate_norm + log2_time
+    log2_direct_norm = math.log2(direct_norm)
+    if log2_exponent_norm <= log2_direct_norm:
         exponent_norm = 2.0**log2_exponent_norm
+        exponent = (
+            rate_matrix * branch_length
+            if time_multiplier == 1.0
+            else _mk_timed_generator(rate_matrix, time_mantissa, time_exponent)
+        )
         return _validated_transition_matrix(
-            expm(rate_matrix * branch_length), exponent_norm
+            _exponentiate_generator(exponent, sparse_rates), exponent_norm
         )
 
     # scipy.linalg.expm is backward stable, but on very long CTMC branches its
@@ -394,14 +426,45 @@ def _general_transition_matrix(rate_matrix, branch_length):
     # overflowing rate_norm * branch_length for finite inputs.
     squarings = max(
         1,
-        int(math.ceil(log2_exponent_norm - math.log2(_MAX_DIRECT_EXPONENT_NORM))),
+        int(math.ceil(log2_exponent_norm - log2_direct_norm)),
     )
-    scaled_length = math.ldexp(branch_length, -squarings)
-    scaled_norm = rate_scale * scaled_length * scaled_rate_norm
+    scaled_norm = 2.0 ** (log2_exponent_norm - squarings)
+    if time_multiplier == 1.0:
+        time_mantissa, time_exponent = math.frexp(branch_length)
+    exponent = _mk_timed_generator(
+        rate_matrix, time_mantissa, time_exponent - squarings
+    )
+    if np.any((rate_matrix > 0.0) & (exponent < np.finfo(float).tiny)):
+        extra_squarings = int(math.ceil(math.log2(direct_norm / 2.0)))
+        return _log_space_transition_matrix(
+            rate_matrix,
+            time_mantissa,
+            time_exponent - squarings - extra_squarings,
+            squarings + extra_squarings,
+        )
     matrix = _validated_transition_matrix(
-        expm(rate_matrix * scaled_length), scaled_norm
+        _exponentiate_generator(exponent, sparse_rates), scaled_norm
     )
     exponent_norm = 2.0**log2_exponent_norm if log2_exponent_norm < 1023.0 else math.inf
+    return _square_markov_matrix(matrix, squarings, exponent_norm)
+
+
+def _mk_scaled_time(branch_length, multiplier):
+    length, length_exponent = math.frexp(branch_length)
+    scale, scale_exponent = math.frexp(multiplier)
+    time, adjustment = math.frexp(length * scale)
+    return time, length_exponent + scale_exponent + adjustment
+
+
+def _mk_timed_generator(matrix, time_mantissa, time_exponent):
+    if -1021 <= time_exponent <= 1024:
+        return matrix * math.ldexp(time_mantissa, time_exponent)
+    mantissas, exponents = np.frexp(matrix)
+    with np.errstate(under="ignore"):
+        return np.ldexp(mantissas * time_mantissa, exponents + time_exponent)
+
+
+def _square_markov_matrix(matrix, squarings, exponent_norm):
     for _ in range(squarings):
         previous = matrix
         matrix = _validated_transition_matrix(matrix @ matrix, exponent_norm)
@@ -411,6 +474,80 @@ def _general_transition_matrix(rate_matrix, branch_length):
         if np.array_equal(matrix, previous):
             break
     return matrix
+
+
+def _log_matrix_product(first, second):
+    """Multiply nonnegative matrices represented by elementwise logarithms."""
+
+    result = np.full((len(first), len(second)), -math.inf)
+    for index in range(len(second)):
+        np.logaddexp(result, first[:, index, None] + second[index, None, :], out=result)
+    return result
+
+
+def _log_space_transition_matrix(rate_matrix, time_mantissa, time_exponent, squarings):
+    """Preserve positive rates too small to represent before squaring."""
+
+    num_states = len(rate_matrix)
+    diagonal = np.diag_indices(num_states)
+    intensity = float(np.max(-rate_matrix[diagonal]))
+    intensity_mantissa, intensity_exponent = math.frexp(intensity)
+    scaled_intensity = math.ldexp(
+        intensity_mantissa * time_mantissa,
+        intensity_exponent + time_exponent,
+    )
+    # Form λI + Qt in log space. Combine binary exponents before converting
+    # to logs so the common shift cannot cancel large log magnitudes.
+    jump_rates = rate_matrix.copy()
+    jump_rates[diagonal] += intensity
+    mantissas, exponents = np.frexp(jump_rates)
+    jump = _log_probabilities(mantissas * time_mantissa) + (
+        exponents.astype(int) + time_exponent
+    ) * math.log(2.0)
+    term = np.full_like(jump, -math.inf)
+    term[diagonal] = 0.0
+    result = term.copy()
+    for count in range(1, num_states + 32):
+        term = _log_matrix_product(term, jump) - math.log(count)
+        updated = np.logaddexp(result, term)
+        if count >= num_states and np.array_equal(updated, result):
+            break
+        result = updated
+    result -= scaled_intensity
+    log_minimum = math.log(np.finfo(float).tiny)
+    for step in range(squarings):
+        if float(np.min(result[result != -math.inf])) >= log_minimum:
+            # Once all positive entries are representable, finish with ordinary
+            # products to avoid accumulating log rounding at extreme exponents.
+            return _square_markov_matrix(np.exp(result), squarings - step, math.inf)
+        updated = _log_matrix_product(result, result)
+        updated -= logsumexp(updated, axis=1, keepdims=True)
+        if np.array_equal(result, updated):
+            break
+        result = updated
+    return _validated_transition_matrix(np.exp(result), math.inf)
+
+
+def _exponentiate_generator(exponent, sparse_rates):
+    if not sparse_rates:
+        return expm(exponent)
+    # Uniformization with λ <= 1. Use λI + Qt directly so that forming
+    # a stochastic jump matrix cannot underflow tiny off-diagonal rates.
+    num_states = exponent.shape[0]
+    diagonal = np.diag_indices(num_states)
+    intensity = float(np.max(-exponent[diagonal]))
+    exponent[diagonal] += intensity
+    term = np.eye(num_states)
+    result = term.copy()
+    # Every reachable pair has a path with at most k - 1 jumps. Include
+    # these terms before applying an elementwise relative convergence test.
+    for count in range(1, num_states + 32):
+        term = (term @ exponent) / count
+        updated = result + term
+        if count >= num_states and np.array_equal(updated, result):
+            break
+        result = updated
+    return result * math.exp(-intensity)
 
 
 def _validated_transition_matrix(matrix, exponent_norm):
@@ -448,11 +585,15 @@ def _get_er_rate_from_matrix(rate_matrix):
     rate = float(off_diagonal_rates[0])
     if rate < 0.0:
         return None
-    if not np.allclose(off_diagonal_rates, rate, rtol=10**-12, atol=0.0):
-        return None
-    expected_diagonal = np.full(num_states, -rate * float(num_states - 1), dtype=float)
-    if not np.allclose(np.diag(rate_matrix), expected_diagonal, rtol=10**-12, atol=0.0):
-        return None
+    # The relative error threshold can itself be subnormal for tiny rates.
+    with np.errstate(under="ignore"):
+        if not np.allclose(off_diagonal_rates, rate, rtol=10**-12, atol=0.0):
+            return None
+        expected_diagonal = -rate * float(num_states - 1)
+        if not np.allclose(
+            np.diag(rate_matrix), expected_diagonal, rtol=10**-12, atol=0.0
+        ):
+            return None
     return rate
 
 
@@ -461,8 +602,14 @@ def _log_probabilities(values):
         return np.log(values)
 
 
+def _edge_logsumexp(values):
+    if values.shape[-1] <= _MAX_DIRECT_LOG_SUM_STATES:
+        return np.logaddexp.reduce(values, axis=-1)
+    return logsumexp(values, axis=-1)
+
+
 def _probabilities_from_logs(values):
-    normalizer = float(logsumexp(values))
+    normalizer = float(_edge_logsumexp(values))
     if not math.isfinite(normalizer):
         raise ValueError("Failed to calculate posterior state probabilities.")
     return np.exp(values - normalizer)
@@ -518,52 +665,50 @@ def _compute_log_inside_likelihoods(
     rate_matrix,
     *,
     fixed_transition_matrices=None,
+    retain_messages=True,
     _structured_er=False,
+    prepared_leaves=None,
+    prepared_branches=None,
 ):
     if isinstance(rate_matrix, dict):
         sample_matrix = next(iter(rate_matrix.values()))
     else:
         sample_matrix = rate_matrix
         if fixed_transition_matrices is None:
-            fixed_transition_matrices = _transition_matrices_for_tree(tree, rate_matrix)
+            fixed_transition_matrices = _transition_matrices_for_tree(
+                tree, rate_matrix, prepared_branches=prepared_branches
+            )
     num_states = sample_matrix.shape[0]
     inside = dict()
     log_scales = dict()
     child_terms: dict[Any, Any] = {}
     transition_matrices = dict()
-    transition_matrix_cache = dict()
+    prepared_generators: dict[int, tuple[Callable, dict]] = {}
     er_descriptions = {}
     structured = _structured_er and num_states >= 32
     for node in tree.traverse(strategy="postorder"):
         if node.is_leaf:
-            inside[node] = _log_probabilities(
-                likelihood_by_leaf[node.name].astype(float)
+            inside[node] = (
+                _log_probabilities(likelihood_by_leaf[node.name].astype(float))
+                if prepared_leaves is None
+                else prepared_leaves[node]
             )
             log_scales[node] = 0.0
             continue
 
         likelihood = np.zeros(num_states, dtype=float)
         log_scale = 0.0
-        child_terms[node] = dict()
+        if retain_messages:
+            child_terms[node] = dict()
         for child in node.get_children():
-            branch_length = float(child.dist)
-            child_rate_matrix = (
-                rate_matrix[child] if isinstance(rate_matrix, dict) else rate_matrix
-            )
             if fixed_transition_matrices is not None:
                 matrix = fixed_transition_matrices[child]
                 if not structured:
                     log_matrix = _log_probabilities(matrix)
             else:
-                cache_key = (id(child_rate_matrix), branch_length)
-                if cache_key not in transition_matrix_cache:
-                    matrix = _transition_matrix(child_rate_matrix, branch_length)
-                    transition_matrix_cache[cache_key] = (
-                        matrix,
-                        _log_probabilities(matrix),
-                    )
-                matrix, log_matrix = transition_matrix_cache[cache_key]
-            transition_matrices[child] = matrix
+                matrix, log_matrix = _mk_regime_edge_transition(
+                    rate_matrix[child], child.dist, prepared_generators
+                )
             description = None
             if structured:
                 key = id(matrix)
@@ -577,15 +722,20 @@ def _compute_log_inside_likelihoods(
             if description is None:
                 if structured and fixed_transition_matrices is not None:
                     log_matrix = _log_probabilities(matrix)
-                term = logsumexp(log_matrix + inside[child][None, :], axis=1)
+                term = _edge_logsumexp(log_matrix + inside[child][None, :])
             else:
                 log_delta, log_b = description
                 term = np.logaddexp(
                     log_delta + inside[child], log_b + logsumexp(inside[child])
                 )
-            child_terms[node][child] = term
             likelihood += term
             log_scale += log_scales[child]
+            if retain_messages:
+                child_terms[node][child] = term
+                transition_matrices[child] = matrix
+            else:
+                del inside[child]
+                del log_scales[child]
         scale = float(np.max(likelihood))
         if not math.isfinite(scale):
             inside[node] = likelihood
@@ -596,6 +746,20 @@ def _compute_log_inside_likelihoods(
     return inside, log_scales, child_terms, transition_matrices
 
 
+def _mk_regime_edge_transition(matrix, edge_length, prepared_generators):
+    key = id(matrix)
+    if key not in prepared_generators:
+        prepared_generators[key] = (_mk_transition_evaluator(matrix), {})
+    transition_for_length, transitions = prepared_generators[key]
+    length = _validated_branch_length(edge_length)
+    if length not in transitions:
+        transition = (
+            np.eye(matrix.shape[0]) if length == 0.0 else transition_for_length(length)
+        )
+        transitions[length] = (transition, _log_probabilities(transition))
+    return transitions[length]
+
+
 def _log_likelihood(
     tree,
     likelihood_by_leaf,
@@ -603,16 +767,31 @@ def _log_likelihood(
     rate_matrix,
     *,
     fixed_transition_matrices=None,
+    prepared_leaves=None,
+    prepared_branches=None,
 ):
-    inside, log_scales, _, _ = _compute_inside_likelihoods(
+    inside, log_scales, _, _ = _compute_log_inside_likelihoods(
         tree=tree,
         likelihood_by_leaf=likelihood_by_leaf,
         rate_matrix=rate_matrix,
-        log_space=True,
         fixed_transition_matrices=fixed_transition_matrices,
+        retain_messages=False,
+        prepared_leaves=prepared_leaves,
+        prepared_branches=prepared_branches,
     )
-    root_term = float(logsumexp(_log_probabilities(root_prior) + inside[tree]))
-    return log_scales[tree] + root_term
+    return _mk_root_log_likelihood(root_prior, inside[tree], log_scales[tree])
+
+
+def _mk_log_tip_probabilities(tree, likelihood_by_leaf):
+    return {
+        node: _log_probabilities(likelihood_by_leaf[node.name].astype(float))
+        for node in tree.leaves()
+    }
+
+
+def _mk_root_log_likelihood(root_prior, inside, log_scale):
+    root_term = float(_edge_logsumexp(_log_probabilities(root_prior) + inside))
+    return log_scale + root_term
 
 
 def _is_informative_tip_likelihood(likelihood):
@@ -648,6 +827,14 @@ def _informative_descendants(tree, likelihood_by_leaf):
     return informative
 
 
+def _has_informative_mk_branch(tree, likelihood_by_leaf):
+    informative = _informative_descendants(tree, likelihood_by_leaf)
+    return any(
+        not node.is_root and informative[node] and float(node.dist) > 0.0
+        for node in informative
+    )
+
+
 def _initial_rate_value(tree, rate, rate_bounds):
     if rate is not None:
         value = float(rate)
@@ -677,23 +864,23 @@ def _fit_custom_rate_matrix(
     rate_bounds,
     fixed_rate_matrix,
     prior_for,
+    *,
+    retain_inside=False,
 ):
     if fixed_rate_matrix is None:
         raise ValueError("--model CUSTOM requires --rate-matrix.")
     rate_matrix = validate_rate_matrix(fixed_rate_matrix, num_states=len(states))
     final_prior = prior_for(rate_matrix)
-    return {
+    fit = {
         "model": "CUSTOM",
         "rates": np.array([], dtype=float),
         "rate_matrix": rate_matrix,
-        "log_likelihood": _log_likelihood(
-            tree, likelihood_by_leaf, final_prior, rate_matrix
-        ),
         "rate_estimated": False,
         "rate_bounds": rate_bounds,
         "root_prior": final_prior,
         "fit_status": "fixed",
     }
+    return _fit_mk_likelihood(tree, likelihood_by_leaf, fit, retain_inside)
 
 
 def _rate_root_prior(root_prior, root_prior_factory, matrix):
@@ -710,23 +897,45 @@ def _fixed_parametric_rate_fit(
     transition_graph,
     rate_design,
     prior_for,
+    *,
+    retain_inside=False,
 ):
     rate_matrix = _build_rate_matrix(
         model, states, rates, transition_graph, rate_design
     )
     final_prior = prior_for(rate_matrix)
-    return {
+    fit = {
         "model": model,
         "rates": np.asarray(rates, dtype=float),
         "rate_matrix": rate_matrix,
-        "log_likelihood": _log_likelihood(
-            tree, likelihood_by_leaf, final_prior, rate_matrix
-        ),
         "rate_estimated": False,
         "rate_bounds": rate_bounds,
         "root_prior": final_prior,
         "fit_status": "fixed",
     }
+    return _fit_mk_likelihood(tree, likelihood_by_leaf, fit, retain_inside)
+
+
+def _fit_mk_likelihood(tree, likelihood_by_leaf, fit, retain_inside):
+    rate_matrix = fit.get("rate_matrix_by_node", fit["rate_matrix"])
+    root_prior = fit["root_prior"]
+    if retain_inside:
+        inside, scales, child_terms, matrices = _compute_inside_likelihoods(
+            tree,
+            likelihood_by_leaf,
+            rate_matrix,
+            log_space=True,
+            _structured_er=fit.get("model") == "ER" and not fit.get("rate_estimated"),
+        )
+        fit["log_likelihood"] = _mk_root_log_likelihood(
+            root_prior, inside[tree], scales[tree]
+        )
+        fit["_inside_messages"] = (inside, child_terms, matrices)
+    else:
+        fit["log_likelihood"] = _log_likelihood(
+            tree, likelihood_by_leaf, root_prior, rate_matrix
+        )
+    return fit
 
 
 def _validate_initial_rate_likelihood(
@@ -832,6 +1041,7 @@ def _fit_parametric_rate_matrix(
     transition_graph=None,
     rate_design=None,
     root_prior_factory=None,
+    retain_inside=False,
 ):
     def prior_for(matrix):
         return _rate_root_prior(root_prior, root_prior_factory, matrix)
@@ -854,6 +1064,7 @@ def _fit_parametric_rate_matrix(
             transition_graph,
             rate_design,
             prior_for,
+            retain_inside=retain_inside,
         )
 
     if model == "ER" and rate is not None:
@@ -870,6 +1081,7 @@ def _fit_parametric_rate_matrix(
             transition_graph,
             rate_design,
             prior_for,
+            retain_inside=retain_inside,
         )
 
     initial_rate = _initial_rate_value(tree, rate, rate_bounds)
@@ -897,6 +1109,8 @@ def _fit_parametric_rate_matrix(
         rate_design,
         prior_for,
     )
+    prepared_leaves = _mk_log_tip_probabilities(tree, likelihood_by_leaf)
+    prepared_branches = _mk_branch_lengths(tree)
 
     def objective(log_rates):
         try:
@@ -906,7 +1120,12 @@ def _fit_parametric_rate_matrix(
             )
             current_prior = prior_for(rate_matrix)
             log_likelihood = _log_likelihood(
-                tree, likelihood_by_leaf, current_prior, rate_matrix
+                tree,
+                likelihood_by_leaf,
+                current_prior,
+                rate_matrix,
+                prepared_leaves=prepared_leaves,
+                prepared_branches=prepared_branches,
             )
         except (ValueError, ArithmeticError):
             return 1e100
@@ -941,12 +1160,10 @@ def _fit_parametric_rate_matrix(
         model, states, rates, transition_graph, rate_design
     )
     final_prior = prior_for(rate_matrix)
-    log_likelihood = _log_likelihood(tree, likelihood_by_leaf, final_prior, rate_matrix)
     result = {
         "model": model,
         "rates": rates,
         "rate_matrix": rate_matrix,
-        "log_likelihood": log_likelihood,
         "rate_estimated": True,
         "rate_bounds": rate_bounds,
         "optimizer_success": optimized.success,
@@ -957,7 +1174,7 @@ def _fit_parametric_rate_matrix(
         "root_prior": final_prior,
     }
     result.update(_parameter_boundary_summary(rates, parameter_kinds, parameter_bounds))
-    return result
+    return _fit_mk_likelihood(tree, likelihood_by_leaf, result, retain_inside)
 
 
 def _fit_rate_matrix(
@@ -974,6 +1191,7 @@ def _fit_rate_matrix(
     root_prior_factory=None,
     regime_assignment=None,
     regime_model="ER",
+    retain_inside=False,
 ):
     if model not in SUPPORTED_MODELS:
         raise ValueError("Unsupported '--model': {}".format(model))
@@ -992,6 +1210,7 @@ def _fit_rate_matrix(
             rate_bounds,
             fixed_rate_matrix,
             prior_for,
+            retain_inside=retain_inside,
         )
     num_parameters = (
         1
@@ -1016,6 +1235,7 @@ def _fit_rate_matrix(
             root_prior_factory=root_prior_factory,
             regime_assignment=regime_assignment,
             regime_model=regime_model,
+            retain_inside=retain_inside,
         )
     return _fit_parametric_rate_matrix(
         tree=tree,
@@ -1028,6 +1248,7 @@ def _fit_rate_matrix(
         transition_graph=transition_graph,
         rate_design=rate_design,
         root_prior_factory=root_prior_factory,
+        retain_inside=retain_inside,
     )
 
 
@@ -1078,6 +1299,8 @@ def _fit_regime_rate_matrices(
     root_prior_factory,
     regime_assignment,
     regime_model,
+    *,
+    retain_inside=False,
 ):
     if regime_assignment is None:
         raise ValueError("--model MK-REGIME requires --regime-map.")
@@ -1109,6 +1332,12 @@ def _fit_regime_rate_matrices(
     ]
     lower_logs = np.log([item[0] for item in bounds])
     upper_logs = np.log([item[1] for item in bounds])
+    prepared_leaves = _mk_log_tip_probabilities(tree, likelihood_by_leaf)
+    edge_regimes = tuple(
+        (node, regime_assignment.by_node[node])
+        for node in tree.traverse()
+        if not node.is_root
+    )
 
     def matrices_for(parameters):
         by_regime = {}
@@ -1120,11 +1349,7 @@ def _fit_regime_rate_matrices(
                 parameters[start : start + per_regime],
                 transition_graph,
             )
-        by_node = {
-            node: by_regime[regime_assignment.by_node[node]]
-            for node in tree.traverse()
-            if not node.is_root
-        }
+        by_node = {node: by_regime[regime] for node, regime in edge_regimes}
         return by_regime, by_node
 
     def prior_for(by_regime):
@@ -1141,7 +1366,11 @@ def _fit_regime_rate_matrices(
             by_regime, by_node = matrices_for(parameters)
             current_prior = prior_for(by_regime)
             likelihood = _log_likelihood(
-                tree, likelihood_by_leaf, current_prior, by_node
+                tree,
+                likelihood_by_leaf,
+                current_prior,
+                by_node,
+                prepared_leaves=prepared_leaves,
             )
         except (ValueError, ArithmeticError):
             return 1e100
@@ -1155,7 +1384,7 @@ def _fit_regime_rate_matrices(
             initial_logs,
             optimizer_bounds,
             maxiter=800,
-            minimizer=minimize,
+            minimizer=_minimize_mk,
             ftol=None,
             additional_starts=_regime_rate_starts(
                 initial_logs,
@@ -1170,7 +1399,6 @@ def _fit_regime_rate_matrices(
     parameters = np.exp(optimized.x)
     by_regime, by_node = matrices_for(parameters)
     final_prior = prior_for(by_regime)
-    log_likelihood = _log_likelihood(tree, likelihood_by_leaf, final_prior, by_node)
     rates_by_regime = {
         regime: parameters[index * per_regime : (index + 1) * per_regime]
         for index, regime in enumerate(regimes)
@@ -1187,7 +1415,6 @@ def _fit_regime_rate_matrices(
         "regime_by_node": regime_assignment.by_node,
         "regime_map_source": regime_assignment.source,
         "root_regime": regime_assignment.root_regime,
-        "log_likelihood": log_likelihood,
         "rate_estimated": True,
         "rate_bounds": rate_bounds,
         "optimizer_success": optimized.success,
@@ -1198,7 +1425,7 @@ def _fit_regime_rate_matrices(
         "root_prior": final_prior,
     }
     result.update(_parameter_boundary_summary(parameters, all_kinds, bounds))
-    return result
+    return _fit_mk_likelihood(tree, likelihood_by_leaf, result, retain_inside)
 
 
 def _compute_outside_likelihoods(
@@ -1237,8 +1464,8 @@ def _compute_log_outside_likelihoods(
             sibling_log_sum = prefix_log_sums[child_index] + suffix_log_sum
             parent_log_weight = outside[node] + sibling_log_sum
             matrix = _log_probabilities(transition_matrices[child])
-            outside[child] = logsumexp(matrix.T + parent_log_weight[None, :], axis=1)
-            total = float(logsumexp(outside[child]))
+            outside[child] = _edge_logsumexp(matrix.T + parent_log_weight[None, :])
+            total = float(_edge_logsumexp(outside[child]))
             if math.isfinite(total):
                 outside[child] -= total
             suffix_log_sum = suffix_log_sum + terms[child_index]
@@ -1296,6 +1523,8 @@ def compute_mk_marginals(
     fixed_rate_matrix=None,
     regime_assignment=None,
     regime_model="ER",
+    *,
+    _compute_posterior=True,
 ):
     _require_multiple_discrete_states(states)
     root_prior, root_prior_factory = _root_prior_configuration(
@@ -1315,92 +1544,77 @@ def compute_mk_marginals(
         root_prior_factory=root_prior_factory,
         regime_assignment=regime_assignment,
         regime_model=regime_model,
+        retain_inside=_compute_posterior,
     )
     root_prior = fit.get("root_prior", root_prior)
     if not math.isfinite(fit["log_likelihood"]):
         raise ValueError(
             "The observed tip states have zero likelihood under the Mk model."
         )
+    fit["root_prior"] = root_prior
+    fit["sample_size"] = _informative_tip_likelihood_count(likelihood_by_leaf)
+    _add_rate_design_fit_metadata(fit, rate_design)
+    if not _compute_posterior:
+        return {}, fit
+    return _mk_marginals_from_fit(tree, likelihood_by_leaf, fit), fit
 
-    inside, _, child_terms, transition_matrices = _compute_inside_likelihoods(
-        tree=tree,
-        likelihood_by_leaf=likelihood_by_leaf,
-        rate_matrix=fit.get("rate_matrix_by_node", fit["rate_matrix"]),
-        log_space=True,
-        _structured_er=model == "ER" and rate is not None,
-    )
+
+def _mk_marginals_from_fit(tree, likelihood_by_leaf, fit):
+    messages = fit.pop("_inside_messages", None)
+    if messages is None:
+        inside, _, child_terms, transition_matrices = _compute_inside_likelihoods(
+            tree,
+            likelihood_by_leaf,
+            fit.get("rate_matrix_by_node", fit["rate_matrix"]),
+            log_space=True,
+            _structured_er=fit.get("model") == "ER" and not fit.get("rate_estimated"),
+        )
+    else:
+        inside, child_terms, transition_matrices = messages
     outside = _compute_outside_likelihoods(
         tree=tree,
         child_terms=child_terms,
         transition_matrices=transition_matrices,
-        root_prior=root_prior,
+        root_prior=fit["root_prior"],
         log_space=True,
     )
-    posterior_by_node = dict()
-    for node in tree.traverse():
-        posterior_by_node[node] = _probabilities_from_logs(inside[node] + outside[node])
+    posterior_by_node = {
+        node: _probabilities_from_logs(inside[node] + outside[node])
+        for node in tree.traverse()
+    }
     fit.update(
         {
-            "root_prior": root_prior,
-            "sample_size": _informative_tip_likelihood_count(likelihood_by_leaf),
             "inside": {node: np.exp(values) for node, values in inside.items()},
             "log_inside": inside,
             "transition_matrices": transition_matrices,
             "posterior_by_node": posterior_by_node,
         }
     )
-    _add_rate_design_fit_metadata(fit, rate_design)
-    return posterior_by_node, fit
+    return posterior_by_node
 
 
-def _posterior_for_rate_matrix(
-    tree,
-    likelihood_by_leaf,
-    root_prior,
-    rate_matrix,
-    *,
-    fixed_transition_matrices=None,
+def _mk_branch_lengths(tree):
+    return tuple(
+        (node, _validated_branch_length(node.dist))
+        for node in tree.traverse(strategy="preorder")
+        if not node.is_root
+    )
+
+
+def _transition_matrices_for_tree(
+    tree, rate_matrix, *, prepared_branches=None, time_multiplier=1.0
 ):
-    inside, _, child_terms, transition_matrices = _compute_inside_likelihoods(
-        tree=tree,
-        likelihood_by_leaf=likelihood_by_leaf,
-        rate_matrix=rate_matrix,
-        log_space=True,
-        fixed_transition_matrices=fixed_transition_matrices,
-    )
-    outside = _compute_outside_likelihoods(
-        tree=tree,
-        child_terms=child_terms,
-        transition_matrices=transition_matrices,
-        root_prior=root_prior,
-        log_space=True,
-    )
-    return {
-        node: _probabilities_from_logs(inside[node] + outside[node])
-        for node in tree.traverse()
-    }
-
-
-def _transition_matrices_for_tree(tree, rate_matrix):
     """Build each unique branch-length transition once for one generator."""
 
-    lengths = sorted({float(node.dist) for node in tree.traverse() if not node.is_root})
-    # Preserve the closed-form ER path: it is both cheaper and more accurate
-    # than a generic eigendecomposition for equal-rates generators.
-    by_length = (
-        None
-        if _get_er_rate_from_matrix(rate_matrix) is not None
-        else _symmetric_transition_matrices(rate_matrix, lengths)
+    transition_for_length = _mk_transition_evaluator(rate_matrix, time_multiplier)
+    branches = (
+        _mk_branch_lengths(tree) if prepared_branches is None else prepared_branches
     )
-    if by_length is None:
-        by_length = {
-            length: _transition_matrix(rate_matrix, length) for length in lengths
-        }
+    by_length = {0.0: np.eye(rate_matrix.shape[0], dtype=float)}
     by_node = {}
-    for node in tree.traverse(strategy="preorder"):
-        if node.is_root:
-            continue
-        length = float(node.dist)
+    for node, length in branches:
+        if length not in by_length:
+            by_length[length] = transition_for_length(length)
         by_node[node] = by_length[length]
     return by_node
 
@@ -1463,23 +1677,166 @@ def _symmetric_transition_matrices(rate_matrix, lengths):
 def _discrete_gamma_category_rates(shape, categories):
     """Return Yang's equal-probability, conditional-mean gamma categories."""
 
-    boundaries = np.concatenate(
-        (
-            np.zeros(1, dtype=float),
-            gamma_distribution.ppf(
-                np.arange(1, categories, dtype=float) / categories,
-                a=shape,
-                scale=1.0 / shape,
-            ),
-            np.full(1, np.inf, dtype=float),
-        )
-    )
+    # Both moments use the unit-scale gamma argument, so the mean-one
+    # scale cancels without constructing distribution or endpoint arrays.
+    boundaries = gammaincinv(shape, np.arange(1, categories, dtype=float) / categories)
     # For X ~ Gamma(shape, scale=1/shape), the partial first moment through x
     # is the CDF of Gamma(shape + 1, scale=1/shape), because E[X] = 1.
-    first_moments = gamma_distribution.cdf(boundaries, a=shape + 1.0, scale=1.0 / shape)
+    first_moments = np.empty(categories + 1, dtype=float)
+    first_moments[0], first_moments[-1] = 0.0, 1.0
+    first_moments[1:-1] = gammainc(shape + 1.0, boundaries)
     rates = categories * np.diff(first_moments)
     rates /= float(np.mean(rates))
     return rates
+
+
+def _mixture_log_tip_likelihoods(compiled, likelihoods_by_character):
+    leaves = compiled.leaf_indices
+    names = tuple(compiled.nodes[index].name for index in leaves)
+    characters = likelihoods_by_character.values()
+    first = next(iter(characters))
+    state_shape = np.shape(first[names[0]])
+    values = np.empty((len(leaves), len(characters), *state_shape), dtype=float)
+    for column, likelihood in enumerate(characters):
+        values[:, column] = [likelihood[name] for name in names]
+    with np.errstate(divide="ignore"):
+        # These are owned buffers, and every category reads the same view.
+        np.log(values, out=values)
+    return dict(zip(leaves, values, strict=True))
+
+
+def _mixture_character_batches(likelihoods_by_character, num_states):
+    batch_size = max(1, _MAX_MIXTURE_EDGE_VALUES // (num_states * num_states))
+    items = tuple(likelihoods_by_character.items())
+    return [
+        dict(items[start : start + batch_size])
+        for start in range(0, len(items), batch_size)
+    ]
+
+
+def _mixture_log_transitions(compiled, transitions):
+    # A single pass per category serves all character batches. Keep the
+    # log matrices only while evaluating that category.
+    by_matrix = {}
+    by_index = [None] * len(compiled.nodes)
+    with np.errstate(divide="ignore"):
+        for index, node in enumerate(compiled.nodes[1:], start=1):
+            matrix = transitions[node]
+            key = id(matrix)
+            if key not in by_matrix:
+                by_matrix[key] = np.log(matrix)
+            by_index[index] = by_matrix[key]
+    return by_index
+
+
+def _mixture_log_likelihoods(compiled, tips, log_prior, log_transitions):
+    """Prune one rate category for all characters together."""
+
+    inside = tips.copy()
+    log_scales = np.zeros(len(next(iter(tips.values()))))
+    for index in compiled.postorder:
+        children = compiled.children[index]
+        if not children:
+            continue
+        likelihood = np.zeros((len(log_scales), len(log_prior)))
+        for child in children:
+            matrix = log_transitions[child]
+            likelihood += _edge_logsumexp(matrix[None] + inside.pop(child)[:, None, :])
+        scale = np.max(likelihood, axis=1)
+        inside[index] = likelihood - np.where(np.isfinite(scale), scale, 0.0)[:, None]
+        log_scales += scale
+    return log_scales + logsumexp(log_prior + inside[0], axis=1)
+
+
+def _mixture_posterior_batch(compiled, tips, log_prior, log_transitions):
+    inside = tips.copy()
+    child_terms = [None] * len(compiled.nodes)
+    tip_shape = next(iter(tips.values())).shape
+    for index in compiled.postorder:
+        children = compiled.children[index]
+        if not children:
+            continue
+        likelihood = np.zeros(tip_shape)
+        for child in children:
+            term = _edge_logsumexp(
+                log_transitions[child][None] + inside[child][:, None, :]
+            )
+            child_terms[child] = term
+            likelihood += term
+        inside[index] = _normalize_mk_log_rows(likelihood, by_sum=False)
+
+    outside = {0: log_prior[None]}
+    for index, children in enumerate(compiled.children):
+        if children:
+            _mixture_outside_children(
+                outside, index, children, child_terms, log_transitions
+            )
+        inside[index] = inside[index] + outside.pop(index)
+    return inside
+
+
+def _normalize_mk_log_rows(values, *, by_sum):
+    scales = _edge_logsumexp(values) if by_sum else np.max(values, axis=1)
+    return values - np.where(np.isfinite(scales), scales, 0.0)[:, None]
+
+
+def _mixture_outside_children(outside, index, children, child_terms, log_transitions):
+    prefix = [np.zeros_like(outside[index])]
+    for child in children:
+        prefix.append(prefix[-1] + child_terms[child])
+    suffix = np.zeros_like(outside[index])
+    for position in range(len(children) - 1, -1, -1):
+        child = children[position]
+        parent = outside[index] + (prefix[position] + suffix)
+        next_outside = _edge_logsumexp(
+            log_transitions[child].T[None] + parent[:, None, :]
+        )
+        outside[child] = _normalize_mk_log_rows(next_outside, by_sum=True)
+        suffix = suffix + child_terms[child]
+
+
+def _mixture_posteriors(compiled, tip_batches, log_prior, transitions, probabilities):
+    nodes = compiled.nodes
+    result = np.zeros((len(probabilities), len(nodes), len(log_prior)))
+    for category, transition in enumerate(transitions):
+        weights = probabilities[:, category]
+        log_transitions = _mixture_log_transitions(compiled, transition)
+        start = 0
+        for tips in tip_batches:
+            count = len(next(iter(tips.values())))
+            batch_weights = weights[start : start + count]
+            active = np.flatnonzero(batch_weights > 0.0)
+            if len(active):
+                selected = (
+                    tips
+                    if len(active) == count
+                    else {index: values[active] for index, values in tips.items()}
+                )
+                log_posterior = _mixture_posterior_batch(
+                    compiled, selected, log_prior, log_transitions
+                )
+                for index, values in log_posterior.items():
+                    result[start + active, index] += batch_weights[
+                        active, None
+                    ] * np.exp(_normalize_mk_log_rows(values, by_sum=True))
+            start += count
+    return result
+
+
+def _mixture_root_prior(mode, states, observed_by_character, likelihoods_by_character):
+    equal = np.full(len(states), 1.0 / len(states))
+    if mode in {"equal", "stationary"}:
+        return equal
+    if mode != "empirical":
+        raise ValueError(f"Unsupported MK-MIXTURE root prior: {mode}.")
+    counts = np.zeros(len(states), dtype=float)
+    for character, likelihood_by_leaf in likelihoods_by_character.items():
+        for leaf_name, value in observed_by_character[character].items():
+            if value is None:
+                continue
+            likelihood = likelihood_by_leaf[leaf_name]
+            counts += likelihood / likelihood.sum()
+    return counts / counts.sum() if counts.sum() > 0.0 else equal
 
 
 def compute_mk_mixture_marginals(
@@ -1495,10 +1852,9 @@ def compute_mk_mixture_marginals(
     root_prior_mode="equal",
     rate_bounds=None,
     transition_graph=None,
+    _compute_posterior=True,
 ):
     """Jointly fit several Mk characters with gamma or ordered free rates."""
-
-    from nwkit.optimization import deterministic_multistart
 
     _require_multiple_discrete_states(states)
     if base_model not in {"ER", "SYM", "ARD", "F81", "GTR"}:
@@ -1510,6 +1866,14 @@ def compute_mk_mixture_marginals(
         raise ValueError("--rate-categories must be between 2 and 8.")
     if len(likelihoods_by_character) < 2:
         raise ValueError("MK-MIXTURE requires at least two character columns.")
+    if not any(
+        _has_informative_mk_branch(tree, likelihood_by_leaf)
+        for likelihood_by_leaf in likelihoods_by_character.values()
+    ):
+        raise ValueError(
+            "MK-MIXTURE requires a positive-length branch ancestral to an "
+            "informative tip observation."
+        )
     rate_bounds = DEFAULT_RATE_BOUNDS if rate_bounds is None else rate_bounds
     labels = _rate_parameter_labels(base_model, states, transition_graph)
     if len(labels) > _MAX_FREE_TRANSITION_PARAMETERS:
@@ -1530,6 +1894,11 @@ def compute_mk_mixture_marginals(
                 "rate makes the mixture distribution unidentifiable."
             )
         fixed_base = np.asarray([fixed_rate], dtype=float)
+    fixed_matrix = (
+        _build_rate_matrix(base_model, states, fixed_base, transition_graph)
+        if fixed_base is not None
+        else None
+    )
 
     initial_rate = _initial_rate_value(tree, rate, rate_bounds)
     initial_base = _initial_model_parameters(
@@ -1601,68 +1970,57 @@ def compute_mk_mixture_marginals(
             if fixed_base is not None
             else np.exp(np.asarray(parameters[: len(labels)], dtype=float))
         )
-        matrix = _build_rate_matrix(base_model, states, base, transition_graph)
+        matrix = (
+            fixed_matrix
+            if fixed_matrix is not None
+            else _build_rate_matrix(base_model, states, base, transition_graph)
+        )
         category_rates, weights, shape = mixture_parameters(parameters)
         return base, matrix, category_rates, weights, shape
 
+    compiled = CompiledTree.from_tree(tree)
+    prepared_branches = _mk_branch_lengths(tree)
+    log_tip_batches = [
+        _mixture_log_tip_likelihoods(compiled, batch)
+        for batch in _mixture_character_batches(likelihoods_by_character, len(states))
+    ]
+    fixed_prior = _mixture_root_prior(
+        root_prior_mode, states, observed_by_character, likelihoods_by_character
+    )
+    if root_prior_mode == "stationary" and fixed_matrix is not None:
+        fixed_prior = stationary_distribution(fixed_matrix)
+
     def prior_for(matrix):
-        if root_prior_mode == "stationary":
-            return stationary_distribution(matrix)
-        if root_prior_mode == "equal":
-            return np.full(len(states), 1.0 / len(states), dtype=float)
-        if root_prior_mode != "empirical":
-            raise ValueError(f"Unsupported MK-MIXTURE root prior: {root_prior_mode}.")
-        counts = np.zeros(len(states), dtype=float)
-        for character, likelihood_by_leaf in likelihoods_by_character.items():
-            observed = observed_by_character[character]
-            for leaf_name, value in observed.items():
-                if value is None:
-                    continue
-                likelihood = likelihood_by_leaf[leaf_name]
-                counts += likelihood / likelihood.sum()
         return (
-            counts / counts.sum()
-            if counts.sum() > 0.0
-            else np.full(len(states), 1.0 / len(states), dtype=float)
+            stationary_distribution(matrix)
+            if root_prior_mode == "stationary" and fixed_matrix is None
+            else fixed_prior
         )
 
-    def character_scores(
-        matrix,
-        category_rates,
-        weights,
-        root_prior,
-        transition_matrices_by_category=None,
-    ):
-        if transition_matrices_by_category is None:
-            transition_matrices_by_category = [
-                _transition_matrices_for_tree(tree, matrix * category_rate)
-                for category_rate in category_rates
-            ]
-        scores = {}
-        total = 0.0
-        for character, likelihood_by_leaf in likelihoods_by_character.items():
-            values = np.asarray(
-                [
-                    math.log(weight)
-                    + _log_likelihood(
-                        tree,
-                        likelihood_by_leaf,
-                        root_prior,
-                        matrix * category_rate,
-                        fixed_transition_matrices=transition_matrices,
-                    )
-                    for category_rate, weight, transition_matrices in zip(
-                        category_rates,
-                        weights,
-                        transition_matrices_by_category,
-                        strict=True,
-                    )
-                ]
+    def character_scores(matrix, category_rates, weights, root_prior, *, retain=False):
+        log_prior = _log_probabilities(root_prior)
+        transitions = []
+        columns = []
+        for rate, weight in zip(category_rates, weights, strict=True):
+            transition = _mixture_category_transitions(
+                tree, matrix, rate, prepared_branches
             )
-            score = float(logsumexp(values))
-            scores[character] = values
-            total += score
-        return total, scores, transition_matrices_by_category
+            if retain:
+                transitions.append(transition)
+            log_transitions = _mixture_log_transitions(compiled, transition)
+            columns.append(
+                math.log(weight)
+                + np.concatenate(
+                    [
+                        _mixture_log_likelihoods(
+                            compiled, tips, log_prior, log_transitions
+                        )
+                        for tips in log_tip_batches
+                    ]
+                )
+            )
+        scores = np.column_stack(columns)
+        return sum(map(float, logsumexp(scores, axis=1))), scores, transitions
 
     def objective(parameters):
         try:
@@ -1674,40 +2032,35 @@ def compute_mk_mixture_marginals(
             return 1e100
         return -likelihood if math.isfinite(likelihood) else 1e100
 
-    optimized = deterministic_multistart(objective, initial, bounds, maxiter=1500)
+    optimized = deterministic_multistart(
+        objective, initial, bounds, maxiter=1500, minimizer=_minimize_mk
+    )
     base, matrix, category_rates, weights, shape = unpack(optimized.x)
     root_prior = prior_for(matrix)
     log_likelihood, scores, transition_matrices_by_category = character_scores(
-        matrix, category_rates, weights, root_prior
+        matrix, category_rates, weights, root_prior, retain=_compute_posterior
     )
-    posterior_by_character = {}
-    category_posterior_by_character = {}
-    for character, likelihood_by_leaf in likelihoods_by_character.items():
-        category_probabilities = np.exp(
-            scores[character] - logsumexp(scores[character])
+    if not math.isfinite(log_likelihood):
+        raise ValueError(
+            "The observed characters have zero likelihood under MK-MIXTURE."
         )
-        category_posterior_by_character[character] = category_probabilities
-        category_posteriors = [
-            _posterior_for_rate_matrix(
-                tree,
-                likelihood_by_leaf,
-                root_prior,
-                matrix * category_rate,
-                fixed_transition_matrices=transition_matrices,
-            )
-            for category_rate, transition_matrices in zip(
-                category_rates, transition_matrices_by_category, strict=True
-            )
-        ]
-        posterior_by_character[character] = {
-            node: sum(
-                probability * posterior[node]
-                for probability, posterior in zip(
-                    category_probabilities, category_posteriors, strict=True
-                )
-            )
-            for node in tree.traverse()
-        }
+    category_probabilities = np.exp(scores - logsumexp(scores, axis=1)[:, None])
+    category_posterior_by_character = dict(
+        zip(likelihoods_by_character, category_probabilities, strict=True)
+    )
+    posterior_by_character = (
+        _batched_mixture_marginals(
+            tree,
+            compiled,
+            likelihoods_by_character,
+            log_tip_batches,
+            root_prior,
+            transition_matrices_by_category,
+            category_probabilities,
+        )
+        if _compute_posterior
+        else {}
+    )
 
     tolerance = 1e-5
     statuses = []
@@ -1775,6 +2128,19 @@ def compute_mk_mixture_marginals(
     return posterior_by_character, fit
 
 
+def _batched_mixture_marginals(
+    tree, compiled, likelihoods, tips, prior, transitions, probabilities
+):
+    marginals = _mixture_posteriors(
+        compiled, tips, _log_probabilities(prior), transitions, probabilities
+    )
+    order = tuple((node, compiled.index_by_node[node]) for node in tree.traverse())
+    return {
+        character: {node: values[index] for node, index in order}
+        for character, values in zip(likelihoods, marginals, strict=True)
+    }
+
+
 def compute_hrm_marginals(
     tree,
     states,
@@ -1786,6 +2152,7 @@ def compute_hrm_marginals(
     root_prior_mode="equal",
     rate_bounds=None,
     transition_graph=None,
+    _compute_posterior=True,
 ):
     """Fit a fully parameterized hidden-rates CTMC and marginalize classes."""
 
@@ -1836,6 +2203,7 @@ def compute_hrm_marginals(
         root_prior_mode=root_prior_mode,
         rate_bounds=rate_bounds,
         transition_graph=expanded_graph,
+        _compute_posterior=_compute_posterior,
     )
     projection = state_projection(len(states), hidden_categories)
     posterior = {
@@ -1943,6 +2311,7 @@ def compute_covarion_marginals(
     root_prior_mode="equal",
     rate_bounds=None,
     transition_graph=None,
+    _compute_posterior=True,
 ):
     """Fit a parsimonious ordered hidden-rate covarion CTMC."""
 
@@ -1953,7 +2322,6 @@ def compute_covarion_marginals(
         expanded_state_labels,
         state_projection,
     )
-    from nwkit.optimization import deterministic_multistart
 
     _require_multiple_discrete_states(states)
     hidden_categories = _integer_option(hidden_categories, "--hidden-categories")
@@ -1974,6 +2342,11 @@ def compute_covarion_marginals(
     np.fill_diagonal(observed_graph, False)
     if not np.any(observed_graph):
         raise ValueError("COVARION requires at least one observed-state transition.")
+    if not _has_informative_mk_branch(tree, likelihood_by_leaf):
+        raise ValueError(
+            "COVARION requires a positive-length branch ancestral to an "
+            "informative tip observation."
+        )
     rate_bounds = DEFAULT_RATE_BOUNDS if rate_bounds is None else rate_bounds
     initial_rate = _initial_rate_value(tree, rate, rate_bounds)
     fixed_rate = None
@@ -2011,18 +2384,30 @@ def compute_covarion_marginals(
             effective_rate_bounds=rate_bounds,
         )
 
+    prepared_leaves = _mk_log_tip_probabilities(tree, expanded_likelihoods)
+    prepared_branches = _mk_branch_lengths(tree)
+
     def objective(parameters):
         try:
             matrix, _ = matrix_for(parameters)
             prior = (
                 root_prior if root_prior_factory is None else root_prior_factory(matrix)
             )
-            likelihood = _log_likelihood(tree, expanded_likelihoods, prior, matrix)
+            likelihood = _log_likelihood(
+                tree,
+                expanded_likelihoods,
+                prior,
+                matrix,
+                prepared_leaves=prepared_leaves,
+                prepared_branches=prepared_branches,
+            )
         except (ValueError, ArithmeticError, OverflowError):
             return 1e100
         return -likelihood if math.isfinite(likelihood) else 1e100
 
-    optimized = deterministic_multistart(objective, initial, bounds, maxiter=1200)
+    optimized = deterministic_multistart(
+        objective, initial, bounds, maxiter=1200, minimizer=_minimize_mk
+    )
     matrix, multipliers = matrix_for(optimized.x)
     base_rate, spread, switching_rate, spread_fraction = unpack(optimized.x)
     effective_rates = base_rate * multipliers
@@ -2034,6 +2419,7 @@ def compute_covarion_marginals(
         model="CUSTOM",
         root_prior_mode=root_prior_mode,
         fixed_rate_matrix=matrix,
+        _compute_posterior=_compute_posterior,
     )
     posterior = {
         node: aggregate_probabilities(probabilities, len(states), hidden_categories)
@@ -2119,60 +2505,55 @@ def _should_output_node(node, observed_state_by_leaf, targets):
     return False
 
 
+def _discrete_output_node_columns(nodes, observed_state_by_leaf, node_to_branch_id):
+    observed = [
+        observed_state_by_leaf.get(node.name) if node.is_leaf else None
+        for node in nodes
+    ]
+    return {
+        "branch_id": [node_to_branch_id[node] for node in nodes],
+        "parent": [
+            -1 if node.is_root else node_to_branch_id[node.up] for node in nodes
+        ],
+        "node_class": [get_node_class(node) for node in nodes],
+        "name": ["" if node.name in (None, "") else str(node.name) for node in nodes],
+        "observed_state": ["" if value is None else value for value in observed],
+        "is_imputed": [
+            node.is_leaf and _is_missing_observation(value)
+            for node, value in zip(nodes, observed, strict=True)
+        ],
+    }
+
+
 def _build_output_table(
     tree, states, observed_state_by_leaf, posterior_by_node, targets, output_mode
 ):
     node_to_branch_id = assign_branch_ids(tree)
-    state_ids = [_safe_column_state(state) for state in states]
-    rows = list()
-    for node in tree.traverse():
-        if not _should_output_node(node, observed_state_by_leaf, targets):
-            continue
-        posterior = posterior_by_node[node]
-        map_index = int(np.argmax(posterior))
-        observed_state = observed_state_by_leaf.get(node.name) if node.is_leaf else None
-        row = {
-            "branch_id": node_to_branch_id[node],
-            "parent": -1 if node.is_root else node_to_branch_id[node.up],
-            "node_class": get_node_class(node),
-            "name": "" if node.name in [None, ""] else str(node.name),
-            "observed_state": "" if observed_state is None else observed_state,
-            "is_imputed": bool(_is_missing_tip(node, observed_state_by_leaf)),
-        }
-        if output_mode == "probabilities":
-            row["map_state"] = states[map_index]
-            row["map_probability"] = float(posterior[map_index])
-            for state_id, probability in zip(state_ids, posterior, strict=True):
-                row["p_{}".format(state_id)] = float(probability)
-        elif output_mode == "map":
-            row["state"] = states[map_index]
-            row["probability"] = float(posterior[map_index])
-        else:
-            raise ValueError("Unsupported '--output': {}".format(output_mode))
-        rows.append(row)
+    nodes = [
+        node
+        for node in tree.traverse()
+        if _should_output_node(node, observed_state_by_leaf, targets)
+    ]
+    columns = _discrete_output_node_columns(
+        nodes, observed_state_by_leaf, node_to_branch_id
+    )
+    probabilities = np.empty((len(nodes), len(states)), dtype=float)
+    for index, node in enumerate(nodes):
+        probabilities[index] = posterior_by_node[node]
+    selected = np.argmax(probabilities, axis=1)
+    labels = [states[index] for index in selected]
+    maximum = probabilities[np.arange(len(nodes)), selected]
     if output_mode == "probabilities":
-        columns = [
-            "branch_id",
-            "parent",
-            "node_class",
-            "name",
-            "observed_state",
-            "is_imputed",
-            "map_state",
-            "map_probability",
-        ] + ["p_{}".format(state_id) for state_id in state_ids]
+        columns.update(map_state=labels, map_probability=maximum)
+        columns.update(
+            (f"p_{_safe_column_state(state)}", probabilities[:, index])
+            for index, state in enumerate(states)
+        )
+    elif output_mode == "map":
+        columns.update(state=labels, probability=maximum)
     else:
-        columns = [
-            "branch_id",
-            "parent",
-            "node_class",
-            "name",
-            "observed_state",
-            "is_imputed",
-            "state",
-            "probability",
-        ]
-    return pd.DataFrame(rows, columns=columns)
+        raise ValueError("Unsupported '--output': {}".format(output_mode))
+    return pd.DataFrame(columns)
 
 
 def _safe_column_state(state):
@@ -2513,18 +2894,36 @@ def _build_uniformization_context(rate_matrix, branch_length, *, _parameters=Non
     r_matrix = np.maximum(r_matrix, 0.0)
     r_matrix = r_matrix / r_matrix.sum(axis=1, keepdims=True)
     event_counts = np.arange(max_n + 1, dtype=np.int64)
-    log_poisson = poisson.logpmf(event_counts, lam)
+    log_poisson = _uniformization_log_event_weights(
+        event_counts, omega, branch_length, lam
+    )
     full_cache_bytes = 2 * (max_n + 1) * num_states * num_states * 8
     cache_small_context = full_cache_bytes <= _MAX_CACHED_BACKWARD_BYTES
     return {
         "no_events": False,
         "max_n": max_n,
         "r_matrix": r_matrix,
+        "rate_matrix": rate_matrix,
+        "omega": omega,
         "event_counts": event_counts,
         "log_poisson": log_poisson,
         "backward_by_end": {} if cache_small_context else None,
         "bridge_probability_cache": {} if cache_small_context else None,
     }
+
+
+def _uniformization_log_event_weights(counts, omega, branch_length, intensity):
+    if intensity >= np.finfo(float).tiny:
+        return poisson.logpmf(counts, intensity)
+    log_intensity = math.log(omega) + math.log(branch_length)
+    return counts * log_intensity - gammaln(counts + 1.0) - intensity
+
+
+def _uniformization_log_jump_matrix(rate_matrix, omega, jump_matrix):
+    log_jump = _log_probabilities(jump_matrix)
+    tiny = (rate_matrix > 0.0) & (jump_matrix < np.finfo(float).tiny)
+    log_jump[tiny] = np.log(rate_matrix[tiny]) - math.log(omega)
+    return log_jump
 
 
 def _build_uniformization_contexts(rate_matrix, branch_lengths, *, _parameters=None):
@@ -2569,10 +2968,17 @@ def _bridge_probabilities(weights):
     return _normalize_probability_vector(weights)
 
 
-def _backward_bridge_messages(context, end_state):
+def _bridge_message_cache(context, end_state):
     cache = context.get("backward_by_end")
     if cache is not None and end_state in cache:
         return cache[end_state]
+    backward = _backward_bridge_messages(context, end_state)
+    if cache is not None:
+        cache[end_state] = (backward, False)
+    return backward, False
+
+
+def _backward_bridge_messages(context, end_state):
     r_matrix = context["r_matrix"]
     num_states = r_matrix.shape[0]
     max_n = len(context["event_counts"]) - 1
@@ -2581,9 +2987,44 @@ def _backward_bridge_messages(context, end_state):
     backward[0, end_state] = 1.0
     for event_count in range(max_n):
         backward[event_count + 1, :] = r_matrix.dot(backward[event_count, :])
-    if cache is not None:
-        cache[end_state] = backward
     return backward
+
+
+def _log_backward_bridge_messages(context, end_state):
+    log_r = context.get("log_r_matrix")
+    if log_r is None:
+        log_r = _uniformization_log_jump_matrix(
+            context["rate_matrix"], context["omega"], context["r_matrix"]
+        )
+        context["log_r_matrix"] = log_r
+    history = np.full((len(context["event_counts"]), len(log_r)), -math.inf)
+    history[0, end_state] = 0.0
+    for index in range(1, len(history)):
+        history[index] = _edge_logsumexp(log_r + history[index - 1][None, :])
+    cache = context.get("backward_by_end")
+    if cache is not None:
+        cache[end_state] = (history, True)
+    return history
+
+
+def _bridge_log_weights(start_state, end_state, context, backward, logged):
+    if not logged:
+        probabilities = backward[:, start_state]
+        log_weights = context["log_poisson"] + _log_probabilities(probabilities)
+        maximum_weight = float(np.max(log_weights))
+        small = probabilities < np.finfo(float).tiny
+        # A lost bridge term is bounded by the Poisson weight times the
+        # smallest normal float. Recompute only when it could matter.
+        small_upper_bound = np.max(context["log_poisson"][small], initial=-math.inf)
+        small_upper_bound += math.log(np.finfo(float).tiny)
+        if math.isfinite(maximum_weight) and small_upper_bound < maximum_weight - 36.0:
+            return log_weights, backward, False
+        del probabilities, log_weights, backward
+        cache = context.get("backward_by_end")
+        if cache is not None:
+            cache.pop(end_state, None)
+        backward = _log_backward_bridge_messages(context, end_state)
+    return context["log_poisson"] + backward[:, start_state], backward, True
 
 
 def _draw_bridge_event_count(start_state, end_state, context, rng):
@@ -2592,17 +3033,10 @@ def _draw_bridge_event_count(start_state, end_state, context, rng):
     cache = context.get("bridge_probability_cache")
     cache_key = (start_state, end_state)
     probabilities = None if cache is None else cache.get(cache_key)
-    backward = _backward_bridge_messages(context, end_state)
+    backward, logged = _bridge_message_cache(context, end_state)
     if probabilities is None:
-        bridge_probabilities = backward[:, start_state]
-        valid = bridge_probabilities > 0.0
-        if not np.any(valid):
-            raise ValueError(
-                "No feasible stochastic bridge connects the requested states."
-            )
-        log_weights = np.full(len(bridge_probabilities), -math.inf, dtype=float)
-        log_weights[valid] = context["log_poisson"][valid] + np.log(
-            bridge_probabilities[valid]
+        log_weights, backward, logged = _bridge_log_weights(
+            start_state, end_state, context, backward, logged
         )
         normalizer = float(logsumexp(log_weights))
         if not math.isfinite(normalizer):
@@ -2613,7 +3047,7 @@ def _draw_bridge_event_count(start_state, end_state, context, rng):
         if cache is not None:
             cache[cache_key] = probabilities
     event_count = int(rng.choice(context["event_counts"], p=probabilities))
-    return event_count, backward
+    return event_count, (backward, logged)
 
 
 def _sample_bridge_transition_counts(
@@ -2632,20 +3066,29 @@ def _sample_bridge_transition_counts(
         uniformization_contexts,
         uniformization_context,
     )
-    event_count, backward = _draw_bridge_event_count(
+    return _draw_bridge_transition_counts(
+        start_state, end_state, context, rng, history=history
+    )
+
+
+def _draw_bridge_transition_counts(
+    start_state, end_state, context, rng, *, history=None
+):
+    event_count, messages = _draw_bridge_event_count(
         start_state, end_state, context, rng
     )
-    num_states = rate_matrix.shape[0]
     counts: defaultdict[Any, int] = defaultdict(int)
     if event_count == 0:
         return counts
-    r_matrix = context["r_matrix"]
+    backward, logged = messages
+    num_states = len(context["r_matrix"])
     current_state = start_state
     for step_index in range(event_count):
         remaining = event_count - step_index - 1
-        weights = r_matrix[current_state, :] * backward[remaining, :]
-        probabilities = _bridge_probabilities(weights)
-        next_state = int(rng.choice(np.arange(num_states), p=probabilities))
+        probabilities = _bridge_step_probabilities(
+            context, backward[remaining], current_state, logged
+        )
+        next_state = int(rng.choice(num_states, p=probabilities))
         if next_state != current_state:
             counts[(current_state, next_state)] += 1
         current_state = next_state
@@ -2654,34 +3097,35 @@ def _sample_bridge_transition_counts(
     return counts
 
 
-def _resolve_uniformization_context(
-    rate_matrix, branch_length, contexts, explicit_context
-):
-    if explicit_context is not None:
-        return explicit_context
-    if contexts is not None:
-        return contexts[branch_length]
-    return _build_uniformization_context(rate_matrix, branch_length)
+def _bridge_step_probabilities(context, backward, state, logged):
+    if logged:
+        return _probabilities_from_logs(context["log_r_matrix"][state] + backward)
+    return _bridge_probabilities(context["r_matrix"][state] * backward)
 
 
-def _sample_node_states(tree, states, fit, rng):
+def _conditional_node_state_probabilities(fit, child, parent_state):
+    transition_matrix = fit["transition_matrices"][child]
+    weights = (
+        _log_probabilities(transition_matrix[parent_state, :])
+        + fit["log_inside"][child]
+    )
+    return _probabilities_from_logs(weights)
+
+
+def _sample_node_states(tree, states, fit, rng, *, conditional_probabilities=None):
+    if conditional_probabilities is None:
+        conditional_probabilities = partial(_conditional_node_state_probabilities, fit)
     sampled_states = dict()
     num_states = len(fit["posterior_by_node"][tree])
+    state_indices = np.arange(num_states)
     sampled_states[tree] = int(
-        rng.choice(np.arange(num_states), p=fit["posterior_by_node"][tree])
+        rng.choice(state_indices, p=fit["posterior_by_node"][tree])
     )
     for node in tree.traverse(strategy="preorder"):
         for child in node.get_children():
             parent_state = sampled_states[node]
-            transition_matrix = fit["transition_matrices"][child]
-            weights = (
-                _log_probabilities(transition_matrix[parent_state, :])
-                + fit["log_inside"][child]
-            )
-            probabilities = _probabilities_from_logs(weights)
-            sampled_states[child] = int(
-                rng.choice(np.arange(num_states), p=probabilities)
-            )
+            probabilities = conditional_probabilities(child, parent_state)
+            sampled_states[child] = int(rng.choice(state_indices, p=probabilities))
     return sampled_states
 
 
@@ -2693,22 +3137,22 @@ def _simulation_seed_sequence(seed, num_simulations):
     return seed_sequence.spawn(num_simulations)
 
 
-def _build_stochastic_map_spec(tree, fit, node_to_branch_id, uniformization_contexts):
+def _build_stochastic_map_spec(
+    tree, fit, node_to_branch_id, uniformization_contexts, *, prepare_probabilities=True
+):
     nodes = list(tree.traverse(strategy="preorder"))
     node_to_index = {node: index for index, node in enumerate(nodes)}
     children_by_index: list[list[int]] = [[] for _ in nodes]
     parent_indices = [-1] * len(nodes)
     branch_ids = [-1] * len(nodes)
     branch_lengths = [0.0] * len(nodes)
-    transition_matrices = np.zeros(
-        (len(nodes), fit["rate_matrix"].shape[0], fit["rate_matrix"].shape[1]),
-        dtype=float,
-    )
-    rate_matrices = np.zeros_like(transition_matrices)
+    rate_matrix = fit["rate_matrix"]
+    num_states = rate_matrix.shape[0]
+    node_weights = np.full((len(nodes), num_states, num_states), np.nan)
+    rate_matrices = [rate_matrix] * len(nodes)
+    rate_by_node = fit.get("rate_matrix_by_node", {})
     contexts = [None] * len(nodes)
-    inside = np.zeros((len(nodes), fit["rate_matrix"].shape[0]), dtype=float)
     for node, node_index in node_to_index.items():
-        inside[node_index, :] = fit["log_inside"][node]
         if node.is_root:
             continue
         parent_index = node_to_index[node.up]
@@ -2716,23 +3160,34 @@ def _build_stochastic_map_spec(tree, fit, node_to_branch_id, uniformization_cont
         children_by_index[parent_index].append(node_index)
         branch_ids[node_index] = node_to_branch_id[node]
         branch_lengths[node_index] = float(node.dist)
-        transition_matrices[node_index, :, :] = fit["transition_matrices"][node]
-        rate_matrices[node_index, :, :] = fit.get("rate_matrix_by_node", {}).get(
-            node, fit["rate_matrix"]
+        log_weights = _log_probabilities(
+            np.asarray(fit["transition_matrices"][node], dtype=float)
         )
+        log_weights += np.asarray(fit["log_inside"][node], dtype=float)
+        if prepare_probabilities:
+            normalizers = logsumexp(log_weights, axis=1)
+            valid = np.isfinite(normalizers)
+            # Impossible parent states are never used by a valid draw.
+            node_weights[node_index, valid] = np.exp(
+                log_weights[valid] - normalizers[valid, None]
+            )
+        else:
+            node_weights[node_index] = log_weights
+        rate_matrices[node_index] = rate_by_node.get(node, rate_matrix)
         contexts[node_index] = _stochastic_map_context(uniformization_contexts, node)
     return {
         "children_by_index": children_by_index,
         "parent_indices": parent_indices,
         "branch_ids": branch_ids,
         "branch_lengths": branch_lengths,
-        "log_inside": inside,
-        "log_transition_matrices": _log_probabilities(transition_matrices),
-        "rate_matrix": fit["rate_matrix"],
+        "node_weights": node_weights,
+        "probabilities_prepared": prepare_probabilities,
+        "state_indices": np.arange(num_states),
+        "rate_matrix": rate_matrix,
         "rate_matrices": rate_matrices,
         "root_posterior": fit["posterior_by_node"][tree],
         "uniformization_contexts": contexts,
-        "num_states": fit["rate_matrix"].shape[0],
+        "num_states": num_states,
         "state_projection": fit.get("state_projection"),
     }
 
@@ -2745,16 +3200,18 @@ def _stochastic_map_context(uniformization_contexts, node):
 
 def _sample_node_states_from_spec(spec, rng):
     sampled_states = np.zeros(len(spec["parent_indices"]), dtype=int)
-    state_indices = np.arange(spec["num_states"])
+    state_indices = spec["state_indices"]
+    node_weights = spec["node_weights"]
+    probabilities_prepared = spec["probabilities_prepared"]
     sampled_states[0] = int(rng.choice(state_indices, p=spec["root_posterior"]))
     for parent_index, child_indices in enumerate(spec["children_by_index"]):
         parent_state = sampled_states[parent_index]
         for child_index in child_indices:
-            transition_matrix = spec["log_transition_matrices"][child_index]
-            weights = (
-                transition_matrix[parent_state, :] + spec["log_inside"][child_index]
-            )
-            probabilities = _probabilities_from_logs(weights)
+            probabilities = node_weights[child_index, parent_state]
+            if not probabilities_prepared:
+                probabilities = _probabilities_from_logs(probabilities)
+            elif not math.isfinite(probabilities[0]):
+                raise ValueError("Failed to calculate posterior state probabilities.")
             sampled_states[child_index] = int(
                 rng.choice(state_indices, p=probabilities)
             )
@@ -2768,13 +3225,11 @@ def _simulate_stochastic_map_once(spec, seed_sequence):
     for node_index, parent_index in enumerate(spec["parent_indices"]):
         if parent_index < 0:
             continue
-        branch_counts = _sample_bridge_transition_counts(
+        branch_counts = _draw_bridge_transition_counts(
             int(sampled_states[parent_index]),
             int(sampled_states[node_index]),
-            spec["branch_lengths"][node_index],
-            spec["rate_matrices"][node_index],
+            spec["uniformization_contexts"][node_index],
             rng,
-            uniformization_context=spec["uniformization_contexts"][node_index],
         )
         _merge_projected_branch_counts(
             simulation_counts,
@@ -2927,36 +3382,69 @@ def _run_stochastic_simulations(spec, seed_sequences, threads):
         )
 
 
-def _stochastic_map_rows(
+def _stochastic_map_table(
     tree, states, node_to_branch_id, total_counts, any_counts, num_simulations
 ):
-    rows = list()
-    for node in tree.traverse():
-        if node.is_root:
-            continue
-        branch_id = node_to_branch_id[node]
-        for from_index, from_state in enumerate(states):
-            for to_index, to_state in enumerate(states):
-                if from_index == to_index:
-                    continue
-                count_key = (branch_id, from_index, to_index)
-                total_count = total_counts.get(count_key, 0)
-                any_count = any_counts.get(count_key, 0)
-                rows.append(
-                    {
-                        "branch_id": branch_id,
-                        "parent": node_to_branch_id[node.up],
-                        "node_class": get_node_class(node),
-                        "name": "" if node.name in [None, ""] else str(node.name),
-                        "from_state": from_state,
-                        "to_state": to_state,
-                        "total_count": total_count,
-                        "mean_count": total_count / float(num_simulations),
-                        "posterior_frequency": any_count / float(num_simulations),
-                        "num_simulations": num_simulations,
-                    }
-                )
-    return rows
+    nodes = [node for node in tree.traverse() if not node.is_root]
+    branch_ids = [node_to_branch_id[node] for node in nodes]
+    pairs = [
+        (first, second)
+        for first in range(len(states))
+        for second in range(len(states))
+        if first != second
+    ]
+    row_count = len(nodes) * len(pairs)
+    total = _stochastic_map_count_column(total_counts, branch_ids, pairs, row_count)
+    any_count = _stochastic_map_count_column(any_counts, branch_ids, pairs, row_count)
+    return pd.DataFrame(
+        {
+            "branch_id": np.repeat(np.asarray(branch_ids, dtype=np.int64), len(pairs)),
+            "parent": np.repeat(
+                np.asarray(
+                    [node_to_branch_id[node.up] for node in nodes], dtype=np.int64
+                ),
+                len(pairs),
+            ),
+            "node_class": np.repeat(
+                np.asarray([get_node_class(node) for node in nodes], dtype=object),
+                len(pairs),
+            ),
+            "name": np.repeat(
+                np.asarray(
+                    [
+                        "" if node.name in (None, "") else str(node.name)
+                        for node in nodes
+                    ],
+                    dtype=object,
+                ),
+                len(pairs),
+            ),
+            "from_state": np.tile(
+                np.asarray([states[first] for first, _ in pairs], dtype=object),
+                len(nodes),
+            ),
+            "to_state": np.tile(
+                np.asarray([states[second] for _, second in pairs], dtype=object),
+                len(nodes),
+            ),
+            "total_count": total,
+            "mean_count": total / float(num_simulations),
+            "posterior_frequency": any_count / float(num_simulations),
+            "num_simulations": num_simulations,
+        }
+    )
+
+
+def _stochastic_map_count_column(counts, branch_ids, pairs, row_count):
+    return np.fromiter(
+        (
+            counts.get((branch_id, first, second), 0)
+            for branch_id in branch_ids
+            for first, second in pairs
+        ),
+        dtype=np.int64,
+        count=row_count,
+    )
 
 
 def _simulate_stochastic_maps(tree, states, fit, num_simulations, seed=None, threads=1):
@@ -2970,12 +3458,18 @@ def _simulate_stochastic_maps(tree, states, fit, num_simulations, seed=None, thr
         fit, branches, _parameters=parameters
     )
     del parameters
-    spec = _build_stochastic_map_spec(tree, fit, node_to_branch_id, contexts)
+    spec = _build_stochastic_map_spec(
+        tree,
+        fit,
+        node_to_branch_id,
+        contexts,
+        prepare_probabilities=num_simulations > 1,
+    )
     seed_sequences = _simulation_seed_sequence(seed, num_simulations)
     total_counts, any_counts = _run_stochastic_simulations(
         spec, seed_sequences, threads
     )
-    rows = _stochastic_map_rows(
+    return _stochastic_map_table(
         tree,
         states,
         node_to_branch_id,
@@ -2983,19 +3477,6 @@ def _simulate_stochastic_maps(tree, states, fit, num_simulations, seed=None, thr
         any_counts,
         num_simulations,
     )
-    columns = (
-        "branch_id",
-        "parent",
-        "node_class",
-        "name",
-        "from_state",
-        "to_state",
-        "total_count",
-        "mean_count",
-        "posterior_frequency",
-        "num_simulations",
-    )
-    return pd.DataFrame(rows, columns=columns)
 
 
 def _write_stochastic_map(tree, states, fit, args):
@@ -3965,6 +4446,7 @@ def _fit_continuous_model_impl(
             sigma2=getattr(args, "sigma2", None),
             standard_errors=errors,
             _tree_validated=True,
+            _compute_posterior=compute_posterior,
         )
     if model == "BMS":
         from nwkit.regime_continuous_asr import compute_bms_marginals
@@ -3987,6 +4469,7 @@ def _fit_continuous_model_impl(
             regime_parameters_source=None if fixed is None else fixed[1],
             standard_errors=errors,
             _tree_validated=True,
+            _compute_posterior=compute_posterior,
         )
     if model == "BMS-DRIFT":
         from nwkit.regime_drift_asr import compute_regime_drift_marginals
@@ -4007,15 +4490,26 @@ def _fit_continuous_model_impl(
             regime_parameters_source=None if fixed is None else fixed[1],
             standard_errors=errors,
             _tree_validated=True,
+            _compute_posterior=compute_posterior,
         )
     if model == "OU":
-        return _fit_ou_model(tree, observed, errors, args, settings)
+        return _fit_ou_model(
+            tree, observed, errors, args, settings, compute_posterior=compute_posterior
+        )
     if model in {"OUM", "OUMA", "OUMV", "OUMVA"}:
         return _fit_regime_ou_model(
-            tree, observed, errors, args, model, regime_assignment
+            tree,
+            observed,
+            errors,
+            args,
+            model,
+            regime_assignment,
+            compute_posterior=compute_posterior,
         )
     if model in {"LAMBDA", "KAPPA", "DELTA", "EB", "ACDC"}:
-        return _fit_transformed_continuous_model(tree, observed, errors, args, model)
+        return _fit_transformed_continuous_model(
+            tree, observed, errors, args, model, compute_posterior=compute_posterior
+        )
     if model == "BM-DRIFT":
         from nwkit.nonstationary_continuous_asr import compute_bm_drift_marginals
 
@@ -4026,6 +4520,7 @@ def _fit_continuous_model_impl(
             drift=getattr(args, "drift", None),
             standard_errors=errors,
             _tree_validated=True,
+            _compute_posterior=compute_posterior,
         )
     if model == "MV-BM":
         from nwkit.multivariate_asr import compute_mvbm_marginals
@@ -4088,7 +4583,7 @@ def _fit_continuous_model_impl(
     raise ValueError(f"Unsupported continuous ASR model: {model}.")
 
 
-def _fit_ou_model(tree, observed, errors, args, settings):
+def _fit_ou_model(tree, observed, errors, args, settings, *, compute_posterior):
     from nwkit.ou_asr import compute_ou_marginals, parse_alpha_bounds
 
     alpha_bounds = parse_alpha_bounds(getattr(args, "alpha_bounds", None), tree)
@@ -4102,6 +4597,7 @@ def _fit_ou_model(tree, observed, errors, args, settings):
             alpha_bounds=alpha_bounds,
             standard_errors=errors,
             _tree_validated=True,
+            _compute_posterior=compute_posterior,
         )
     from nwkit.general_ou_asr import compute_general_ou_marginals
 
@@ -4116,10 +4612,13 @@ def _fit_ou_model(tree, observed, errors, args, settings):
         theta=getattr(args, "theta", None),
         alpha_bounds=alpha_bounds,
         standard_errors=errors,
+        _compute_posterior=compute_posterior,
     )
 
 
-def _fit_regime_ou_model(tree, observed, errors, args, model, regime_assignment):
+def _fit_regime_ou_model(
+    tree, observed, errors, args, model, regime_assignment, *, compute_posterior
+):
     from nwkit.asr_regimes import read_regime_parameters
     from nwkit.ou_asr import parse_alpha_bounds
     from nwkit.regime_gaussian_asr import (
@@ -4146,10 +4645,13 @@ def _fit_regime_ou_model(tree, observed, errors, args, model, regime_assignment)
         alpha_bounds=parse_alpha_bounds(getattr(args, "alpha_bounds", None), tree),
         standard_errors=errors,
         _tree_validated=True,
+        _compute_posterior=compute_posterior,
     )
 
 
-def _fit_transformed_continuous_model(tree, observed, errors, args, model):
+def _fit_transformed_continuous_model(
+    tree, observed, errors, args, model, *, compute_posterior
+):
     from nwkit.transformed_continuous_asr import (
         compute_transformed_bm_marginals,
         parse_parameter_bounds,
@@ -4179,6 +4681,7 @@ def _fit_transformed_continuous_model(tree, observed, errors, args, model):
         profile_ci_level=getattr(args, "profile_ci_level", None),
         standard_errors=errors,
         _tree_validated=True,
+        _compute_posterior=compute_posterior,
     )
 
 
@@ -4419,4 +4922,54 @@ def _write_continuous_model_comparison(
     _write_table(
         model_comparison_table(summaries),
         args.model_comparison_out,
+    )
+
+
+def _resolve_uniformization_context(
+    rate_matrix, branch_length, contexts, explicit_context
+):
+    if explicit_context is not None:
+        return explicit_context
+    if contexts is not None:
+        return contexts[branch_length]
+    return _build_uniformization_context(rate_matrix, branch_length)
+
+
+def _mk_transition_evaluator(matrix, time_multiplier=1.0):
+    num_states = matrix.shape[0]
+    er_rate = _get_er_rate_from_matrix(matrix)
+    if er_rate is None:
+        prepared = _prepare_generator_exponential(matrix)
+
+        def transition(length):
+            return _transition_from_generator(matrix, length, prepared, time_multiplier)
+
+        return transition
+    if time_multiplier == 1.0:
+        return lambda length: _er_transition_matrix(length, er_rate, num_states)
+
+    rate, rate_exponent = math.frexp(er_rate)
+
+    def scaled_transition(length):
+        time, time_exponent = _mk_scaled_time(length, time_multiplier)
+        try:
+            elapsed_rate = math.ldexp(time * rate, time_exponent + rate_exponent)
+        except OverflowError:
+            elapsed_rate = math.inf
+        return _er_transition_from_elapsed_rate(elapsed_rate, num_states)
+
+    return scaled_transition
+
+
+def _mixture_category_transitions(tree, matrix, rate, branches):
+    with np.errstate(over="ignore", under="ignore"):
+        scaled = matrix * rate
+    # Keep the time multiplier in binary components if scaling the generator
+    # would round a positive rate to a subnormal value or to infinity.
+    if np.isfinite(scaled).all() and not np.any(
+        (matrix > 0.0) & (scaled < np.finfo(float).tiny)
+    ):
+        return _transition_matrices_for_tree(tree, scaled, prepared_branches=branches)
+    return _transition_matrices_for_tree(
+        tree, matrix, prepared_branches=branches, time_multiplier=float(rate)
     )

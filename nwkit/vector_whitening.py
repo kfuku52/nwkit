@@ -11,7 +11,10 @@ import math
 from dataclasses import dataclass
 
 import numpy as np
-from scipy.linalg import solve_triangular
+from scipy.linalg import get_lapack_funcs, solve_triangular
+
+from nwkit.gaussian_whitening import _normalize_mean_design
+from nwkit.vector_gaussian import _symmetric_part
 
 
 def _cholesky(matrix, label):
@@ -20,7 +23,7 @@ def _cholesky(matrix, label):
     ):
         raise ValueError(f"{label} must be finite and symmetric.")
     try:
-        return np.linalg.cholesky((matrix + matrix.T) / 2)
+        return np.linalg.cholesky(_symmetric_part(matrix))
     except np.linalg.LinAlgError as exc:
         raise ValueError(
             f"{label} is not positive definite; no jitter is applied."
@@ -28,11 +31,35 @@ def _cholesky(matrix, label):
 
 
 @dataclass(frozen=True)
+class _HouseholderRotation:
+    reflectors: np.ndarray
+    coefficients: np.ndarray
+
+    @classmethod
+    def factor(cls, matrix):
+        transposed, coefficients = np.linalg.qr(matrix, mode="raw")
+        reflectors = transposed.T
+        triangular = np.triu(reflectors[: len(coefficients)])
+        return cls(reflectors, coefficients), triangular
+
+    def apply_transpose(self, values):
+        apply = get_lapack_funcs("ormqr", (self.reflectors,))
+        args = ("L", "T", self.reflectors, self.coefficients, values)
+        _, work, info = apply(*args, lwork=-1)
+        if info != 0:
+            raise ValueError("Could not determine QR application workspace.")
+        result, _, info = apply(*args, lwork=int(work[0]))
+        if info != 0:
+            raise ValueError("Could not apply the tree whitening QR factor.")
+        return result
+
+
+@dataclass(frozen=True)
 class _Step:
     node: int
     children: tuple
     positions: np.ndarray | None
-    rotation: np.ndarray | None
+    rotation: np.ndarray | _HouseholderRotation | None
     retained: int
     factor: np.ndarray
 
@@ -91,10 +118,11 @@ class VectorTreeWhitening:
     def build(
         cls, compiled, mask, slopes, innovations, errors, *, root_covariance, plan=None
     ):
-        """Use tip-major observed-coordinate ordering, with diagonal slopes.
+        """Use tip-major observed-coordinate ordering.
 
-        mask has shape (tips,p); slopes (nodes,p); innovations (nodes,p,p);
-        errors (tips,p,p). Root state has zero mean and the supplied covariance.
+        Slopes can be diagonal (nodes,p) or full (nodes,p,p); innovations have
+        shape (nodes,p,p) and errors (tips,p,p). Root state has zero mean and
+        the supplied covariance.
         """
         mask = np.asarray(mask, dtype=bool)
         if mask.ndim != 2 or mask.shape[0] != len(compiled.leaf_indices):
@@ -107,8 +135,9 @@ class VectorTreeWhitening:
         innovations = np.asarray(innovations, dtype=float)
         errors = np.asarray(errors, dtype=float)
         root_covariance = np.asarray(root_covariance, dtype=float)
+        slope_shape = (n, p) if slopes.ndim == 2 else (n, p, p)
         for value, shape, label in (
-            (slopes, (n, p), "Slopes"),
+            (slopes, slope_shape, "Slopes"),
             (innovations, (n, p, p), "Innovations"),
             (errors, (len(mask), p, p), "Observation covariance"),
             (root_covariance, (p, p), "Root covariance"),
@@ -139,6 +168,7 @@ class VectorTreeWhitening:
                 "Vector observation plan belongs to a different tree or mask."
             )
         messages: dict[int, np.ndarray] = {}
+        diagonal_slopes = slopes.ndim == 2
         steps = []
         logdet = 0.0
         for node, children, row, observed, positions in plan.entries:
@@ -148,14 +178,21 @@ class VectorTreeWhitening:
                 covariance = covariance + errors[row][np.ix_(observed, observed)]
                 factor = _cholesky(covariance, "Observed branch covariance")
                 propagated = solve_triangular(
-                    factor, local * slopes[node], lower=True, check_finite=False
+                    factor,
+                    local * slopes[node] if diagonal_slopes else slopes[node][observed],
+                    lower=True,
+                    check_finite=False,
                 )
                 step = _Step(node, (), positions, None, len(observed), factor)
             else:
                 local = np.concatenate([messages.pop(i) for i in children])
                 retained = min(p, len(local))
                 rotation = None
-                if len(local) > p:
+                if len(local) >= max(64, 4 * p):
+                    # Large polytomies need only the first p Householder
+                    # reflectors, even when emitting every orthogonal residual.
+                    rotation, local = _HouseholderRotation.factor(local)
+                elif len(local) > p:
                     rotation, triangular = np.linalg.qr(local, mode="complete")
                     local = triangular[:retained]
                 if node == 0:
@@ -173,7 +210,10 @@ class VectorTreeWhitening:
                 covariance = np.eye(retained) + local @ innovations[node] @ local.T
                 factor = _cholesky(covariance, "Integrated branch covariance")
                 propagated = solve_triangular(
-                    factor, local * slopes[node], lower=True, check_finite=False
+                    factor,
+                    local * slopes[node] if diagonal_slopes else local @ slopes[node],
+                    lower=True,
+                    check_finite=False,
                 )
                 step = _Step(node, children, None, rotation, retained, factor)
             messages[node] = propagated
@@ -204,8 +244,13 @@ class VectorTreeWhitening:
                 if step.positions is not None
                 else np.concatenate([messages.pop(i) for i in step.children])
             )
-            if step.rotation is not None:
-                local = step.rotation.T @ local
+            rotation = step.rotation
+            if rotation is not None:
+                local = (
+                    rotation.apply_transpose(local)
+                    if isinstance(rotation, _HouseholderRotation)
+                    else rotation.T @ local
+                )
                 residual = local[step.retained :]
                 output[offset : offset + len(residual)] = residual
                 offset += len(residual)
@@ -221,18 +266,31 @@ class VectorTreeWhitening:
         return output[:, 0] if vector else output
 
 
+def _mean_design_qr(design, *, observation_count=None):
+    normalized, norms = _normalize_mean_design(design)
+    q, r = np.linalg.qr(normalized, mode="reduced")
+    # R has the singular values of the original normalized design. Use the
+    # original dimensions when setting the rank tolerance.
+    if design.shape[1]:
+        singular_values = np.linalg.svd(r, compute_uv=False)
+        rows = design.shape[0] if observation_count is None else observation_count
+        tolerance = (
+            singular_values[0] * max(rows, design.shape[1]) * np.finfo(r.dtype).eps
+        )
+        if np.count_nonzero(singular_values > tolerance) < design.shape[1]:
+            raise ValueError("The observed mean design is rank deficient.")
+    return q, r, norms
+
+
 def vector_gls(factor, response, design):
     """Profile linear means using QR, retaining their full joint covariance."""
     whitened = factor.apply(np.column_stack((response, design)))
     y, x = whitened[:, 0], whitened[:, 1:]
-    norms = np.linalg.norm(x, axis=0)
-    if np.any(norms == 0) or np.linalg.matrix_rank(x / norms) < x.shape[1]:
-        raise ValueError("The observed mean design is rank deficient.")
+    q, r, norms = _mean_design_qr(x)
     if len(y) <= x.shape[1]:
         raise ValueError(
             "Joint GLS needs residual observations beyond mean parameters."
         )
-    q, r = np.linalg.qr(x / norms, mode="reduced")
     coefficients = solve_triangular(r, q.T @ y, check_finite=False) / norms
     residual = y - q @ (q.T @ y)
     quadratic = float(residual @ residual)

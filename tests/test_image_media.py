@@ -787,6 +787,53 @@ class TestImageSecurityLimits:
         finally:
             adapter.close()
 
+    def test_pinned_pools_reuse_only_the_validated_address_and_hostname(
+        self, monkeypatch
+    ):
+        created = []
+
+        class Adapter:
+            def __init__(self):
+                self.closed = False
+                created.append(self)
+
+            def close(self):
+                self.closed = True
+
+        monkeypatch.setattr(
+            image_module, "_new_pinned_adapter", lambda *args: Adapter()
+        )
+        monkeypatch.setattr(image_module, "HTTP_SESSION_POOL_SIZE", 2)
+        with image_module.build_http_session() as session:
+            original = session.get_adapter("https://example.com")
+            first = session.pinned_adapter(original, "example.com", "93.184.216.34")
+            assert first is session.pinned_adapter(
+                original, "example.com", "93.184.216.34"
+            )
+            different_ip = session.pinned_adapter(
+                original, "example.com", "93.184.216.35"
+            )
+            different_host = session.pinned_adapter(
+                original, "example.org", "93.184.216.35"
+            )
+            assert len(created) == 3
+            assert first.closed
+            assert not different_ip.closed
+            assert not different_host.closed
+        assert all(adapter.closed for adapter in created)
+
+    def test_media_limits_connect_retries_without_changing_server_backoff(self):
+        with (
+            image_module.build_http_session() as lookup,
+            image_module.build_download_session() as media,
+        ):
+            url = "https://example.com/image.jpg"
+            lookup_retry = lookup.get_adapter(url).max_retries
+            media_retry = media.get_adapter(url).max_retries
+            assert (lookup_retry.connect, media_retry.connect) == (4, 1)
+            assert media_retry.status_forcelist == lookup_retry.status_forcelist
+            assert media_retry.respect_retry_after_header
+
     def test_pinned_request_rejects_proxy_configuration(self):
         session = requests.Session()
         session.trust_env = False
@@ -860,7 +907,7 @@ class TestImageSecurityLimits:
             "_resolve_public_addresses",
             lambda hostname, url: ("93.184.216.34",),
         )
-        session = requests.Session()
+        session = image_module.build_http_session()
         session.trust_env = False
         session.auth = ("session-user", "session-secret")
         session.cert = "/tmp/session-client.pem"

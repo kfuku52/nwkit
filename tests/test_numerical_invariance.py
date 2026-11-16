@@ -1,5 +1,6 @@
 """Invariance and resource-limit contracts at numerical model boundaries."""
 
+import math
 import weakref
 from decimal import Decimal, localcontext
 
@@ -13,8 +14,15 @@ from nwkit.evolution import (
     build_evolutionary_covariance,
     build_sparse_evolutionary_model,
 )
-from nwkit.gaussian import DiagonalLowRankCovariance
+from nwkit.gaussian import (
+    DiagonalLowRankCovariance,
+    draw_from_factor,
+    factor_logdet,
+    solve_factor,
+)
 from nwkit.measurement_error import (
+    _positive_semidefinite,
+    _predictor_error_covariance,
     fit_conditional_eiv_gaussian,
     fit_factor_latent_predictor,
     fit_latent_predictor,
@@ -22,18 +30,152 @@ from nwkit.measurement_error import (
 )
 from nwkit.optimization import FitResourceError, ScalarFitCache
 from nwkit.phylogenetic_glmm import (
+    _count_log_likelihood,
+    _draw_beta_binomial,
+    _gamma_log_likelihood,
+    _gamma_scalar_terms,
+    _lognormal_scalar_terms,
+    _negative_binomial_scalar_terms,
+    _normal_censor_interval_terms,
+    _poisson_scalar_terms,
+    _scalar_initial_coefficient,
+    _scalar_terms,
+    _scale_covariance_by_mean_variance,
     _zero_component_count_scalar_terms,
     _zero_truncation_terms,
 )
+from nwkit.regression_pipeline import _positive_semidefinite_loading
 from nwkit.sparse_laplace import JointPredictorUncertainty
 
 pytestmark = pytest.mark.filterwarnings(r"error::RuntimeWarning:nwkit\.")
+
+
+def test_dense_pgls_preserves_nearly_collinear_coefficient_direction():
+    x = np.linspace(-1.0, 1.0, 16)
+    distinct = np.cos(9.0 * x)
+    separation = 1e-8
+    design = np.column_stack([np.ones(len(x)), x, x + separation * distinct])
+    # Use a well-conditioned change of basis before forming the reference.
+    reference_design = design.copy()
+    reference_design[:, 2] = (design[:, 2] - x) / separation
+    response = 1.0 + 5.0 * x + 0.25 * reference_design[:, 2] + 0.1 * np.sin(17.0 * x)
+    covariance = np.eye(len(x)) + 0.1 * np.outer(x, x)
+    cholesky = np.linalg.cholesky(covariance)
+    whitened = np.linalg.solve(cholesky, reference_design)
+    values = np.linalg.solve(cholesky, response)
+    basis, singular, rotation = np.linalg.svd(whitened, full_matrices=False)
+    beta = rotation.T @ ((basis.T @ values) / singular)
+    residual = values - whitened @ beta
+    variance = float(residual @ residual) / (len(x) - design.shape[1])
+    transform = np.array(
+        [[1.0, 0.0, 0.0], [0.0, 1.0, -1.0 / separation], [0.0, 0.0, 1.0 / separation]]
+    )
+    inverse = transform @ (rotation.T / singular)
+    uncertainty = inverse @ inverse.T * variance
+
+    actual = regress._profile_covariance_fit(
+        response,
+        design,
+        np.zeros(len(x)),
+        [("evolutionary_rate", covariance)],
+        reml=True,
+    )
+    np.testing.assert_allclose(actual["beta"], transform @ beta, atol=2e-6, rtol=2e-7)
+    np.testing.assert_allclose(actual["beta_covariance"], uncertainty, rtol=2e-6)
+    assert actual["component_variances"]["evolutionary_rate"] == pytest.approx(variance)
 
 
 def _data():
     rng = np.random.default_rng(52)
     x = rng.normal(size=40)
     return np.column_stack([np.ones(40), x]), 2.0 + 0.5 * x + rng.normal(size=40)
+
+
+@pytest.mark.parametrize(
+    "validate", [regress._validate_covariance_matrix, _positive_semidefinite]
+)
+@pytest.mark.parametrize("diagonal", [False, True])
+def test_gaussian_covariance_readers_retain_small_variances(validate, diagonal):
+    values = np.ldexp(np.array([[1.0, 0.25], [0.25, 0.5]]), -1050)
+    if diagonal:
+        values = np.diag(np.diag(values))
+    with np.errstate(over="raise", invalid="raise"):
+        np.testing.assert_array_equal(validate(values, "Sampling covariance"), values)
+        with pytest.raises(ValueError, match="positive semidefinite"):
+            validate(-values, "Sampling covariance")
+
+
+@pytest.mark.parametrize("diagonal", [False, True])
+def test_covariance_validation_preserves_small_components_of_a_mixed_scale(diagonal):
+    values = np.array([[1.0, 2e-101], [2e-101, 1e-200]])
+    if diagonal:
+        values = np.diag(np.diag(values))
+    np.testing.assert_array_equal(_positive_semidefinite(values, "sampling"), values)
+
+
+def test_glmm_covariance_normalization_preserves_subnormal_components():
+    tiny = math.ulp(0.0)
+    mixed = np.diag([1.0, tiny])
+    normalized = _scale_covariance_by_mean_variance(mixed, 2, "Test")
+    np.testing.assert_array_equal(np.diag(normalized), [2.0, 2.0 * tiny])
+    entirely_small = np.diag([tiny, 2.0 * tiny])
+    normalized = _scale_covariance_by_mean_variance(entirely_small, 2, "Test")
+    np.testing.assert_allclose(np.diag(normalized), [2 / 3, 4 / 3])
+
+
+@pytest.mark.parametrize("exponent", [-1060, 1023])
+def test_categorical_sampling_loading_preserves_covariance_units(exponent):
+    covariance = np.ldexp(np.array([[1.0, 0.5], [0.5, 0.25]]), exponent)
+    with np.errstate(over="raise", invalid="raise"):
+        loading = _positive_semidefinite_loading(covariance, 2)
+    assert loading.shape == (2, 1)
+    np.testing.assert_allclose(
+        np.ldexp(loading @ loading.T, -exponent),
+        [[1.0, 0.5], [0.5, 0.25]],
+    )
+
+
+@pytest.mark.parametrize("exponent", [-530, 530])
+def test_dense_predictor_covariance_scales_through_extreme_slope(exponent):
+    base = np.array([[1.0, 0.25], [0.25, 0.5]])
+    covariance_exponent = -1050 if exponent > 0 else 1022
+    covariance = np.ldexp(base, covariance_exponent)
+    with np.errstate(over="raise", invalid="raise"):
+        projected = _predictor_error_covariance(
+            np.array([np.ldexp(1.0, exponent)]), covariance, 0, 2
+        )
+    np.testing.assert_array_equal(
+        projected, np.ldexp(base, covariance_exponent + 2 * exponent)
+    )
+
+
+def test_latent_predictor_retains_small_correlated_sampling_uncertainty():
+    prior = np.array([[1.0, 0.2, 0.0], [0.2, 1.0, 0.1], [0.0, 0.1, 1.2]])
+    sampling = 1e-24 * np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.25], [0.0, 0.25, 1.0]])
+    result = fit_latent_predictor(
+        np.array([0.0, 2.0, 1.0]), prior, sampling, include_intercept=True
+    )
+    scale = np.max(np.diag(sampling))
+    np.testing.assert_allclose(
+        result.covariance / scale, sampling / scale, rtol=1e-12, atol=1e-12
+    )
+
+
+@pytest.mark.parametrize("last", [-0.3, -0.1, 0.2])
+@pytest.mark.parametrize("correlation", [0.0, 0.15])
+def test_latent_predictor_keeps_intercept_when_precision_sum_overflows(
+    last, correlation
+):
+    values = np.array([0.0, 1e-160, 0.3, last])
+    prior = np.diag([0.0, 0.0, 1.0, 1.0])
+    prior[2, 3] = prior[3, 2] = correlation
+    sampling = np.array([1e-310, 1e-310, 0.1, 0.1])
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        fitted = fit_latent_predictor(values, prior, sampling, include_intercept=True)
+    assert np.isfinite(fitted.log_likelihood)
+    assert fitted.prior_mean == pytest.approx(5e-161, rel=1e-10, abs=0.0)
+    np.testing.assert_allclose(fitted.mean[:2], 5e-161, rtol=1e-10, atol=0.0)
+    np.testing.assert_array_equal(fitted.covariance[:2, :2], np.zeros((2, 2)))
 
 
 @pytest.mark.parametrize("sampling", [0.0, 0.1])
@@ -67,6 +209,27 @@ def test_gaussian_fit_is_invariant_to_an_intercept_shift(sampling, reml):
         )
 
 
+def test_gaussian_component_variance_is_invariant_to_large_covariance_units():
+    design, response = _data()
+    scale = 2.0**1023
+    covariance = np.ones(len(response))
+    kwargs = {"reml": True}
+    fixed = np.zeros(len(response))
+    before = regress._profile_covariance_fit(
+        response, design, fixed, [("rate", covariance)], **kwargs
+    )
+    with np.errstate(over="raise", invalid="raise"):
+        after = regress._profile_covariance_fit(
+            response, design, fixed, [("rate", scale * covariance)], **kwargs
+        )
+    np.testing.assert_array_equal(after["beta"], before["beta"])
+    np.testing.assert_array_equal(after["beta_covariance"], before["beta_covariance"])
+    assert after["objective"] == before["objective"]
+    assert scale * after["component_variances"]["rate"] == pytest.approx(
+        before["component_variances"]["rate"]
+    )
+
+
 @pytest.mark.parametrize("scale", [1e-6, 1e6])
 def test_gaussian_variance_follows_response_units(scale):
     design, response = _data()
@@ -84,6 +247,71 @@ def test_gaussian_variance_follows_response_units(scale):
     assert fits[1]["beta_covariance"] / scale**2 == pytest.approx(
         fits[0]["beta_covariance"]
     )
+
+
+@pytest.mark.parametrize("exponent", [-500, 500])
+@pytest.mark.parametrize("structured", [False, True])
+def test_gaussian_regression_preserves_fits_in_extreme_response_units(
+    exponent, structured
+):
+    design, response = _data()
+    size = len(response)
+    if structured:
+        fixed = DiagonalLowRankCovariance(
+            np.full(size, 0.04), sparse.csr_matrix(np.full((size, 1), 0.2))
+        )
+        scaled_fixed = DiagonalLowRankCovariance(
+            np.ldexp(fixed.diagonal, 2 * exponent),
+            fixed.low_rank * math.ldexp(1.0, exponent),
+        )
+        component = np.ones(size)
+    else:
+        fixed = np.full(size, 0.04)
+        scaled_fixed = np.ldexp(fixed, 2 * exponent)
+        distances = np.abs(np.arange(size)[:, None] - np.arange(size))
+        component = 0.4**distances
+    components = [("evolutionary_rate", component)]
+    reference = regress._profile_covariance_fit(
+        response, design, fixed, components, reml=True
+    )
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        scaled = regress._profile_covariance_fit(
+            np.ldexp(response, exponent), design, scaled_fixed, components, reml=True
+        )
+    np.testing.assert_allclose(
+        np.ldexp(scaled["beta"], -exponent), reference["beta"], atol=1e-7
+    )
+    np.testing.assert_allclose(
+        np.ldexp(scaled["beta_covariance"], -2 * exponent),
+        reference["beta_covariance"],
+        rtol=1e-5,
+        atol=1e-10,
+    )
+    assert scaled["objective"] - (size - 2) * exponent * math.log(2.0) == pytest.approx(
+        reference["objective"], abs=1e-9
+    )
+    scaled_rate = np.ldexp(
+        scaled["component_variances"]["evolutionary_rate"], -2 * exponent
+    )
+    assert scaled_rate == pytest.approx(
+        reference["component_variances"]["evolutionary_rate"], rel=1e-5
+    )
+    assert factor_logdet(scaled["cholesky"]) - 2 * size * exponent * math.log(
+        2.0
+    ) == pytest.approx(factor_logdet(reference["cholesky"]), abs=1e-4)
+    scaled_response = np.ldexp(response, exponent)
+    np.testing.assert_allclose(
+        np.ldexp(solve_factor(scaled["cholesky"], scaled_response), exponent),
+        solve_factor(reference["cholesky"], response),
+        rtol=1e-5,
+        atol=1e-8,
+    )
+    draws = np.random.default_rng(22).standard_normal(size)
+    before = draw_from_factor(
+        reference["cholesky"], draws, rng=np.random.default_rng(15)
+    )
+    after = draw_from_factor(scaled["cholesky"], draws, rng=np.random.default_rng(15))
+    np.testing.assert_allclose(np.ldexp(after, -exponent), before, rtol=1e-5, atol=1e-8)
 
 
 def test_no_intercept_fit_retains_the_response_mean():
@@ -333,6 +561,407 @@ def test_explicit_dense_opt_in_keeps_the_full_lambda_search(monkeypatch):
     )
     assert observed["objective"] == pytest.approx(expected["objective"])
     assert observed["evolution_parameter"] > 0.0
+
+
+@pytest.mark.parametrize("dispersion", [None, 0.2])
+def test_hurdle_likelihood_retains_small_mean_limit(dispersion):
+    family = "hurdle-poisson" if dispersion is None else "hurdle-negative-binomial"
+    counts = np.array([0.0, 1.0, 2.0, 1.0])
+    eta = np.array([-1000.0, -1000.0, -1000.0, -100.0])
+    log_likelihood = _count_log_likelihood(
+        counts, eta, family, dispersion, 0.2, np.zeros(len(eta))
+    )
+
+    expected = [
+        np.log(0.2),
+        np.log(0.8),
+        np.log(0.8) - 1000.0 + np.log((1.0 + (dispersion or 0.0)) / 2.0),
+        np.log(0.8),
+    ]
+    np.testing.assert_allclose(log_likelihood, expected, rtol=0.0, atol=1e-12)
+
+
+@pytest.mark.parametrize("dispersion", [9e-7, 1e-14, 1e-20, 1e-310])
+def test_negative_binomial_likelihood_preserves_near_poisson_limit(dispersion):
+    counts = np.array([0.0, 1.0, 5.0, 1000.0, 10_000.0])
+    means = np.array([0.5, 1.0, 4.0, 1200.0, 10_000.0])
+    eta = np.log(means)
+    zero_offset = np.zeros_like(eta)
+    expected = []
+    for count, mean, log_mean in zip(counts, means, eta, strict=True):
+        expected.append(
+            math.fsum(math.log1p(dispersion * j) for j in range(int(count)))
+            - math.lgamma(count + 1.0)
+            + count * (log_mean - math.log1p(dispersion * mean))
+            - math.log1p(dispersion * mean) / dispersion
+        )
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        actual = _count_log_likelihood(
+            counts, eta, "negative-binomial", dispersion, None, zero_offset
+        )
+        gradient, curvature = _negative_binomial_scalar_terms(
+            counts, eta, zero_offset, dispersion
+        )
+    np.testing.assert_allclose(actual, expected, rtol=0.0, atol=7e-11)
+    denominator = 1.0 + dispersion * means
+    np.testing.assert_allclose(gradient, (means - counts) / denominator, atol=1e-10)
+    np.testing.assert_allclose(
+        curvature, means * (1.0 + dispersion * counts) / denominator**2, rtol=1e-12
+    )
+
+
+def test_poisson_log_mass_resolves_large_counts_near_the_fitted_mean():
+    counts = np.array([1e12, 1e15, 1e18])
+    eta = np.log(counts) + np.array([0.0, 1e-7, -1e-12])
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        mass = _count_log_likelihood(counts, eta, "poisson", None, None, 0.0)
+    # Evaluate the reference around the same representable log-count used in
+    # the deviance to distinguish cancellation from rounding the input logit.
+    relative = eta - np.log(counts)
+    expected_mass = -0.5 * (np.log(counts) + math.log(math.tau))
+    expected_mass -= (1.0 / counts) / 12.0
+    expected_mass -= ((counts * relative) * relative) * (0.5 + relative / 6.0)
+    np.testing.assert_allclose(mass, expected_mass, rtol=0.0, atol=5e-13)
+
+
+@pytest.mark.parametrize(
+    "dispersion,count,shift,expected",
+    [
+        (1e-8, 1e18, 0.099, -474303.9574402318),
+        (1e-6, 1e6, -0.1, -2507.13229477862),
+        (0.7, 1e18, 0.0, -42.24461542763349),
+        (1e308, 1e18, -0.2, -750.6427403160588),
+        (1e-310, 1e308, 0.0, -9.099441551930474e279),
+        (0.7, 1e308, 1.0, -710.5198344547231),
+    ],
+)
+def test_large_negative_binomial_counts_match_high_precision_reference(
+    dispersion, count, shift, expected
+):
+    counts = np.array([count])
+    log_mean = np.log(counts) + shift
+    # Reference from the log-gamma definition at 750 decimal digits.
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        actual = _count_log_likelihood(
+            counts, log_mean, "negative-binomial", dispersion, None, 0.0
+        )
+    assert actual[0] == pytest.approx(expected, rel=1e-11)
+
+
+@pytest.mark.parametrize(
+    "count,eta,dispersion,expected",
+    [
+        (
+            1e150,
+            345.38776394910684,
+            None,
+            (-6.995567977508237e121, -1.1828413230444888e136, 9.999999999999882e149),
+        ),
+        (
+            1e150,
+            345.38776394910684,
+            1e-155,
+            (-6.9954980225280125e121, -1.182829494749541e136, 9.999900000999872e149),
+        ),
+        (
+            1e308,
+            709.1962086421661,
+            None,
+            (-9.190435967449779e279, 1.355760743453642e294, 1.0000000000000136e308),
+        ),
+        (
+            1e308,
+            709.1962086421661,
+            1e-308,
+            (-4.595217983724868e279, 6.778803717268165e293, 5e307),
+        ),
+        (
+            1e308,
+            709.1962086421661,
+            1e-155,
+            (-9.190435967449695e126, 1.3557607434536237e141, 9.999999999999864e154),
+        ),
+    ],
+)
+def test_high_count_likelihood_retains_the_log_mean_rounding_residual(
+    count, eta, dispersion, expected
+):
+    # Evaluate the log-gamma likelihood and analytic derivatives with
+    # 850-digit arithmetic at the exact binary64 input values.
+    counts = np.array([count])
+    linear = np.array([eta])
+    family = "poisson" if dispersion is None else "negative-binomial"
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        likelihood = _count_log_likelihood(
+            counts, linear, family, dispersion, None, 0.0
+        )[0]
+        if dispersion is None:
+            gradient, curvature = _poisson_scalar_terms(counts, linear, 0.0)
+        else:
+            gradient, curvature = _negative_binomial_scalar_terms(
+                counts, linear, 0.0, dispersion
+            )
+    np.testing.assert_allclose(
+        [likelihood, gradient[0], curvature[0]], expected, rtol=2e-13
+    )
+
+
+def test_beta_binomial_retains_endpoint_and_interior_mass_at_tiny_precision():
+    dispersion = 1e-310
+    values = np.array([0.0, 1.0, 2.0, 4.0, 0.0])
+    trials = np.array([4.0, 4.0, 4.0, 4.0, 0.0])
+    linear = np.full(len(values), math.log(3.0))
+    with np.errstate(over="raise", divide="raise", invalid="raise"):
+        likelihood, gradient, curvature = _scalar_terms(
+            values,
+            linear,
+            family="beta-binomial",
+            dispersion=dispersion,
+            zero_probability=None,
+            offset=np.zeros_like(values),
+            trials=trials,
+            censor_lower=None,
+            censor_upper=None,
+        )
+    # The scaled endpoint masses are 1/4 and 3/4, and the interior
+    # masses are precision * 3/16 * 4 / (x * (4-x)).
+    expected = math.log(0.25 * 0.75 * 0.25 * (3 / 16)) + 2 * math.log(dispersion)
+    assert likelihood == pytest.approx(expected, abs=1e-12)
+    np.testing.assert_allclose(gradient, [0.75, 0.5, 0.5, -0.25, 0.0])
+    np.testing.assert_allclose(curvature, [3 / 16, 3 / 8, 3 / 8, 3 / 16, 0.0])
+    rng = np.random.default_rng(17)
+    simulated = _draw_beta_binomial(
+        rng, np.full(1200, math.log(3.0)), dispersion, np.full(1200, 4.0)
+    )
+    assert np.all((simulated == 0.0) | (simulated == 4.0))
+    assert simulated.mean() == pytest.approx(3.0, abs=0.16)
+
+
+@pytest.mark.parametrize(
+    "precision, trials, value, linear, expected",
+    [
+        (2.0, 1e200, 5e199, 0.0, (-460.51701859880916, 0.0, 0.8224670334241132)),
+        (
+            10.0,
+            1e308,
+            1e307,
+            1.0,
+            (-718.6976529276656, 6.536481003750685, -0.7171883569063113),
+        ),
+        (1e-18, 1e308, 1e308, 0.0, (-0.6931471805599456, -0.5, 0.25)),
+        (
+            0.25,
+            1e308,
+            1.0,
+            -11.0,
+            (-12.389289860215717, -0.997004550643891, 0.0029953498783304756),
+        ),
+        (2e12, 10.0, 0.0, 0.0, (-6.931471805576953, 4.9999999999775, 2.4999999999775)),
+        (1e308, 10.0, 5.0, 0.0, (-1.4020427180880297, 0.0, 2.5)),
+        (1e100, 1e200, 5e199, 0.0, (-345.6135553017516, 0.0, 2.5e99)),
+        (
+            1e308,
+            1e308,
+            1e307,
+            0.0,
+            (-2.0349845015839338e307, 2.118244650968009e307, 1.0119047619047619e307),
+        ),
+    ],
+)
+def test_beta_binomial_preserves_mass_and_derivatives_at_extreme_parameters(
+    precision, trials, value, linear, expected
+):
+    # Values from the log-gamma and polygamma definitions at 770 digits.
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        log_mass, gradient, curvature = _scalar_terms(
+            np.array([value]),
+            np.array([linear]),
+            family="beta-binomial",
+            dispersion=precision,
+            zero_probability=None,
+            offset=np.zeros(1),
+            trials=np.array([trials]),
+            censor_lower=None,
+            censor_upper=None,
+        )
+    np.testing.assert_allclose(
+        [log_mass, gradient[0], curvature[0]], expected, rtol=1e-11, atol=1e-13
+    )
+
+
+def test_beta_binomial_initial_intercept_uses_finite_trial_proportion():
+    with np.errstate(over="raise", invalid="raise"):
+        coefficients = _scalar_initial_coefficient(
+            np.array([5e307, 1e308]),
+            np.ones((2, 1)),
+            "beta-binomial",
+            np.zeros(2),
+            np.full(2, 1e308),
+        )
+    assert coefficients[0, 0] == pytest.approx(math.log(3.0))
+
+
+def test_gamma_likelihood_and_derivatives_scale_with_response_units():
+    values = np.array([0.75, 2.0, 3.0])
+    linear = np.array([0.3, -0.2, 0.6])
+    dispersion = 2.0
+    scale = 1e-310
+    with np.errstate(over="raise", invalid="raise"):
+        before = _gamma_log_likelihood(values, linear, dispersion)
+        after = _gamma_log_likelihood(
+            values * scale, linear + np.log(scale), dispersion
+        )
+        before_terms = _gamma_scalar_terms(values, linear, dispersion)
+        after_terms = _gamma_scalar_terms(
+            values * scale, linear + np.log(scale), dispersion
+        )
+    np.testing.assert_allclose(after + np.log(scale), before, atol=3e-12)
+    np.testing.assert_allclose(after_terms, before_terms, atol=3e-12)
+
+
+@pytest.mark.parametrize("shape", [1e-310, math.ulp(0.0)])
+def test_gamma_likelihood_remains_finite_for_subnormal_shape(shape):
+    values = np.array([0.5, 2.0])
+    log_density = _gamma_log_likelihood(values, np.zeros(2), shape)
+    np.testing.assert_allclose(
+        log_density, math.log(shape) - np.log(values), atol=1e-13
+    )
+
+
+@pytest.mark.parametrize("shape", [1e18, 1e200, 1e308])
+def test_high_shape_gamma_log_density_resolves_variation_near_its_mean(shape):
+    # In log-response units the high-shape limit has variance 1 / shape.
+    standardized = np.array([0.0, -0.25, 1.0, 3.0])
+    linear = -standardized / math.sqrt(shape)
+    with np.errstate(over="raise", invalid="raise"):
+        result = _gamma_log_likelihood(np.ones(len(linear)), linear, shape)
+    normal_limit = 0.5 * (math.log(shape) - math.log(math.tau)) - (
+        0.5 * standardized**2
+    )
+    np.testing.assert_allclose(result, normal_limit, rtol=0.0, atol=5e-9)
+
+
+@pytest.mark.parametrize(
+    "response,eta,shape,expected",
+    [
+        (
+            2.0,
+            0.6931471805599453,
+            1e200,
+            (-2.6889890624053367e166, -2.3190468138462994e183, 1e200),
+        ),
+        (
+            1e308,
+            709.1962086421661,
+            1e100,
+            (-9.190435967449695e71, 1.3557607434536237e86, 9.999999999999864e99),
+        ),
+        (
+            0.9,
+            -0.10536051565782628,
+            1e100,
+            (-1.1568767549535953e65, -4.81014917638444e82, 1e100),
+        ),
+    ],
+)
+def test_high_shape_gamma_density_keeps_the_log_mean_rounding_residual(
+    response, eta, shape, expected
+):
+    # Reference from the Gamma density and its analytic derivatives at 600
+    # decimal digits, evaluated on the exact binary64 inputs.
+    values, linear = np.array([response]), np.array([eta])
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        likelihood = _gamma_log_likelihood(values, linear, shape)[0]
+        gradient, curvature = _gamma_scalar_terms(values, linear, shape)
+    np.testing.assert_allclose(
+        [likelihood, gradient[0], curvature[0]], expected, rtol=2e-13
+    )
+
+
+def test_lognormal_score_avoids_overflow_in_squared_dispersion():
+    gradient, curvature = _lognormal_scalar_terms(
+        np.ones(2), np.array([1e308, -1e308]), 1e155
+    )
+    np.testing.assert_allclose(gradient, [0.01, -0.01])
+    np.testing.assert_allclose(curvature, [1e-310, 1e-310], atol=0.0)
+
+
+def test_gaussian_censoring_scores_keep_tails_and_small_curvature():
+    values = np.array([1.0, np.nan, np.nan, np.nan, np.nan])
+    linear = np.array([101.0, 100.0, -22.0, 8e6, -800.0])
+    lower = np.array([np.nan, np.nan, 100.0, np.nan, np.nan])
+    upper = np.array([np.nan, -22.0, np.nan, 0.0, 0.0])
+    sd = 4.0
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        likelihood, score, weight = _scalar_terms(
+            values,
+            linear,
+            family="censored-gaussian",
+            dispersion=sd,
+            zero_probability=None,
+            offset=np.zeros_like(values),
+            trials=None,
+            censor_lower=lower,
+            censor_upper=upper,
+        )
+    assert np.isfinite(likelihood)
+    assert score[0] == 100 / sd**2
+    assert weight[0] == 1 / sd**2
+    assert score[1] == -score[2]
+    assert score[1] == pytest.approx(7.6331791926650395, rel=1e-12)
+    assert weight[1] == pytest.approx(0.06243324326357813, rel=1e-12)
+    assert weight[1] == weight[2]
+    assert score[3] == pytest.approx(8e6 / sd**2, rel=1e-12)
+    assert weight[3] == pytest.approx(1 / sd**2, rel=1e-12)
+    assert score[4] == weight[4] == 0.0
+
+
+def test_interval_censoring_derivatives_match_high_precision_normal_moments():
+    lower = np.array([-1.25, 8.1, 30.0, -30.2, 0.0])
+    upper = np.array([0.75, 8.3, 30.2, -30.0, math.ulp(0.0)])
+    center = np.array([0.0, 0.0, 0.0, 0.0, 11.0])
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        mass, score, weight = _normal_censor_interval_terms(
+            lower, upper, center, 1.0, derivatives=True
+        )
+    # Reference moments from the normal density and upper-tail integrals
+    # evaluated to 160 decimal digits, plus the limiting narrow-interval case.
+    expected_mass = [
+        -0.40388205087032925,
+        -36.04052541639861,
+        -454.32366048808217,
+        -454.32366048808217,
+        math.log(math.ulp(0.0)) - 60.5 - 0.5 * math.log(math.tau),
+    ]
+    expected_score = [
+        0.17745138198386967,
+        -8.173850602678082,
+        -30.032776307243488,
+        30.032776307243488,
+        11.0,
+    ]
+    expected_weight = [
+        0.7116580399881117,
+        0.997074221430888,
+        0.9989929931365967,
+        0.9989929931365967,
+        1.0,
+    ]
+    np.testing.assert_allclose(mass, expected_mass, rtol=1e-12)
+    np.testing.assert_allclose(score, expected_score, rtol=1e-12)
+    np.testing.assert_allclose(weight, expected_weight, rtol=1e-12)
+
+
+def test_count_intercept_initialization_uses_log_exposure():
+    with np.errstate(over="raise", divide="raise"):
+        coefficients = _scalar_initial_coefficient(
+            np.array([1.0, 0.0, 4.0]),
+            np.ones((3, 1)),
+            "poisson",
+            np.full(3, -1000.0),
+            None,
+        )
+    assert coefficients[0, 0] == pytest.approx(1000.0 + np.log(5.0 / 3.0))
 
 
 @pytest.mark.parametrize("dispersion", [None, 0.2])

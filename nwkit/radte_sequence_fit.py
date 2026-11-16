@@ -3,17 +3,19 @@
 import numpy as np
 from scipy.optimize import minimize
 
-from nwkit.fasta import parse_fasta
+from nwkit.fasta import iter_fasta
 from nwkit.radte_sequence import DNA_CODES
 
 
 def default_sequence_model(path):
+    ignored = str.maketrans("", "", "".join(DNA_CODES) + " \t")
+    protein = False
     with open(path, encoding="utf-8") as handle:
-        records = parse_fasta(handle)
-    letters = set(
-        "".join("".join(record.raw.splitlines()[1:]) for record in records).upper()
-    ) - {" ", "\t"}
-    return "gtr" if letters.issubset(DNA_CODES) else "lg"
+        for record in iter_fasta(handle):
+            if not protein:
+                sequence = "".join(record.raw.splitlines()[1:]).upper()
+                protein = bool(sequence.translate(ignored))
+    return "lg" if protein else "gtr"
 
 
 def unrooted_lengths(likelihood, lengths):

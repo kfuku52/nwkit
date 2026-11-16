@@ -9,9 +9,16 @@ from dataclasses import dataclass
 import numpy as np
 
 from nwkit.shift_joint_model import joint_covariance_geometry
-from nwkit.shift_native_model import ShiftData, ShiftLayout, ShiftTree, mean_geometry
+from nwkit.shift_native_model import (
+    ShiftData,
+    ShiftLayout,
+    ShiftTree,
+    _restore_trait_variance,
+    mean_geometry,
+    restore_trait_covariance,
+)
 from nwkit.vector_gaussian import VectorProcess, VectorTransition
-from nwkit.vector_simulation import simulate_vector_process
+from nwkit.vector_simulation import _zero_mean_draws, simulate_vector_process
 
 
 @dataclass(frozen=True)
@@ -28,6 +35,9 @@ class ShiftSimulation:
     missing: np.ndarray
 
     def validate(self):
+        self._validated_geometry()
+
+    def _validated_geometry(self):
         n, p = len(self.tree.leaf_names), len(self.trait_names)
         if (
             np.shape(self.alpha_height) != (p,)
@@ -64,7 +74,7 @@ class ShiftSimulation:
         eigenvalues = np.linalg.eigvalsh(self.measurement_covariance)
         if eigenvalues.min() < -1e-12 * max(1.0, np.max(np.abs(eigenvalues))):
             raise ValueError("Measurement covariance must be positive semidefinite.")
-        joint_covariance_geometry(
+        return joint_covariance_geometry(
             self.tree, self.alpha_height, self.covariance_coordinate, self.root_model
         )
 
@@ -74,28 +84,17 @@ def simulation_from_fit(data, result):
     if "joint_fit" in result:
         joint = result["joint_fit"]
         alpha = joint.alpha_height.copy()
-        covariance = (
-            joint.covariance_coordinate * data.scales[:, None] * data.scales[None]
-        )
+        covariance = restore_trait_covariance(joint.covariance_coordinate, data.scales)
         coefficients = joint.coefficients * data.scales[None]
-        noise = joint.measurement_variance * data.scales**2
+        noise = joint.measurement_variance
     else:
         alpha = np.array([fit.alpha_height for fit in result["fits"]])
-        covariance = np.diag(
-            [
-                fit.process_variance * data.scales[j] ** 2
-                for j, fit in enumerate(result["fits"])
-            ]
-        )
+        variance = np.array([fit.process_variance for fit in result["fits"]])
+        covariance = np.diag(_restore_trait_variance(variance, data.scales))
         coefficients = np.column_stack(
             [fit.coefficients * data.scales[j] for j, fit in enumerate(result["fits"])]
         )
-        noise = np.array(
-            [
-                fit.measurement_variance * data.scales[j] ** 2
-                for j, fit in enumerate(result["fits"])
-            ]
-        )
+        noise = np.array([fit.measurement_variance for fit in result["fits"]])
     coefficients[0] += data.centers
     return ShiftSimulation(
         data.tree,
@@ -105,15 +104,15 @@ def simulation_from_fit(data, result):
         covariance,
         coefficients,
         result["root_model"],
-        data.variances * data.scales[None] ** 2,
-        np.diag(noise),
+        _restore_trait_variance(data.variances, data.scales),
+        np.diag(_restore_trait_variance(noise, data.scales)),
         ~np.isfinite(data.values),
     )
 
 
 def simulate_shift(spec, replicates=1, *, seed=1):
     """Return observed (replicate,tip,trait) and latent (replicate,node,trait)."""
-    spec.validate()
+    slopes, innovations, root, _, _ = spec._validated_geometry()
     if (
         isinstance(replicates, bool)
         or not isinstance(replicates, (int, np.integer))
@@ -123,9 +122,6 @@ def simulate_shift(spec, replicates=1, *, seed=1):
     if isinstance(seed, bool) or not isinstance(seed, (int, np.integer)) or seed < 0:
         raise ValueError("Simulation seed must be a nonnegative integer.")
     process_seed, error_seed = np.random.SeedSequence(int(seed)).spawn(2)
-    slopes, innovations, root, _, _ = joint_covariance_geometry(
-        spec.tree, spec.alpha_height, spec.covariance_coordinate, spec.root_model
-    )
     p = len(spec.trait_names)
     weights = np.column_stack(
         [mean_geometry(spec.tree, float(alpha))[1] for alpha in spec.alpha_height]
@@ -137,23 +133,29 @@ def simulate_shift(spec, replicates=1, *, seed=1):
     transitions = {
         node: VectorTransition(
             np.diag(slopes[i]),
-            (1 - slopes[i]) * baseline + weights[i] * offsets[groups[i]],
+            weights[i] * offsets[groups[i]],
             innovations[i],
         )
         for i, node in enumerate(spec.tree.compiled.nodes)
         if i
     }
-    process = VectorProcess(spec.tree.compiled.tree, p, transitions, baseline, root)
+    # Propagate deviations from the background optimum so small changes can
+    # accumulate over several branches before returning to original units.
+    process = VectorProcess(spec.tree.compiled.tree, p, transitions, np.zeros(p), root)
     _, latent = simulate_vector_process(
-        process, replicates, seed=int(process_seed.generate_state(1)[0])
+        process,
+        replicates,
+        seed=int(process_seed.generate_state(1)[0]),
+        compiled_tree=spec.tree.compiled,
     )
-    values = latent[:, spec.tree.compiled.leaf_indices, :].copy()
-    rng = np.random.default_rng(error_seed)
-    for i in range(len(spec.tree.leaf_names)):
-        covariance = spec.measurement_covariance + np.diag(spec.sampling_variances[i])
-        values[:, i] += rng.multivariate_normal(
-            np.zeros(p), covariance, size=replicates, check_valid="raise"
-        )
+    values = np.take(latent, spec.tree.compiled.leaf_indices, axis=1)
+    if np.any(spec.measurement_covariance) or np.any(spec.sampling_variances):
+        draw = _zero_mean_draws(np.random.default_rng(error_seed), p, replicates)
+        for i, sampling in enumerate(spec.sampling_variances):
+            covariance = spec.measurement_covariance + np.diag(sampling)
+            values[:, i] += draw(covariance)
+    latent += baseline
+    values += baseline
     values[:, spec.missing] = np.nan
     return values, latent
 

@@ -6,8 +6,12 @@ import pytest
 
 from nwkit.asr import _multivariate_fit_status_message
 from nwkit.multivariate_gaussian_asr import (
+    _clip_roundoff_covariances,
     _geometry,
     _prepare_observations,
+    _restore_diagonal_ou_diffusion,
+    _restore_sigma,
+    _stationary_diagonal_ou_covariance,
     fit_dense_mvbm,
     fit_dense_mvou,
     fit_dense_mvou_diag,
@@ -18,6 +22,65 @@ from nwkit.util import read_tree
 
 def tree_from(source):
     return read_tree(source, "1", True, quiet=True, rooted="yes")
+
+
+def test_posterior_covariance_clips_only_negative_eigenvalues_within_roundoff():
+    valid = np.array([[2.0, 0.25], [0.25, 0.5]])
+    near_singular = np.array([[1.0, 1.0 + 2e-15], [1.0 + 2e-15, 1.0]])
+    covariances = np.stack((valid, near_singular))
+    _clip_roundoff_covariances(covariances, 2)
+    np.testing.assert_array_equal(covariances[0], valid)
+    np.testing.assert_allclose(
+        np.linalg.eigvalsh(covariances[1]), [0.0, 2.0], atol=1e-14
+    )
+    with pytest.raises(ValueError, match="not positive semidefinite"):
+        _clip_roundoff_covariances(np.array([[[1.0, 2.0], [2.0, 1.0]]]), 2)
+
+
+def test_covariance_unit_restoration_preserves_mixed_scale_symmetry():
+    data = SimpleNamespace(scales=np.array([2.0**-600, 2.0**500]))
+    sigma = np.array([[1.0, 2.0**-500], [2.0**-500, 1.0]])
+    restored = _restore_sigma(data, sigma)
+    assert restored[0, 1] == restored[1, 0] == 2.0**-600
+
+
+def test_diagonal_ou_diffusion_combines_reciprocal_trait_and_attraction_units():
+    data = SimpleNamespace(scales=np.array([2.0**-500, 2.0**500]))
+    alpha = np.array([2.0**1001, 2.0**-999])
+    covariance = np.array([[0.75, -0.25], [-0.25, 0.5]])
+    # Each row factor simplifies to two, even though multiplying either
+    # unnormalized variance factor first would lose the opposing scale.
+    restored = _restore_diagonal_ou_diffusion(data, covariance, alpha)
+    np.testing.assert_allclose(restored, 4.0 * covariance, rtol=3e-16, atol=0.0)
+    np.testing.assert_array_equal(np.diag(restored), 4.0 * np.diag(covariance))
+    np.testing.assert_array_equal(restored, restored.T)
+
+
+def test_diagonal_ou_preserves_representable_far_apart_rate_covariance():
+    covariance = np.full((2, 2), 2.0**54)
+    alpha = np.array([2.0**-1074, 2.0**1023])
+    # The stationary correlation factor is subnormal, although the scaled
+    # covariance is normal. Combining exponents gives sqrt(2) * 2**-994.
+    expected = math.ldexp(math.sqrt(2.0), -994)
+    with np.errstate(under="raise"):
+        stationary = _stationary_diagonal_ou_covariance(
+            covariance, np.log(alpha), alpha
+        )
+    assert stationary[0, 1] == expected
+    np.testing.assert_array_equal(stationary, stationary.T)
+
+
+@pytest.mark.parametrize("time_scale", [2.0**-1023, 3.0 * 2.0**-1024])
+def test_brownian_covariance_restores_trait_and_time_units_together(time_scale):
+    data = SimpleNamespace(scales=np.array([2.0**-500, 2.0**-600]))
+    sigma = np.array([[2.0, 0.25], [0.25, 0.5]])
+    # Construct the reference in exponent space so tiny raw variances are
+    # not rounded to zero before dividing by the evolutionary time scale.
+    factor, exponent = math.frexp(time_scale)
+    expected = np.ldexp(
+        sigma / factor, np.array([[-1000, -1100], [-1100, -1200]]) - exponent
+    )
+    assert np.array_equal(_restore_sigma(data, sigma, time_scale=time_scale), expected)
 
 
 def test_dense_mvbm_accepts_partial_vectors_and_errors():
@@ -43,6 +106,61 @@ def test_dense_mvbm_accepts_partial_vectors_and_errors():
     assert np.all(np.linalg.eigvalsh(fit.sigma) > 0.0)
     assert posterior[tree["B"]].covariance[1, 1] > 0.0
     assert posterior[tree["D"]].covariance[0, 0] > 0.0
+
+
+@pytest.mark.parametrize(
+    "tip_time, trait_scale, stem", [(1.0, 1.0, 1e16), (1e-300, 1e-20, 1e20)]
+)
+def test_dense_mvbm_preserves_missing_trait_fit_below_long_unobserved_stem(
+    tip_time, trait_scale, stem
+):
+    values = {
+        "A": (0.0, 1.0),
+        "B": (0.4, None),
+        "C": (1.2, 0.2),
+        "D": (None, -0.3),
+        "E": (1.7, 0.8),
+    }
+    values = {
+        name: tuple(None if trait is None else trait * trait_scale for trait in traits)
+        for name, traits in values.items()
+    }
+    errors = {
+        name: tuple(
+            0.1 * trait_scale if trait is not None else None for trait in traits
+        )
+        for name, traits in values.items()
+    }
+    observed_clade = (
+        f"((A:{tip_time / 2},B:{tip_time / 2})I:{tip_time / 2},"
+        f"(C:{tip_time / 2},D:{tip_time / 2})J:{tip_time / 2},E:{tip_time})M"
+    )
+    short_tree = tree_from(f"(({observed_clade}:0)K:0,F:2)R;")
+    long_tree = tree_from(f"(({observed_clade}:{stem})K:{3 * stem},F:2)R;")
+    fits = [
+        fit_dense_mvbm(tree, values, ("x", "y"), standard_errors=errors)
+        for tree in (short_tree, long_tree)
+    ]
+    (short_posterior, short_fit), (long_posterior, long_fit) = fits
+    assert long_fit.restricted_log_likelihood == short_fit.restricted_log_likelihood
+    np.testing.assert_array_equal(long_fit.sigma, short_fit.sigma)
+    for name in (*values, "I", "J", "M"):
+        np.testing.assert_array_equal(
+            long_posterior[long_tree[name]].mean, short_posterior[short_tree[name]].mean
+        )
+        np.testing.assert_array_equal(
+            long_posterior[long_tree[name]].covariance,
+            short_posterior[short_tree[name]].covariance,
+        )
+    for name, distance in (("K", stem), ("R", 4 * stem), ("F", 4 * stem)):
+        marginal = long_posterior[long_tree[name]]
+        origin = short_posterior[short_tree["M"]]
+        np.testing.assert_array_equal(marginal.mean, origin.mean)
+        np.testing.assert_allclose(
+            marginal.covariance,
+            origin.covariance + long_fit.sigma * distance,
+            rtol=2e-15,
+        )
 
 
 def test_dense_mvbm_exact_complete_case_agrees_with_fast_path_reasonably():
@@ -254,10 +372,26 @@ def test_dense_multivariate_models_contract_duplicate_exact_zero_length_tips(fit
     posterior, fit = fitter(tree, values, ("x", "y"), **options)
     assert fit.num_observed == 5
     assert fit.num_effective_observations == 4
-    assert posterior[tree["A"]].mean == pytest.approx(posterior[tree["B"]].mean)
-    assert posterior[tree["A"]].covariance == pytest.approx(
-        posterior[tree["B"]].covariance
-    )
+    for name in ("A", "B", "I"):
+        np.testing.assert_array_equal(posterior[tree[name]].mean, values["A"])
+        np.testing.assert_array_equal(
+            posterior[tree[name]].covariance, np.zeros((2, 2))
+        )
+
+
+@pytest.mark.parametrize(
+    "fitter", [fit_dense_mvbm, fit_dense_mvou, fit_dense_mvou_diag]
+)
+def test_dense_multivariate_models_preserve_exact_coordinates_of_partial_tips(fitter):
+    tree = tree_from("((A:0,B:0)I:1,C:1,D:1,E:1)R;")
+    values = {"A": (-0.751, None), "C": (2.1, 1.0), "D": (-0.2, 0.0), "E": (0.9, -1.0)}
+    options = {"alpha": 0.7} if fitter is not fit_dense_mvbm else {}
+    posterior, _ = fitter(tree, values, ("x", "y"), **options)
+    for name in ("A", "B", "I"):
+        marginal = posterior[tree[name]]
+        assert marginal.mean[0] == values["A"][0]
+        np.testing.assert_array_equal(marginal.covariance[0], [0.0, 0.0])
+        assert marginal.covariance[1, 1] > 0.0
 
 
 def test_dense_multivariate_model_rejects_conflicting_exact_zero_length_tips():

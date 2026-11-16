@@ -73,7 +73,7 @@ def simulate_families(case, count, rng):
             }[node.name]
         node.name = f"p{i}"
     demography = msprime.Demography.from_species_tree(
-        dated_text(population_tree)[4:], initial_size=case["ne"], time_units="gen"
+        dated_text(population_tree).strip(), initial_size=case["ne"], time_units="gen"
     )
     true_genes, estimated_genes, alignments, audits = [], [], [], []
     for family in range(count):

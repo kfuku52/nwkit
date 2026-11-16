@@ -5,15 +5,17 @@ indices are prepared once per dataset. Large inputs retain tree pruning.
 """
 
 from dataclasses import dataclass
+from functools import cached_property
 
 import numpy as np
 from scipy.linalg import cho_solve, cholesky, solve_triangular
 
 from nwkit.shift_joint_model import (
     NativeJointFit,
+    _joint_observed_design,
+    _joint_predictions,
     integral_decay,
     joint_covariance_geometry,
-    joint_design,
 )
 from nwkit.vector_whitening import vector_gls
 
@@ -103,6 +105,34 @@ class _DenseFactor:
         return solve_triangular(self.lower, values, lower=True, check_finite=False)
 
 
+def _observed_path_geometry(tree, tips):
+    """Measure each side of a pair from its shared ancestor."""
+    count = len(tips)
+    shared = np.empty((count, count))
+    distance = np.zeros((count, count))
+    depths = np.zeros(len(tree.times))
+    bounds = np.searchsorted(tips, tree.tip_intervals)
+    for node, parent in enumerate(tree.compiled.parents[1:], 1):
+        depths[node] = depths[parent] + tree.times[node]
+    remaining = np.zeros(count)
+    for node in tree.compiled.postorder:
+        children = tree.compiled.children[node]
+        if not children:
+            start, stop = bounds[node]
+            shared[start:stop, start:stop] = depths[node]
+            continue
+        left, right = children
+        start, split = bounds[left]
+        _, stop = bounds[right]
+        remaining[start:split] += tree.times[left]
+        remaining[split:stop] += tree.times[right]
+        shared[start:split, split:stop] = depths[node]
+        shared[split:stop, start:split] = depths[node]
+        distance[start:split, split:stop] = remaining[start:split, None]
+        distance[split:stop, start:split] = remaining[split:stop, None]
+    return shared, distance
+
+
 class DenseJointContext:
     """Reusable geometry; never cache parameter-dependent matrix factorizations."""
 
@@ -112,29 +142,30 @@ class DenseJointContext:
         self.data, self.root_model = data, root_model
         self.mask = np.isfinite(data.values)
         self.tips, self.traits = np.nonzero(self.mask)
-        m = len(self.tips)
-        self.shared = np.zeros((m, m))
-        for node, (first, last) in enumerate(data.tree.tip_intervals):
-            positions = np.flatnonzero((self.tips >= first) & (self.tips < last))
-            self.shared[np.ix_(positions, positions)] += data.tree.times[node]
-        self.distance = self.shared.diagonal()[:, None] - self.shared
+        self.shared, self.distance = _observed_path_geometry(data.tree, self.tips)
         self.same_tip = self.tips[:, None] == self.tips[None, :]
         self.rows, self.columns = self.traits[:, None], self.traits[None, :]
 
-    def covariance(self, alpha, covariance, noise):
+    @cached_property
+    def trait_pairs(self):
+        return (self.rows * self.data.values.shape[1] + self.columns).ravel()
+
+    def covariance(self, alpha, covariance, noise, *, gradient=True):
         # Retain the reference geometry's parameter validation and reported
         # diffusion/tip coordinates, including stationary-root restrictions.
         _, _, _, tip, diffusion = joint_covariance_geometry(
-            self.data.tree, alpha, covariance, self.root_model
+            self.data.tree, alpha, covariance, self.root_model, _include_branches=False
         )
         if not np.isfinite(noise).all() or np.any(noise < 0):
             raise ValueError(
                 "Additional measurement variance must be finite and nonnegative."
             )
         r, c = self.rows, self.columns
+        alpha_score = None
         if np.isinf(alpha).all():
             kernel = self.same_tip.astype(float)
-            alpha_score = np.zeros_like(kernel)
+            if gradient:
+                alpha_score = np.zeros_like(kernel)
         else:
             if np.isinf(alpha).any():
                 raise ValueError(
@@ -145,17 +176,19 @@ class DenseJointContext:
             if self.root_model == "OUrandomRoot":
                 scale = np.sqrt(2 * alpha)
                 kernel = decay * scale[r] * scale[c] / sums
-                alpha_score = -self.distance + 0.5 / alpha[r] - 1 / sums
+                if gradient:
+                    alpha_score = -self.distance + 0.5 / alpha[r] - 1 / sums
             else:
                 scale = np.sqrt(integral_decay(2 * alpha, 1.0))
                 kernel = decay * integral_decay(sums, self.shared) / scale[r] / scale[c]
-                alpha_score = (
-                    -self.distance
-                    + log_integral_derivative(sums, self.shared)
-                    - log_integral_derivative(2 * alpha[r], 1.0)
-                )
-        process = covariance[r, c] * kernel
-        matrix = process.copy()
+                if gradient:
+                    alpha_score = (
+                        -self.distance
+                        + log_integral_derivative(sums, self.shared)
+                        - log_integral_derivative(2 * alpha[r], 1.0)
+                    )
+        matrix = covariance[r, c] * kernel
+        alpha_rows = None if alpha_score is None else matrix * alpha_score
         matrix.flat[:: len(matrix) + 1] += (self.data.variances + noise)[self.mask]
         if not np.isfinite(matrix).all():
             raise ValueError("Observed joint covariance must be finite.")
@@ -165,7 +198,7 @@ class DenseJointContext:
             tip,
             diffusion,
             kernel,
-            process * alpha_score,
+            alpha_rows,
         )
 
     def evaluate(self, layout, alpha, covariance, noise, *, gradient=False):
@@ -174,10 +207,10 @@ class DenseJointContext:
         noise = np.broadcast_to(np.asarray(noise, float), (p,)).copy()
         covariance = np.asarray(covariance, float)
         factor, tip, diffusion, kernel, alpha_rows = self.covariance(
-            alpha, covariance, noise
+            alpha, covariance, noise, gradient=gradient
         )
-        design = joint_design(self.data, layout, alpha)
-        x, y = design[self.mask], self.data.values[self.mask]
+        x, designs = _joint_observed_design(self.data, layout, alpha, self.mask)
+        y = self.data.values[self.mask]
         beta, ll, quadratic, beta_covariance = vector_gls(factor, y, x)
         fit = NativeJointFit(
             alpha,
@@ -187,7 +220,7 @@ class DenseJointContext:
             noise,
             beta.reshape(p, len(layout.groups)).T,
             beta_covariance,
-            np.einsum("ijk,k->ij", design, beta),
+            _joint_predictions(designs, beta),
             ll,
             quadratic,
             len(y),
@@ -196,13 +229,15 @@ class DenseJointContext:
         )
         if not gradient:
             return fit
+        assert alpha_rows is not None
         # Envelope theorem: at the GLS mean optimum no derivative of beta is
         # required. d(-log L) = .5 tr((K^-1-u u')dK) - u' (dX) beta.
         inverse = cho_solve((factor.lower, True), np.eye(len(y)), check_finite=False)
         u = cho_solve((factor.lower, True), y - x @ beta, check_finite=False)
         weight = inverse - np.outer(u, u)
-        covariance_score = np.zeros((p, p))
-        np.add.at(covariance_score, (self.rows, self.columns), 0.5 * weight * kernel)
+        covariance_score = np.bincount(
+            self.trait_pairs, weights=(0.5 * weight * kernel).ravel(), minlength=p * p
+        ).reshape(p, p)
         noise_score = np.bincount(
             self.traits, weights=0.5 * weight.diagonal(), minlength=p
         )

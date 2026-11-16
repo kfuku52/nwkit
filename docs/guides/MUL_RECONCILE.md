@@ -67,7 +67,8 @@ GRAMPA. Thus this objective differs from `nwkit reconcile`'s below-gene-root
 loss count. All edges have unit topological length for scoring.
 
 Dynamic-program states retain the minimum subtree score for each possible
-species-node map, tie counts, and backpointers. The recurrence combines every
+species-node map. Check tables also count tied assignments; only detailed
+mapping output needs to retain backpointers. The recurrence combines every
 pair of child states; higher-cost alternatives at the same map cannot improve
 any ancestral score. Traceback reports all minimizing leaf assignments without
 grouping distinct gene tips or fixing assignments using sister heuristics.

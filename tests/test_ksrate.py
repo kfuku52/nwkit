@@ -56,8 +56,32 @@ def test_formula_on_asymmetric_rates_and_negative_not_clipped():
 def test_finite_ks_cancellation_does_not_overflow_intermediate_sum():
     assert corrected_ks(1e308, 1e308, 1e308) == 1e308
     assert corrected_ks(5e-324, 0, 0) == 5e-324
+    assert corrected_ks(1.0, 1e308, 1e308) == 1.0
+    assert corrected_ks(5e-324, 1e308, 1e308) == 5e-324
+    assert corrected_ks(1e308, 5e-324, 1e308) == 5e-324
     with pytest.raises(ValueError, match="finite"):
         corrected_ks(1e308, 1e308, 0)
+
+
+def test_bootstrap_keeps_finite_cancellation_and_rejects_true_overflow():
+    trios = [KsTrio("A", "B", "C", "AB", 1)]
+
+    def pairs(outgroup, focal_sister=1e308):
+        return PairKs(
+            [
+                KsObservation("A", "B", "f", focal_sister),
+                KsObservation("A", "C", "f", 1e308),
+                KsObservation("B", "C", "f", outgroup),
+            ],
+            "ABC",
+        )
+
+    result = bootstrap_corrections(pairs(1e308), trios, 2, 1)
+    np.testing.assert_array_equal(result[("A", "AB")], [1e308, 1e308])
+    result = bootstrap_corrections(pairs(1e308, 5e-324), trios, 2, 1)
+    np.testing.assert_array_equal(result[("A", "AB")], [5e-324, 5e-324])
+    with pytest.raises(ValueError, match="representable as a finite float"):
+        bootstrap_corrections(pairs(0.0), trios, 2, 1)
 
 
 @pytest.mark.parametrize("value", [1e308, 5e-324])
@@ -69,18 +93,40 @@ def test_pair_and_group_medians_are_stable_at_float_extremes(value):
     assert grouped_corrections(trios, np.array([-1e308, 1e308]))[("A", "AB")] == 0
 
 
-def test_simultaneous_endpoints_avoid_cancellable_intermediate_overflow():
+def test_pair_and_group_medians_round_adjacent_subnormal_values():
+    tiny = float(np.nextafter(0.0, 1.0))
     pairs = PairKs(
         [
-            KsObservation(a, b, f"f{i}", 1e308)
-            for a, b in [("A", "B"), ("A", "C"), ("B", "C")]
+            KsObservation("A", "B", "first", tiny),
+            KsObservation("A", "B", "second", 2 * tiny),
+        ],
+        "AB",
+    )
+    assert pairs.estimates()[("A", "B")] == 2 * tiny
+    trios = [KsTrio("A", "B", "C", "AB", 1)] * 2
+    assert (
+        grouped_corrections(trios, np.array([-3 * tiny, -2 * tiny]))[("A", "AB")]
+        == -2 * tiny
+    )
+
+
+@pytest.mark.parametrize("focal_sister", [1e308, 1.0])
+def test_simultaneous_endpoints_keep_finite_cancellation(focal_sister):
+    pairs = PairKs(
+        [
+            KsObservation(a, b, f"f{i}", distance)
+            for a, b, distance in [
+                ("A", "B", focal_sister),
+                ("A", "C", 1e308),
+                ("B", "C", 1e308),
+            ]
             for i in range(8)
         ],
         "ABC",
     )
     trios = [KsTrio("A", "B", "C", "AB", 1)]
     intervals, _ = simultaneous_median_corrections(pairs, trios, 0.95)
-    assert intervals[("A", "AB")] == (1e308, 1e308)
+    assert intervals[("A", "AB")] == (focal_sister, focal_sister)
 
 
 def test_weighted_median_and_joint_family_resampling():

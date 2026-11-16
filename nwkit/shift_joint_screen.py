@@ -11,18 +11,20 @@ import numpy as np
 
 from nwkit.shift_joint_model import joint_factor
 from nwkit.shift_native_screen import _effect_design, descendant_design
+from nwkit.vector_whitening import _mean_design_qr
 
 
 def joint_screen_matrix(
     data, fitted, branches=None, *, normalize=True, memory_limit=512 * 1024**2
 ):
     joint = fitted["joint_fit"]
-    n, p = data.values.shape
+    p = len(data.trait_names)
     branches = tuple(
         sorted(set(data.tree.branch_ids) - {0}) if branches is None else branches
     )
     mask = np.isfinite(data.values)
-    observed = int(mask.sum())
+    tips, traits = np.nonzero(mask)
+    observed = len(tips)
     estimated = 8 * (
         3 * observed * len(branches) * p
         + 4 * observed * (p + 1)
@@ -39,21 +41,25 @@ def joint_screen_matrix(
         joint.measurement_variance,
         root_model=joint.root_model,
     )
-    intercept = np.broadcast_to(np.eye(p), (n, p, p))[mask]
+    intercept = np.eye(p)[traits]
     white = factor.apply(np.column_stack((data.values[mask], intercept)))
     baseline, _ = np.linalg.qr(white[:, 1:], mode="reduced")
     response = white[:, 0] - baseline @ (baseline.T @ white[:, 0])
     matrix = np.empty((observed, len(branches) * p))
+    rows_by_trait = tuple(np.flatnonzero(traits == trait) for trait in range(p))
     for first in range(0, len(branches), 16):
         selected = branches[first : first + 16]
         descendant, _ = descendant_design(data.tree, selected)
-        raw = np.zeros((n, p, len(selected) * p))
-        for trait in range(p):
-            values = _effect_design(
-                data.tree, descendant, float(joint.alpha_height[trait]), selected
-            )
-            raw[:, trait, trait::p] = values
-        block = factor.apply(raw[mask])
+        raw = np.zeros((observed, len(selected) * p))
+        effects_by_rate: dict[float, np.ndarray] = {}
+        for trait, rows in enumerate(rows_by_trait):
+            rate = float(joint.alpha_height[trait])
+            if rate not in effects_by_rate:
+                effects_by_rate[rate] = _effect_design(
+                    data.tree, descendant, rate, selected
+                )
+            raw[rows, trait::p] = effects_by_rate[rate][tips[rows]]
+        block = factor.apply(raw)
         block -= baseline @ (baseline.T @ block)
         matrix[:, first * p : (first + len(selected)) * p] = block
     if normalize:
@@ -68,17 +74,21 @@ def joint_screen_matrix(
 
 
 def joint_path(matrix, response, p, *, iterations, paths):
+    if matrix.shape[0] >= 4 * (matrix.shape[1] + 1):
+        # Orthogonal reduction preserves the loss and gradient for every step.
+        reduced = np.linalg.qr(np.column_stack((response, matrix)), mode="r")
+        response, matrix = reduced[:, 0], reduced[:, 1:]
     groups = matrix.shape[1] // p
     initial_gradient = (matrix.T @ response).reshape(groups, p)
     maximum = float(np.max(np.linalg.norm(initial_gradient, axis=1)))
     coefficients = np.zeros((groups, p))
     step = 1 / max(1.0, float(np.sum(matrix * matrix)))
+    residual = matrix @ coefficients.ravel() - response
+    gradient = (matrix.T @ residual).reshape(groups, p)
+    loss = 0.5 * float(residual @ residual)
     for fraction in paths:
         strength = maximum * fraction
         for _iteration in range(iterations):
-            residual = matrix @ coefficients.ravel() - response
-            gradient = (matrix.T @ residual).reshape(groups, p)
-            loss = 0.5 * float(residual @ residual)
             for _ in range(40):
                 trial = coefficients - step * gradient
                 norms = np.linalg.norm(trial, axis=1)
@@ -87,11 +97,10 @@ def joint_path(matrix, response, p, *, iterations, paths):
                 )[:, None]
                 change = trial - coefficients
                 r = matrix @ trial.ravel() - response
-                if 0.5 * float(r @ r) <= loss + float(
-                    np.sum(gradient * change)
-                ) + float(np.sum(change * change)) / (2 * step) + 1e-12 * max(
-                    1.0, loss
-                ):
+                trial_loss = 0.5 * float(r @ r)
+                if trial_loss <= loss + float(np.sum(gradient * change)) + float(
+                    np.sum(change * change)
+                ) / (2 * step) + 1e-12 * max(1.0, loss):
                     break
                 step *= 0.5
             else:
@@ -99,6 +108,7 @@ def joint_path(matrix, response, p, *, iterations, paths):
                     "Joint group-lasso backtracking failed its quadratic bound."
                 )
             coefficients = trial
+            loss = trial_loss
             gradient = (matrix.T @ r).reshape(groups, p)
             norms = np.linalg.norm(coefficients, axis=1)
             active = norms > 0
@@ -183,12 +193,20 @@ class JointQuickProfile:
         self.columns = {b: i for i, b in enumerate(branches)}
         self.evaluations = 0
         observed = np.isfinite(data.values)
+        self.observation_count = int(observed.sum())
         self.constant = -0.5 * (
-            int(observed.sum()) * math.log(2 * math.pi) + logdet
+            self.observation_count * math.log(2 * math.pi) + logdet
         ) - sum(
             int(observed[:, j].sum()) * math.log(data.scales[j])
             for j in range(len(data.trait_names))
         )
+        if len(self.response) > self.matrix.shape[1] + 1:
+            # Keep the response in the orthogonal reduction so the residual
+            # outside the candidate span remains part of the likelihood.
+            reduced = np.linalg.qr(
+                np.column_stack((self.response, self.matrix)), mode="r"
+            )
+            self.response, self.matrix = reduced[:, 0], reduced[:, 1:]
 
     def score(self, layout):
         self.evaluations += 1
@@ -207,9 +225,9 @@ class JointQuickProfile:
             ):
                 if group:
                     x[:, (group - 1) :: q] += sign * block
-        norms = np.linalg.norm(x, axis=0)
-        if np.any(norms == 0) or np.linalg.matrix_rank(x / norms) < x.shape[1]:
+        try:
+            basis, _, _ = _mean_design_qr(x, observation_count=self.observation_count)
+        except ValueError:
             return -math.inf
-        basis, _ = np.linalg.qr(x / norms, mode="reduced")
         residual = self.response - basis @ (basis.T @ self.response)
         return self.constant - 0.5 * float(residual @ residual)

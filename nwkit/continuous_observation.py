@@ -5,7 +5,7 @@ import math
 
 import numpy as np
 
-from nwkit.vector_gaussian import _array, _inverse
+from nwkit.vector_gaussian import _array, _cholesky
 
 
 def validate_measurement_covariances(observed, trait_names, covariances):
@@ -31,7 +31,9 @@ def validate_measurement_covariances(observed, trait_names, covariances):
             )
         noisy = np.flatnonzero(np.diag(matrix) != 0)
         if len(noisy):
-            _inverse(matrix[np.ix_(noisy, noisy)], "Measurement covariance noisy block")
+            _cholesky(
+                matrix[np.ix_(noisy, noisy)], "Measurement covariance noisy block"
+            )
         result[name] = matrix.copy()
     return result
 
@@ -81,8 +83,9 @@ def prepare_correlated_observations(
             errors[name] = np.zeros(len(trait_names))
     data = _prepare_observations(tree, observed, trait_names, errors, dense_limit=False)
     values, normalized = normalized_vector_observations(data)
+    exponents = -data.covariance_scale_exponents
     for name in normalized:
-        normalized[name] = covariances[name] / np.outer(data.scales, data.scales)
+        normalized[name] = np.ldexp(covariances[name], exponents)
     return data, values, normalized, covariances
 
 

@@ -77,9 +77,18 @@ def test_lambda_spectrum_retains_error_constant_and_resolution_guards(monkeypatc
 
 def test_exact_lambda_bootstrap_preserves_draws_against_cholesky(monkeypatch):
     c = covariance()
+    original = signal_stats.eigh
+    calls = []
+
+    def counted(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(signal_stats, "eigh", counted)
     first = np.random.default_rng(443)
     second = np.random.default_rng(443)
     actual = lambda_parametric_bootstrap(c, VALUES, np.zeros(8), 2.0, 19, first)
+    assert len(calls) == 1
     monkeypatch.setattr(signal_stats, "_zero_error_lambda_profile", lambda *args: None)
     expected = lambda_parametric_bootstrap(c, VALUES, np.zeros(8), 2.0, 19, second)
     assert actual == expected
@@ -157,6 +166,51 @@ def test_zero_k_permutations_do_not_factor_invalid_covariance():
     assert permutation_test(np.zeros((8, 8)), VALUES, np.zeros(8), 1, 0, rng) == 1
     assert rng.bit_generator.state == state
     assert permutation_test(None, None, None, None, 0, None) == 1
+
+
+def test_k_permutation_p_value_matches_refits_for_larger_covariance():
+    from nwkit.signal_stats import permutation_test
+
+    generator = np.random.default_rng(385)
+    n = 48
+    effects = generator.normal(size=(n, 5))
+    matrix = effects @ effects.T + np.diag(np.linspace(0.3, 1.7, n))
+    values = generator.normal(size=n)
+    errors = np.zeros(n)
+    observed = k_statistic(matrix, values)
+    reference = np.random.default_rng(601)
+    actual = np.random.default_rng(601)
+    limit = observed - 1e-12 * max(1.0, abs(observed))
+    exceedances = sum(
+        k_statistic(matrix, values[reference.permutation(n)]) >= limit
+        for _ in range(47)
+    )
+    assert 0 < exceedances < 47
+    assert permutation_test(matrix, values, errors, observed, 47, actual) == (
+        (1 + exceedances) / 48
+    )
+    assert actual.bit_generator.state == reference.bit_generator.state
+
+
+@pytest.mark.parametrize("scale", [1e-200, 1e200])
+def test_blomberg_k_retains_ratio_at_extreme_response_scale(scale):
+    base = np.array([-1.0, 0.0, 0.25, 1.0])
+    matrix = np.diag([1.0, 2.0, 3.0, 4.0])
+    inverse = 1 / matrix.diagonal()
+    residual = base - inverse @ base / inverse.sum()
+    expected = (residual @ residual) / (residual**2 @ inverse)
+    expected /= (matrix.trace() - len(base) / inverse.sum()) / (len(base) - 1)
+    assert k_statistic(matrix, base * scale) == pytest.approx(expected)
+    rng = np.random.default_rng(45)
+    reference = np.random.default_rng(45)
+    assert signal_stats.permutation_test(
+        matrix, base * scale, np.zeros(4), expected, 19, rng
+    ) == (
+        signal_stats.permutation_test(
+            matrix, base, np.zeros(4), expected, 19, reference
+        )
+    )
+    assert rng.bit_generator.state == reference.bit_generator.state
 
 
 @pytest.mark.parametrize("singular", [False, True])
@@ -348,11 +402,18 @@ def test_missing_constant_and_trait_order(tmp_path, capsys):
     assert first.iloc[0].num_tests == 1
 
 
-def test_missing_uses_retained_mrca(tmp_path, capsys):
+@pytest.mark.parametrize("stem", ["0.7", "1e120"])
+def test_missing_uses_retained_mrca(tmp_path, capsys, stem):
     frame = pd.DataFrame(
         {"leaf_name": list("ABCDEFGH"), "x": [1, 2, 3, 4, None, None, None, None]}
     )
-    result = run_cli(tmp_path, capsys, ["--test", "no"], frame)
+    result = run_cli(
+        tmp_path,
+        capsys,
+        ["--test", "no"],
+        frame,
+        f"(((A:0.7,B:0.7):0.8,(C:0.9,D:0.9):0.6):{stem},(E:1,F:1,G:1,H:1):1);",
+    )
     reduced = run_cli(
         tmp_path,
         capsys,
@@ -528,6 +589,21 @@ def test_rate_units_avoid_intermediate_square_overflow():
     assert result["sigma2"] == pytest.approx(0.5e200)
     result = _restore_units({"sigma2": 0.5}, 1e-200, 1e-200, 0, 8)
     assert result["sigma2"] == pytest.approx(0.5e-200, rel=1e-15, abs=0)
+
+
+@pytest.mark.parametrize("magnitude", [8e153, 1e154])
+def test_exact_diffusion_likelihood_retains_large_finite_rate(magnitude):
+    import math
+
+    values = np.array([-magnitude, 0.0, magnitude, 0.0])
+    expected = (magnitude * 0.5) * magnitude
+    with np.errstate(over="raise", invalid="raise"):
+        likelihood, rate, mean = rate_fit(np.eye(4), values, np.zeros(4))
+    assert rate == pytest.approx(expected)
+    assert mean == 0
+    assert likelihood == pytest.approx(
+        -2 * (1 + math.log(2 * math.pi) + math.log(expected))
+    )
 
 
 @pytest.mark.parametrize("seed", range(4))

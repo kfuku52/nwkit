@@ -8,10 +8,13 @@ import pandas as pd
 from scipy.optimize import brentq
 from scipy.stats import chi2
 
+from nwkit.compiled_tree import CompiledTree
 from nwkit.gaussian_inference import (
-    condition_gaussian_tree,
+    GaussianTreeLikelihood,
+    _gaussian_root_posterior,
     simulate_gaussian_process,
 )
+from nwkit.optimization import _bounded_scalar_grid
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,61 +57,27 @@ def profile_likelihood_interval(
     maximum = float(log_likelihood(mle))
     if not math.isfinite(maximum):
         raise ValueError("The profile likelihood is not finite at the MLE.")
-    cutoff = maximum - 0.5 * float(chi2.ppf(level, 1))
+    drop = 0.5 * float(chi2.ppf(level, 1))
 
     def difference(value):
         try:
             likelihood = float(log_likelihood(float(value)))
         except (ValueError, ArithmeticError, OverflowError):
             return -math.inf
-        return likelihood - cutoff if math.isfinite(likelihood) else -math.inf
+        return (likelihood - maximum) + drop if math.isfinite(likelihood) else -math.inf
 
-    left_grid = np.linspace(lower, mle, grid_size)
-    right_grid = np.linspace(mle, upper, grid_size)
-
-    def crossing(grid, reverse):
-        values = [difference(value) for value in grid]
-        pairs = tuple(range(len(grid) - 1))
-        if reverse:
-            pairs = pairs[::-1]
-        for index in pairs:
-            first, second = values[index], values[index + 1]
-            if not (math.isfinite(first) and math.isfinite(second)):
-                finite_index = None
-                if math.isfinite(first) and first > 0.0:
-                    finite_index = index
-                elif math.isfinite(second) and second > 0.0:
-                    finite_index = index + 1
-                if finite_index is not None:
-                    return float(grid[finite_index]), True
-                continue
-            if first == 0.0:
-                return float(grid[index]), False
-            if second == 0.0:
-                return float(grid[index + 1]), False
-            if (first < 0.0 < second) or (second < 0.0 < first):
-                return float(
-                    brentq(
-                        difference,
-                        float(grid[index]),
-                        float(grid[index + 1]),
-                        xtol=1e-10,
-                    )
-                ), False
-        finite_indices = [
-            index for index, value in enumerate(values) if math.isfinite(value)
-        ]
-        if not finite_indices:
-            raise ValueError("The profile likelihood is finite only at the MLE.")
-        boundary_index = finite_indices[0] if reverse else finite_indices[-1]
-        boundary = float(grid[boundary_index])
-        return boundary, True
+    left_grid = _bounded_scalar_grid(lower, mle, grid_size)
+    right_grid = _bounded_scalar_grid(mle, upper, grid_size)
 
     lower_value, lower_limited = (
-        (lower, True) if mle == lower else crossing(left_grid, True)
+        (lower, True)
+        if mle == lower
+        else _profile_crossing(difference, left_grid[-2::-1], mle)
     )
     upper_value, upper_limited = (
-        (upper, True) if mle == upper else crossing(right_grid, False)
+        (upper, True)
+        if mle == upper
+        else _profile_crossing(difference, right_grid[1:], mle)
     )
     return ProfileLikelihoodInterval(
         lower_value,
@@ -119,15 +88,82 @@ def profile_likelihood_interval(
     )
 
 
+def _profile_crossing(difference, points, mle):
+    inside = mle
+    for point in points:
+        outside = float(point)
+        value = difference(outside)
+        if value > 0.0:
+            inside = outside
+            continue
+        # Refine at a nonfinite profile value to distinguish a likelihood
+        # crossing from exhaustion of the finite parameter domain.
+        while not math.isfinite(value):
+            middle = 0.5 * inside + 0.5 * outside
+            if middle == inside or middle == outside:
+                return inside, True
+            midpoint_value = difference(middle)
+            if midpoint_value > 0.0:
+                inside = middle
+            else:
+                outside = middle
+                value = midpoint_value
+        if value == 0.0:
+            return outside, False
+        return float(
+            brentq(
+                difference,
+                min(inside, outside),
+                max(inside, outside),
+                xtol=math.ulp(0.0),
+                # A root close to zero may be hundreds of binary scales
+                # closer than the nearest point of the initial profile grid.
+                maxiter=2 * (np.finfo(float).maxexp - np.finfo(float).minexp),
+            )
+        ), False
+    return inside, True
+
+
 def _summary_statistics(values):
-    values = np.asarray(values, dtype=float)
-    centered = values - float(np.mean(values))
+    """Summarize observation vectors along a contiguous final axis."""
+
+    means = np.mean(values, axis=-1)
+    lower = np.min(values, axis=-1)
+    upper = np.max(values, axis=-1)
     return {
-        "mean": float(np.mean(values)),
-        "variance": float(np.var(values, ddof=1)) if len(values) > 1 else 0.0,
-        "range": float(np.ptp(values)),
-        "max_abs_centered": float(np.max(np.abs(centered))),
+        "mean": means,
+        "variance": np.var(values, axis=-1, ddof=1),
+        "range": upper - lower,
+        "max_abs_centered": np.maximum(upper - means, means - lower),
     }
+
+
+def _predictive_work_units(observed, replicated):
+    """Scale extreme trait values before moments and tail counts are computed."""
+
+    size = max(
+        float(np.max(observed)),
+        -float(np.min(observed)),
+        float(np.max(replicated)),
+        -float(np.min(replicated)),
+    )
+    if not math.isfinite(size):
+        raise ValueError(
+            "Posterior predictive observations exceed floating-point range."
+        )
+    exponent = math.frexp(size)[1]
+    if -250 <= exponent <= 250:
+        return observed, replicated, 0
+    return np.ldexp(observed, -exponent), np.ldexp(replicated, -exponent), exponent
+
+
+def _restore_predictive_statistic(value, exponent):
+    try:
+        return math.ldexp(float(value), exponent)
+    except OverflowError as exc:
+        raise ValueError(
+            "A posterior predictive statistic exceeds floating-point range."
+        ) from exc
 
 
 def gaussian_posterior_predictive(
@@ -145,49 +181,36 @@ def gaussian_posterior_predictive(
     num_simulations = int(num_simulations)
     if num_simulations <= 0:
         raise ValueError("num_simulations must be a positive integer.")
-    conditioned = condition_gaussian_tree(
-        process, values_by_leaf, standard_errors=standard_errors
-    )
-    compiled = conditioned.compiled_tree
-    records = []
-    for name, node_index in compiled.leaf_index_by_name.items():
-        value = values_by_leaf.get(name)
-        if value is None:
-            continue
-        error = 0.0 if standard_errors is None else float(standard_errors[name])
-        records.append((node_index, float(value), error))
+    compiled = CompiledTree.from_tree(process.tree)
+    prepared = GaussianTreeLikelihood.prepare(compiled, values_by_leaf, standard_errors)
+    root = _gaussian_root_posterior(process, prepared)
+    records = prepared.records
     if len(records) < 2:
         raise ValueError("Posterior predictive checks require two observed tips.")
     seed_sequence = np.random.SeedSequence(seed)
     root_seed, process_seed, error_seed = seed_sequence.spawn(3)
     root_rng = np.random.default_rng(root_seed)
-    root = conditioned.marginals[process.tree]
     root_values = (
         np.full(num_simulations, root.mean)
         if root.variance == 0.0
         else root_rng.normal(root.mean, math.sqrt(root.variance), num_simulations)
     )
-    simulations = simulate_gaussian_process(
+    replicated = simulate_gaussian_process(
         process,
         num_samples=num_simulations,
         seed=int(process_seed.generate_state(1)[0]),
         root_values=root_values,
         compiled_tree=compiled,
+        _output_indices=tuple(record[0] for record in records),
     ).values
-    indices = np.asarray([record[0] for record in records], dtype=int)
-    replicated = simulations[:, indices]
     errors = np.asarray([record[2] for record in records], dtype=float)
     if np.any(errors > 0.0):
         error_rng = np.random.default_rng(error_seed)
         replicated += error_rng.normal(0.0, errors, replicated.shape)
     observed = np.asarray([record[1] for record in records], dtype=float)
+    observed, replicated, exponent = _predictive_work_units(observed, replicated)
     observed_statistics = _summary_statistics(observed)
-    replicate_statistics = {
-        key: np.asarray(
-            [_summary_statistics(row)[key] for row in replicated], dtype=float
-        )
-        for key in observed_statistics
-    }
+    replicate_statistics = _summary_statistics(replicated)
     rows = []
     for statistic, observed_value in observed_statistics.items():
         values = replicate_statistics[statistic]
@@ -197,16 +220,21 @@ def gaussian_posterior_predictive(
         lower = (1.0 + float(np.sum(values <= observed_value))) / (
             num_simulations + 1.0
         )
+        statistic_exponent = 2 * exponent if statistic == "variance" else exponent
+        moments = {
+            "observed": observed_value,
+            "replicate_mean": np.mean(values),
+            "replicate_sd": np.std(values, ddof=1) if num_simulations > 1 else 0.0,
+            "replicate_q025": np.quantile(values, 0.025),
+            "replicate_q975": np.quantile(values, 0.975),
+        }
         rows.append(
             {
                 "statistic": statistic,
-                "observed": observed_value,
-                "replicate_mean": float(np.mean(values)),
-                "replicate_sd": (
-                    float(np.std(values, ddof=1)) if num_simulations > 1 else 0.0
-                ),
-                "replicate_q025": float(np.quantile(values, 0.025)),
-                "replicate_q975": float(np.quantile(values, 0.975)),
+                **{
+                    key: _restore_predictive_statistic(value, statistic_exponent)
+                    for key, value in moments.items()
+                },
                 "p_lower": lower,
                 "p_upper": upper,
                 "p_two_sided": min(1.0, 2.0 * min(lower, upper)),
@@ -215,19 +243,26 @@ def gaussian_posterior_predictive(
         )
     from nwkit.phylogenetic_predictive import predictive_summary, sister_clade_contrast
 
-    names = [str(compiled.nodes[index].name) for index in indices]
-    rows.append(
-        predictive_summary(
-            "sister_clade_mean_squared_difference",
-            sister_clade_contrast(
-                process.tree, dict(zip(names, observed, strict=True))
-            ),
-            [
-                sister_clade_contrast(process.tree, dict(zip(names, row, strict=True)))
-                for row in replicated
-            ],
-        )
+    names = [str(compiled.nodes[index].name) for index, _, _ in records]
+    sister_summary = predictive_summary(
+        "sister_clade_mean_squared_difference",
+        sister_clade_contrast(process.tree, dict(zip(names, observed, strict=True))),
+        [
+            sister_clade_contrast(process.tree, dict(zip(names, row, strict=True)))
+            for row in replicated
+        ],
     )
+    for key in (
+        "observed",
+        "replicate_mean",
+        "replicate_sd",
+        "replicate_q025",
+        "replicate_q975",
+    ):
+        sister_summary[key] = _restore_predictive_statistic(
+            sister_summary[key], 2 * exponent
+        )
+    rows.append(sister_summary)
     return pd.DataFrame(rows)
 
 

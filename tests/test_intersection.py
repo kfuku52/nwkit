@@ -77,6 +77,11 @@ class TestGetRemoveNames:
         result = get_remove_names(arr1, arr2, "prefix")
         assert result == ["GHI_003"]
 
+    def test_prefix_match_can_skip_a_longer_reference_label(self):
+        assert get_remove_names(["ABC_999", "DEF"], ["ABC", "ABC_001"], "prefix") == [
+            "DEF"
+        ]
+
     def test_backward_mode(self):
         arr1 = ["pre_ABC", "DEF", "pre_GHI"]
         arr2 = ["ABC", "pre_DEF"]

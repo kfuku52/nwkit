@@ -6,7 +6,11 @@ from ete4 import Tree
 from nwkit.astral import extract_support_labels
 from nwkit.parent_index import ParentIndex, validate_parent_links
 from nwkit.species_parser import SpeciesParser
-from nwkit.tree_features import foreground_components, unrooted_splits
+from nwkit.tree_features import (
+    foreground_components,
+    patristic_distances,
+    unrooted_splits,
+)
 
 
 def test_parent_index_handles_deep_tree_without_quadratic_ancestor_storage():
@@ -58,6 +62,25 @@ def test_foreground_clades_and_partial_backbone():
     assert unrooted_splits(tree, {"A", "B", "C", "D"}) == {frozenset({"A", "B"})}
 
 
+@pytest.mark.parametrize(
+    "newick",
+    ["(((B),D),(C,A,E));", "(((B),D),(D,A,B));", "A;"],
+)
+def test_clade_rank_ids_preserve_mask_order_and_unary_ties(newick):
+    from nwkit.branch_features import assign_clade_rank_ids
+
+    tree = Tree(newick, parser=1)
+    nodes = list(tree.traverse())
+    bits = {name: 1 << i for i, name in enumerate(sorted(tree.leaf_names()))}
+    expected = sorted(
+        nodes, key=lambda node: sum(bits[name] for name in set(node.leaf_names()))
+    )
+
+    assert assign_clade_rank_ids(tree) is tree
+    assert sorted(nodes, key=lambda node: node.props["branch_id"]) == expected
+    assert [node.props["branch_id"] for node in expected] == list(range(len(nodes)))
+
+
 def test_strict_support_normalizes_only_verified_edge_representations():
     from nwkit.branch_features import map_internal_support_by_split
 
@@ -72,6 +95,28 @@ def test_strict_support_normalizes_only_verified_edge_representations():
     assert set(values.values()) == {90}
     assert [node.support for node in source.children] == before
     assert all(node.support is None for node in target.children)
+
+
+def test_partial_support_transfers_only_explicit_values_to_matching_splits():
+    from nwkit.branch_features import ensure_branch_ids, map_internal_support_by_split
+
+    source = Tree("((A,B)0,(C,D),(E,F)97);", parser=0)
+    target = ensure_branch_ids(Tree("(((A,B),(C,D)),(E,F));", parser=1))
+    values, diagnostics = map_internal_support_by_split(
+        target, source, allow_partial=True
+    )
+    assert {
+        frozenset(node.leaf_names()): values[node.props["branch_id"]]
+        for node in target.traverse()
+        if node.props["branch_id"] in values
+    } == {frozenset("AB"): 0.0, frozenset("ABCD"): 97.0, frozenset("EF"): 97.0}
+    assert diagnostics["supported_split_count"] == 2
+    assert diagnostics["internal_split_count"] == 3
+    with pytest.raises(ValueError, match="only a subset"):
+        map_internal_support_by_split(target, source)
+    incompatible = Tree("((A,C)0,(B,D),(E,F)97);", parser=0)
+    with pytest.raises(ValueError, match="incompatible unrooted topologies"):
+        map_internal_support_by_split(target, incompatible, allow_partial=True)
 
 
 def test_convert_astral_retains_properties_and_can_drop_comments():
@@ -170,6 +215,19 @@ def test_constraint_scope_and_partial_backbone_are_explicit():
         verify_constraint(tree, constraint, set("ABCDE"), "typo")
 
 
+def test_partial_constraint_projects_extra_tips_on_both_sides_of_a_split():
+    from nwkit.tree_features import verify_constraint
+
+    constraint = Tree("((C,D),(B,A));", parser=1)
+    matching = Tree("(E,(A,(F,B)),(C,(G,D)));", parser=1)
+    conflicting = Tree("(E,(A,(F,C)),(B,(G,D)));", parser=1)
+    taxa = set("ABCDEFG")
+
+    assert verify_constraint(matching, constraint, taxa, "partial") == {frozenset("AB")}
+    with pytest.raises(ValueError, match="violates 1 required"):
+        verify_constraint(conflicting, constraint, taxa, "partial")
+
+
 @pytest.mark.parametrize(
     "text", ["(A,(B,(C,(D,(E,F)))));", "((A,B),(C,D),(E,F));", "((A),B,((C,D),E),F);"]
 )
@@ -235,9 +293,17 @@ def test_posterior_diagnostics_require_distinct_chain_files(
     assert output.read_bytes() == b"previous diagnostics"
 
 
+def test_distance_matrix_accumulates_paths_from_each_starting_tip():
+    tree = Tree("((A:1,B:3):2,C:4);", parser=1)
+
+    assert patristic_distances(tree) == {
+        "A": {"A": 0.0, "B": 4.0, "C": 7.0},
+        "B": {"B": 0.0, "A": 4.0, "C": 9.0},
+        "C": {"C": 0.0, "B": 9.0, "A": 7.0},
+    }
+
+
 @pytest.mark.parametrize("text", ["((A:1,B:1):1,A:2);", "(A:1,:2);"])
 def test_distance_matrix_rejects_labels_that_would_drop_or_alias_rows(text):
-    from nwkit.tree_features import patristic_distances
-
     with pytest.raises(ValueError, match="unique nonempty"):
         patristic_distances(Tree(text, parser=1))

@@ -7,10 +7,12 @@ Scaled regime offsets have well-defined Brownian and independent-tip limits.
 
 import math
 from dataclasses import dataclass
+from sys import float_info
 
 import numpy as np
 
 from nwkit.compiled_tree import CompiledTree
+from nwkit.gaussian_tree import _product_ratio
 from nwkit.gaussian_whitening import TreeWhitening, tree_gls
 from nwkit.util import assign_branch_ids
 
@@ -58,26 +60,35 @@ class ShiftTree:
         ids = assign_branch_ids(tree)
         branch_ids = tuple(ids[node] for node in compiled.nodes)
         intervals = {node: (i, i + 1) for i, node in enumerate(compiled.leaf_indices)}
+        normalized_times = times / height
         remaining = np.zeros(len(compiled.nodes))
+        shortest = np.full(len(compiled.nodes), np.inf)
+        exact_ultrametric = bool(np.ptp(heights) == 0)
+        # Equal depths measured from the root can hide differences among short
+        # descendant paths near the tips. Check local ages for the shortcut.
         for i in compiled.postorder:
             children = compiled.children[i]
             if children:
                 intervals[i] = (intervals[children[0]][0], intervals[children[-1]][1])
+                if shortest[i] != remaining[i]:
+                    exact_ultrametric = False
+            else:
+                shortest[i] = 0.0
             if i:
                 parent = compiled.parents[i]
-                remaining[parent] = max(
-                    remaining[parent], times[i] / height + remaining[i]
-                )
+                edge = normalized_times[i]
+                remaining[parent] = max(remaining[parent], edge + remaining[i])
+                shortest[parent] = min(shortest[parent], edge + shortest[i])
         return cls(
             compiled,
             branch_ids,
             height,
-            times / height,
+            normalized_times,
             tuple(np.asarray(levels[level], dtype=int) for level in sorted(levels)),
             tuple(int(i) for i in np.argsort(branch_ids)),
             tuple(intervals[i] for i in range(len(compiled.nodes))),
             remaining,
-            bool(np.ptp(heights) == 0),
+            exact_ultrametric,
         )
 
     @property
@@ -168,15 +179,18 @@ class ShiftLayout:
             index = tree.indices_by_branch[branch]
             parent = tree.compiled.parents[index]
             age = tree.remaining_times[parent]
-            weight = (
-                age
-                if alpha_height == 0
-                else (
-                    1.0
-                    if math.isinf(alpha_height)
-                    else -math.expm1(-alpha_height * age) / -math.expm1(-alpha_height)
+            if alpha_height < float_info.epsilon / 2:
+                weight = age
+            elif math.isinf(alpha_height):
+                weight = 1.0
+            else:
+                exponent = alpha_height * age
+                denominator = -math.expm1(-alpha_height)
+                weight = (
+                    (alpha_height / denominator) * age
+                    if exponent < float_info.min
+                    else -math.expm1(-exponent) / denominator
                 )
-            )
             first, last = tree.tip_intervals[index]
             if labels[index]:
                 matrix[first:last, labels[index]] += weight
@@ -186,16 +200,31 @@ class ShiftLayout:
 
 
 def mean_geometry(tree, alpha_height):
+    alpha_height = _nonnegative_alpha(alpha_height)
+    if math.isinf(alpha_height):
+        return np.zeros(len(tree.times)), np.ones(len(tree.times))
+    slopes = np.exp(-alpha_height * tree.times)
+    return slopes, _normalized_ou_duration(alpha_height, tree.times)
+
+
+def _nonnegative_alpha(alpha_height):
     alpha_height = float(alpha_height)
     if math.isnan(alpha_height) or alpha_height < 0:
         raise ValueError("Alpha times tree height must be nonnegative.")
-    if alpha_height == 0:
-        return np.ones(len(tree.times)), tree.times.copy()
-    if math.isinf(alpha_height):
-        return np.zeros(len(tree.times)), np.ones(len(tree.times))
-    return np.exp(-alpha_height * tree.times), -np.expm1(
-        -alpha_height * tree.times
-    ) / -np.expm1(-alpha_height)
+    return alpha_height
+
+
+def _normalized_ou_duration(rate, times):
+    if rate < float_info.epsilon / 2:
+        return times.copy()
+    exponent = rate * times
+    result = -np.expm1(-exponent) / -np.expm1(-rate)
+    # The denominator is still well resolved when only the branch exponent is
+    # subnormal. Apply the first-order branch term before scaling by time.
+    small = exponent < float_info.min
+    if small.any():
+        result[small] = (rate / -math.expm1(-rate)) * times[small]
+    return result
 
 
 def covariance_geometry(tree, alpha_height, process_variance, root_model):
@@ -204,22 +233,35 @@ def covariance_geometry(tree, alpha_height, process_variance, root_model):
     process_variance = float(process_variance)
     if not math.isfinite(process_variance) or process_variance < 0:
         raise ValueError("Process tip variance must be finite and nonnegative.")
-    slopes, _ = mean_geometry(tree, alpha_height)
+    alpha_height = _nonnegative_alpha(alpha_height)
     if alpha_height == 0:
         if root_model == "OUrandomRoot":
             raise ValueError("Stationary-root OU is undefined at alpha zero.")
-        return slopes, process_variance * tree.times, 0.0
-    denominator = (
-        1.0
-        if math.isinf(alpha_height) or root_model == "OUrandomRoot"
-        else -np.expm1(-2 * alpha_height)
-    )
-    fractions = (
-        np.ones(len(tree.times))
-        if math.isinf(alpha_height)
-        else -np.expm1(-2 * alpha_height * tree.times)
-    )
-    innovations = process_variance * (fractions / denominator)
+        return np.ones(len(tree.times)), process_variance * tree.times, 0.0
+    double_rate = 2 * alpha_height
+    if math.isinf(alpha_height):
+        slopes = np.zeros(len(tree.times))
+        innovations = np.full(len(tree.times), process_variance)
+    else:
+        exponent = -alpha_height * tree.times
+        slopes = np.exp(exponent)
+        if root_model == "OUfixedRoot" and math.isfinite(double_rate):
+            innovations = process_variance * _normalized_ou_duration(
+                double_rate, tree.times
+            )
+        else:
+            exponent = (
+                -double_rate * tree.times
+                if math.isfinite(double_rate)
+                else 2 * exponent
+            )
+            innovations = process_variance * -np.expm1(exponent)
+            if root_model == "OUrandomRoot" and process_variance:
+                affected = (exponent > -float_info.min) & (tree.times > 0)
+                for index in np.flatnonzero(affected):
+                    innovations[index] = _product_ratio(
+                        double_rate, tree.times[index], process_variance
+                    )
     root_variance = process_variance if root_model == "OUrandomRoot" else 0.0
     return slopes, innovations, root_variance
 
@@ -265,9 +307,26 @@ class ShiftData:
             raise ValueError(
                 "Each native shift trait needs at least three observed tips."
             )
-        centers = np.nanmean(values, axis=0)
-        centered = values - centers
+        with np.errstate(over="ignore", invalid="ignore"):
+            centers = np.nanmean(values, axis=0)
+            centered = values - centers
         scales = np.nanmax(np.abs(centered), axis=0)
+        affected = ~np.isfinite(centers) | ~np.isfinite(scales)
+        for column in np.flatnonzero(affected):
+            trait = values[:, column]
+            magnitude = np.nanmax(np.abs(trait))
+            exponent = math.frexp(magnitude)[1] - 1
+            center = math.ldexp(np.nanmean(np.ldexp(trait, -exponent)), exponent)
+            with np.errstate(over="ignore"):
+                shifted = trait - center
+            if np.isinf(shifted).any():
+                # Centering at the middle of the observed range bounds the
+                # deviations when even subtraction from the mean overflows.
+                center = np.nanmin(trait) / 2 + np.nanmax(trait) / 2
+                shifted = trait - center
+            centers[column] = center
+            centered[:, column] = shifted
+            scales[column] = np.nanmax(np.abs(shifted))
         scales = np.maximum(scales, np.sqrt(np.max(errors, axis=0)))
         if np.any(scales == 0) or not np.isfinite(scales).all():
             raise ValueError(
@@ -350,6 +409,34 @@ def evaluate_trait(
     )
 
 
+def _restore_trait_variance(
+    values, scale, rate=1.0, time=1.0, *, column_scale=None, extra_power=0
+):
+    """Restore variance with the scale, rate, and time powers combined first."""
+    mantissa, exponent = np.frexp(values)
+    scale_part, scale_power = np.frexp(scale)
+    if column_scale is None:
+        scale_factor, scale_exponent = scale_part**2, 2 * scale_power
+    else:
+        column_part, column_power = np.frexp(column_scale)
+        scale_factor = scale_part * column_part
+        scale_exponent = scale_power + column_power
+    rate_part, rate_power = math.frexp(rate)
+    time_part, time_power = math.frexp(time)
+    with np.errstate(over="ignore", under="ignore"):
+        return np.ldexp(
+            mantissa * scale_factor * rate_part / time_part,
+            exponent + scale_exponent + rate_power - time_power + extra_power,
+        )
+
+
+def restore_trait_covariance(matrix, scales, time=1.0):
+    """Restore a covariance matrix in the original trait and tree units."""
+    return _restore_trait_variance(
+        matrix, scales[:, None], time=time, column_scale=scales[None]
+    )
+
+
 def restore_trait_fit(data, trait, fit):
     scale, center = data.scales[trait], data.centers[trait]
     alpha = fit.alpha_height
@@ -362,20 +449,32 @@ def restore_trait_fit(data, trait, fit):
     coefficients[0] += center
     sigma2 = None
     if not math.isinf(alpha):
-        ratio = 1.0 if alpha == 0 else 2 * alpha / -np.expm1(-2 * alpha)
-        if fit.root_model == "OUrandomRoot":
-            ratio = 2 * alpha
-        sigma2 = fit.process_variance * scale**2 * ratio / data.tree.height
+        double_rate = 2 * alpha
+        if math.isinf(double_rate):
+            sigma2 = _restore_trait_variance(
+                fit.process_variance, scale, alpha, data.tree.height, extra_power=1
+            )
+        else:
+            ratio = double_rate
+            if fit.root_model == "OUfixedRoot":
+                ratio = 1.0 if alpha == 0 else double_rate / -np.expm1(-double_rate)
+            sigma2 = _restore_trait_variance(
+                fit.process_variance, scale, ratio, data.tree.height
+            )
     return {
         "trait": data.trait_names[trait],
         "alpha": None if math.isinf(alpha) else alpha / data.tree.height,
         "alpha_height": None if math.isinf(alpha) else alpha,
         "alpha_status": status,
         "sigma2": sigma2,
-        "process_tip_variance": fit.process_variance * scale**2,
-        "measurement_variance": fit.measurement_variance * scale**2,
+        "process_tip_variance": _restore_trait_variance(fit.process_variance, scale),
+        "measurement_variance": _restore_trait_variance(
+            fit.measurement_variance, scale
+        ),
         "scaled_regime_coefficients": coefficients.tolist(),
-        "coefficient_covariance": (fit.coefficient_covariance * scale**2).tolist(),
+        "coefficient_covariance": _restore_trait_variance(
+            fit.coefficient_covariance, scale
+        ).tolist(),
         "predicted": (center + scale * fit.predicted).tolist(),
         "log_likelihood": fit.log_likelihood - fit.num_observations * math.log(scale),
         "num_observations": fit.num_observations,

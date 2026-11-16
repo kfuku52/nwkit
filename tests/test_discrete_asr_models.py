@@ -181,6 +181,18 @@ def test_stationary_distribution_is_invariant_to_rate_units(scale):
         np.testing.assert_allclose(stationary_distribution(matrix), [2 / 3, 1 / 3])
 
 
+@pytest.mark.parametrize("slow_rate", [1e-30, 1e-310])
+@pytest.mark.parametrize("order", [(0, 1, 2), (2, 0, 1), (1, 2, 0)])
+def test_stationary_distribution_resolves_weakly_connected_classes(slow_rate, order):
+    matrix = np.array(
+        [[-1.0, 1.0, 0.0], [1.0, -1.0, slow_rate], [0.0, 2 * slow_rate, -2 * slow_rate]]
+    )
+    expected = np.array([0.4, 0.4, 0.2])
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        probabilities = stationary_distribution(matrix[np.ix_(order, order)])
+    np.testing.assert_allclose(probabilities, expected[list(order)], rtol=2e-13)
+
+
 def test_mk_fit_recovers_from_scipy_bound_roundoff(monkeypatch):
     minimize = asr.minimize
     methods = []
@@ -284,6 +296,26 @@ def test_labelled_rate_matrix_derives_or_validates_diagonal(tmp_path):
         validate_rate_matrix([[-0.1, 0.2], [0.4, -0.4]])
 
 
+def test_labelled_generator_checks_large_row_totals_without_overflow(tmp_path):
+    matrix = tmp_path / "rates.tsv"
+    matrix.write_text("state\ta\tb\na\t-1e308\t1e308\nb\t0\t0\n")
+    with np.errstate(over="raise", invalid="raise"):
+        _, valid = read_rate_matrix(matrix)
+        np.testing.assert_array_equal(valid, [[-1e308, 1e308], [0.0, 0.0]])
+        matrix.write_text("state\ta\tb\na\t-1e308\t8e307\nb\t0\t0\n")
+        with pytest.raises(ValueError, match="negative row sums"):
+            read_rate_matrix(matrix)
+
+
+def test_gtr_retains_frequencies_when_the_raw_weight_sum_overflows():
+    with np.errstate(over="raise", invalid="raise"):
+        matrix = build_rate_matrix("GTR", ["a", "b", "c"], [1, 1, 1, 1e308, 1e308])
+        stationary = stationary_distribution(matrix)
+
+    np.testing.assert_allclose(stationary[1:], [0.5, 0.5])
+    assert stationary[0] == pytest.approx(5e-309, abs=0.0, rel=1e-12)
+
+
 def test_generator_validation_is_relative_to_the_rate_scale():
     invalid = np.array([[-2e-15, 1e-15], [3e-15, -3e-15]])
     with pytest.raises(ValueError, match="rows must sum to zero"):
@@ -323,6 +355,21 @@ def test_transition_matrix_preserves_slow_changes_on_extreme_long_branches():
     )
     np.testing.assert_allclose(transition[1], [0.0, 1.0, 0.0])
     np.testing.assert_allclose(transition[2], [0.0, 1.0, 0.0], atol=1e-15)
+    np.testing.assert_allclose(transition.sum(axis=1), 1.0, atol=1e-15)
+
+
+def test_transition_matrix_keeps_slow_rates_below_scaled_float_range():
+    fast = 1e100
+    slow = 1e-230
+    matrix = np.array(
+        [[-fast, fast, 0.0], [fast, -fast, slow], [0.0, 2 * slow, -2 * slow]]
+    )
+    transition = asr._transition_matrix(matrix, 1e230)
+    # The two fast states equilibrate on a negligible timescale. Their
+    # aggregate exits at slow/2 and the third state exits at 2*slow.
+    stay = 0.2 + 0.8 * math.exp(-2.5)
+    expected = [(1.0 - stay) / 2.0, (1.0 - stay) / 2.0, stay]
+    np.testing.assert_allclose(transition[2], expected, rtol=5e-11)
     np.testing.assert_allclose(transition.sum(axis=1), 1.0, atol=1e-15)
 
 

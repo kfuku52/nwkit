@@ -205,6 +205,31 @@ def test_oum_jointly_estimates_shared_process_and_regime_optima():
     assert fit.optimizer_converged_starts > 0
 
 
+@pytest.mark.parametrize("scale", [1e-95, 1e95])
+def test_regime_ou_optima_are_trait_unit_invariant(scale):
+    tree = tree_from("((A:0.4,B:0.9)I:0.3,(C:0.5,D:0.8)J:0.6,E:0.4,F:0.9)R;")
+    warm = {"C", "D", "J", "F"}
+    regimes = assignment(
+        tree, ["warm" if node.name in warm else "cold" for node in tree.traverse()]
+    )
+    values = dict(zip("ABCDEF", (-0.3, 0.4, 1.6, 2.8, 0.2, 1.7), strict=True))
+    _, expected = compute_regime_ou_marginals(tree, values, regimes, alpha=0.8)
+    _, fit = compute_regime_ou_marginals(
+        tree,
+        {name: value * scale for name, value in values.items()},
+        regimes,
+        alpha=0.8,
+    )
+    assert fit.sigma2 / scale**2 == pytest.approx(expected.sigma2, rel=1e-5)
+    assert fit.log_likelihood + len(values) * math.log(scale) == pytest.approx(
+        expected.log_likelihood, abs=1e-9
+    )
+    for regime in regimes.regimes:
+        assert fit.theta_by_regime[regime] / scale == pytest.approx(
+            expected.theta_by_regime[regime], abs=1e-5
+        )
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize("model", ["OUM", "OUMA", "OUMV", "OUMVA"])
 def test_regime_ou_cli_fixed_parameters(model, tmp_path):

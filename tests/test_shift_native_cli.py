@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 
 import numpy as np
 import pandas as pd
@@ -8,6 +9,29 @@ from nwkit.cli import main, parser
 from nwkit.shift_native_model import ShiftLayout, ShiftTree
 from nwkit.util import read_tree
 from tests.test_shift_native_model import TREE
+
+
+def test_native_effect_table_preserves_small_normalized_ages():
+    from nwkit.shift_native_fit import fit_native_layout
+    from nwkit.shift_native_model import ShiftData
+    from nwkit.shift_native_output import native_tables
+
+    tree = read_tree("((a:1e-170,b:1e-170):1,c:1);", "auto", True, quiet=True)
+    data = ShiftData.build(tree, np.array([[1.0], [2.0], [4.0]]), ["x"])
+    tip = data.tree.compiled.leaf_index_by_name["a"]
+    layout = ShiftLayout.build(data.tree, [data.tree.branch_ids[tip]])
+    result = fit_native_layout(
+        data,
+        ShiftLayout.build(data.tree),
+        alpha_height=0.0,
+        process_variance=1.0,
+        measurement_variance=0.1,
+    )
+    result["layout"] = layout
+    result["traits"][0]["scaled_regime_coefficients"] = [0.0, 1e130]
+    result["fits"][0] = replace(result["fits"][0], alpha_height=1e-170)
+    _, effects, _, _ = native_tables(data, result)
+    assert effects[0]["mean_effect"] == pytest.approx(1e-40, rel=1e-15, abs=0)
 
 
 @pytest.mark.parametrize("selection", ["native", "calibrated", "ic"])

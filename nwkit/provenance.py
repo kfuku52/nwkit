@@ -154,6 +154,7 @@ INPUT_PATH_ARGUMENTS = frozenset(
         "species_list",
         "species_map_tsv",
         "species_name_tsv",
+        "verified_images_tsv",
         "species_tree",
         "species_traits",
         "support_source",
@@ -165,6 +166,7 @@ INPUT_PATH_ARGUMENTS = frozenset(
         "transition_graph",
         "tree",
         "tree_ensemble",
+        "vertlife_file",
         "weight_tsv",
         "densitree_trees",
     )
@@ -396,8 +398,27 @@ def _declared_input_path_candidates(args):
     return candidates
 
 
+def _verified_image_input_paths(args):
+    path = getattr(args, "verified_images_tsv", None)
+    if (
+        getattr(args, "command", None) != "image"
+        or not path
+        or not os.path.isfile(path)
+    ):
+        return []
+    from nwkit.image_workflow import read_verified_rows
+
+    directory = os.path.dirname(os.path.realpath(path))
+    return [
+        ("verified_images_tsv:asset", os.path.join(directory, row["local_path"]))
+        for row in read_verified_rows(path)
+        if row.get("local_path")
+    ]
+
+
 def _input_path_candidates(args):
     candidates = _declared_input_path_candidates(args)
+    candidates.extend(_verified_image_input_paths(args))
     if getattr(args, "command", None) == "draw" and getattr(args, "comparison", None):
         from nwkit.reconciliation_view import read_comparison
 
@@ -414,6 +435,12 @@ def _input_path_candidates(args):
         from nwkit.angiocal import angiocal_input_path
 
         candidates.append(("angiocal_cache", str(angiocal_input_path(args))))
+    if getattr(args, "vertlife_dataset", None) is not None and not getattr(
+        args, "vertlife_file", None
+    ):
+        from nwkit.vertlife import vertlife_input_path
+
+        candidates.append(("vertlife_cache", str(vertlife_input_path(args))))
     if getattr(args, "radte_prefix", None):
         from nwkit.result_plot_data import radte_plot_protected_paths
 
@@ -790,6 +817,7 @@ def _external_context(args):
         "species_parser",
         "species_regex",
         "species_map_tsv",
+        "vertlife_dataset",
     )
     return {
         key: _json_value(getattr(args, key))
@@ -993,6 +1021,15 @@ def validate_command_path_roles(args):
             angiocal_protected_paths(args),
             _audit_collision_candidates(args, getattr(args, "audit", None)),
         )
+    if getattr(args, "vertlife_dataset", None) is not None and not getattr(
+        args, "vertlife_file", None
+    ):
+        from nwkit.vertlife import vertlife_cache_lock_paths
+
+        validate_outputs_do_not_replace_inputs(
+            vertlife_cache_lock_paths(args),
+            _audit_collision_candidates(args, getattr(args, "audit", None)),
+        )
     inputs = _input_path_candidates(args)
     outputs = _audit_collision_candidates(args, None)
     allows_in_place_tree = args.command in _IN_PLACE_TREE_COMMANDS and not (
@@ -1105,6 +1142,11 @@ def _runtime_input_file_records(args):
     if angiocal_source:
         return _input_file_records(
             args, input_candidates=[("angiocal_cache", angiocal_source)]
+        )
+    vertlife_source = getattr(args, "_nwkit_vertlife_cache", None)
+    if vertlife_source:
+        return _input_file_records(
+            args, input_candidates=[("vertlife_cache", vertlife_source)]
         )
     if getattr(args, "command", None) != "draw":
         return []

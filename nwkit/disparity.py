@@ -1,5 +1,6 @@
 """Squared-distance disparity, crown-time DTT and a fitted Brownian null."""
 
+import math
 import multiprocessing
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
@@ -35,19 +36,41 @@ def make_design(tree, names, depths):
     parents = np.asarray([-1 if node.is_root else index[node.up] for node in nodes])
     starts = np.asarray([0.0 if node.is_root else depths[node.up] for node in nodes])
     ends = np.asarray([depths[node] for node in nodes])
-    row_indices, column_indices, weights = [0], [0], [1.0]
-    clade_counts = [1]
-    for row, time in enumerate(times[1:], 1):
-        active = np.flatnonzero(
-            (parents >= 0) & (counts > 1) & (starts <= time) & (ends > time)
-        )
-        clade_counts.append(len(active))
-        row_indices.extend([row] * len(active))
-        column_indices.extend(active)
-        if len(active):
-            weights.extend([1 / len(active)] * len(active))
+    # An eligible branch covers one contiguous, half-open range of split rows.
+    event_times = times[1:-1]
+    eligible = np.flatnonzero((parents >= 0) & (counts > 1))
+    eligible_starts, eligible_ends = starts[eligible], ends[eligible]
+    first_rows = np.searchsorted(event_times, eligible_starts) + 1
+    stop_rows = np.searchsorted(event_times, eligible_ends) + 1
+    has_events = first_rows < stop_rows
+    first_rows, stop_rows = first_rows[has_events], stop_rows[has_events]
+    changes = np.bincount(first_rows, minlength=len(times))
+    changes -= np.bincount(stop_rows, minlength=len(times))
+    clade_counts = np.cumsum(changes, dtype=counts.dtype)
+    clade_counts[0] = 1
+    present = eligible[(eligible_starts <= 1) & (eligible_ends > 1)]
+    clade_counts[-1] = len(present)
+
+    # Fill the CSR slots in preorder so each row retains its sum order.
+    indptr = np.empty(len(times) + 1, dtype=np.intp)
+    indptr[0] = 0
+    np.cumsum(clade_counts, out=indptr[1:])
+    indices = np.empty(int(indptr[-1]), dtype=np.intp)
+    indices[0] = 0
+    indices[indptr[-2] :] = present
+    next_index = indptr[:-1].copy()
+    for column, first, stop in zip(
+        eligible[has_events], first_rows, stop_rows, strict=True
+    ):
+        offsets = next_index[first:stop]
+        indices[offsets] = column
+        offsets += 1
+    row_weights = np.divide(
+        1.0, clade_counts, out=np.zeros(len(times)), where=clade_counts > 0
+    )
     matrix = csr_matrix(
-        (weights, (row_indices, column_indices)), shape=(len(times), len(nodes))
+        (np.repeat(row_weights, clade_counts), indices, indptr),
+        shape=(len(times), len(nodes)),
     )
     return DTTDesign(
         parents,
@@ -56,12 +79,29 @@ def make_design(tree, names, depths):
         np.asarray([0.0 if node.is_root else node.dist for node in nodes]),
         times,
         matrix,
-        np.asarray(clade_counts),
+        clade_counts,
     )
 
 
 def clade_disparities(design, values):
     """Mean pairwise squared Euclidean distance via stable subtree moments."""
+    with np.errstate(over="ignore", invalid="ignore", under="ignore"):
+        disparities, counts = _clade_moments(design, values)
+        affected = ~np.isfinite(disparities)
+        if disparities[0] < np.finfo(float).tiny:
+            affected |= disparities < np.finfo(float).tiny
+        if affected.any():
+            exponent = np.frexp(np.max(np.abs(values)))[1]
+            scaled, _ = _clade_moments(design, np.ldexp(values, -exponent))
+            disparities[affected] = np.ldexp(scaled[affected], 2 * int(exponent))
+    if not np.isfinite(disparities).all() or disparities[0] <= 0:
+        raise ValueError(
+            "DTT requires finite, positive total disparity; rescale nonconstant traits."
+        )
+    return disparities, counts
+
+
+def _clade_moments(design, values):
     p = values.shape[1]
     counts = np.zeros(len(design.parents), dtype=int)
     means = np.zeros((len(counts), p))
@@ -71,7 +111,13 @@ def clade_disparities(design, values):
             counts[node] = 1
             means[node] = values[design.tip_rows[node]]
             continue
-        for child in design.children[node]:
+        children = design.children[node]
+        first = children[0]
+        # The first child's moments initialize an empty accumulator directly.
+        counts[node] = counts[first]
+        means[node] += means[first]
+        sums[node] += sums[first]
+        for child in children[1:]:
             total = counts[node] + counts[child]
             delta = means[child] - means[node]
             sums[node] += (
@@ -83,10 +129,6 @@ def clade_disparities(design, values):
     disparities = np.divide(
         2 * sums, counts - 1, out=np.zeros_like(sums), where=counts > 1
     )
-    if not np.isfinite(disparities).all() or disparities[0] <= 0:
-        raise ValueError(
-            "DTT requires finite, positive total disparity; rescale nonconstant traits."
-        )
     return disparities, counts
 
 
@@ -99,11 +141,19 @@ def transform_traits(values, scale):
     values = np.asarray(values, dtype=float)
     if values.ndim != 2 or not np.isfinite(values).all():
         raise ValueError("DTT requires a finite numeric trait matrix.")
+    center = values[0].copy()
     with np.errstate(over="ignore"):
-        differences = values - values[0]
-    if not np.isfinite(differences).all():
-        raise ValueError("DTT trait ranges overflow; rescale input units.")
+        differences = values - center
     units = np.max(np.abs(differences), axis=0)
+    if np.isinf(units.max()):
+        overflowed = np.isinf(units)
+        affected = values[:, overflowed]
+        # A midpoint bounds the centered differences by half the range, which
+        # fits even when subtracting the first observation would overflow.
+        center[overflowed] = affected.min(axis=0) / 2 + affected.max(axis=0) / 2
+        centered = affected - center[overflowed]
+        differences[:, overflowed] = centered
+        units[overflowed] = np.max(np.abs(centered), axis=0)
     if np.any(units == 0):
         raise ValueError(
             "DTT requires nonconstant selected columns; remove constant traits."
@@ -111,7 +161,8 @@ def transform_traits(values, scale):
     if scale == "standardize":
         normalized = differences / units
         sd = np.std(normalized, axis=0, ddof=1)
-        scales = units * sd
+        with np.errstate(over="ignore"):
+            scales = units * sd
         transformed = normalized / sd
     elif scale == "raw":
         scales = np.full(values.shape[1], units.max())
@@ -120,24 +171,67 @@ def transform_traits(values, scale):
         raise ValueError("DTT scale must be raw or standardize.")
     if not np.isfinite(scales).all() or np.any(scales <= 0):
         raise ValueError("DTT trait scales cannot be represented; rescale input units.")
-    return transformed, values[0].copy(), scales
+    return transformed, center, scales
 
 
-def fit_brownian(covariance, values):
+def _check_brownian_dimensions(values):
     n, p = values.shape
     if n <= p:
         raise ValueError(
             "BM simulations require more tips than traits; use fewer columns or --n-sim 0."
         )
+
+
+_SINGULAR_BROWNIAN = "BM simulations require nonsingular tip covariance; check zero-length terminal branches."
+
+
+def fit_brownian(covariance, values):
+    _check_brownian_dimensions(values)
     try:
         factor = np.linalg.cholesky(covariance)
     except np.linalg.LinAlgError as exc:
-        raise ValueError(
-            "BM simulations require nonsingular tip covariance; check zero-length terminal branches."
-        ) from exc
-    weight = cho_solve((factor, True), np.ones(n))
+        raise ValueError(_SINGULAR_BROWNIAN) from exc
+    weight = cho_solve((factor, True), np.ones(len(values)))
     center = weight @ values / weight.sum()
     white = solve_triangular(factor, values - center, lower=True)
+    return _brownian_rate(center, white, len(values))
+
+
+def fit_brownian_tree(design, values):
+    """Fit by independent contrasts, retaining branches below depth precision."""
+    _check_brownian_dimensions(values)
+    n, traits = values.shape
+    means = np.empty((len(design.parents), traits))
+    deviations = np.sqrt(design.lengths)
+    contrasts = np.empty((n - 1, traits))
+    written = 0
+    for node in range(len(design.parents) - 1, -1, -1):
+        row = design.tip_rows[node]
+        if row >= 0:
+            means[node] = values[row]
+            continue
+        first, *remaining = design.children[node]
+        mean = means[first]
+        deviation = deviations[first]
+        for child in remaining:
+            other = deviations[child]
+            total = math.hypot(deviation, other)
+            if total == 0.0:
+                raise ValueError(_SINGULAR_BROWNIAN)
+            contrasts[written] = (mean - means[child]) / total
+            written += 1
+            left, right = other / total, deviation / total
+            mean = left**2 * mean + right**2 * means[child]
+            deviation = min(deviation, other) * (max(deviation, other) / total)
+        means[node] = mean
+        deviations[node] = math.hypot(deviations[node], deviation)
+    if deviations[0] == 0.0:
+        raise ValueError(_SINGULAR_BROWNIAN)
+    return _brownian_rate(means[0], contrasts, n)
+
+
+def _brownian_rate(center, white, n):
+    p = white.shape[1]
     units = np.max(np.abs(white), axis=0)
     if not np.isfinite(white).all() or np.any(units <= 0):
         raise ValueError(
@@ -159,24 +253,48 @@ def fit_brownian(covariance, values):
 
 def _simulate_one(design, factor, seed):
     rng = np.random.default_rng(seed)
-    values = np.zeros((len(design.parents), factor.shape[0]))
-    innovations = rng.standard_normal((len(values) - 1, factor.shape[0])) @ factor.T
+    values = np.empty((len(design.parents), factor.shape[0]))
+    values[0] = 0.0
+    values[1:] = rng.standard_normal((len(values) - 1, factor.shape[0])) @ factor.T
     for node in range(1, len(values)):
         values[node] = (
-            values[design.parents[node]]
-            + np.sqrt(design.lengths[node]) * innovations[node - 1]
+            values[design.parents[node]] + np.sqrt(design.lengths[node]) * values[node]
         )
-    tips = np.empty((int(np.sum(design.tip_rows >= 0)), factor.shape[0]))
-    for node, row in enumerate(design.tip_rows):
-        if row >= 0:
-            tips[row] = values[node]
-    return dtt_curve(design, tips)
+    return design.weights @ _relative_simulated_disparity(
+        design, _tip_states(design, values)
+    )
+
+
+def _relative_simulated_disparity(design, tips):
+    # All clades share the same scaling in the ratio. Compute it even when
+    # the unnormalized disparity would be outside the floating-point range.
+    with np.errstate(over="ignore", invalid="ignore", under="ignore"):
+        disparities, _ = _clade_moments(design, tips)
+        if not np.isfinite(disparities).all() or disparities[0] < np.finfo(float).tiny:
+            exponent = np.frexp(np.max(np.abs(tips)))[1]
+            disparities, _ = _clade_moments(design, np.ldexp(tips, -exponent))
+    if not np.isfinite(disparities).all() or disparities[0] <= 0:
+        raise ValueError(
+            "DTT requires finite, positive total disparity; rescale nonconstant traits."
+        )
+    return disparities / disparities[0]
+
+
+def _tip_states(design, values):
+    nodes = np.flatnonzero(design.tip_rows >= 0)
+    tips = np.empty((len(nodes), values.shape[1]), dtype=values.dtype)
+    tips[design.tip_rows[nodes]] = values[nodes]
+    return tips
 
 
 _SIMULATION_WORKSPACE_BYTES = 4 * 1024**2
 
 
 def _row_squared_norms(delta):
+    if delta.shape[1] == 1:
+        # A one-component dot product has no reduction order to preserve.
+        with np.errstate(over="ignore", under="ignore", invalid="ignore"):
+            return np.square(delta[:, 0])
     # Fresh vectors retain the original dot reduction, including on backends
     # whose reduction differs for offset rows of a batched buffer.
     output = []
@@ -186,45 +304,63 @@ def _row_squared_norms(delta):
     return np.asarray(output)
 
 
-def _batched_disparities(design, values, counts):
-    means = np.zeros_like(values)
-    sums = np.zeros(values.shape[:2])
+def _batched_relative_disparities(design, means, counts):
+    """Replace simulated states with their clade means after propagation."""
+    with np.errstate(over="ignore", invalid="ignore", under="ignore"):
+        disparities = _batched_clade_moments(design, means, counts)
+    affected = ~np.isfinite(disparities).all(axis=0)
+    affected |= disparities[0] < np.finfo(float).tiny
+    np.divide(disparities, disparities[0], out=disparities, where=~affected[None, :])
+    for replica in np.flatnonzero(affected):
+        # The in-place reduction changes only internal states. The original
+        # tips let the single-curve path recover extreme but finite disparities.
+        disparities[:, replica] = _relative_simulated_disparity(
+            design, _tip_states(design, means[:, replica])
+        )
+    return disparities
+
+
+def _batched_clade_moments(design, means, counts):
+    sums = np.zeros(means.shape[:2])
     for node in range(len(counts) - 1, -1, -1):
         if design.tip_rows[node] >= 0:
-            means[node] = values[node]
             continue
-        merged = 0
-        for child in design.children[node]:
+        children = design.children[node]
+        first = children[0]
+        merged = counts[first]
+        # Preserve the signed-zero behavior of a zero-initialized sum.
+        np.add(0.0, means[first], out=means[node])
+        sums[node] += sums[first]
+        for child in children[1:]:
             total = merged + counts[child]
             delta = means[child] - means[node]
             squared = _row_squared_norms(delta)
             sums[node] += sums[child] + squared * merged * counts[child] / total
             means[node] += delta * (counts[child] / total)
             merged = total
-    disparities = np.divide(
+    return np.divide(
         2 * sums,
         (counts - 1)[:, None],
         out=np.zeros_like(sums),
         where=counts[:, None] > 1,
     )
-    if not np.isfinite(disparities).all() or np.any(disparities[0] <= 0):
-        raise ValueError(
-            "DTT requires finite, positive total disparity; rescale nonconstant traits."
-        )
-    return disparities
 
 
 def _simulate_chunk(payload):
     design, factor, seeds = payload
-    if len(seeds) <= 1:
-        return [(index, _simulate_one(design, factor, seed)) for index, seed in seeds]
     nodes, traits = len(design.parents), factor.shape[0]
-    # Include products, moment/denominator arrays and temporary curve storage.
+    curves = np.empty(
+        (len(seeds), len(design.times)),
+        dtype=np.result_type(design.weights.dtype, np.float64),
+    )
+    # Include simulation products, moment arrays and temporary curves.
     # Large trees/trait dimensions retain the single-replica workspace.
     replica_bytes = 8 * (nodes * (3 * traits + 6) + 2 * len(design.times))
     batch = max(1, min(32, _SIMULATION_WORKSPACE_BYTES // max(1, replica_bytes)))
-    if batch == 1:
-        return [(index, _simulate_one(design, factor, seed)) for index, seed in seeds]
+    if len(seeds) <= 1 or batch == 1:
+        for index, seed in enumerate(seeds):
+            curves[index] = _simulate_one(design, factor, seed)
+        return curves
     counts = np.zeros(nodes, dtype=int)
     for node in range(nodes - 1, -1, -1):
         counts[node] = (
@@ -233,38 +369,23 @@ def _simulate_chunk(payload):
             else sum(counts[child] for child in design.children[node])
         )
     square_roots = np.sqrt(design.lengths)
-    indexed: list[tuple[int, np.ndarray]] = []
     for start in range(0, len(seeds), batch):
         selected = seeds[start : start + batch]
         replicas = len(selected)
-        innovations = np.empty((nodes - 1, replicas, traits))
-        for column, (_, seed) in enumerate(selected):
+        values = np.empty((nodes, replicas, traits))
+        values[0] = 0.0
+        for column, seed in enumerate(selected):
             rng = np.random.default_rng(seed)
-            innovations[:, column, :] = (
-                rng.standard_normal((nodes - 1, traits)) @ factor.T
-            )
-        values = np.zeros((nodes, replicas, traits))
+            values[1:, column, :] = rng.standard_normal((nodes - 1, traits)) @ factor.T
         for node in range(1, nodes):
             values[node] = (
-                values[design.parents[node]]
-                + square_roots[node] * innovations[node - 1]
+                values[design.parents[node]] + square_roots[node] * values[node]
             )
-        disparities = _batched_disparities(design, values, counts)
-        curves = np.asarray(
-            [
-                np.asarray(
-                    design.weights @ (disparities[:, column] / disparities[0, column])
-                )
-                for column in range(replicas)
-            ]
-        )
-        del innovations, values, disparities
-        indexed.extend(
-            (index, curve.copy())
-            for (index, _), curve in zip(selected, curves, strict=True)
-        )
-        del curves
-    return indexed
+        disparities = _batched_relative_disparities(design, values, counts)
+        del values
+        curves[start : start + replicas] = (design.weights @ disparities).T
+        del disparities
+    return curves
 
 
 def validate_work(design, traits, count, export_simulations=False):
@@ -282,23 +403,25 @@ def validate_work(design, traits, count, export_simulations=False):
 
 
 def simulate_curves(design, factor, count, seed=1, threads=1):
-    seeds = list(enumerate(np.random.SeedSequence(seed).spawn(count)))
-    if threads == 1 or count <= 1:
-        indexed = _simulate_chunk((design, factor, seeds))
-    else:
-        workers = min(threads, count)
-        chunks = [seeds[i::workers] for i in range(workers)]
-        with ProcessPoolExecutor(
-            max_workers=workers, mp_context=multiprocessing.get_context("spawn")
-        ) as pool:
-            indexed = [
-                item
-                for chunk in pool.map(
-                    _simulate_chunk, ((design, factor, chunk) for chunk in chunks)
-                )
-                for item in chunk
-            ]
-    return np.asarray([curve for _, curve in sorted(indexed, key=lambda item: item[0])])
+    seeds = np.random.SeedSequence(seed).spawn(count)
+    if not seeds:
+        return np.empty(0)
+    if threads == 1 or count == 1:
+        return _simulate_chunk((design, factor, seeds))
+    workers = min(threads, count)
+    chunks = [seeds[i::workers] for i in range(workers)]
+    with ProcessPoolExecutor(
+        max_workers=workers, mp_context=multiprocessing.get_context("spawn")
+    ) as pool:
+        curves = np.empty(
+            (count, len(design.times)),
+            dtype=np.result_type(design.weights.dtype, np.float64),
+        )
+        for worker, worker_curves in enumerate(
+            pool.map(_simulate_chunk, ((design, factor, chunk) for chunk in chunks))
+        ):
+            curves[worker::workers] = worker_curves
+    return curves
 
 
 def curve_area(times, curves, interval=(0.0, 1.0)):

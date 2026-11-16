@@ -20,6 +20,21 @@ def _common_ancestor_by_parent_walk(first, second):
     return second
 
 
+def test_names_for_mask_ignores_bits_outside_the_index():
+    index = CladeIndex(Tree("(A,B,C);", parser=1))
+    assert index.names_for_mask(0b10101) == ("A", "C")
+    assert index.names_for_mask(-2) == ("B", "C")
+
+
+def test_names_for_wide_mask_preserves_order_and_ignores_outside_bits():
+    names = tuple(f"T{i:03d}" for i in range(600))
+    index = CladeIndex(Tree(f"({','.join(reversed(names))});", parser=1))
+    selected = tuple(i for i in range(len(names)) if i % 7 < 3)
+    mask = sum(1 << i for i in selected) | (1 << 900)
+    assert index.names_for_mask(mask) == tuple(names[i] for i in selected)
+    assert index.names_for_mask(-2) == names[1:]
+
+
 @pytest.mark.parametrize("source", ["A;", "(A,B,C);", "(((A,B),C),(D,(E,F)));"])
 def test_lca_matches_parent_walk_for_all_node_pairs(source):
     index = LcaIndex(Tree(source, parser=1))

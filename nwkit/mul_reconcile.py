@@ -12,7 +12,14 @@ from urllib.parse import quote
 import pandas as pd
 
 from nwkit import __version__
-from nwkit.mul_reconcile_model import Reconciliation, hypotheses, validate_binary
+from nwkit.mul_reconcile_model import (
+    _GeneIndex,
+    _reconcile_indexed_genes,
+    _score_indexed_genes,
+    hypotheses,
+    prepare_score_cache,
+    reconcile_genes,
+)
 from nwkit.output_transaction import output_transaction, validate_output_targets
 from nwkit.rooting_state import rooting_output_options
 from nwkit.species_parser import get_species_parser
@@ -66,14 +73,14 @@ def annotated_mapping_text(gene, mapping, args=None):
     ).rstrip(";")
 
 
-def _score_task(task):
-    candidate, genes, parser, limit, collect_checks = task
+def _score_task(candidate, genes, limit, collect_checks):
+    if not collect_checks:
+        return candidate.id, sum(_score_indexed_genes(genes, candidate.tree, limit)), []
     checks, score = [], 0
-    for number, gene in enumerate(genes, 1):
-        result = Reconciliation(gene, candidate.tree, parser, limit)
+    for number, result in enumerate(
+        _reconcile_indexed_genes(genes, candidate.tree, limit, keep_choices=False), 1
+    ):
         score += result.score
-        if not collect_checks:
-            continue
         checks.append(
             {
                 "mul.tree": candidate.id,
@@ -89,17 +96,44 @@ def _score_task(task):
     return candidate.id, score, checks
 
 
+_SCORE_WORKER_GENES = None
+
+
+def _init_score_worker(genes):
+    global _SCORE_WORKER_GENES
+    _SCORE_WORKER_GENES = genes
+
+
+def _score_worker_task(task):
+    candidate, limit, collect_checks = task
+    return _score_task(candidate, _SCORE_WORKER_GENES, limit, collect_checks)
+
+
 def run_search(
     candidates, genes, parser, *, cpus=1, max_state_pairs=10000000, collect_checks=True
 ):
-    tasks = (
-        (candidate, genes, parser, max_state_pairs, collect_checks)
-        for candidate in candidates
-    )
-    if cpus == 1:
-        return tuple(map(_score_task, tasks))
-    with ProcessPoolExecutor(max_workers=min(cpus, len(candidates))) as pool:
-        return tuple(pool.map(_score_task, tasks, chunksize=1))
+    if cpus < 1:
+        raise ValueError("cpus must be positive.")
+    candidates = tuple(candidates)
+    if not candidates:
+        return ()
+    # Gene topology and taxon labels do not depend on the MUL hypothesis.
+    prepared = tuple(_GeneIndex(gene, parser) for gene in genes)
+    if len(prepared) > 1 and len(candidates) > 1:
+        prepare_score_cache(prepared)
+    if cpus == 1 or len(candidates) == 1:
+        return tuple(
+            _score_task(candidate, prepared, max_state_pairs, collect_checks)
+            for candidate in candidates
+        )
+    tasks = ((candidate, max_state_pairs, collect_checks) for candidate in candidates)
+    # Each worker reads the same trees. Only the candidate changes between tasks.
+    with ProcessPoolExecutor(
+        max_workers=min(cpus, len(candidates)),
+        initializer=_init_score_worker,
+        initargs=(prepared,),
+    ) as pool:
+        return tuple(pool.map(_score_worker_task, tasks, chunksize=1))
 
 
 def mul_reconcile_main(args):
@@ -192,8 +226,6 @@ def mul_reconcile_main(args):
     )
     if not genes:
         raise ValueError("At least one gene tree is required.")
-    for gene in genes:
-        validate_binary(gene, "Gene tree")
     parser = get_species_parser(args)
     candidates = hypotheses(
         species,
@@ -245,8 +277,9 @@ def mul_reconcile_main(args):
             lineterminator="\n",
         )
         writer.writeheader()
-        for number, gene in enumerate(genes, 1):
-            result = Reconciliation(gene, best.tree, parser, args.max_state_pairs)
+        for number, result in enumerate(
+            reconcile_genes(genes, best.tree, parser, args.max_state_pairs), 1
+        ):
             for duplications, losses, mapping in result.mappings(args.max_maps):
                 writer.writerow(
                     {
@@ -255,7 +288,7 @@ def mul_reconcile_main(args):
                         "dups": duplications,
                         "losses": losses,
                         "total.score": duplications + losses,
-                        "maps": annotated_mapping_text(gene, mapping, args),
+                        "maps": annotated_mapping_text(result.gene, mapping, args),
                         "node.maps": json.dumps(mapping, separators=(",", ":")),
                         "maps.format": "grampa-annotated-newick",
                         "node.maps.format": "nwkit-node-map-json-v1",

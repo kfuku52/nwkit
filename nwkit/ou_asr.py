@@ -1,7 +1,9 @@
 """Linear-time single-optimum Ornstein-Uhlenbeck ancestral reconstruction."""
 
 import math
+import sys
 from dataclasses import dataclass, replace
+from sys import float_info
 from typing import Any
 
 import numpy as np
@@ -9,15 +11,25 @@ from scipy.optimize import minimize, minimize_scalar
 
 from nwkit.continuous_asr import (
     GaussianMarginal,
+    _brownian_observation_records,
     _finite_number,
     _ldexp,
     _observations_by_group,
     _tree_groups,
 )
-from nwkit.gaussian_tree import ou_transition
+from nwkit.evolution import _finite_rate_bound
+from nwkit.gaussian_inference import _normal_log_density as _log_normal_density
+from nwkit.gaussian_inference import _normal_log_overlap
+from nwkit.gaussian_tree import (
+    _mean_at_tiny_variance_ratio,
+    _propagated_variance,
+    ou_stationary_variance,
+    ou_transition_from_root_variance,
+)
 
 _LOG_2PI = math.log(2.0 * math.pi)
 _LOG_2 = math.log(2.0)
+_LOG_FLOAT_MAX = math.log(sys.float_info.max)
 
 
 @dataclass(frozen=True)
@@ -80,15 +92,6 @@ class _OuData:
     trait_exponent: int
 
 
-def _log_normal_density(value, mean, variance):
-    if variance <= 0.0 or not math.isfinite(variance):
-        raise ValueError("OU Gaussian variance must be positive and finite.")
-    standardized = (value - mean) / math.sqrt(variance)
-    if not math.isfinite(standardized):
-        return -math.inf
-    return -0.5 * (_LOG_2PI + math.log(variance) + standardized * standardized)
-
-
 def _combine(first, second):
     """Multiply two normalized scalar Gaussian factors and retain the constant."""
 
@@ -98,17 +101,13 @@ def _combine(first, second):
         return _Factor(first.marginal, first.log_weight + second.log_weight)
     left, right = first.marginal, second.marginal
     variance_sum = left.variance + right.variance
-    if not math.isfinite(variance_sum):
-        raise ValueError(
-            "An OU conditional variance exceeds floating-point range; rescale units."
-        )
     if variance_sum == 0.0:
         if left.mean != right.mean:
             raise ValueError(
                 "Conflicting exact observations have zero likelihood under the OU model."
             )
         return _Factor(left, first.log_weight + second.log_weight)
-    log_overlap = _log_normal_density(left.mean, right.mean, variance_sum)
+    log_overlap = _normal_log_overlap(left, right, variance_sum)
     if left.variance == 0.0:
         marginal = left
     elif right.variance == 0.0:
@@ -117,16 +116,19 @@ def _combine(first, second):
         larger = max(left.variance, right.variance)
         ratio = min(left.variance, right.variance) / larger
         denominator = 1.0 + ratio
-        left_weight = (right.variance / larger) / denominator
-        right_weight = (left.variance / larger) / denominator
         variance = min(left.variance, right.variance) / denominator
         if variance <= 0.0:
             raise ValueError(
                 "A positive OU conditional variance underflowed; rescale units."
             )
-        marginal = GaussianMarginal(
-            left_weight * left.mean + right_weight * right.mean, variance
-        )
+        left_weight = (right.variance / larger) / denominator
+        right_weight = (left.variance / larger) / denominator
+        mean = left_weight * left.mean + right_weight * right.mean
+        if ratio < float_info.min:
+            mean = _mean_at_tiny_variance_ratio(
+                left.mean, right.mean, left.variance, right.variance
+            )
+        marginal = GaussianMarginal(mean, variance)
     return _Factor(marginal, first.log_weight + second.log_weight + log_overlap)
 
 
@@ -136,15 +138,44 @@ def _normal_nll_polynomial(mean_offset, mean_slope, variance):
     scale = math.sqrt(variance)
     standardized_offset = mean_offset / scale
     standardized_slope = mean_slope / scale
+    return _nll_from_standardized(
+        standardized_offset, standardized_slope, math.log(variance)
+    )
+
+
+def _nll_from_standardized(standardized_offset, standardized_slope, log_variance):
     if not all(
         math.isfinite(value) for value in (standardized_offset, standardized_slope)
     ):
         raise ValueError("An OU profiled likelihood exceeds floating-point range.")
+    square = standardized_offset * standardized_offset
+    constant = 0.5 * (_LOG_2PI + log_variance + square)
+    if not math.isfinite(constant):
+        constant = (
+            0.5 * (_LOG_2PI + log_variance)
+            + (0.5 * standardized_offset) * standardized_offset
+        )
     return (
         0.5 * standardized_slope * standardized_slope,
         standardized_offset * standardized_slope,
-        0.5
-        * (_LOG_2PI + math.log(variance) + standardized_offset * standardized_offset),
+        constant,
+    )
+
+
+def _affine_ou_overlap(first, second, variance_sum):
+    if math.isfinite(variance_sum):
+        return _normal_nll_polynomial(
+            first.mean_offset - second.mean_offset,
+            first.mean_slope - second.mean_slope,
+            variance_sum,
+        )
+    largest = max(first.variance, second.variance)
+    ratio = min(first.variance, second.variance) / largest
+    scale = math.sqrt(largest) * math.sqrt(1.0 + ratio)
+    return _nll_from_standardized(
+        first.mean_offset / scale - second.mean_offset / scale,
+        first.mean_slope / scale - second.mean_slope / scale,
+        math.log(largest) + math.log1p(ratio),
     )
 
 
@@ -167,10 +198,6 @@ def _combine_affine(first, second):
             nll_constant=constant,
         )
     variance_sum = first.variance + second.variance
-    if not math.isfinite(variance_sum):
-        raise ValueError(
-            "An OU conditional variance exceeds floating-point range; rescale units."
-        )
     if variance_sum == 0.0:
         if (
             first.mean_offset != second.mean_offset
@@ -185,11 +212,7 @@ def _combine_affine(first, second):
             nll_linear=linear,
             nll_constant=constant,
         )
-    extra = _normal_nll_polynomial(
-        first.mean_offset - second.mean_offset,
-        first.mean_slope - second.mean_slope,
-        variance_sum,
-    )
+    extra = _affine_ou_overlap(first, second, variance_sum)
     quadratic += extra[0]
     linear += extra[1]
     constant += extra[2]
@@ -232,11 +255,13 @@ def _prepare_data(
     standard_errors,
     *,
     process_sd=0.0,
+    minimum_trait_exponent=-sys.float_info.max_exp,
     tree_validated=False,
 ):
     node_groups, parents, lengths = _tree_groups(tree, validated=tree_validated)
     grouped, num_observed, exact_values = _observations_by_group(
-        tree, node_groups, values_by_leaf, standard_errors
+        node_groups,
+        _brownian_observation_records(tree, values_by_leaf, standard_errors),
     )
     all_records = [record for items in grouped.values() for record in items]
     raw_values = [value for value, _ in all_records]
@@ -253,6 +278,7 @@ def _prepare_data(
         process_sd,
     )
     trait_exponent = math.frexp(size)[1] - 1 if size > 0.0 else 0
+    trait_exponent = max(trait_exponent, minimum_trait_exponent)
     children: list[list[int]] = [[] for _ in parents]
     for child, parent in enumerate(parents):
         if parent >= 0:
@@ -293,31 +319,31 @@ def _prepare_data(
     )
 
 
-def _transition(alpha, sigma2, theta, length):
-    transition, root_variance = ou_transition(length, alpha, sigma2, theta)
+def _stationary_variance(alpha, sigma2):
+    root_variance = ou_stationary_variance(alpha, sigma2)
     if not math.isfinite(root_variance) or root_variance <= 0.0:
         raise ValueError(
             "The stationary OU variance is outside floating-point range; rescale units."
         )
-    return (
+    return root_variance
+
+
+def _propagate_up(factor, alpha, root_variance, theta, length):
+    if factor.marginal is None:
+        return factor
+    transition = ou_transition_from_root_variance(length, alpha, root_variance, theta)
+    decay, intercept, innovation = (
         transition.slope,
         transition.intercept,
         transition.variance,
-        root_variance,
     )
-
-
-def _propagate_up(factor, alpha, sigma2, theta, length):
-    if factor.marginal is None:
-        return factor
-    decay, intercept, innovation, _ = _transition(alpha, sigma2, theta, length)
     marginal = factor.marginal
     total_variance = marginal.variance + innovation
     if not math.isfinite(total_variance) or total_variance <= 0.0:
         raise ValueError("An OU pruning variance is not positive and finite.")
     exponent = alpha * length
     log_parent_variance = math.log(total_variance) + 2.0 * exponent
-    if decay == 0.0 or log_parent_variance >= math.log(np.finfo(float).max):
+    if decay == 0.0 or log_parent_variance >= _LOG_FLOAT_MAX:
         return _Factor(
             None,
             factor.log_weight
@@ -335,19 +361,24 @@ def _propagate_up(factor, alpha, sigma2, theta, length):
     )
 
 
-def _propagate_affine_up(factor, alpha, sigma2, theta_reference, length):
+def _propagate_affine_up(factor, alpha, root_variance, theta_reference, length):
     if factor.mean_offset is None:
         return factor
-    decay, intercept, innovation, _ = _transition(
-        alpha, sigma2, theta_reference, length
+    transition = ou_transition_from_root_variance(
+        length, alpha, root_variance, theta_reference
+    )
+    decay, intercept, innovation = (
+        transition.slope,
+        transition.intercept,
+        transition.variance,
     )
     total_variance = factor.variance + innovation
     if not math.isfinite(total_variance) or total_variance <= 0.0:
         raise ValueError("An OU pruning variance is not positive and finite.")
     exponent = alpha * length
-    intercept_slope = 1.0 - decay
+    intercept_slope = -math.expm1(-exponent)
     log_parent_variance = math.log(total_variance) + 2.0 * exponent
-    if decay == 0.0 or log_parent_variance >= math.log(np.finfo(float).max):
+    if decay == 0.0 or log_parent_variance >= _LOG_FLOAT_MAX:
         extra = _normal_nll_polynomial(
             factor.mean_offset - intercept,
             factor.mean_slope - intercept_slope,
@@ -372,6 +403,7 @@ def _propagate_affine_up(factor, alpha, sigma2, theta_reference, length):
 def _profile_theta(data, alpha, sigma2, theta_reference):
     """Profile theta exactly from its quadratic tree likelihood in one pass."""
 
+    root_variance = _stationary_variance(alpha, sigma2)
     inside = [
         _AffineFactor(
             None if factor.marginal is None else factor.marginal.mean,
@@ -390,11 +422,10 @@ def _profile_theta(data, alpha, sigma2, theta_reference):
             upward[group] = _propagate_affine_up(
                 factor,
                 alpha,
-                sigma2,
+                root_variance,
                 theta_reference,
                 data.lengths[group],
             )
-    root_variance = sigma2 / (2.0 * alpha)
     result = _combine_affine(
         _AffineFactor(theta_reference, 1.0, root_variance), inside[0]
     )
@@ -412,41 +443,45 @@ def _profile_theta(data, alpha, sigma2, theta_reference):
     return fitted_theta, negative_log_likelihood
 
 
-def _predict_down(factor, alpha, sigma2, theta, length):
-    decay, intercept, innovation, _ = _transition(alpha, sigma2, theta, length)
+def _predict_down(factor, alpha, root_variance, theta, length):
     if factor.marginal is None:
         return factor
+    transition = ou_transition_from_root_variance(length, alpha, root_variance, theta)
+    decay, intercept, innovation = (
+        transition.slope,
+        transition.intercept,
+        transition.variance,
+    )
     marginal = factor.marginal
     mean = decay * marginal.mean + intercept
-    variance = decay * decay * marginal.variance + innovation
+    variance = _propagated_variance(decay, marginal.variance, innovation)
     if not math.isfinite(mean) or not math.isfinite(variance) or variance <= 0.0:
         raise ValueError("An OU smoothing message is not finite and positive.")
     return _Factor(GaussianMarginal(mean, variance), factor.log_weight)
 
 
 def _prune(data, alpha, sigma2, theta):
-    inside = list(data.local)
-    upward = [_Factor(None) for _ in data.parents]
+    root_variance = _stationary_variance(alpha, sigma2)
+    upward = list(data.local)
     for group in range(len(data.parents) - 1, -1, -1):
-        factor = inside[group]
+        factor = upward[group]
         for child in data.children[group]:
             factor = _combine(factor, upward[child])
-        inside[group] = factor
-        if data.parents[group] >= 0:
-            upward[group] = _propagate_up(
-                factor, alpha, sigma2, theta, data.lengths[group]
-            )
-    root_variance = sigma2 / (2.0 * alpha)
+        upward[group] = (
+            _propagate_up(factor, alpha, root_variance, theta, data.lengths[group])
+            if data.parents[group] >= 0
+            else factor
+        )
     posterior_root = _combine(
-        _Factor(GaussianMarginal(theta, root_variance)), inside[0]
+        _Factor(GaussianMarginal(theta, root_variance)), upward[0]
     )
     if not math.isfinite(posterior_root.log_weight):
         raise ValueError("The observed values have zero likelihood under the OU model.")
-    return tuple(inside), tuple(upward), posterior_root.log_weight
+    return upward, posterior_root.log_weight
 
 
-def _smooth(data, alpha, sigma2, theta, inside, upward):
-    root_variance = sigma2 / (2.0 * alpha)
+def _smooth(data, alpha, sigma2, theta, upward):
+    root_variance = _stationary_variance(alpha, sigma2)
     outside = [_Factor(None) for _ in data.parents]
     outside[0] = _Factor(GaussianMarginal(theta, root_variance))
     posterior = [None for _ in data.parents]
@@ -462,7 +497,7 @@ def _smooth(data, alpha, sigma2, theta, inside, upward):
             child = children[index]
             cavity = _combine(prefix[index], suffix)
             outside[child] = _predict_down(
-                cavity, alpha, sigma2, theta, data.lengths[child]
+                cavity, alpha, root_variance, theta, data.lengths[child]
             )
             suffix = _combine(upward[child], suffix)
     if any(item is None for item in posterior):
@@ -481,7 +516,7 @@ def default_alpha_bounds(tree):
         if node.is_leaf:
             maximum_depth = max(maximum_depth, depth)
     time_scale = maximum_depth if maximum_depth > 0.0 else 1.0
-    return 1e-6 / time_scale, 50.0 / time_scale
+    return _finite_rate_bound(1e-6, time_scale), _finite_rate_bound(50.0, time_scale)
 
 
 def parse_alpha_bounds(value, tree):
@@ -804,7 +839,7 @@ def _fit_parameters(data, alpha, sigma2, theta, alpha_bounds):
                 math.exp(values["log_alpha"]) if alpha_estimated else float(alpha)
             )
             current_sigma2 = (
-                2.0 * current_alpha * math.exp(values["log_root_variance"])
+                current_alpha * (2.0 * math.exp(values["log_root_variance"]))
                 if sigma2_estimated
                 else float(sigma2)
             )
@@ -816,7 +851,7 @@ def _fit_parameters(data, alpha, sigma2, theta, alpha_bounds):
                 current_theta = float(theta)
                 negative_log_likelihood = -_prune(
                     data, current_alpha, current_sigma2, current_theta
-                )[2]
+                )[1]
             current = (current_alpha, current_sigma2, current_theta)
             if not math.isfinite(negative_log_likelihood):
                 raise ValueError("non-finite likelihood")
@@ -893,7 +928,7 @@ def _fit_parameters(data, alpha, sigma2, theta, alpha_bounds):
         )
         for candidate_index in verification_indices:
             candidate = candidates[candidate_index]
-            candidate["objective"] = -_prune(data, *candidate["current"])[2]
+            candidate["objective"] = -_prune(data, *candidate["current"])[1]
         candidates = [
             candidates[candidate_index]
             for candidate_index in sorted(verification_indices)
@@ -912,7 +947,7 @@ def _fit_parameters(data, alpha, sigma2, theta, alpha_bounds):
     )
     fitted = selected["current"]
     fitted_alpha, fitted_sigma2, fitted_theta = fitted
-    _, _, log_likelihood = _prune(data, *fitted)
+    log_likelihood = -selected["objective"]
     tolerance = 1e-5
     statuses = []
     if alpha_estimated:
@@ -920,7 +955,7 @@ def _fit_parameters(data, alpha, sigma2, theta, alpha_bounds):
             statuses.append("alpha_lower_boundary")
         elif fitted_alpha >= alpha_bounds[1] * (1.0 - tolerance):
             statuses.append("alpha_upper_boundary")
-    fitted_root_variance = fitted_sigma2 / (2.0 * fitted_alpha)
+    fitted_root_variance = ou_stationary_variance(fitted_alpha, fitted_sigma2)
     if sigma2_estimated:
         if fitted_root_variance <= root_variance_bounds[0] * (1.0 + tolerance):
             statuses.append("root_variance_lower_boundary")
@@ -958,67 +993,9 @@ def _fit_parameters(data, alpha, sigma2, theta, alpha_bounds):
     )
 
 
-def compute_ou_marginals(
-    tree,
-    values_by_leaf,
-    *,
-    alpha=None,
-    sigma2=None,
-    theta=None,
-    alpha_bounds=None,
-    standard_errors=None,
-    _tree_validated=False,
-):
-    """Return all-node conditional marginals under stationary-root OU1."""
-
-    bounds = default_alpha_bounds(tree) if alpha_bounds is None else alpha_bounds
-    if len(bounds) != 2 or not all(
-        math.isfinite(float(value)) and float(value) > 0.0 for value in bounds
-    ):
-        raise ValueError("OU alpha bounds must be two positive finite values.")
-    bounds = float(bounds[0]), float(bounds[1])
-    if bounds[0] >= bounds[1]:
-        raise ValueError("OU alpha lower bound must be smaller than the upper bound.")
-    fixed_alpha = (
-        None if alpha is None else _finite_number(alpha, "--alpha", nonnegative=True)
-    )
-    fixed_sigma2 = (
-        None if sigma2 is None else _finite_number(sigma2, "--sigma2", nonnegative=True)
-    )
-    fixed_theta = None if theta is None else _finite_number(theta, "--theta")
-    process_sd = 0.0
-    if fixed_sigma2 is not None and fixed_sigma2 > 0.0:
-        scale_alpha = fixed_alpha if fixed_alpha is not None else bounds[0]
-        if scale_alpha > 0.0:
-            root_variance = fixed_sigma2 / (2.0 * scale_alpha)
-            if math.isfinite(root_variance):
-                process_sd = math.sqrt(root_variance)
-    data = _prepare_data(
-        tree,
-        values_by_leaf,
-        standard_errors,
-        process_sd=process_sd,
-        tree_validated=_tree_validated,
-    )
-    scaled_sigma2 = (
-        None
-        if fixed_sigma2 is None
-        else _ldexp(
-            fixed_sigma2,
-            -2 * data.trait_exponent,
-            "--sigma2",
-        )
-    )
-    if fixed_theta is None:
-        scaled_theta = None
-    else:
-        centered_theta = fixed_theta - data.trait_center
-        if not math.isfinite(centered_theta):
-            raise ValueError("--theta minus the observed trait center is not finite.")
-        scaled_theta = _ldexp(centered_theta, -data.trait_exponent, "OU centered theta")
-    fit = _fit_parameters(data, fixed_alpha, scaled_sigma2, scaled_theta, bounds)
-    inside, upward, _ = _prune(data, fit.alpha, fit.sigma2, fit.theta)
-    smoothed = _smooth(data, fit.alpha, fit.sigma2, fit.theta, inside, upward)
+def _ou_posterior(data, fit):
+    upward, _ = _prune(data, fit.alpha, fit.sigma2, fit.theta)
+    smoothed = _smooth(data, fit.alpha, fit.sigma2, fit.theta, upward)
     restored = tuple(
         GaussianMarginal(
             data.trait_center
@@ -1044,6 +1021,75 @@ def compute_ou_marginals(
         for item in posterior.values()
     ):
         raise ValueError("An OU ancestral marginal is outside floating-point range.")
+    return posterior
+
+
+def compute_ou_marginals(
+    tree,
+    values_by_leaf,
+    *,
+    alpha=None,
+    sigma2=None,
+    theta=None,
+    alpha_bounds=None,
+    standard_errors=None,
+    _tree_validated=False,
+    _compute_posterior=True,
+):
+    """Return all-node conditional marginals under stationary-root OU1."""
+
+    bounds = default_alpha_bounds(tree) if alpha_bounds is None else alpha_bounds
+    if len(bounds) != 2 or not all(
+        math.isfinite(float(value)) and float(value) > 0.0 for value in bounds
+    ):
+        raise ValueError("OU alpha bounds must be two positive finite values.")
+    bounds = float(bounds[0]), float(bounds[1])
+    if bounds[0] >= bounds[1]:
+        raise ValueError("OU alpha lower bound must be smaller than the upper bound.")
+    fixed_alpha = (
+        None if alpha is None else _finite_number(alpha, "--alpha", nonnegative=True)
+    )
+    fixed_sigma2 = (
+        None if sigma2 is None else _finite_number(sigma2, "--sigma2", nonnegative=True)
+    )
+    fixed_theta = None if theta is None else _finite_number(theta, "--theta")
+    process_sd = 0.0
+    minimum_trait_exponent = -sys.float_info.max_exp
+    if fixed_sigma2 is not None and fixed_sigma2 > 0.0:
+        # Rescaling the trait must also leave its fixed diffusion representable.
+        sigma2_exponent = math.frexp(fixed_sigma2)[1]
+        minimum_trait_exponent = (sigma2_exponent - sys.float_info.max_exp + 1) // 2
+        scale_alpha = fixed_alpha if fixed_alpha is not None else bounds[0]
+        if scale_alpha > 0.0:
+            root_variance = ou_stationary_variance(scale_alpha, fixed_sigma2)
+            if math.isfinite(root_variance):
+                process_sd = math.sqrt(root_variance)
+    data = _prepare_data(
+        tree,
+        values_by_leaf,
+        standard_errors,
+        process_sd=process_sd,
+        minimum_trait_exponent=minimum_trait_exponent,
+        tree_validated=_tree_validated,
+    )
+    scaled_sigma2 = (
+        None
+        if fixed_sigma2 is None
+        else _ldexp(
+            fixed_sigma2,
+            -2 * data.trait_exponent,
+            "--sigma2",
+        )
+    )
+    if fixed_theta is None:
+        scaled_theta = None
+    else:
+        centered_theta = fixed_theta - data.trait_center
+        if not math.isfinite(centered_theta):
+            raise ValueError("--theta minus the observed trait center is not finite.")
+        scaled_theta = _ldexp(centered_theta, -data.trait_exponent, "OU centered theta")
+    fit = _fit_parameters(data, fixed_alpha, scaled_sigma2, scaled_theta, bounds)
+    posterior = _ou_posterior(data, fit) if _compute_posterior else {}
     restored_theta = data.trait_center + _ldexp(
         fit.theta, data.trait_exponent, "Fitted theta"
     )

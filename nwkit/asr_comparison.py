@@ -217,7 +217,7 @@ def _assign_dense_ranks(scored, finite_selected):
         scored[index]["is_best"] = "yes" if rank == 1 else "no"
 
 
-def _score_group(scored, group, indices, criterion):
+def _score_group(scored, indices, group_indices, criterion):
     group_rows = [scored[index] for index in indices]
     for name in INFORMATION_CRITERIA:
         weights = _criterion_weights(group_rows, name, minimum_finite=2)
@@ -236,9 +236,8 @@ def _score_group(scored, group, indices, criterion):
         ),
         key=lambda item: (item[0], item[1]),
     )
-    for row in scored:
-        if str(row.get("comparison_group", "")) == group:
-            row["num_comparable_models"] = len(finite_selected)
+    for index in group_indices:
+        scored[index]["num_comparable_models"] = len(finite_selected)
     if len(finite_selected) >= 2:
         _assign_dense_ranks(scored, finite_selected)
 
@@ -273,17 +272,19 @@ def grouped_model_comparison_table(rows, *, criterion="aic"):
         row["is_best"] = ""
 
     grouped: dict[str, list[int]] = {}
+    all_grouped: dict[str, list[int]] = {}
     for index, row in enumerate(scored):
+        group = str(row.get("comparison_group", ""))
+        all_grouped.setdefault(group, []).append(index)
         if str(row.get("rankable", "no")).lower() not in {"yes", "true", "1"}:
             continue
         row.update(_information_criteria(row))
-        group = str(row.get("comparison_group", ""))
         if group == "":
             raise ValueError(f"Rankable model {row['model']} has no comparison_group.")
         grouped.setdefault(group, []).append(index)
 
     for group, indices in grouped.items():
-        _score_group(scored, group, indices, criterion)
+        _score_group(scored, indices, all_grouped[group], criterion)
 
     return pd.DataFrame(scored)
 

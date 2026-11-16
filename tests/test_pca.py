@@ -6,11 +6,11 @@ from io import StringIO
 import numpy as np
 import pandas as pd
 import pytest
-from scipy.optimize import minimize
+from scipy.optimize import minimize, minimize_scalar
 
 from nwkit import phylogenetic_pca
 from nwkit.cli import main
-from nwkit.evolution import build_evolutionary_covariance
+from nwkit.evolution import build_evolutionary_covariance, build_evolutionary_process
 from nwkit.phylogenetic_pca import fit_pca
 from nwkit.util import read_tree
 from tests.test_signal import TREE, VALUES
@@ -120,6 +120,103 @@ def test_correlation_pca_and_lambda_are_invariant_to_units():
     assert second.lambda_value == pytest.approx(first.lambda_value, abs=1e-5)
     assert second.eigenvalues == pytest.approx(first.eigenvalues, abs=1e-5)
     assert np.abs(second.scores) == pytest.approx(np.abs(first.scores), abs=1e-5)
+
+
+@pytest.mark.parametrize("model", ["BM", "LAMBDA"])
+def test_correlation_pca_handles_extreme_finite_trait_units(model):
+    matrix = covariance()
+    values = np.array(
+        [
+            [-1, 0.5],
+            [-0.8, -0.5],
+            [0.8, 0.8],
+            [1, -1],
+            [-0.4, 0.3],
+            [0.4, -0.2],
+            [0.5, -0.3],
+            [-0.5, 1],
+        ]
+    )
+    units = np.array([1e308, 1e-305])
+    reference = fit_pca(matrix, values, model=model, mode="corr")
+    with np.errstate(over="raise", invalid="raise"):
+        fit = fit_pca(matrix, values * units, model=model, mode="corr")
+    assert fit.lambda_value == pytest.approx(reference.lambda_value)
+    np.testing.assert_allclose(fit.eigenvalues, reference.eigenvalues, atol=1e-13)
+    np.testing.assert_allclose(fit.scores, reference.scores, atol=1e-13)
+    np.testing.assert_allclose(fit.center / units, reference.center, atol=1e-13)
+    np.testing.assert_allclose(fit.scale / units, reference.scale, atol=1e-13)
+    assert fit.log_likelihood == pytest.approx(
+        reference.log_likelihood - len(values) * np.log(units).sum(), abs=1e-11
+    )
+
+
+def test_spectral_lambda_profile_agrees_with_cholesky():
+    matrix = np.kron(np.eye(9), covariance())
+    rng = np.random.default_rng(256)
+    values = rng.normal(size=(len(matrix), 4))
+    values -= values[0].copy()
+    profile = phylogenetic_pca._spectral_lambda_profile(
+        matrix, matrix.diagonal(), values
+    )
+    assert profile is not None
+    for lam in (0.0, 0.3, 0.8, 1.0):
+        fixed = fit_pca(matrix, values, model="LAMBDA", lambda_value=lam)
+        assert -profile(lam) == pytest.approx(fixed.log_likelihood, abs=1e-10)
+
+
+@pytest.mark.parametrize("tip_difference", [0.15, 1e-5])
+def test_free_lambda_can_fit_with_a_singular_brownian_endpoint(tip_difference):
+    tree = read_tree("[&R]((A:0,B:0):1,C:1,D:1,E:1,F:1);", 0, False)
+    c = build_evolutionary_process(tree, allow_zero=True).tip_covariance(list("ABCDEF"))
+    values = np.array(
+        [
+            [0, 0],
+            [tip_difference, -tip_difference],
+            [2, -1],
+            [0, 2],
+            [-1, -1],
+            [1.5, 1.5],
+        ]
+    )
+    with pytest.raises(np.linalg.LinAlgError):
+        fit_pca(c, values, model="BM")
+
+    fit = fit_pca(c, values, model="LAMBDA")
+
+    # The only correlated tips are A and B. The three eigenspaces have
+    # eigenvalues 1 + lambda, 1 - lambda and 1, so the inverse is explicit.
+    def objective(log_distance):
+        distance = np.exp(log_distance)
+        plus_eigenvalue = 2 - distance
+        plus, minus = (values[0] + values[1]) / 2, (values[0] - values[1]) / 2
+        center = (2 * plus / plus_eigenvalue + values[2:].sum(axis=0)) / (
+            2 / plus_eigenvalue + 4
+        )
+        residual = values[2:] - center
+        trait = (
+            residual.T @ residual
+            + 2 * np.outer(plus - center, plus - center) / plus_eigenvalue
+            + 2 * np.outer(minus, minus) / distance
+        ) / 6
+        return 0.5 * (
+            12 * (np.log(2 * np.pi) + 1)
+            + 2 * (log_distance + np.log(plus_eigenvalue))
+            + 6 * np.linalg.slogdet(trait)[1]
+        )
+
+    reference = minimize_scalar(objective, bounds=(-32, 0), method="bounded")
+    assert reference.success
+    assert 1 - fit.lambda_value == pytest.approx(np.exp(reference.x), rel=1e-4)
+    assert fit.log_likelihood == pytest.approx(-reference.fun, abs=1e-8)
+
+
+def test_free_lambda_rejects_unbounded_likelihood_at_singular_endpoint():
+    covariance = np.eye(6)
+    covariance[0, 1] = covariance[1, 0] = 1
+    values = np.array([[0, 0], [0, 0], [2, -1], [0, 2], [-1, -1], [1.5, 1.5]])
+    with pytest.raises(ValueError, match="unbounded near singular lambda=1"):
+        fit_pca(covariance, values, model="LAMBDA")
 
 
 def test_rank_deficiency_is_supported_only_for_fixed_tree_model():

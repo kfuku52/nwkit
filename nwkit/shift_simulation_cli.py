@@ -122,9 +122,21 @@ def explicit_simulation(tree, parameters):
             raise ValueError(
                 "The Brownian drift limit requires scaled_regime_coefficients."
             )
-        coefficients[1:] = (coefficients[1:] - coefficients[0]) * -np.expm1(
-            -alpha[None]
-        )
+        attenuation = -np.expm1(-alpha)
+        with np.errstate(over="ignore", invalid="ignore"):
+            offsets = coefficients[1:] - coefficients[0]
+            scaled = offsets * attenuation
+            overflow = (
+                np.isinf(offsets)
+                & np.isfinite(coefficients[1:])
+                & np.isfinite(coefficients[0])
+            )
+            rows, columns = np.nonzero(overflow)
+            scaled[rows, columns] = (
+                coefficients[1 + rows, columns] * attenuation[columns]
+                - coefficients[0, columns] * attenuation[columns]
+            )
+        coefficients[1:] = scaled
     errors = np.broadcast_to(
         np.asarray(parameters.get("sampling_standard_errors", 0.0), float), (n, p)
     ).copy()

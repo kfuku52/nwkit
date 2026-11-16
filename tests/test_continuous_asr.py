@@ -1,6 +1,7 @@
 """Independent Gaussian oracles for continuous ancestral reconstruction."""
 
 import math
+from fractions import Fraction
 
 import numpy as np
 import pytest
@@ -9,6 +10,11 @@ from scipy.optimize import brentq, minimize_scalar
 
 import nwkit.continuous_asr as continuous
 from nwkit.continuous_asr import compute_bm_marginals
+from nwkit.gaussian_tree import (
+    GaussianRootPrior,
+    GaussianTreeProcess,
+    brownian_transition,
+)
 from nwkit.util import read_tree
 from tests.helpers import make_deep_ladder_tree
 
@@ -23,6 +29,29 @@ def test_ldexp_distinguishes_underflow_from_overflow():
         continuous._ldexp(smallest_subnormal, -1, "Scaled value")
     with pytest.raises(ValueError, match="exceeds floating-point range"):
         continuous._ldexp(1.0, 2048, "Scaled value")
+
+
+def test_brownian_asr_keeps_short_branches_and_small_weighted_means():
+    short, long, response = 1e-162, 1e150, 1e75
+    tree = tree_from(f"(A:{short},B:{long})R;")
+    posterior, fit = compute_bm_marginals(tree, {"A": 0.0, "B": response}, sigma2=1)
+    a, b, y = map(Fraction, (short, long, response))
+    assert posterior[tree].mean == pytest.approx(
+        float(a * y / (a + b)), rel=4e-12, abs=0
+    )
+    assert posterior[tree].variance == pytest.approx(
+        float(a * b / (a + b)), rel=4e-12, abs=0
+    )
+    assert math.isfinite(fit.restricted_log_likelihood)
+
+
+def test_brownian_merge_preserves_a_mean_when_its_weight_underflows():
+    a, b, y = 1e-180, 1e150, 1e50
+    posterior, _, _, _ = continuous._merge(continuous.GaussianMarginal(0.0, a), y, b)
+    x, z, observation = map(Fraction, (a, b, y))
+    assert posterior.mean == pytest.approx(
+        float(x * observation / (x + z)), rel=1e-14, abs=0
+    )
 
 
 def dense_marginals(tree, values, sigma2, errors=None):
@@ -172,6 +201,33 @@ def test_two_tip_root_mean_variance_and_residual_likelihood():
         -0.5 * (math.log(2 * math.pi * 8) + 16 / 8)
     )
     assert posterior[tree["A"]].variance == posterior[tree["B"]].variance == 0.0
+
+
+def test_fixed_brownian_likelihood_halves_an_overflowing_squared_residual():
+    tree = tree_from("(A:1,B:1)R;")
+    contrast = 2.6e154
+    posterior, fit = compute_bm_marginals(tree, {"A": 0.0, "B": contrast}, sigma2=1.0)
+    assert fit.restricted_log_likelihood == pytest.approx(
+        -(0.25 * contrast) * contrast, rel=2e-15
+    )
+    assert posterior[tree].mean == pytest.approx(contrast / 2)
+    assert posterior[tree].variance == pytest.approx(0.5)
+    with pytest.raises(ValueError, match="residual log-likelihood is not finite"):
+        compute_bm_marginals(tree, {"A": 0.0, "B": 2.7e154}, sigma2=1.0)
+
+
+@pytest.mark.parametrize("local", [False, True])
+def test_fixed_brownian_likelihood_halves_residuals_before_summing(local):
+    if local:
+        tree = tree_from("((A:0,B:0):1,C:1)R;")
+        values = {"A": 0.0, "B": 2e154, "C": 1e154}
+        errors = {"A": 1.0, "B": 1.0, "C": 0.0}
+    else:
+        tree = tree_from("((A:0.5,B:0.5):1,(C:0.5,D:0.5):1)R;")
+        values = {"A": 0.0, "B": 1e154, "C": 0.0, "D": 1e154}
+        errors = None
+    _, fit = compute_bm_marginals(tree, values, sigma2=1.0, standard_errors=errors)
+    assert fit.restricted_log_likelihood == pytest.approx(-1e308, rel=2e-15)
 
 
 @pytest.mark.parametrize("errors", [None, {"A": 0.2, "B": 0.0, "C": 0.7, "D": 1.2}])
@@ -392,6 +448,28 @@ def test_unrepresentable_variance_in_the_final_fixed_model_is_still_rejected():
             {"A": 0.0, "B": 1.0, "C": 2.0},
             sigma2=1e-20,
         )
+
+
+def test_brownian_rescaling_uses_transformed_branch_variances():
+    raw = tree_from("(A:4e-323,B:64,C:1)R;")
+    transformed = tree_from("(A:1,B:64,C:1e-310)R;")
+    process = GaussianTreeProcess(
+        raw,
+        {
+            leaf: brownian_transition(transformed[leaf.name].dist)
+            for leaf in raw.leaves()
+        },
+        GaussianRootPrior("flat", 0.0, None),
+        "transformed",
+    )
+    values = {"A": 0.0, "B": 1e9, "C": 2e9}
+    _, expected = compute_bm_marginals(
+        transformed, values, sigma2=0.01, _compute_posterior=False
+    )
+    _, result = compute_bm_marginals(
+        raw, values, sigma2=0.01, _process=process, _compute_posterior=False
+    )
+    assert result == expected
 
 
 @pytest.mark.parametrize("size", [1e20, 1e100, 1e150])

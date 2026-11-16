@@ -16,6 +16,39 @@ def tree_from(source):
     return read_tree(source, "1", True, quiet=True, rooted="yes")
 
 
+def test_affine_ou_pruning_preserves_weak_attraction_to_the_optimum():
+    factor = ou_asr._AffineFactor(0.0, variance=1.0)
+    propagated = ou_asr._propagate_affine_up(
+        factor, alpha=1e-20, root_variance=1.0, theta_reference=0.0, length=1.0
+    )
+    assert propagated.mean_slope == pytest.approx(-1e-20, abs=0.0, rel=1e-14)
+
+
+def test_ou_tail_likelihood_remains_finite_when_the_square_alone_overflows():
+    assert ou_asr._log_normal_density(1.7e154, 0.0, 1.0) == pytest.approx(-1.445e308)
+    assert ou_asr._normal_nll_polynomial(1.7e154, 0.0, 1.0)[2] == pytest.approx(
+        1.445e308
+    )
+
+
+def test_ou_combines_finite_messages_with_an_overflowing_variance_sum():
+    variance = 1.7e308
+    left = ou_asr._Factor(ou_asr.GaussianMarginal(0.5, variance))
+    right = ou_asr._Factor(ou_asr.GaussianMarginal(2.0, variance))
+    combined = ou_asr._combine(left, right)
+    log_density = -0.5 * (math.log(math.tau) + math.log(variance) + math.log(2.0))
+    assert combined.marginal == ou_asr.GaussianMarginal(1.25, 8.5e307)
+    assert combined.log_weight == pytest.approx(log_density)
+    affine = ou_asr._combine_affine(
+        ou_asr._AffineFactor(0.5, 0.25, variance),
+        ou_asr._AffineFactor(2.0, 0.5, variance),
+    )
+    assert affine.mean_offset == 1.25
+    assert affine.mean_slope == 0.375
+    assert affine.variance == 8.5e307
+    assert affine.nll_constant == pytest.approx(-log_density)
+
+
 def ancestor_distances(node):
     result, distance = {node: 0.0}, 0.0
     while not node.is_root:
@@ -473,6 +506,27 @@ def test_ou_power_of_two_scaling_handles_large_finite_trait_units():
     assert fit2.log_likelihood == pytest.approx(
         fit1.log_likelihood - len(small_values) * math.log(unit), abs=1e-10
     )
+
+
+def test_stationary_ou_fit_preserves_variance_when_doubling_alpha_overflows():
+    values = {"A": 0.25, "B": 0.7, "C": -0.1}
+    regular = tree_from("(A:1,B:2,C:3)R;")
+    short = tree_from("(A:1e-308,B:2e-308,C:3e-308)R;")
+    first, reference = compute_ou_marginals(
+        regular, values, alpha=1.0, sigma2=1.0, theta=0.1
+    )
+    second, scaled = compute_ou_marginals(
+        short,
+        values,
+        alpha=1e308,
+        sigma2=1e308,
+        theta=0.1,
+        alpha_bounds=(1e-308, 1e308),
+    )
+    assert scaled.root_variance == reference.root_variance == 0.5
+    assert scaled.log_likelihood == pytest.approx(reference.log_likelihood, abs=1e-12)
+    assert second[short].mean == pytest.approx(first[regular].mean)
+    assert second[short].variance == pytest.approx(first[regular].variance)
 
 
 def test_ou_requires_positive_alpha_and_sigma2():

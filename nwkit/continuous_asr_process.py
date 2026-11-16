@@ -6,7 +6,8 @@ from nwkit.gaussian_tree import (
     GaussianTransition,
     GaussianTreeProcess,
     brownian_transition,
-    ou_transition,
+    ou_branch_transition,
+    ou_transition_from_root_variance,
 )
 from nwkit.regime_drift_asr import build_regime_drift_process
 from nwkit.regime_gaussian_asr import build_regime_ou_process
@@ -84,21 +85,25 @@ def fitted_scalar_process(tree, model, fit, *, root_prior=None, regime_assignmen
         )
     if model == "OU":
         mode = root_prior or getattr(fit, "root_prior", "stationary")
-        transitions = {
-            node: ou_transition(float(node.dist), fit.alpha, fit.sigma2, fit.theta)[0]
-            for node in tree.traverse()
-            if not node.is_root
-        }
         if mode == "stationary":
-            root = GaussianRootPrior(
-                "stationary", fit.theta, fit.sigma2 / (2.0 * fit.alpha)
-            )
+            root = GaussianRootPrior("stationary", fit.theta, fit.root_variance)
         elif mode == "fixed":
             root = GaussianRootPrior("fixed", fit.root_mean, 0.0)
         elif mode == "gaussian":
             root = GaussianRootPrior("gaussian", fit.root_mean, fit.root_variance)
         else:
             raise ValueError(f"Unsupported fitted OU root prior: {mode}.")
+        transitions = {
+            node: ou_transition_from_root_variance(
+                float(node.dist), fit.alpha, fit.root_variance, fit.theta
+            )
+            if mode == "stationary"
+            else ou_branch_transition(
+                float(node.dist), fit.alpha, fit.sigma2, fit.theta
+            )
+            for node in tree.traverse()
+            if not node.is_root
+        }
         return GaussianTreeProcess(tree, transitions, root, "ou", fit.alpha)
     if model in {"OUM", "OUMA", "OUMV", "OUMVA"}:
         if regime_assignment is None:

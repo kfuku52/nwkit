@@ -342,6 +342,29 @@ full hashes identify the executed artifacts, rather than dependency defaults.
 To replay these protocols on the current checkout, also pass `--run-studies`;
 the original invocations above describe the archived runs.
 
+### Weak events with a supplied SSD rate group
+
+The 2026-11-14 replay used the same 64-family count matrices and 19 null
+bootstrap draws per dataset. Each refit searched the same four branches at
+their midpoints. The second fit supplied the SSD branch as a separate
+duplication/loss rate group through the existing rate-group model, with both
+rates estimated from the counts. The simulated SSD branch was known for
+this comparison. The count data were identical between the two fits.
+
+| Scenario and data seeds | Outcome | Homogeneous background | Supplied SSD rate group |
+| --- | --- | ---: | ---: |
+| Local SSD only, 173000–173007 | Any conditionally supported branch | 1/8 | 1/8 |
+| Weak WGD with local SSD, 177000–177003 | True WGD branch ranked first | 0/4 | 3/4 |
+| Weak WGD with local SSD, 177000–177003 | True WGD branch conditionally supported | 0/4 | 1/4 |
+
+In the weak-WGD datasets the homogeneous background ranked the SSD branch
+first in all four cases. With the SSD group supplied, the true WGD branch
+had search-wide bootstrap p-values of 0.10, 0.15, 1.00 and 0.05 in seed
+order. The last dataset also passed the branch-burst AIC gate. The same
+local-SSD-only dataset, seed 173002, retained false support under both rate
+models. These paired pilot results measure localization and support in the
+specified simulated regimes. With 19 draws, p-values have 0.05 resolution.
+
 ## Evidence interpretation and remaining limits
 
 Branch-rate heterogeneity can mimic WGD signals. The explicit branch-burst

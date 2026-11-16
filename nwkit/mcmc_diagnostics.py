@@ -25,8 +25,16 @@ def _rank(x):
     return ndtri((ranks - 0.375) / (x.size + 0.25))
 
 
+def _rank_binary(x):
+    # Tied zeros and ones each occupy one block of ranks.
+    zeros = x.size - np.count_nonzero(x)
+    ranks = np.array([(zeros + 1) / 2, (zeros + 1 + x.size) / 2])
+    scores = ndtri((ranks - 0.375) / (x.size + 0.25))
+    return np.where(x == 0, scores[0], scores[1])
+
+
 def _constant(x):
-    return bool(np.any(np.ptp(x, axis=1) == 0))
+    return bool(np.any(x.max(axis=1) == x.min(axis=1)))
 
 
 def _rhat(x):
@@ -44,13 +52,15 @@ def _ess(x):
     m, n = x.shape
     if n < 3 or np.ptp(x) == 0:
         return math.nan
-    centered = x - x.mean(axis=1, keepdims=True)
+    means = x.mean(axis=1)
     length = next_fast_len(2 * n)
-    spectrum = np.fft.rfft(centered, n=length, axis=1)
-    acov = np.fft.irfft(spectrum * spectrum.conjugate(), n=length, axis=1)
+    spectrum = np.fft.rfft(x - means[:, None], n=length, axis=1)
+    spectrum *= spectrum.conjugate()
+    acov = np.fft.irfft(spectrum, n=length, axis=1)
+    del spectrum
     acov = acov[:, :n].mean(axis=0) / n
     within = acov[0] * n / (n - 1)
-    pooled = acov[0] + np.var(x.mean(axis=1), ddof=1)
+    pooled = acov[0] + np.var(means, ddof=1)
     rho = np.zeros(n)
     rho[0] = even = 1.0
     rho[1] = odd = 1 - (within - acov[1]) / pooled
@@ -90,16 +100,27 @@ def diagnose(values, *, indicator=False, structural=False):
         return {**result, "status": "mcmc_rhat_unavailable"}
     if x.shape[1] < 8:
         return {**result, "status": "insufficient_draws"}
-    if _constant(x) or _constant(_split(x)):
+    split = None if _constant(x) else _split(x)
+    if split is None or _constant(split):
         reason = "unresolved_rare_category" if indicator else "constant_trace"
         return {**result, "status": reason}
-    split = _split(x)
-    ranked = _rank(split)
+    binary = indicator and isinstance(values, np.ndarray) and values.dtype.kind == "b"
+    ranked = _rank_binary(split) if binary else _rank(split)
     rank_rhat = _rhat(ranked)
+    exponent = 0
     if indicator:
         # Folding a balanced binary variable can be identically constant.
         result["rhat"] = rank_rhat
     else:
+        # The raw trace can exceed the range for a squared deviation or an
+        # FFT power. Scaling by a power of two retains precision for those
+        # calculations. The bulk ranks above use the original trace.
+        input_exponent = math.frexp(max(abs(float(x.min())), abs(float(x.max()))))[1]
+        if not -450 <= input_exponent <= 450:
+            exponent = input_exponent
+            with np.errstate(under="ignore"):
+                x = np.ldexp(x, -exponent)
+            split = _split(x)
         folded_rhat = _rhat(_rank(_split(np.abs(x - np.median(x)))))
         result["rhat"] = float(np.maximum(rank_rhat, folded_rhat))
         tails = [
@@ -108,7 +129,9 @@ def diagnose(values, *, indicator=False, structural=False):
         result["ess_tail"] = float(np.min(tails))
     result["ess_bulk"] = _ess(ranked)
     result["ess_mean"] = _ess(split)
-    result["mcse_mean"] = float(np.sqrt(np.var(x, ddof=1) / result["ess_mean"]))
+    mcse = np.sqrt(np.var(x, ddof=1) / result["ess_mean"])
+    with np.errstate(over="ignore", under="ignore"):
+        result["mcse_mean"] = float(np.ldexp(mcse, exponent))
     required = [result[k] for k in ("rhat", "ess_bulk", "ess_mean", "mcse_mean")]
     if not indicator:
         required.append(result["ess_tail"])

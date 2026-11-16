@@ -21,7 +21,11 @@ from nwkit.vector_fit import (
     normalized_vector_observations,
     restored_vector_posterior,
 )
-from nwkit.vector_gaussian import VectorProcess, VectorTransition, condition_vector_tree
+from nwkit.vector_gaussian import (
+    VectorProcess,
+    VectorTransition,
+    prepare_vector_conditioning,
+)
 
 
 def _ou_geometry(data):
@@ -78,21 +82,27 @@ def _alpha_spec(data, alpha, alpha_by_trait, alpha_bounds, diagonal):
 
 
 def _process(data, rates, covariance, theta):
+    rate_sums = rates[:, None] + rates[None, :]
     transitions = {}
+    by_time: dict[float, VectorTransition] = {}
     for node in data.compiled.nodes[1:]:
-        attenuation = np.exp(-rates * float(node.dist))
-        innovation = covariance * -np.expm1(
-            -(rates[:, None] + rates[None, :]) * float(node.dist)
-        )
-        transitions[node] = VectorTransition(
-            np.diag(attenuation), theta * (1 - attenuation), innovation
-        )
+        time = float(node.dist)
+        transition = by_time.get(time)
+        if transition is None:
+            exponent = -rates * time
+            attenuation = np.exp(exponent)
+            innovation = covariance * -np.expm1(-rate_sums * time)
+            transition = VectorTransition(
+                np.diag(attenuation), theta * -np.expm1(exponent), innovation
+            )
+            by_time[time] = transition
+        transitions[node] = transition
     return VectorProcess(data.compiled.tree, len(rates), transitions, theta, covariance)
 
 
 def _fit_result(
     data,
-    result,
+    likelihood,
     optimized,
     rates,
     sigma,
@@ -127,8 +137,7 @@ def _fit_result(
         sigma_rank=rank,
         sigma_estimated=True,
         restricted_log_likelihood=None,
-        log_likelihood=result.log_likelihood
-        - _likelihood_scale_adjustment(data, reml=False),
+        log_likelihood=likelihood - _likelihood_scale_adjustment(data, reml=False),
         num_observed=data.num_observed_tips,
         num_effective_observations=data.num_effective_positions,
         residual_df=len(data.values),
@@ -202,8 +211,11 @@ def fit_pruning_mvou(
         + bounds
         + [(None, None)] * dimension
     )
+    condition = prepare_vector_conditioning(
+        data.compiled, dimension, observed, error_covariances=errors
+    )
 
-    def evaluate(parameters):
+    def build_process(parameters):
         rates = fixed
         if rates is None:
             rates = np.exp(parameters[:rate_count])
@@ -214,22 +226,27 @@ def fit_pruning_mvou(
         sigma = covariance / denominator if diagonal else covariance
         diffusion = covariance if diagonal else covariance * denominator
         theta = np.asarray(parameters[-dimension:])
-        result = condition_vector_tree(
-            _process(data, rates, sigma, theta), observed, error_covariances=errors
-        )
-        return result, rates, sigma, diffusion, theta
+        return _process(data, rates, sigma, theta), rates, sigma, diffusion, theta
 
     def objective(parameters):
         try:
-            return -evaluate(parameters)[0].log_likelihood
+            process, *_ = build_process(parameters)
+            return -condition(process, likelihood_only=True)
         except (ValueError, ArithmeticError, np.linalg.LinAlgError):
             return 1e100
 
     optimized = deterministic_multistart(objective, initial, bounds, maxiter=1800)
-    result, rates, sigma, diffusion, theta = evaluate(optimized.x)
+    process, rates, sigma, diffusion, theta = build_process(optimized.x)
+    if compute_posterior:
+        result = condition(process)
+        likelihood = result.log_likelihood
+        posterior = restored_vector_posterior(result, data)
+    else:
+        likelihood = condition(process, likelihood_only=True)
+        posterior = {}
     fit = _fit_result(
         data,
-        result,
+        likelihood,
         optimized,
         rates,
         sigma,
@@ -240,8 +257,4 @@ def fit_pruning_mvou(
         diagonal,
         alpha,
     )
-    return restored_vector_posterior(
-        result, data
-    ) if compute_posterior else {}, replace(
-        fit, measurement_covariances=measurement_covariances
-    )
+    return posterior, replace(fit, measurement_covariances=measurement_covariances)

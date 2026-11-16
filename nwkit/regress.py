@@ -10,6 +10,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from scipy import sparse
+from scipy.linalg import qr, solve_triangular
 from scipy.optimize import minimize
 from scipy.stats import chi2
 from scipy.stats import t as student_t
@@ -28,10 +29,18 @@ from nwkit.gaussian import (
     effective_likelihood_settings,
     factor_diagonal_low_rank_updates,
     factor_logdet,
+    finite_mean,
+    gaussian_response_units,
     is_diagonal,
     materialize_covariance,
+    materialize_low_rank_covariance,
+    regression_total_quadratic,
+    rescale_gaussian_covariance,
     residual_variance_scale,
+    restore_gaussian_response_units,
+    sample_standard_errors,
     solve_factor,
+    validate_psd_covariance,
 )
 from nwkit.measurement_error import (
     _predictor_error_variance_diagonal,
@@ -798,24 +807,7 @@ def _prepare_sampling_covariance(
 
 
 def _validate_covariance_matrix(matrix, label):
-    matrix = np.asarray(matrix, dtype=float)
-    if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
-        raise ValueError("{} must be a square matrix.".format(label))
-    if not np.isfinite(matrix).all():
-        raise ValueError("{} must contain finite values.".format(label))
-    symmetric = (matrix + matrix.T) / 2.0
-    asymmetry = float(np.max(np.abs(matrix - matrix.T))) if matrix.size else 0.0
-    scale = max(1.0, float(np.max(np.abs(symmetric))) if matrix.size else 1.0)
-    tolerance = np.finfo(float).eps * scale * max(1, len(matrix)) * 100.0
-    if asymmetry > tolerance:
-        raise ValueError("{} must be symmetric.".format(label))
-    eigenvalues = (
-        np.diag(symmetric) if is_diagonal(symmetric) else np.linalg.eigvalsh(symmetric)
-    )
-    if eigenvalues.size and float(eigenvalues.min()) < -tolerance:
-        raise ValueError("{} must be positive semidefinite.".format(label))
-    symmetric[np.abs(symmetric) < tolerance] = 0.0
-    return symmetric
+    return validate_psd_covariance(matrix, label, clip_negative_diagonal=True)
 
 
 def _validate_factor_covariance(covariance, size, label):
@@ -1063,9 +1055,9 @@ def _prepare_predictor_posteriors(
             "posterior": posterior,
             "posterior_factor": posterior_factor,
             "posterior_model": posterior_model,
-            "mean_sampling_variance": float(np.mean(_covariance_diagonal(covariance))),
+            "mean_sampling_variance": finite_mean(_covariance_diagonal(covariance)),
             "mean_prior_variance": float(
-                posterior.evolutionary_rate * np.mean(contrast_variance)
+                posterior.evolutionary_rate * finite_mean(contrast_variance)
             ),
         }
         posteriors[predictor] = state
@@ -1197,6 +1189,15 @@ def _append_predictor_omnibus_rows(
             }
         )
         rows.append(template)
+
+
+def _clustered_score_crossproduct(design, weighted_residual, inverse, n_events):
+    scores = np.empty((n_events, design.shape[1]), dtype=float)
+    for column, values in enumerate(design.T):
+        scores[:, column] = np.bincount(
+            inverse, weights=values * weighted_residual, minlength=n_events
+        )
+    return scores.T @ scores
 
 
 def _fit_model(
@@ -1394,7 +1395,7 @@ def _prepare_component_matrices(n_observations, components, component_factors):
         if not len(positive):
             raise ValueError("Variance component '{}' has zero diagonal.".format(name))
         component_matrices.append((name, prepared_matrix))
-        component_scales.append(float(np.mean(positive)))
+        component_scales.append(finite_mean(positive))
     return component_matrices, component_scales
 
 
@@ -1487,16 +1488,14 @@ def _profile_component_representation(
         normalized_components = [
             (
                 name,
-                None if matrix is None else materialize_covariance(matrix) / scale,
+                materialize_low_rank_covariance(normalized_factors[name])
+                if matrix is None
+                else materialize_covariance(matrix) / scale,
             )
             for (name, matrix), scale in zip(
                 component_matrices, component_scales, strict=True
             )
         ]
-        if any(component is None for _, component in normalized_components):
-            raise ValueError(
-                "Implicit low-rank components require diagonal fixed covariance."
-            )
         fixed_updates = []
     return (
         structured_model,
@@ -1577,6 +1576,105 @@ def _requires_dense_profile_covariance(fixed_covariance, components, component_f
     )
 
 
+def _dense_profile_gls(cholesky, design, response, rhs, return_details):
+    whitened = solve_triangular(cholesky, rhs, lower=True, check_finite=False)
+    whitened_design = whitened[:, :-1]
+    whitened_response = whitened[:, -1]
+    beta, beta_covariance, gram_logdet = _whitened_regression(
+        whitened_design, whitened_response, return_details
+    )
+    whitened_residual = whitened_response - whitened_design @ beta
+    quadratic = float(whitened_residual @ whitened_residual)
+    residual, inverse_residual = None, None
+    if return_details:
+        residual = response - design @ beta
+        inverse_residual = solve_triangular(
+            cholesky, whitened_residual, lower=True, trans="T", check_finite=False
+        )
+    return (
+        beta,
+        beta_covariance,
+        gram_logdet,
+        residual,
+        inverse_residual,
+        quadratic,
+    )
+
+
+def _whitened_regression(design, response, return_details):
+    gram = design.T @ design
+    sign, logdet = np.linalg.slogdet(gram)
+    if sign <= 0.0 or _ill_conditioned_gram(gram):
+        basis, triangular, order = qr(
+            design, mode="economic", pivoting=True, check_finite=False
+        )
+        return _pivoted_regression(basis, triangular, order, response, return_details)
+    beta = np.linalg.solve(gram, design.T @ response)
+    return beta, np.linalg.inv(gram) if return_details else None, logdet
+
+
+def _ill_conditioned_gram(gram):
+    if len(gram) <= 1:
+        return False
+    if len(gram) == 2:
+        # trace provides the scale without a second small matrix factorization.
+        first, second = float(gram[0, 0]), float(gram[1, 1])
+        scale = max(first, second)
+        if scale == 0.0:
+            return True
+        first, second = first / scale, second / scale
+        cross = float(gram[0, 1]) / scale
+        determinant = first * second - cross * cross
+        return determinant <= math.sqrt(np.finfo(float).eps) * (first + second) ** 2
+    eigenvalues = np.linalg.eigvalsh(gram)
+    return eigenvalues[0] <= math.sqrt(np.finfo(float).eps) * eigenvalues[-1]
+
+
+def _pivoted_regression(basis, triangular, order, response, return_details):
+    diagonal = np.abs(np.diag(triangular))
+    if len(diagonal) != len(order) or diagonal[-1] <= (
+        np.finfo(float).eps * max(basis.shape) * diagonal[0]
+    ):
+        raise np.linalg.LinAlgError("The weighted regression design is singular.")
+    beta = np.empty(len(order))
+    beta[order] = solve_triangular(triangular, basis.T @ response, check_finite=False)
+    covariance = None
+    if return_details:
+        inverse = solve_triangular(triangular, np.eye(len(order)), check_finite=False)
+        covariance = np.empty_like(inverse)
+        covariance[np.ix_(order, order)] = inverse @ inverse.T
+    return beta, covariance, 2.0 * float(np.log(diagonal).sum())
+
+
+def _structured_gls_coefficients(cholesky, design, response, inverse_design, details):
+    gram = design.T @ inverse_design
+    sign, logdet = np.linalg.slogdet(gram)
+    if sign <= 0.0:
+        raise np.linalg.LinAlgError("The weighted regression design is singular.")
+    beta = np.linalg.solve(
+        gram, design.T @ _solve_positive_definite(cholesky, response)
+    )
+    return beta, np.linalg.inv(gram) if details else None, logdet
+
+
+def _regression_precentering(design, beta, structured):
+    if not structured and _ill_conditioned_gram(design.T @ design):
+        return np.zeros_like(beta)
+    return beta
+
+
+def _structured_profile_covariance(diagonal, updates, required):
+    if not required:
+        return None
+    if any(sparse.issparse(update) for update in updates):
+        loading = sparse.hstack(
+            [sparse.csr_matrix(update) for update in updates], format="csr"
+        )
+    else:
+        loading = np.column_stack(updates)
+    return DiagonalLowRankCovariance(diagonal, loading)
+
+
 def _profile_covariance_fit(
     y,
     design,
@@ -1624,11 +1722,31 @@ def _profile_covariance_fit(
     ) = _prepare_profile_covariance_components(
         n_observations, fixed_covariance, components, component_factors
     )
-    centered_response, beta_offset = center_response(y, design)
+    working_response, sampling_diagonal, response_exponent = gaussian_response_units(
+        y, _covariance_diagonal(fixed_covariance)
+    )
+    if response_exponent:
+        working_fixed_covariance = np.ldexp(
+            working_fixed_covariance, -2 * response_exponent
+        )
+        fixed_updates = (
+            [rescale_gaussian_covariance(fixed_covariance, -response_exponent).low_rank]
+            if isinstance(fixed_covariance, DiagonalLowRankCovariance)
+            else []
+        )
+    centered_response, beta_offset = center_response(working_response, design)
     ordinary_beta = np.linalg.lstsq(design, centered_response, rcond=None)[0]
+    initial_residual = centered_response - design @ ordinary_beta
+    # For nearly collinear columns, reconstructing the ordinary fitted values
+    # injects rounding errors along the same weakly identified direction.
+    ordinary_beta = _regression_precentering(design, ordinary_beta, structured_model)
     ordinary_residual = centered_response - design @ ordinary_beta
+    dense_rhs = (
+        None if structured_model else np.column_stack((design, ordinary_residual))
+    )
+    need_grouped_covariance = likelihood_groups is not None
     response_scale = residual_variance_scale(
-        centered_response, ordinary_residual, _covariance_diagonal(fixed_covariance)
+        centered_response, initial_residual, sampling_diagonal
     )
     lower_variance = max(response_scale * 1e-12, np.finfo(float).tiny)
     upper_variance = max(response_scale * 1e6, lower_variance * 1e6)
@@ -1636,9 +1754,11 @@ def _profile_covariance_fit(
         normalized_components
     )
 
-    def evaluate(log_variances, response=ordinary_residual, return_details=False):
+    def evaluate(log_variances, return_details=False):
+        response = ordinary_residual
         variances = np.exp(np.asarray(log_variances, dtype=float))
         covariance = working_fixed_covariance.copy()
+        covariance_representation = covariance
         if structured_model:
             low_rank_updates = list(fixed_updates)
             for variance, (name, component) in zip(
@@ -1649,7 +1769,7 @@ def _profile_covariance_fit(
                         math.sqrt(float(variance)) * normalized_factors[name]
                     )
                 else:
-                    covariance = covariance + variance * component
+                    covariance += variance * component
             if np.any(covariance <= 0.0) or not np.isfinite(covariance).all():
                 return float("inf")
             try:
@@ -1657,28 +1777,16 @@ def _profile_covariance_fit(
                     cholesky = factor_diagonal_low_rank_updates(
                         covariance, low_rank_updates
                     )
-                    low_rank = (
-                        sparse.hstack(
-                            [sparse.csr_matrix(update) for update in low_rank_updates],
-                            format="csr",
-                        )
-                        if any(sparse.issparse(update) for update in low_rank_updates)
-                        else np.column_stack(low_rank_updates)
-                    )
-                    covariance_representation = DiagonalLowRankCovariance(
-                        covariance, low_rank
+                    covariance_representation = _structured_profile_covariance(
+                        covariance,
+                        low_rank_updates,
+                        return_details or need_grouped_covariance,
                     )
                 else:
                     cholesky = np.sqrt(covariance)
-                    covariance_representation = covariance
                 inverse_design = _solve_positive_definite(cholesky, design)
-                gram = design.T @ inverse_design
-                gram_sign, gram_logdet = np.linalg.slogdet(gram)
-                if gram_sign <= 0.0:
-                    return float("inf")
-                beta = np.linalg.solve(
-                    gram,
-                    design.T @ _solve_positive_definite(cholesky, response),
+                beta, beta_covariance, gram_logdet = _structured_gls_coefficients(
+                    cholesky, design, response, inverse_design, return_details
                 )
                 residual = response - design @ beta
                 inverse_residual = _solve_positive_definite(cholesky, residual)
@@ -1691,23 +1799,21 @@ def _profile_covariance_fit(
                 variances, normalized_components, strict=True
             ):
                 assert component is not None
-                covariance = covariance + variance * component
-            covariance = (covariance + covariance.T) / 2.0
-            covariance_representation = covariance
+                covariance += variance * component
+            covariance += covariance.T
+            covariance /= 2.0
             try:
                 cholesky = np.linalg.cholesky(covariance)
-                inverse_design = _solve_positive_definite(cholesky, design)
-                gram = design.T @ inverse_design
-                gram_sign, gram_logdet = np.linalg.slogdet(gram)
-                if gram_sign <= 0.0:
-                    return float("inf")
-                beta = np.linalg.solve(
-                    gram,
-                    design.T @ _solve_positive_definite(cholesky, response),
+                (
+                    beta,
+                    beta_covariance,
+                    gram_logdet,
+                    residual,
+                    inverse_residual,
+                    quadratic,
+                ) = _dense_profile_gls(
+                    cholesky, design, response, dense_rhs, return_details
                 )
-                residual = response - design @ beta
-                inverse_residual = _solve_positive_definite(cholesky, residual)
-                quadratic = float(residual @ inverse_residual)
                 covariance_logdet = 2.0 * float(np.log(np.diag(cholesky)).sum())
             except np.linalg.LinAlgError:
                 return float("inf")
@@ -1722,7 +1828,6 @@ def _profile_covariance_fit(
             return float("inf")
         if not return_details:
             return objective
-        beta_covariance = np.linalg.inv(gram)
         component_variances = {
             name: float(variance / scale)
             for variance, (name, _), scale in zip(
@@ -1766,7 +1871,9 @@ def _profile_covariance_fit(
         details["boundary_warning"] = bool(
             optimum <= lower_variance * 10.0 or optimum >= upper_variance / 10.0
         )
-        return details
+        return restore_gaussian_response_units(
+            details, response_exponent, effective_likelihood_count
+        )
 
     # A warm start can lie on a variance boundary where log-scale gradients
     # vanish. Retain interior starts for each new response, including bootstrap.
@@ -1805,7 +1912,9 @@ def _profile_covariance_fit(
         np.any(np.exp(details["log_variances"]) <= lower_variance * 10.0)
         or np.any(np.exp(details["log_variances"]) >= upper_variance / 10.0)
     )
-    return details
+    return restore_gaussian_response_units(
+        details, response_exponent, effective_likelihood_count
+    )
 
 
 def _random_effect_policy(policy, identifiable, label):
@@ -2555,24 +2664,22 @@ def _predictor_measurement_result_fields(
     if isinstance(uncertainty, ContinuousPredictorUncertainty):
         selected_factor = uncertainty.factor[uncertainty.observation_index]
         if np.ndim(selected_factor) == 1:
-            mean_posterior_variance = float(np.mean(np.square(selected_factor)))
+            mean_posterior_variance = finite_mean(np.square(selected_factor))
         else:
-            mean_posterior_variance = float(
-                np.mean(np.sum(np.square(selected_factor), axis=1))
+            mean_posterior_variance = finite_mean(
+                np.sum(np.square(selected_factor), axis=1)
             )
     elif isinstance(uncertainty, GmrfPredictorUncertainty):
-        mean_posterior_variance = float(
-            np.mean(
-                _predictor_error_variance_diagonal(
-                    np.asarray([1.0]),
-                    uncertainty,
-                    0,
-                    len(uncertainty.observation_index),
-                )
+        mean_posterior_variance = finite_mean(
+            _predictor_error_variance_diagonal(
+                np.asarray([1.0]),
+                uncertainty,
+                0,
+                len(uncertainty.observation_index),
             )
         )
     else:
-        mean_posterior_variance = float(np.mean(np.diag(uncertainty)))
+        mean_posterior_variance = finite_mean(np.diag(uncertainty))
     mean_prior_variance = state["mean_prior_variance"]
     return {
         "mean_predictor_sampling_variance": state["mean_sampling_variance"],
@@ -3228,7 +3335,7 @@ def _fit_covariance_model(
                 likelihood_groups=likelihood_groups,
                 event_groups=event_inverse if event_weighting == "event" else None,
             )
-        standard_errors = np.std(bootstrap_coefficients, axis=0, ddof=1)
+        standard_errors = sample_standard_errors(bootstrap_coefficients)
     elif inference == "studentized-bootstrap":
         bootstrap_coefficients, bootstrap_standard_errors = (
             _studentized_bootstrap_coefficients(
@@ -3267,13 +3374,15 @@ def _fit_covariance_model(
     critical = float(student_t.ppf(0.5 + confidence_level / 2.0, degrees_of_freedom))
     if event_weighting == "event":
         loss_weights = 1.0 / event_counts[event_inverse]
-        total_quadratic = float(loss_weights @ np.square(response_values))
-        residual_quadratic = float(
-            loss_weights @ np.square(response_values - design @ beta)
-        )
+        maximum = float(np.max(np.abs(response_values)))
+        exponent = math.frexp(maximum)[1] if maximum else 0
+        with np.errstate(under="ignore"):
+            scaled_response = np.ldexp(response_values, -exponent)
+            residual = scaled_response - design @ np.ldexp(beta, -exponent)
+            total_quadratic = float(loss_weights @ np.square(scaled_response))
+            residual_quadratic = float(loss_weights @ np.square(residual))
     else:
-        inverse_y = _solve_positive_definite(fit["cholesky"], response_values)
-        total_quadratic = float(response_values @ inverse_y)
+        total_quadratic = regression_total_quadratic(fit["cholesky"], response_values)
         residual_quadratic = fit["quadratic"]
     r_squared = (
         float("nan")
@@ -3286,7 +3395,7 @@ def _fit_covariance_model(
     lineage_variance_by_term, _ = _lineage_variances_by_term(
         random_designs, component_variances
     )
-    mean_sampling_variance = float(np.mean(_covariance_diagonal(sampling_covariance)))
+    mean_sampling_variance = finite_mean(_covariance_diagonal(sampling_covariance))
     fitted_variance = mean_sampling_variance
     for uncertainty, columns in zip(
         raw_predictor_uncertainties,

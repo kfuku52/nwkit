@@ -85,7 +85,14 @@ def get_stdin_input_options(args: Any) -> list[tuple[str, str]]:
         if getattr(args, dest, None) == "-"
         and not (
             dest == "infile"
-            and (getattr(args, "radte_prefix", None) or getattr(args, "document", None))
+            and (
+                getattr(args, "radte_prefix", None)
+                or getattr(args, "document", None)
+                or (
+                    getattr(args, "command", None) == "constrain"
+                    and getattr(args, "backbone", None) == "vertlife"
+                )
+            )
         )
     ]
     options.extend(

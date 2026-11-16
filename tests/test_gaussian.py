@@ -1,10 +1,103 @@
 """Numerical error contracts shared by dense and sparse Gaussian factors."""
 
+import math
+
 import numpy as np
 import pytest
 from scipy import sparse
 
 from nwkit import gaussian
+
+
+@pytest.mark.parametrize("groups", [[2, 0, 1, 4, 3], [1, 0, 1, 2, 0]])
+def test_grouped_dense_covariance_uses_the_correct_rows_in_group_order(groups):
+    loading = np.array([[1, 1], [2, -1], [3, 0], [-1, 2], [0, -1]], dtype=float)
+    covariance = loading @ loading.T
+    membership = np.asarray(groups) == np.arange(max(groups) + 1)[:, None]
+    weights = membership / membership.sum(axis=1, keepdims=True)
+    expected = np.diag(weights @ covariance @ weights.T)
+    np.testing.assert_allclose(
+        gaussian.grouped_mean_covariance_diagonal(covariance, groups), expected
+    )
+
+
+def test_grouped_dense_covariance_keeps_large_finite_mean_variance():
+    covariance = np.array([[1.6e308, 8e307], [8e307, 1.2e308]])
+    with np.errstate(over="raise", invalid="raise"):
+        observed = gaussian.grouped_mean_covariance_diagonal(covariance, [0, 0])
+    np.testing.assert_allclose(observed, [1.1e308], rtol=1e-15)
+
+
+@pytest.mark.parametrize("collinear", [True, False])
+@pytest.mark.parametrize("reverse", [False, True])
+def test_grouped_loadings_keep_finite_covariance_at_extreme_scale_ratios(
+    collinear, reverse
+):
+    diagonal = np.array([0.4, 0.8, 0.7, 1.2])
+    anchor = np.array([[0.2, 0.0], [-0.2, 0.0], [0.0, 0.3], [0.0, 0.3]])
+    first = anchor * 1e-200
+    second = anchor.copy()
+    if not collinear:
+        second[1, 0] *= -2.0
+        second[3, 1] /= 2.0
+    factors = [first, second] if not reverse else [second, first]
+    covariance = np.diag(diagonal) + first @ first.T + second @ second.T
+    expected = np.linalg.solve(covariance, diagonal)
+    with np.errstate(over="raise", invalid="raise"):
+        factor = gaussian.factor_diagonal_low_rank_updates(diagonal, factors)
+        actual = gaussian.solve_factor(factor, diagonal)
+    np.testing.assert_allclose(actual, expected, rtol=2e-15)
+    assert gaussian.factor_logdet(factor) == pytest.approx(
+        np.linalg.slogdet(covariance)[1], abs=2e-15
+    )
+
+
+@pytest.mark.parametrize(
+    "variance,loading",
+    [(1e-100, 1e125), (1e-250, 1e50), (1e-100, 1e50), (1e-310, 1e154)],
+)
+def test_grouped_inverse_preserves_the_small_loading_aligned_solution(
+    variance, loading
+):
+    diagonal = np.full(5, variance)
+    groups = np.array([0, 0, 0, 1, 1])
+    design = np.eye(2)[groups] * loading
+    values = np.column_stack(
+        [np.ones(5), np.full(5, loading), np.array([1.0, -1.0, 0.0, -1.0, 1.0])]
+    )
+    group_size = np.bincount(groups)
+    log_eigenvalues = np.logaddexp(
+        math.log(variance), 2.0 * math.log(loading) + np.log(group_size)
+    )
+    expected_logdet = 3 * math.log(variance) + log_eigenvalues.sum()
+    expected = values.copy()
+    expected[:, :2] = (expected[:, :2] / loading) / loading / group_size[groups, None]
+    with np.errstate(over="raise", invalid="raise"):
+        factor = gaussian.factor_diagonal_low_rank_updates(diagonal, [design])
+        rhs = values.copy()
+        rhs[:, 2] *= variance
+        actual = gaussian.solve_factor(factor, rhs)
+        vector = gaussian.solve_factor(factor, values[:, 0])
+    np.testing.assert_allclose(actual[:, :2], expected[:, :2], rtol=2e-14, atol=0.0)
+    np.testing.assert_allclose(actual[:, 2], expected[:, 2], rtol=2e-14, atol=2e-15)
+    np.testing.assert_allclose(vector, expected[:, 0], rtol=2e-14, atol=0.0)
+    assert gaussian.factor_logdet(factor) == pytest.approx(
+        expected_logdet, rel=0.0, abs=3e-13
+    )
+
+
+@pytest.mark.parametrize("columns", [None, 2])
+def test_diagonal_cholesky_solve_keeps_finite_results_at_subnormal_variance(columns):
+    diagonal = np.ldexp(np.array([1.0, 2.0, 4.0]), -1060)
+    values = np.array([-2.0, 0.0, 3.0])
+    rhs = diagonal * values
+    if columns:
+        rhs = np.column_stack([rhs, -rhs])
+        values = np.column_stack([values, -values])
+    factor = gaussian.factor_covariance(np.diag(diagonal))
+    with np.errstate(over="raise", invalid="raise"):
+        solution = gaussian.solve_factor(factor, rhs)
+    np.testing.assert_allclose(solution, values, rtol=1e-15, atol=0.0)
 
 
 @pytest.mark.parametrize("diagonal", [0.0, np.nan, np.inf, -0.0, 1 + 2j])
@@ -87,6 +180,40 @@ def test_sparse_singular_prior_precision_uses_the_same_error_contract():
         )
 
 
+@pytest.mark.parametrize("precision_update", [False, True])
+def test_sparse_covariance_solve_and_determinant_at_subnormal_variances(
+    precision_update,
+):
+    exponent = -1060
+    relative_diagonal = np.array([1.0, 2.0, 4.0, 8.0])
+    relative_loading = np.array([0.25, -0.5, 0.0, 0.5])
+    diagonal = np.ldexp(relative_diagonal, exponent)
+    loading = sparse.csr_matrix(np.ldexp(relative_loading[:, None], exponent // 2))
+    precision = sparse.eye(1, format="csc")
+    base_covariance = np.diag(relative_diagonal) + np.outer(
+        relative_loading, relative_loading
+    )
+    expected = np.linspace(-1.0, 2.0, len(diagonal))
+    base_rhs = np.stack([base_covariance @ expected, relative_diagonal], axis=1)
+    rhs = np.ldexp(base_rhs, exponent)
+    independent_solution = np.linalg.solve(base_covariance, np.ldexp(rhs, -exponent))
+    expected_logdet = np.linalg.slogdet(base_covariance)[1] + len(
+        diagonal
+    ) * exponent * math.log(2.0)
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        if precision_update:
+            factor = gaussian.factor_diagonal_sparse_precision_updates(
+                diagonal, [(loading, precision, precision.tocsr())]
+            )
+        else:
+            factor = gaussian.factor_diagonal_sparse_low_rank(diagonal, loading)
+        observed = gaussian.solve_factor(factor, rhs)
+    np.testing.assert_allclose(observed, independent_solution, rtol=2e-14, atol=2e-14)
+    assert gaussian.factor_logdet(factor) == pytest.approx(
+        expected_logdet, rel=0.0, abs=1e-12
+    )
+
+
 def test_sparse_roundoff_cannot_turn_rank_deficiency_into_an_indefinite_factor():
     loading = sparse.csr_matrix(
         [[-20.749325931793987], [167.02490282686168], [165.85872694090048]]
@@ -101,6 +228,28 @@ def test_sparse_precision_helpers_reject_indefinite_matrices_before_solving():
     precision = sparse.csc_matrix([[1.0, 2.0], [2.0, 1.0]])
     with pytest.raises(np.linalg.LinAlgError, match="singular|positive definite"):
         gaussian.sparse_precision_update_diagonal(sparse.eye(2), precision)
+
+
+@pytest.mark.parametrize("scale", [2.0**-900, 2.0**1023])
+def test_sparse_precision_validation_and_solve_use_relative_units(scale):
+    reference = np.array([[1.0, 0.25], [0.25, 1.0]])
+    matrix = sparse.csc_matrix(scale * reference)
+    with np.errstate(over="raise", invalid="raise"):
+        factor = gaussian._factor_sparse_lu(matrix, "Sparse precision")
+        np.testing.assert_allclose(factor.solve(scale * reference[:, 1]), [0.0, 1.0])
+        asymmetric = sparse.csc_matrix(scale * np.array([[1.0, 0.5], [0.25, 1.0]]))
+        with pytest.raises(np.linalg.LinAlgError, match="not symmetric"):
+            gaussian._factor_sparse_lu(asymmetric, "Sparse precision")
+
+
+def test_sparse_precision_diagonal_reuses_states_with_distinct_observation_loadings():
+    precision = np.array([[2.0, -0.3], [-0.3, 1.5]])
+    loading = np.array([[0.0, 2.0], [0.5, 0.0], [0.0, 0.0], [0.0, -1.5]])
+    expected = np.diag(loading @ np.linalg.solve(precision, loading.T))
+    observed = gaussian.sparse_precision_update_diagonal(
+        sparse.csr_matrix(loading), sparse.csc_matrix(precision)
+    )
+    np.testing.assert_allclose(observed, expected)
 
 
 @pytest.mark.parametrize("blocks", [1, 2])

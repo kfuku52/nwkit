@@ -1,5 +1,6 @@
 import json
 import sys
+from functools import cache
 from typing import Any
 
 import pandas as pd
@@ -404,7 +405,9 @@ def _lineage_roots(gene_tree, event_type_by_node):
     return lineage_root_by_node
 
 
-def _coverage_fields(orientation, species_mask_by_gene_node, species_clades):
+def _coverage_fields(
+    orientation, species_mask_by_gene_node, species_clades, species_csv
+):
     empty = {
         "coverage_status": "not-applicable",
         "numerator_observed_species_taxa": "",
@@ -437,18 +440,14 @@ def _coverage_fields(orientation, species_mask_by_gene_node, species_clades):
     )
     return {
         "coverage_status": "complete" if complete else "partial",
-        "numerator_observed_species_taxa": species_clades.csv_for_mask(
-            numerator_observed
-        ),
+        "numerator_observed_species_taxa": species_csv(numerator_observed),
         "num_numerator_observed_species_taxa": numerator_observed_count,
-        "numerator_species_clade_taxa": species_clades.csv_for_mask(numerator_full),
+        "numerator_species_clade_taxa": species_csv(numerator_full),
         "num_numerator_species_clade_taxa": numerator_full_count,
         "numerator_species_coverage": numerator_observed_count / numerator_full_count,
-        "denominator_observed_species_taxa": species_clades.csv_for_mask(
-            denominator_observed
-        ),
+        "denominator_observed_species_taxa": species_csv(denominator_observed),
         "num_denominator_observed_species_taxa": denominator_observed_count,
-        "denominator_species_clade_taxa": species_clades.csv_for_mask(denominator_full),
+        "denominator_species_clade_taxa": species_csv(denominator_full),
         "num_denominator_species_clade_taxa": denominator_full_count,
         "denominator_species_coverage": denominator_observed_count
         / denominator_full_count,
@@ -582,6 +581,8 @@ def _reconciliation_row(
     gene_clades,
     species_clades,
     species_mask_by_gene_node,
+    *,
+    species_csv,
 ):
     numerator_gene, denominator_gene, numerator_species, denominator_species = (
         _orientation_nodes(orientation)
@@ -645,16 +646,18 @@ def _reconciliation_row(
         ),
         "descendant_taxa": gene_clades.csv_for_node(node),
         "num_taxa": gene_clades.count_for_node(node),
-        "descendant_species_taxa": species_clades.csv_for_mask(
-            species_mask_by_gene_node[node]
-        ),
+        "descendant_species_taxa": species_csv(species_mask_by_gene_node[node]),
         "num_descendant_species_taxa": species_clades.count_for_mask(
             species_mask_by_gene_node[node]
         ),
-        "species_event_taxa": species_clades.csv_for_mask(species_event_mask),
+        "species_event_taxa": species_csv(species_event_mask),
         "num_species_event_taxa": species_clades.count_for_mask(species_event_mask),
     }
-    row.update(_coverage_fields(orientation, species_mask_by_gene_node, species_clades))
+    row.update(
+        _coverage_fields(
+            orientation, species_mask_by_gene_node, species_clades, species_csv
+        )
+    )
     return row
 
 
@@ -676,6 +679,8 @@ def build_reconciliation_table(
     species_branch_ids = assign_branch_ids(species_tree)
     gene_clades = CladeIndex(gene_tree)
     species_clades = CladeIndex(species_tree)
+    # The same species masks occur in event, descendant and coverage fields.
+    species_csv = cache(species_clades.csv_for_mask)
     species_lca = LcaIndex(species_tree)
     species_leaf_by_name = {str(leaf.name): leaf for leaf in species_tree.leaves()}
     species_nodes_by_name, ambiguous_species_names = _named_species_nodes(species_tree)
@@ -742,6 +747,7 @@ def build_reconciliation_table(
                 gene_clades,
                 species_clades,
                 species_mask_by_gene_node,
+                species_csv=species_csv,
             )
         )
         # LCA losses below this event, excluding losses above the gene root.

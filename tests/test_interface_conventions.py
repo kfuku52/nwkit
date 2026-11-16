@@ -495,6 +495,10 @@ def test_tip_table_can_preserve_selected_category_spellings_without_changing_num
     assert table["category"].tolist() == ["001", "01"]
     assert table["value"].tolist() == [1.5, 2.5]
 
+    custom, _, _ = read_tip_table(str(path), missing_values="1.5")
+    assert pd.isna(custom.loc[0, "value"])
+    assert custom.loc[1, "value"] == 2.5
+
 
 def test_specialized_tsv_inputs_support_standard_input(monkeypatch, tmp_path):
     monkeypatch.setattr(sys, "stdin", io.StringIO("leaf_name\tgroup\nA\tx\n"))

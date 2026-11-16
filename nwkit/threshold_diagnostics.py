@@ -33,14 +33,22 @@ def diagnose_threshold_draws(tree, nodes, states, constraints, traces, *, estima
     thresholds = traces[:, :, count:]
     rows = []
 
-    def append(values, node, kind, label="", structural=False):
+    def append(values, node, kind, label="", structural=False, scale_exponent=0):
+        diagnostics = diagnose(
+            values, indicator=kind == "category", structural=structural
+        )
+        if scale_exponent:
+            with np.errstate(over="ignore", under="ignore"):
+                diagnostics["mcse_mean"] = float(
+                    np.ldexp(diagnostics["mcse_mean"], scale_exponent)
+                )
         rows.append(
             {
                 "branch_id": ids[node] if node is not None else -1,
                 "name": str(node.name or "") if node is not None else "",
                 "variable": kind,
                 "state_or_threshold": label,
-                **diagnose(values, indicator=kind == "category", structural=structural),
+                **diagnostics,
             }
         )
 
@@ -48,7 +56,21 @@ def diagnose_threshold_draws(tree, nodes, states, constraints, traces, *, estima
         values = traces[:, :, index]
         append(values, node, "liability")
         # Second raw moment determines the reported variance along with mean.
-        append(values * values, node, "liability_second_moment")
+        exponent = math.frexp(max(abs(float(values.min())), abs(float(values.max()))))[
+            1
+        ]
+        if not -450 <= exponent <= 450:
+            with np.errstate(under="ignore"):
+                scaled = np.ldexp(values, -exponent)
+                second_moment = scaled * scaled
+            append(
+                second_moment,
+                node,
+                "liability_second_moment",
+                scale_exponent=2 * exponent,
+            )
+        else:
+            append(values * values, node, "liability_second_moment")
         categories = np.zeros(values.shape, dtype=int)
         for threshold_index in range(thresholds.shape[2]):
             categories += values > thresholds[:, :, threshold_index]

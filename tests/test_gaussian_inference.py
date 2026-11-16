@@ -6,8 +6,16 @@ import pytest
 from nwkit.compiled_tree import CompiledTree
 from nwkit.evolution import build_evolutionary_process
 from nwkit.gaussian_inference import (
+    _combine,
+    _Factor,
+    _normal_log_density,
+    _posterior_draw_parameters,
+    _push_down,
+    _push_up,
     condition_gaussian_tree,
+    gaussian_process_parameter_rank,
     gaussian_tree_likelihood,
+    prepare_gaussian_single_draw,
     sample_gaussian_posterior,
     simulate_gaussian_process,
 )
@@ -21,6 +29,132 @@ from nwkit.util import read_tree
 
 def tree_from(source):
     return read_tree(source, "1", True, quiet=True, rooted="yes")
+
+
+def test_gaussian_overlap_stays_finite_when_variance_sum_overflows():
+    first = _Factor(0.5, 1.7e308)
+    second = _Factor(2.0, 1.7e308)
+    combined = _combine(first, second)
+    assert combined.mean == 1.25
+    assert combined.variance == 8.5e307
+    assert combined.log_weight == pytest.approx(
+        -0.5 * (math.log(math.tau) + math.log(1.7e308) + math.log(2.0))
+    )
+    assert _posterior_draw_parameters(
+        GaussianTransition(1.0, 0.0, first.variance), second
+    ) == (0.5, 1.0, math.sqrt(8.5e307))
+
+
+def test_gaussian_log_density_halves_quadratic_before_overflow():
+    assert _normal_log_density(1.7e154, 0.0, 1.0) == pytest.approx(-1.445e308)
+
+
+def test_gaussian_pruning_keeps_large_child_variance_after_scaling_to_parent():
+    child = _Factor(2.0, 1.6e308)
+    parent = _push_up(child, -2.0, 0.5, 1.6e308)
+    assert parent.mean == -0.75
+    assert parent.variance == 8e307
+    assert parent.log_weight == -math.log(2.0)
+    constant = _push_up(child, 0.0, 0.5, 1.6e308)
+    assert constant.mean is None
+    assert constant.density_rank == 1
+    assert constant.log_weight == pytest.approx(
+        -0.5 * (math.log(math.tau) + math.log(2.0) + math.log(1.6e308))
+    )
+
+
+def test_gaussian_pruning_checks_transformed_variance_instead_of_its_log():
+    variance = np.finfo(float).max
+    parent = _push_up(_Factor(1.0, float(variance)), 1.0, 0.0, 0.0)
+    assert parent.mean == 1.0
+    assert parent.variance == variance
+    parent = _push_up(_Factor(1e308, 0.0), 2.0, -1e308, 0.0)
+    assert parent.mean == 1e308
+    with pytest.raises(ValueError, match="pruning message exceeds"):
+        _push_up(_Factor(1.0, 1.0), 1e-200, 0.0, 0.0)
+
+
+def test_affine_branch_recovers_a_finite_mean_after_product_overflow():
+    tree = tree_from("(A:1,B:1)R;")
+    process = GaussianTreeProcess(
+        tree,
+        {
+            tree["A"]: GaussianTransition(2.0, -1e308, 0.0),
+            tree["B"]: GaussianTransition(-2.0, 1e308, 0.0),
+        },
+        GaussianRootPrior("fixed", 1e308, 0.0),
+        "test",
+    )
+    compiled = CompiledTree.from_tree(tree)
+    expected = np.array([1e308, 1e308, -1e308])
+    means, variances = process.marginal_moments()
+    assert [means[node] for node in compiled.nodes] == expected.tolist()
+    assert not any(variances.values())
+    assert _push_down(_Factor(1e308), 2.0, -1e308, 0.0).mean == 1e308
+    for count in (1, 2):
+        replicates = simulate_gaussian_process(process, num_samples=count, seed=1)
+        np.testing.assert_array_equal(replicates.values, np.tile(expected, (count, 1)))
+    draw = prepare_gaussian_single_draw(process, compiled, None)
+    np.testing.assert_array_equal(draw(np.random.default_rng(1)), expected)
+    values = {"A": 1e308}
+    conditioned = condition_gaussian_tree(process, values)
+    assert [
+        conditioned.marginals[node].mean for node in compiled.nodes
+    ] == expected.tolist()
+    samples = sample_gaussian_posterior(process, values, num_samples=2, seed=1)
+    np.testing.assert_array_equal(samples.values, np.tile(expected, (2, 1)))
+
+
+def test_gaussian_pruning_preserves_proper_root_likelihood_for_a_very_weak_branch():
+    tree = tree_from("(A:1,B:1)R;")
+    process = GaussianTreeProcess(
+        tree,
+        {
+            tree["A"]: GaussianTransition(1e-200, 0.0, 1.0),
+            tree["B"]: GaussianTransition(1.0, 0.0, 1.0),
+        },
+        GaussianRootPrior("gaussian", 0.0, 1.0),
+        "test",
+    )
+    result = condition_gaussian_tree(process, {"A": 1.0, "B": 2.0})
+    assert result.log_likelihood == pytest.approx(
+        _normal_log_density(1.0, 0.0, 1.0) + _normal_log_density(2.0, 0.0, 2.0)
+    )
+    assert result.marginals[tree].mean == 1.0
+    assert result.marginals[tree].variance == 0.5
+
+
+@pytest.mark.parametrize("scale", [2.0**-400, 2.0**400])
+def test_parameter_rank_keeps_mean_and_covariance_information_across_units(scale):
+    tree = tree_from("(A:1,B:2)R;")
+    observed = tuple(tree.leaves())
+
+    def process(parameters):
+        mean, log_rate = parameters
+        return GaussianTreeProcess(
+            tree,
+            {
+                tip: GaussianTransition(1.0, 0.0, scale**2 * math.exp(log_rate))
+                for tip in observed
+            },
+            GaussianRootPrior("fixed", scale * mean),
+            "brownian",
+        )
+
+    assert (
+        gaussian_process_parameter_rank(
+            process, [0.0, 0.0], observed, [(None, None), (-3.0, 3.0)]
+        )
+        == 2
+    )
+
+
+def test_combining_with_unit_factor_preserves_positive_zero_weight():
+    from nwkit.gaussian_inference import _UNIT_FACTOR, _combine, _Factor
+
+    factor = _Factor(0.0, 1.0, log_weight=-0.0)
+    assert math.copysign(1.0, _combine(_UNIT_FACTOR, factor).log_weight) == 1.0
+    assert math.copysign(1.0, _combine(factor, _UNIT_FACTOR).log_weight) == 1.0
 
 
 def dense_condition(process, values, errors):
@@ -170,6 +304,48 @@ def test_zero_variance_identity_branch_enforces_exact_state():
     assert result.marginals[tree["A"]].variance == 0.0
 
 
+def test_affine_conditioning_and_draws_preserve_exact_identity_states():
+    tree = tree_from("((B:0,C:1)I:1,A:1)R;")
+    process = build_evolutionary_process(
+        tree, model="brownian", root_mode="flat", allow_zero=True
+    )
+    value = math.nextafter(1.0, math.inf)
+    observations = {"A": -1.0, "B": value}
+    result = condition_gaussian_tree(process, observations)
+    samples = sample_gaussian_posterior(process, observations, num_samples=10, seed=4)
+    for node in (tree["B"], tree["I"]):
+        assert result.marginals[node].mean == value
+        assert result.marginals[node].variance == 0.0
+        np.testing.assert_array_equal(
+            samples.values[:, samples.nodes.index(node)], value
+        )
+
+
+def test_adjacent_exact_values_conflict_on_a_zero_variance_identity_path():
+    tree = tree_from("((B:0,C:0)I:1,A:1)R;")
+    process = build_evolutionary_process(
+        tree, model="brownian", root_mode="flat", allow_zero=True
+    )
+    observations = {"A": -1.0, "B": 1.0, "C": math.nextafter(1.0, math.inf)}
+    with pytest.raises(ValueError, match="Conflicting exact observations"):
+        gaussian_tree_likelihood(process, observations)
+
+
+def test_fixed_root_is_exact_across_identity_edges():
+    tree = tree_from("((A:1,B:1)I:0)R;")
+    value = math.nextafter(1.0, math.inf)
+    process = build_evolutionary_process(
+        tree, model="brownian", root_mode="fixed", root_mean=value, allow_zero=True
+    )
+    result = condition_gaussian_tree(process, {"A": -1.0})
+    samples = sample_gaussian_posterior(process, {"A": -1.0}, num_samples=8, seed=7)
+    for node in (tree, tree["I"]):
+        assert result.marginals[node].mean == value
+        np.testing.assert_array_equal(
+            samples.values[:, samples.nodes.index(node)], value
+        )
+
+
 def test_observed_position_count_contracts_deterministic_identity_edges():
     tree = tree_from("((A:0,B:0)I:0,C:1)R;")
     process = build_evolutionary_process(
@@ -231,6 +407,24 @@ def test_joint_posterior_samples_match_marginal_moments_and_exact_tip():
         )
 
 
+def test_joint_sampler_preserves_exact_tip_on_deterministic_affine_branch():
+    tree = tree_from("(A:1,B:1)R;")
+    process = GaussianTreeProcess(
+        tree,
+        {
+            tree["A"]: GaussianTransition(0.3, 0.2, 0.0),
+            tree["B"]: GaussianTransition(1.0, 0.0, 0.5),
+        },
+        GaussianRootPrior("gaussian", 0.0, 1.0),
+        "test-affine",
+    )
+    samples = sample_gaussian_posterior(process, {"A": 0.1}, num_samples=40, seed=17)
+    index = {node: position for position, node in enumerate(samples.nodes)}
+    np.testing.assert_array_equal(samples.values[:, index[tree["A"]]], 0.1)
+    np.testing.assert_allclose(samples.values[:, 0], (0.1 - 0.2) / 0.3)
+    assert np.std(samples.values[:, index[tree["B"]]]) > 0.0
+
+
 def test_prior_process_simulation_matches_affine_moments():
     tree = tree_from("((A:0.5,B:0.8)I:0.4,C:1.1)R;")
     process = build_evolutionary_process(
@@ -250,3 +444,18 @@ def test_prior_process_simulation_matches_affine_moments():
         assert np.var(samples.values[:, index]) == pytest.approx(
             expected_variances[node], abs=0.03
         )
+
+
+@pytest.mark.parametrize("num_samples", [1, 80])
+def test_selected_gaussian_process_draws_match_full_preorder_stream(num_samples):
+    tree = tree_from("((A:0.5,B:0)I:0.4,C:1.1)R;")
+    compiled = CompiledTree.from_tree(tree)
+    process = build_evolutionary_process(
+        tree, model="ou", parameter=0.8, root_mode="stationary", allow_zero=True
+    )
+    indices = tuple(compiled.index_by_node[tree[name]] for name in ("C", "I", "B"))
+    options = dict(num_samples=num_samples, seed=91, compiled_tree=compiled)
+    full = simulate_gaussian_process(process, **options)
+    selected = simulate_gaussian_process(process, **options, _output_indices=indices)
+    assert selected.nodes == tuple(compiled.nodes[index] for index in indices)
+    np.testing.assert_array_equal(selected.values, full.values[:, indices])

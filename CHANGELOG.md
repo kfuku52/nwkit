@@ -4,9 +4,375 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
-## 0.46.1 (2026-11-09)
+## 0.46.11 (2026-11-16)
 
 - Dependabot dependency update (automated metadata).
+
+## [0.46.10] - 2026-11-16
+
+### Added
+
+- Import verified leaf images from local files or HTTPS URLs with source,
+  attribution, and license metadata.
+- Retry unambiguous same-TaxID names, preserve infraspecific queries, and
+  optionally prioritize Wikimedia Commons structured depiction matches.
+- Checkpoint completed images per taxon, optionally stop provider lookup
+  after successful downloads, and pace API requests across worker threads.
+
+## [0.46.9] - 2026-11-16
+
+### Changed
+
+- Reuse validated HTTPS connections for image lookups and downloads, use
+  sufficiently large Wikimedia previews when resizing, and limit connection
+  retries for unreachable media hosts.
+
+### Fixed
+
+- Require GBIF matches at the requested taxonomic rank. Preserve occurrence
+  links for attribution when image references are missing, and use HTTPS for
+  media served by verified collection hosts.
+
+## [0.46.8] - 2026-11-16
+
+### Changed
+
+- Allow callers to transfer explicitly labelled split supports from partially
+  labelled trees. The mapper reuses its validated split index directly,
+  avoiding two tree copies and a second split lookup.
+
+## [0.46.7] - 2026-11-15
+
+### Fixed
+
+- Mk transition matrices preserve rare multi-step changes on short branches
+  and remain stochastic on very long branches. Asymmetric generators retain
+  their directionality under reciprocal changes of rate and branch-length units.
+  Mk rate mixtures combine extreme branch lengths and category rates without
+  first rounding the scaled generator to zero or infinity.
+- Sparse Mk transition graphs use a nonnegative Poisson series to resolve
+  probabilities for endpoints separated by many jumps.
+- Recover slow Mk transitions that would otherwise underflow during the
+  time scaling used to exponentiate generators on very long branches.
+- Compute stationary Mk root probabilities without cancellation when
+  transitions between groups of states are much slower than transitions
+  within each group.
+- Validate large labelled Mk generators without overflowing intermediate
+  row sums, and retain GTR frequencies when unnormalized weights sum to
+  more than the floating-point range.
+- Threshold ASR samples disjoint ordinal intervals by their log probability
+  mass, preserves the width of narrow intervals after centering, and draws
+  far-tail liabilities relative to their truncation boundary.
+- Threshold ASR scales conditional precisions so positive subnormal branch
+  lengths retain nonzero innovation standard deviations.
+- Keep rounded threshold liabilities inside their observed categories and
+  accumulate scaled posterior variances so large draws keep finite summaries.
+  Keep estimated cuts within the adjacent representable category boundaries.
+- Preserve fixed ordinal thresholds exactly in posterior summaries.
+- Report unrepresentable liability draws before they contaminate MCMC
+  summaries.
+- Estimate threshold-model ESS from a positive monotone sequence of
+  autocorrelations across lags and account for disagreement between chains.
+- Preserve finite MCMCtree posterior means and medians when intermediate sums
+  overflow.
+- Profile-likelihood intervals resolve crossings near the edge of the finite
+  likelihood domain, across extreme parameter ranges, and when the maximum
+  log likelihood is large relative to the cutoff drop.
+- Search regression profile-likelihood intervals in units of each
+  coefficient's standard error.
+- Scale extreme Gaussian posterior predictive values before computing moments
+  to avoid overflowing statistics that are finite in the original units.
+- Preserve exact observations and fixed roots across zero-variance identity
+  branches in Gaussian marginals and joint draws.
+- Fit shared MV-OU attraction in normalized time units so the initialization
+  and search remain finite under extreme branch-length rescaling.
+- Normalize branch times when computing complete-case MV-BM contrasts so
+  branch rescaling preserves the likelihood and ancestral marginals.
+- Fit incomplete MV-BM relative to the common ancestor of the observed tips
+  so long unobserved stems preserve downstream differences. Propagate stem
+  uncertainty to nodes outside the observed clade.
+- Restore trait and time scales together for multivariate Gaussian
+  covariances, and preserve exact observed trait coordinates after conditioning.
+- Fit diagonal MV-OU with row-scaled diffusion so the stationary covariance
+  and representable diffusion remain finite across extreme attraction rates
+  and rate differences between traits.
+- Fit shared and regime-specific Brownian directional drift in normalized
+  trait and time units so branch rescaling preserves the fitted trends.
+- Apply the same ultrametricity tolerance to delta and OU contrasts across
+  branch-length units.
+- Preserve short positive branches under the delta time transformation,
+  including branches shorter than one ULP of their parent depth at large delta.
+- Validate custom covariance on relative scales so overflow and tiny input
+  units cannot hide invalid entries.
+- Preserve small sampling covariances and avoid cancellation when computing
+  latent predictor posterior uncertainty in Gaussian regression.
+- Fit multivariate PGLS in normalized response units and keep sparse latent
+  precision well scaled near a zero trait variance.
+- Fit Gaussian regression in normalized units for extreme responses and
+  restore the coefficients, variances, and likelihood to the input units.
+  Keep PGLS null-model statistics and bootstrap standard errors on stable
+  working scales. Use pivoted QR for poorly conditioned dense PGLS designs.
+- Preserve tail likelihoods in ordinal, multinomial, count and interval-censored
+  GLMMs. Keep positive count draws on the support of the truncated distribution
+  when bootstrapping hurdle models.
+- Preserve negative-binomial likelihoods and bootstrap draws near the Poisson
+  limit.
+- Evaluate large-count Poisson log probabilities without subtracting the
+  large terms shared by the power and factorial of the count. Preserve small
+  log-mean residuals in extreme Poisson and negative-binomial likelihoods
+  and scores.
+- Preserve likelihoods at extreme Gamma shapes, extreme fixed beta and
+  beta-binomial precisions, and large beta-binomial trial totals. Preserve
+  log-mean residuals for highly concentrated Gamma likelihoods and analytic
+  curvature in ordinal-logit tails.
+  Simulate Gamma and count bootstrap responses in the fitted units.
+- Preserve small sampling variances in replicate estimates and independent
+  contrasts. Scale replicate moments so finite means and sampling variances
+  survive overflowing intermediate sums and variances.
+- Use analytic score and curvature for exact and censored Gaussian responses,
+  and integrate narrow intervals without subtracting nearly equal CDFs.
+- Apply observation-specific scales when projecting sparse predictor uncertainty
+  into a phylogenetic GLMM.
+- Check mean and covariance information separately when determining whether
+  Gaussian tree parameters are identifiable.
+- Compute OU contrast branch variances directly so short branches and weak
+  attraction retain their Brownian-limit behavior.
+- Keep EB and ACDC branch variances finite when an intermediate exponential
+  overflows or underflows at an otherwise representable rate and tree scale.
+- Report EB and ACDC fit boundaries using relative distances within the
+  search interval.
+- Apply the shared transformed-Brownian search to the legacy two-sided EB
+  API so its fitted rate is stable across time units.
+- Check BMS rate identifiability from observed tree splits so a regime remains
+  estimable when its informative branches are much shorter than other branches.
+- Search for BMS diffusion rates in normalized time units and keep reported
+  bounds representable in the input units.
+- Retain finite OU stationary variances at extreme attraction rates and
+  reconstruct diagnostics with the root variance recorded by the fit.
+  Preserve fixed diffusion rates during trait scaling in stationary OU fits.
+- Preserve OU branch innovations and mean shifts when attraction times length
+  underflows before multiplication by the stationary variance or optimum.
+- Retain weak attraction in stationary OU optimum profiles and regime designs.
+- Compute finite OU branch innovations without a representable stationary
+  variance when the fitted root convention supplies its own variance.
+- Preserve representable affine-Gaussian branch variances when squaring a
+  transition coefficient alone would overflow or underflow.
+- Keep finite Brownian and stationary OU residual log likelihoods in the tails
+  when the full squared residual would overflow.
+- Initialize nonstationary and regime OU attraction from the midpoint of
+  the log bounds so multiplying extreme bounds cannot overflow or underflow.
+- Normalize nonstationary and regime OU optima and identifiability calculations
+  so estimated diffusion and trait means remain consistent across trait units.
+- Condition dense and sparse latent Gaussian predictors in normalized trait
+  units and retain small posterior variances on diagonal covariances.
+- Preserve sparse Gaussian solves with subnormal sampling variances and small
+  loading-aligned solutions in strongly grouped covariance models.
+- Refine scalar likelihoods in normalized parameter units, prioritizing the
+  strongest grid minima and reporting convergence for the selected fit.
+- Keep scalar likelihood evaluations inside bounds that differ by a single
+  floating-point step.
+- Reject COVARION and MK-MIXTURE fits when no positive-length branch can
+  affect an informative tip observation.
+- Mk mixture marginals average only categories with positive posterior mass
+  and reject characters with zero likelihood before calculating posteriors.
+- COVARION, MK-REGIME, and MK-MIXTURE reuse the bounded Powell retry when
+  SciPy rejects a finite-difference point that rounds outside a bound.
+
+### Performance
+
+- Reuse generator scaling across branches and reduce small-state Mk
+  likelihood messages with NumPy in log space. Reuse upward messages for
+  posterior reconstruction.
+- Batch Mk mixture likelihoods and posteriors across characters. Fit one
+  category at a time to bound transition-matrix storage during optimization.
+- Read ASR trait and standard-error values from their selected table columns
+  without creating a pandas Series for each tip.
+- Release child likelihood messages after they have contributed to a
+  likelihood-only Mk tree traversal.
+- Reuse logged tip likelihoods and parsed branch lengths during Mk rate
+  optimization. Reuse generator preparation in MK-REGIME and a fixed
+  generator and stationary prior across Mk mixture iterations. Pack Mk
+  mixture tip likelihoods in a shared array for batched log conversion.
+- Reuse prepared stochastic mapping contexts without copying branch rate
+  matrices into each worker specification.
+- Precompute child-state conditional probabilities before sampling
+  stochastic maps.
+- Compute Gaussian posterior predictive statistics for all replicates in
+  one pass per statistic. Condition only the root for posterior prediction.
+- Retain only observed-tip draws and active parent states during Gaussian
+  posterior predictive simulation.
+- Batch joint Gaussian posterior draws using precomputed branch conditionals.
+- Build posterior sample table metadata once per node and repeat it across draws.
+- Reuse the fixed simulation root and compiled tree across parametric bootstrap replicates.
+- Reuse fixed regime parameters from the original fit and skip ancestral
+  smoothing when Brownian, OU, and regime-model bootstrap refits only return
+  parameter estimates.
+- Skip ancestral reconstruction during continuous and discrete ASR model
+  comparison.
+- Reuse multivariate ASR branch distances across observations at the same node.
+- Reuse the same tree pass for all traits in complete-data multivariate
+  Brownian ancestral reconstruction.
+- Batch common-ancestor lookups when building dense Gaussian covariances.
+- Reuse the same Gaussian interval quantile throughout ancestral output tables.
+- Solve for dense multivariate posterior covariances in bounded node batches.
+- Reuse multivariate covariance indices and factor dense observation
+  covariances in place during optimization.
+- Check BMS-DRIFT rate identifiability from observed subtree splits without
+  constructing every pairwise path.
+- Compute transformed and directional-drift Brownian likelihoods without
+  reconstructing every node during parameter searches and confidence-interval
+  profiling. Reuse the tree geometry, tip observations, and likelihood
+  evaluations during transformed Brownian fits.
+- Contract raw zero-length branches without allocating a separate Brownian
+  process first.
+- Share order statistics between MCMCtree posterior medians and credible
+  intervals.
+- Draw threshold liabilities with scalar log-space normal quantiles when
+  supported by SciPy. Reuse liability bounds across sweeps with fixed thresholds.
+- Reuse continuous predictor loadings during dense errors-in-variables PGLS
+  optimization, including automatic evolutionary-parameter searches. Reuse
+  augmented sparse systems and fixed predictor precision factors in sparse fits.
+- Reuse projected categorical predictor factors for observations sharing a
+  species in errors-in-variables regression.
+- Read singleton likelihood-group variances directly from the dense
+  covariance diagonal and index larger groups once.
+- Reuse sparse precision solves for marginal variances when multiple
+  observations load the same latent state.
+- Index comparison groups once when assigning counts in ASR comparison tables.
+- Reuse tree covariance and Cholesky factors across phylogenetic GLMM trials.
+  Reuse accepted sparse-mode evaluations, batch multinomial curvature
+  calculations, and avoid redundant assembly of sparse latent covariance
+  components. Reuse sparse Hessian row indices, build multinomial blocks
+  directly in CSR format, and prepare sampling factors only when bootstrapping.
+- Reuse fixed predictor covariance projections in dense regression fits and
+  evaluate only coefficient point estimates during GLMM bootstrap refits.
+- Reduce covariance copies and reuse sparse tree components in multivariate
+  PGLS. Whiten the dense design and response in one triangular solve.
+- Use scalar branch updates for single Gaussian tree simulations.
+- Reuse branch parameters across Gaussian ASR bootstrap simulations.
+- Reuse branch variances, sampling coefficients, and clade metadata across
+  traits in independent contrasts. Reuse the selected PGLS fit when bootstrap
+  replicates estimate an evolutionary parameter.
+- Enumerate wide, dense clade masks by byte while preserving clade IDs and
+  descendant order.
+- Reuse the same covariance across Pagel's lambda trials when tips share no
+  nonzero branch variance.
+- Scale sparse tree simulation innovations in one array operation before
+  propagating them through the tree.
+- Group regression inputs and replicate observations by tip before processing
+  individual traits. Build ancestral and sampling covariance output tables
+  by column.
+
+## [0.46.6] - 2026-11-14
+
+### Added
+
+- Support resumable WGD count bootstraps, supplied background genome doublings,
+  and diagnostics for the fitted count background.
+
+### Fixed
+
+- Preserve rare WGD transition and ascertainment probabilities in log space.
+- Preserve short branches in Brownian, OU, and SHIFT calculations and keep
+  estimates stable at extreme trait scales in DTT, phylogenetic signal, and PCA.
+- Preserve small differences in Ks corrections and weighted tree distances,
+  and stabilize minimum-variance rooting and MCMC diagnostics.
+
+### Performance
+
+- Reuse WGD transitions and prune unrepresented species from gene-topology
+  likelihood calculations. Share tree indexing across MUL hypotheses.
+- Reduce Gaussian fitting and simulation work in ASR and SHIFT, and solve
+  fixed-covariance multivariate OU optima directly with GLS.
+- Reduce work and memory for Ks summaries, phylogenetic signal permutations,
+  DTT simulation and drawing, and path distances between large trees.
+
+## [0.46.5] - 2026-11-13
+
+### Added
+
+- Date gene trees from amino acid alignments with the RADTE MCMCTree backend
+  using CODEML, the bundled LG matrix and approximate likelihood (issue #32).
+
+### Fixed
+
+- Normalize unknown DNA bases for PAML and reject incomplete or invalid
+  MCMCTree traces before publishing RADTE results.
+- Stop PAML child processes on timeout on POSIX.
+
+### Performance
+
+- Run independent MCMCTree chains concurrently and read each alignment and
+  chain trace once. Build RADTE age-sample tables from arrays.
+
+## [0.46.4] - 2026-11-13
+
+### Fixed
+
+- Score the same gene trees for every MUL hypothesis when a caller supplies
+  a single-pass iterable.
+
+### Performance
+
+- Validate and index gene topologies and resolve species labels once per
+  D+L search instead of repeating those operations for each MUL hypothesis.
+
+## [0.46.3] - 2026-11-13
+
+### Fixed
+
+- Enforce minimum RADTE age gaps at fixed calibration boundaries and report
+  why a converged optimizer candidate failed validation (issue #31).
+- Preserve minimum age gaps at RADTE profile endpoints and reject infeasible
+  fixed chronologies before calculating likelihoods.
+
+### Performance
+
+- Keep the RADTE branch-initialization precision matrix sparse, reuse the
+  age-gradient design, and compute feasible profile endpoints in one pass.
+
+## [0.46.2] - 2026-11-11
+
+### Fixed
+
+- Preserve small nonzero weighted path differences and accumulate large
+  topological and weighted path distances in exact branch units before rounding.
+- Normalize staged package permissions for reproducible wheel builds.
+
+### Performance
+
+- Index clades, leaf intervals, projected splits and repeated tree mappings
+  across comparison, reconciliation, annotation, sampling and subtree commands.
+- Reduce retained drawing layouts, posterior samples, annotation buffers and
+  temporary containers during Newick and table processing.
+- Reuse Gaussian factors, branch transitions and fixed covariance models in
+  ASR, regression, GLMM, phylogenetic signal and PCA calculations.
+- Reuse WGD emissions, transitions and topology terms, and prepare shared-family
+  Ks bootstrap observations and trio indices once per calculation.
+- Stream DTT simulation tables and IQ-TREE Hessian exports, reuse codon state
+  masks, pack DNA site patterns and inspect FASTA alphabets record by record.
+- Share MUL species indexes and gene-tree inputs across candidate evaluations
+  and worker processes.
+
+## [0.46.1] - 2026-11-09
+
+### Added
+
+- Use the checksum-verified VertLife amphibian consensus as a reference for
+  topology constraints, dated branch lengths, rooting, and divergence-age reports.
+- Support offline reference files and cached downloads. Include species matching
+  and source provenance in the reports.
+
+### Fixed
+
+- Preserve input branch precision and annotations in VertLife rooting and age
+  reports. Accept rooted polytomies in the age-report mode.
+- Read UTF-8 species lists with an optional byte-order mark.
+
+### Performance
+
+- Check repeated-species groups and projected root splits without rescanning
+  descendant tip sets. Share downloads across concurrent cache misses.
 
 ## [0.46.0] - 2026-11-05
 

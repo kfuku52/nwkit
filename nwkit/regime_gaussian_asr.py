@@ -13,7 +13,10 @@ from typing import Mapping
 import numpy as np
 
 from nwkit.compiled_tree import CompiledTree
+from nwkit.continuous_asr import _ldexp
 from nwkit.gaussian_inference import (
+    GaussianConditioningResult,
+    GaussianTreeLikelihood,
     condition_gaussian_tree,
     gaussian_process_parameter_rank,
     gaussian_tree_likelihood,
@@ -21,7 +24,8 @@ from nwkit.gaussian_inference import (
 from nwkit.gaussian_tree import (
     GaussianRootPrior,
     GaussianTreeProcess,
-    ou_transition,
+    ou_branch_transition,
+    ou_stationary_variance,
 )
 from nwkit.optimization import MultistartResult, deterministic_multistart
 from nwkit.ou_asr import compute_ou_marginals, default_alpha_bounds
@@ -72,6 +76,7 @@ class _RegimeOUSetup:
     initial_sigma: float
     initial_root_variance: float
     observed_mean: float
+    trait_exponent: int
     num_observed: int
     varying_alpha: bool
     varying_sigma: bool
@@ -166,15 +171,16 @@ def build_regime_ou_process(
             raise ValueError(
                 "OU regime branch lengths must be non-negative and finite."
             )
-        transition, _ = ou_transition(
+        transitions[node] = ou_branch_transition(
             length,
             alpha_values[regime],
             sigma_values[regime],
             theta_values[regime],
         )
-        transitions[node] = transition
     root_regime = regime_assignment.root_regime
-    root_variance = sigma_values[root_regime] / (2.0 * alpha_values[root_regime])
+    root_variance = ou_stationary_variance(
+        alpha_values[root_regime], sigma_values[root_regime]
+    )
     if not math.isfinite(root_variance) or root_variance <= 0.0:
         raise ValueError("The OU regime root variance is outside floating-point range.")
     return GaussianTreeProcess(
@@ -302,7 +308,13 @@ def _validate_regime_ou_representation(
         )
 
 
-def _regime_ou_scales(tree, observed, alpha_bounds):
+def _rate_in_float_range(log_value):
+    return math.exp(
+        min(math.log(np.finfo(float).max), max(math.log(math.ulp(0.0)), log_value))
+    )
+
+
+def _regime_ou_scales(observed, alpha_bounds, trait_exponent):
     observed_mean = float(np.mean(observed))
     trait_scale = max(
         math.sqrt(float(np.var(observed))),
@@ -310,27 +322,28 @@ def _regime_ou_scales(tree, observed, alpha_bounds):
         abs(observed_mean) * math.sqrt(np.finfo(float).eps),
         math.sqrt(np.finfo(float).eps),
     )
-    positive_lengths = [
-        float(node.dist)
-        for node in tree.traverse()
-        if not node.is_root and float(node.dist) > 0.0
-    ]
-    mean_length = float(np.mean(positive_lengths)) if positive_lengths else 1.0
-    initial_alpha = math.sqrt(alpha_bounds[0] * alpha_bounds[1])
-    initial_sigma = max(
-        2.0 * initial_alpha * trait_scale * trait_scale, np.finfo(float).tiny
-    )
+    log_alpha = 0.5 * (math.log(alpha_bounds[0]) + math.log(alpha_bounds[1]))
+    initial_alpha = math.exp(log_alpha)
+    log_scale = 2 * trait_exponent * math.log(2.0)
+    log_sigma = math.log(2.0) + log_alpha + 2.0 * math.log(trait_scale) + log_scale
+    initial_sigma = _rate_in_float_range(log_sigma)
     sigma_bounds = (
-        max(initial_sigma * 1e-8, np.finfo(float).tiny),
-        min(initial_sigma * 1e8, np.finfo(float).max / max(1.0, mean_length)),
+        _rate_in_float_range(log_sigma - math.log(1e8)),
+        _rate_in_float_range(log_sigma + math.log(1e8)),
     )
     variance_scale = max(
         float(np.var(observed)),
         float(np.ptp(observed)) ** 2 if len(observed) > 1 else 0.0,
         np.finfo(float).eps,
     )
-    initial_root_variance = max(float(np.var(observed)), variance_scale * 1e-3)
-    root_variance_bounds = (variance_scale / 1e10, variance_scale * 1e10)
+    log_root_scale = math.log(variance_scale) + log_scale
+    initial_root_variance = _rate_in_float_range(
+        math.log(max(float(np.var(observed)), variance_scale * 1e-3)) + log_scale
+    )
+    root_variance_bounds = (
+        _rate_in_float_range(log_root_scale - math.log(1e10)),
+        _rate_in_float_range(log_root_scale + math.log(1e10)),
+    )
     return (
         observed_mean,
         initial_alpha,
@@ -376,6 +389,7 @@ def _prepare_regime_ou_setup(
     )
     if not len(observed) or not np.all(np.isfinite(observed)):
         raise ValueError("OU regime ASR requires finite observed tip values.")
+    _, trait_exponent = math.frexp(float(np.max(np.abs(observed))))
     (
         observed_mean,
         initial_alpha,
@@ -383,7 +397,7 @@ def _prepare_regime_ou_setup(
         sigma_bounds,
         initial_root_variance,
         root_variance_bounds,
-    ) = _regime_ou_scales(tree, observed, bounds)
+    ) = _regime_ou_scales(np.ldexp(observed, -trait_exponent), bounds, trait_exponent)
     varying_alpha = model in {"OUMA", "OUMVA"}
     varying_sigma = model in {"OUMV", "OUMVA"}
     fixed_alpha, fixed_sigma, fixed_theta = _regime_fixed_maps(
@@ -415,6 +429,7 @@ def _prepare_regime_ou_setup(
         initial_sigma=initial_sigma,
         initial_root_variance=initial_root_variance,
         observed_mean=observed_mean,
+        trait_exponent=trait_exponent,
         num_observed=len(observed),
         varying_alpha=varying_alpha,
         varying_sigma=varying_sigma,
@@ -485,7 +500,7 @@ def _add_regime_theta_parameters(
     for regime in setup.regimes:
         names.append(("theta", regime))
         regime_tips = [
-            float(values_by_leaf[str(leaf.name)])
+            math.ldexp(float(values_by_leaf[str(leaf.name)]), -setup.trait_exponent)
             for leaf in tree.leaves()
             if values_by_leaf.get(str(leaf.name)) is not None
             and regime_assignment.by_node[leaf] == regime
@@ -513,9 +528,13 @@ def _unpack_regime_ou_parameters(parameters, names, setup):
     if setup.fixed_sigma is not None:
         sigma_map = dict(setup.fixed_sigma)
     elif setup.model == "OUM":
-        root_variance = math.exp(supplied[("root_variance", "__shared__")])
         shared_alpha = next(iter(alpha_map.values()))
-        sigma_map = dict.fromkeys(setup.regimes, 2.0 * shared_alpha * root_variance)
+        log_sigma = (
+            math.log(2.0)
+            + math.log(shared_alpha)
+            + supplied[("root_variance", "__shared__")]
+        )
+        sigma_map = dict.fromkeys(setup.regimes, math.exp(log_sigma))
     elif setup.varying_sigma:
         sigma_map = {
             regime: math.exp(supplied[("sigma2", regime)]) for regime in setup.regimes
@@ -527,7 +546,12 @@ def _unpack_regime_ou_parameters(parameters, names, setup):
     theta_map = (
         dict(setup.fixed_theta)
         if setup.fixed_theta is not None
-        else {regime: supplied[("theta", regime)] for regime in setup.regimes}
+        else {
+            regime: _ldexp(
+                supplied[("theta", regime)], setup.trait_exponent, "OU theta"
+            )
+            for regime in setup.regimes
+        }
     )
     return alpha_map, sigma_map, theta_map
 
@@ -546,8 +570,8 @@ def _regime_ou_boundary_status(setup, fitted_alpha, fitted_sigma):
         if any(value >= bounds[1] * (1.0 - tolerance) for value in values.values()):
             statuses.append(f"{label}_upper_boundary")
     if setup.model == "OUM" and setup.fixed_sigma is None:
-        root_variance = next(iter(fitted_sigma.values())) / (
-            2.0 * next(iter(fitted_alpha.values()))
+        root_variance = ou_stationary_variance(
+            next(iter(fitted_alpha.values())), next(iter(fitted_sigma.values()))
         )
         if root_variance <= setup.root_variance_bounds[0] * (1.0 + tolerance):
             statuses.append("root_variance_lower_boundary")
@@ -610,6 +634,7 @@ def _single_regime_ou_reduction(
     *,
     regime_parameters_source,
     standard_errors,
+    compute_posterior,
 ):
     """Use the canonical OU1 fitter when every regime parameter is shared."""
 
@@ -627,6 +652,7 @@ def _single_regime_ou_reduction(
         alpha_bounds=setup.alpha_bounds,
         standard_errors=standard_errors,
         _tree_validated=True,
+        _compute_posterior=compute_posterior,
     )
     alpha_by_regime = {regime: ordinary.alpha}
     sigma_by_regime = {regime: ordinary.sigma2}
@@ -677,6 +703,7 @@ def compute_regime_ou_marginals(
     alpha_bounds=None,
     standard_errors=None,
     _tree_validated=False,
+    _compute_posterior=True,
 ):
     """Fit and condition OUM, OUMA, OUMV, or OUMVA."""
 
@@ -700,6 +727,7 @@ def compute_regime_ou_marginals(
             setup,
             regime_parameters_source=regime_parameters_source,
             standard_errors=standard_errors,
+            compute_posterior=_compute_posterior,
         )
     names, initial, parameter_bounds = _regime_ou_parameter_vectors(
         tree, values_by_leaf, regime_assignment, setup
@@ -739,7 +767,11 @@ def compute_regime_ou_marginals(
         leaf for leaf in tree.leaves() if values_by_leaf.get(str(leaf.name)) is not None
     ]
     if gaussian_process_parameter_rank(
-        process_for, initial, observed_nodes, parameter_bounds
+        process_for,
+        initial,
+        observed_nodes,
+        parameter_bounds,
+        trait_exponent=setup.trait_exponent,
     ) < len(names):
         raise ValueError(
             f"{setup.model} free parameters are not jointly identifiable from "
@@ -747,18 +779,22 @@ def compute_regime_ou_marginals(
             "regime map."
         )
 
-    def objective(parameters):
-        try:
-            return -gaussian_tree_likelihood(
-                process_for(parameters),
-                values_by_leaf,
-                standard_errors=standard_errors,
-                compiled_tree=compiled,
-            ).log_likelihood
-        except (ValueError, ArithmeticError, OverflowError):
-            return 1e100
-
+    evaluate = (
+        condition_gaussian_tree if _compute_posterior else gaussian_tree_likelihood
+    )
     if names:
+        prepared_likelihood = GaussianTreeLikelihood.prepare(
+            compiled, values_by_leaf, standard_errors
+        )
+
+        def objective(parameters):
+            try:
+                return -prepared_likelihood.evaluate(
+                    process_for(parameters)
+                ).log_likelihood
+            except (ValueError, ArithmeticError, OverflowError):
+                return 1e100
+
         optimized = deterministic_multistart(
             objective,
             initial,
@@ -766,7 +802,7 @@ def compute_regime_ou_marginals(
             maxiter=1200,
         )
         process = process_for(optimized.x)
-        conditioned = condition_gaussian_tree(
+        conditioned = evaluate(
             process,
             values_by_leaf,
             standard_errors=standard_errors,
@@ -775,7 +811,7 @@ def compute_regime_ou_marginals(
     else:
         fixed_parameters = np.asarray(initial, dtype=float)
         process = process_for(fixed_parameters)
-        conditioned = condition_gaussian_tree(
+        conditioned = evaluate(
             process,
             values_by_leaf,
             standard_errors=standard_errors,
@@ -833,4 +869,9 @@ def compute_regime_ou_marginals(
             else None
         ),
     )
-    return conditioned.marginals, fit
+    posterior = (
+        conditioned.marginals
+        if isinstance(conditioned, GaussianConditioningResult)
+        else {}
+    )
+    return posterior, fit

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Iterable, TextIO
+from typing import Iterable, Iterator, TextIO
 
 
 @dataclass(frozen=True)
@@ -8,16 +8,13 @@ class FastaRecord:
     raw: str
 
 
-def parse_fasta(handle: Iterable[str]) -> list[FastaRecord]:
-    records: list[FastaRecord] = []
+def iter_fasta(handle: Iterable[str]) -> Iterator[FastaRecord]:
     current_name: str | None = None
     current_lines: list[str] = []
     for line_number, line in enumerate(handle, start=1):
         if line.startswith(">"):
             if current_name is not None:
-                records.append(
-                    FastaRecord(name=current_name, raw="".join(current_lines))
-                )
+                yield FastaRecord(name=current_name, raw="".join(current_lines))
             header = line[1:].strip()
             if not header:
                 raise ValueError(
@@ -40,8 +37,11 @@ def parse_fasta(handle: Iterable[str]) -> list[FastaRecord]:
         else:
             current_lines.append(line)
     if current_name is not None:
-        records.append(FastaRecord(name=current_name, raw="".join(current_lines)))
-    return records
+        yield FastaRecord(name=current_name, raw="".join(current_lines))
+
+
+def parse_fasta(handle: Iterable[str]) -> list[FastaRecord]:
+    return list(iter_fasta(handle))
 
 
 def write_fasta(

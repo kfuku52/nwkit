@@ -22,21 +22,26 @@ def encode_codons(seqs, names, codes):
         raise ValueError("Codon alignment length must be divisible by three.")
     matrix = np.empty((len(names), length // 3), dtype=np.uint64)
     ids = {c: i for i, c in enumerate(CODONS)}
+    masks: dict[str, int] = {}
     for i, name in enumerate(names):
+        sequence = seqs[name]
         for j in range(length // 3):
-            token = seqs[name][3 * j : 3 * j + 3]
-            if "-" in token and token != "---":
-                raise ValueError(
-                    f"Partial codon gap in {name} at codon {j + 1}: {token}"
-                )
-            if any(c not in codes for c in token):
-                raise ValueError(
-                    f"Unsupported codon in {name} at codon {j + 1}: {token}"
-                )
-            possible = map("".join, product(*(codes[c] for c in token)))
-            mask = sum(1 << ids[c] for c in possible if c in ids)
-            if not mask:
-                raise ValueError(f"Stop codon in {name} at codon {j + 1}: {token}")
+            token = sequence[3 * j : 3 * j + 3]
+            mask = masks.get(token)
+            if mask is None:
+                if "-" in token and token != "---":
+                    raise ValueError(
+                        f"Partial codon gap in {name} at codon {j + 1}: {token}"
+                    )
+                if any(c not in codes for c in token):
+                    raise ValueError(
+                        f"Unsupported codon in {name} at codon {j + 1}: {token}"
+                    )
+                possible = map("".join, product(*(codes[c] for c in token)))
+                mask = sum(1 << ids[c] for c in possible if c in ids)
+                if not mask:
+                    raise ValueError(f"Stop codon in {name} at codon {j + 1}: {token}")
+                masks[token] = mask
             matrix[i, j] = mask
     return matrix, CODONS
 

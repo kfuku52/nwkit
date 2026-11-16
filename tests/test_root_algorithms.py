@@ -321,6 +321,18 @@ class TestMadRooting:
             if not node.is_root
         )
 
+    def test_subnormal_branches_retain_precise_root_position(self):
+        tree = Tree("((A:5e-324,B:1e-323):5e-324,C:1,D:1);", parser=1)
+
+        rooted, evaluation = mad_rooting(tree, _return_evaluation=True)
+
+        best = evaluation.candidates[0]
+        assert best.split == (frozenset({"C"}), frozenset({"A", "B", "D"}))
+        assert best.position_fraction_from_side_a == 5.0 / 9.0
+        distances = {leaf.name: leaf.dist for leaf in rooted.leaves()}
+        assert distances["A"] == 5e-324
+        assert distances["B"] == 1e-323
+
     def test_heterogeneous_lengths_do_not_corrupt_path_delta_cancellation(self):
         tree = Tree(
             "(X1:1086.5437592639944,"
@@ -508,6 +520,27 @@ class TestMvRooting:
         rooted = mv_rooting(tree)
         dists = [safe_get_distance(rooted, rooted, leaf) for leaf in rooted.leaves()]
         assert np.var(dists) < 1e-10
+
+    def test_small_variance_relative_to_root_to_tip_distances(self):
+        newick = "(A:10000000000,B:10000000001,C:10000000002,D:10000000003);"
+        rooted = mv_rooting(Tree(newick, parser=1))
+        distances = {
+            tip.name: safe_get_distance(rooted, rooted, tip) for tip in rooted.leaves()
+        }
+        assert distances == pytest.approx(
+            {"A": 10000000001, "B": 10000000002, "C": 10000000003, "D": 10000000002},
+            rel=0.0,
+            abs=1e-5,
+        )
+
+        _, evaluation = mv_rooting(Tree(newick, parser=1), _return_evaluation=True)
+        scores = {
+            next(iter(candidate.split[0])): candidate.score
+            for candidate in evaluation.candidates
+        }
+        assert scores == pytest.approx(
+            {"A": 1.25, "B": 1.25, "C": 7 / 6, "D": 0.5}, abs=1e-6
+        )
 
     def test_asymmetric_branch_lengths(self):
         tree = Tree("((A:10,B:1):1,(C:1,D:1):1);", parser=1)

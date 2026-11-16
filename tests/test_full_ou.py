@@ -51,7 +51,9 @@ def test_stable_parameterization_allows_negative_diagonal_and_complex_eigenvalue
     assert actual @ stationary + stationary @ actual.T == pytest.approx(noise)
 
 
-@pytest.mark.parametrize("scale", [np.ones(2), np.array([1e-7, 1e7])])
+@pytest.mark.parametrize(
+    "scale", [np.ones(2), np.array([1e-7, 1e7]), np.array([2.0**511, 2.0**-510])]
+)
 def test_fixed_full_ou_matches_independent_dense_gls(scale):
     tree = _tree()
     attraction = np.array([[0.7, -0.3], [0.2, 0.5]])
@@ -96,7 +98,47 @@ def test_fixed_full_ou_matches_independent_dense_gls(scale):
         abs=1e-8,
     )
     assert fit.identifiability_status == "fixed_covariance_parameters"
+    assert fit.optimizer_success
+    assert fit.optimizer_starts == 0
     assert posterior[tree].covariance.shape == (2, 2)
+
+
+@pytest.mark.parametrize("rate", [0.5, 1.0])
+def test_fixed_full_ou_normalizes_subnormal_diffusion(rate):
+    scale = np.array([2.0**-538, 1.0])
+    values = {"A": [0, 0.3], "B": [0.5, 0.1], "C": [0.25, 1], "D": [-0.125, -0.7]}
+    attraction = rate * np.eye(2)
+    _, reference = fit_full_mvou(
+        _tree(), values, ("x", "y"), attraction=attraction, diffusion=np.diag([4, 1])
+    )
+    with np.errstate(over="raise", divide="raise", invalid="raise"):
+        _, fit = fit_full_mvou(
+            _tree(),
+            {name: scale * row for name, row in values.items()},
+            ("x", "y"),
+            attraction=attraction,
+            diffusion=np.diag([2.0**-1074, 1.0]),
+        )
+    np.testing.assert_allclose(fit.theta / scale, reference.theta, atol=1e-12)
+    np.testing.assert_array_equal(fit.sigma, np.diag([2.0**-1074, 1.0]) / (2 * rate))
+    assert fit.log_likelihood + 4 * np.log(scale[0]) == pytest.approx(
+        reference.log_likelihood, abs=1e-12
+    )
+
+
+def test_fixed_full_ou_eliminates_duplicate_exact_zero_length_tip():
+    values = {"A": [1.4, -0.3], "B": [1.4, -0.3], "C": [0.4, 1.5]}
+    matrices = {
+        "attraction": np.array([[0.5, -0.2], [0.1, 0.6]]),
+        "diffusion": np.eye(2),
+    }
+    _, duplicated = fit_full_mvou(
+        _tree("(A:0,B:0,C:2)R;"), values, ("x", "y"), **matrices
+    )
+    values.pop("B")
+    _, unique = fit_full_mvou(_tree("(A:0,C:2)R;"), values, ("x", "y"), **matrices)
+    np.testing.assert_allclose(duplicated.theta, unique.theta, atol=1e-12)
+    assert duplicated.log_likelihood == pytest.approx(unique.log_likelihood, abs=1e-12)
 
 
 @pytest.mark.slow

@@ -4,23 +4,39 @@ Independent implementation of Blomberg's K and Pagel's lambda. Covariances
 are relative to the retained tips' MRCA; the root mean is profiled by GLS.
 """
 
+import math
+from functools import cache
+
 import numpy as np
 from scipy.linalg import cho_solve, eigh, solve_triangular
 from scipy.optimize import brentq, minimize_scalar
 from scipy.stats import chi2
 
+_MAX_GAUSSIAN_RATE_PRODUCT = float(np.finfo(float).max) / (2 * math.pi)
 
-def gls(covariance, values):
+
+def _prepare_gls(covariance, count):
     factor = np.linalg.cholesky(covariance)
-    weights = cho_solve((factor, True), np.ones(len(values)))
-    mean = float(weights @ values / weights.sum())
+    weights = cho_solve((factor, True), np.ones(count))
+    precision = float(weights.sum())
+    logdet = float(2 * np.log(np.diag(factor)).sum())
+    return factor, weights, precision, logdet
+
+
+def _gls_from_preparation(prepared, values):
+    factor, weights, precision, logdet = prepared
+    mean = float(weights @ values / precision)
     residual = values - mean
     quadratic = float(residual @ cho_solve((factor, True), residual))
-    logdet = float(2 * np.log(np.diag(factor)).sum())
-    return mean, quadratic, logdet, float(weights.sum())
+    return mean, quadratic, logdet, precision
+
+
+def gls(covariance, values):
+    return _gls_from_preparation(_prepare_gls(covariance, len(values)), values)
 
 
 def k_statistic(covariance, values):
+    values = _scale_k_values(values)
     mean, quadratic, _, precision = gls(covariance, values)
     expected = (np.trace(covariance) - len(values) / precision) / (len(values) - 1)
     if quadratic <= 0 or expected <= 0:
@@ -28,8 +44,19 @@ def k_statistic(covariance, values):
     return float(np.sum((values - mean) ** 2) / quadratic / expected)
 
 
+def _scale_k_values(values):
+    values = np.asarray(values)
+    magnitude = float(max(abs(values.min()), abs(values.max())))
+    # K is invariant to a common scaling of the response. Keep both squared
+    # terms away from premature overflow and underflow.
+    if magnitude and not 1e-145 <= magnitude <= 1e145:
+        return np.ldexp(values, -math.frexp(magnitude)[1])
+    return values
+
+
 def _best_scalar(function, grid):
     """Search each grid interval and explicitly retain boundary optima."""
+
     candidates = [(float(x), function(float(x))) for x in grid]
     for left, right in zip(grid[:-1], grid[1:], strict=True):
         result = minimize_scalar(
@@ -44,16 +71,25 @@ def _best_scalar(function, grid):
     return max(candidates, key=lambda item: item[1][0])
 
 
+def _zero_error_rate(gls_result, count):
+    mean, quadratic, logdet, _ = gls_result
+    rate = quadratic / count
+    if rate <= 0:
+        raise ValueError("Zero residual variance has no finite Gaussian density.")
+    likelihood = -0.5 * (count * (1 + _log_gaussian_variance(rate)) + logdet)
+    return float(likelihood), float(rate), mean
+
+
+def _log_gaussian_variance(rate):
+    if rate > _MAX_GAUSSIAN_RATE_PRODUCT:
+        return math.log(2 * math.pi) + math.log(rate)
+    return np.log(2 * np.pi * rate)
+
+
 def rate_fit(covariance, values, errors):
     """Profile the root mean and ML diffusion rate, retaining rate=0."""
-    n = len(values)
     if not np.any(errors):
-        mean, quadratic, logdet, _ = gls(covariance, values)
-        rate = quadratic / n
-        if rate <= 0:
-            raise ValueError("Zero residual variance has no finite Gaussian density.")
-        likelihood = -0.5 * (n * (1 + np.log(2 * np.pi * rate)) + logdet)
-        return float(likelihood), float(rate), mean
+        return _exact_rate_fit(_prepare_gls(covariance, len(values)), values)
     evaluate, lower, upper = _error_rate_profile(covariance, values, errors)
     if upper <= 0:
         return evaluate(0.0)
@@ -66,6 +102,22 @@ def rate_fit(covariance, values, errors):
     )
     _, fit = _best_scalar(lambda z: evaluate(np.exp(z)), logs)
     return max([fit, evaluate(0.0)], key=lambda item: item[0])
+
+
+def _exact_rate_fit(prepared, values):
+    # If the residual sum overflows, its mean square can still be finite.
+    with np.errstate(over="ignore", invalid="ignore"):
+        fitted = _gls_from_preparation(prepared, values)
+    if math.isfinite(fitted[1]):
+        return _zero_error_rate(fitted, len(values))
+    exponent = math.frexp(float(np.max(np.abs(values))))[1]
+    centered_units = np.ldexp(values, -exponent)
+    mean, quadratic, logdet, _ = _gls_from_preparation(prepared, centered_units)
+    rate = math.ldexp(quadratic / len(values), 2 * exponent)
+    if rate <= 0 or not math.isfinite(rate):
+        raise ValueError("Diffusion rate is outside floating-point range.")
+    likelihood = -0.5 * (len(values) * (1 + _log_gaussian_variance(rate)) + logdet)
+    return float(likelihood), rate, math.ldexp(mean, exponent)
 
 
 def _error_rate_profile(covariance, values, errors):
@@ -110,22 +162,32 @@ def _error_rate_profile(covariance, values, errors):
         )
     whitened_y = np.empty(len(values), dtype=float)
     whitened_one = np.empty(len(values), dtype=float)
+    log_diagonal = np.empty_like(log_eigen)
+    weights = np.empty_like(log_eigen)
+    residual = np.empty_like(whitened_y)
+    gaussian_constant = len(values) * np.log(2 * np.pi)
 
     def evaluate(rate):
         if rate == 0 and k:
             return (-np.inf, 0.0, np.nan)
         log_rate = np.log(rate) if rate > 0 else -np.inf
-        log_diagonal = np.logaddexp(0, log_rate + log_eigen)
-        weights = np.exp(-log_diagonal / 2)
+        np.add(log_rate, log_eigen, out=log_diagonal)
+        np.logaddexp(0, log_diagonal, out=log_diagonal)
+        np.multiply(log_diagonal, -0.5, out=weights)
+        np.exp(weights, out=weights)
         if k:
-            whitened_y[:k] = exact_y / np.sqrt(rate)
-            whitened_one[:k] = exact_one / np.sqrt(rate)
-        whitened_y[k:] = noise_y * weights
-        whitened_one[k:] = noise_one * weights
+            standard_deviation = np.sqrt(rate)
+            np.divide(exact_y, standard_deviation, out=whitened_y[:k])
+            np.divide(exact_one, standard_deviation, out=whitened_one[:k])
+        np.multiply(noise_y, weights, out=whitened_y[k:])
+        np.multiply(noise_one, weights, out=whitened_one[k:])
         mean = float(whitened_one @ whitened_y / (whitened_one @ whitened_one))
-        q = float(np.sum((whitened_y - mean * whitened_one) ** 2))
+        np.multiply(mean, whitened_one, out=residual)
+        np.subtract(whitened_y, residual, out=residual)
+        np.square(residual, out=residual)
+        q = float(residual.sum())
         determinant = logdet + (k * log_rate if k else 0) + log_diagonal.sum()
-        likelihood = -0.5 * (len(values) * np.log(2 * np.pi) + determinant + q)
+        likelihood = -0.5 * (gaussian_constant + determinant + q)
         return float(likelihood), float(rate), float(mean + values[0])
 
     return evaluate, lower, upper
@@ -147,16 +209,28 @@ def _prepared_k_statistic(covariance, count):
     weights = cho_solve((factor, True), np.ones(count))
     precision = float(weights.sum())
     expected = (np.trace(covariance) - count / precision) / (count - 1)
+    # At small sizes the LAPACK solve costs less than a separate residual check.
+    use_whitening = count >= 32
 
     def statistic(values):
         mean = float(weights @ values / precision)
         residual = values - mean
-        quadratic = float(residual @ cho_solve((factor, True), residual))
+        if use_whitening:
+            if not np.all(np.isfinite(residual)):
+                raise ValueError("K permutation residuals must be finite.")
+            # The GLS quadratic is the squared norm after one triangular solve.
+            # The initial weight solve has already checked the fixed factor.
+            whitened = solve_triangular(
+                factor, residual, lower=True, check_finite=False
+            )
+            quadratic = float(whitened @ whitened)
+        else:
+            quadratic = float(residual @ cho_solve((factor, True), residual))
         if quadratic <= 0 or expected <= 0:
             raise ValueError(
                 "K is undefined for constant traits or degenerate covariance."
             )
-        return float(np.sum((values - mean) ** 2) / quadratic / expected)
+        return float(np.sum(residual**2) / quadratic / expected)
 
     return statistic
 
@@ -171,6 +245,7 @@ def permutation_test(covariance, values, errors, observed, simulations, rng):
         order = rng.permutation(len(values))
         if statistic is None and not np.any(errors):
             statistic = _prepared_k_statistic(covariance, len(values))
+            values = _scale_k_values(values)
         if statistic is None:
             value, _ = k_fit(covariance, values[order], errors[order])
         else:
@@ -179,16 +254,7 @@ def permutation_test(covariance, values, errors, observed, simulations, rng):
     return (1 + exceed) / (1 + simulations)
 
 
-def _zero_error_lambda_profile(covariance, values, errors):
-    """Prepare one well-conditioned spectrum for an exact-observation fit."""
-    if np.any(errors) or np.ptp(values) == 0:
-        return None
-    # Retain the original endpoint calculations, including rejection of a
-    # singular supplied covariance. No rank or scientific tolerance is changed.
-    boundary = {
-        0.0: rate_fit(np.diag(np.diag(covariance)), values, errors),
-        1.0: rate_fit(covariance, values, errors),
-    }
+def _zero_error_lambda_spectrum(covariance):
     sd = np.sqrt(np.diag(covariance))
     correlation = covariance / sd[:, None] / sd[None, :]
     eigenvalues, eigenvectors = eigh(correlation, driver="evd")
@@ -196,28 +262,56 @@ def _zero_error_lambda_profile(covariance, values, errors):
     # near lambda=1, spectral errors grow with conditioning and sample size.
     # Keep Cholesky profiles in that regime without changing scientific rank.
     accuracy_floor = (
-        np.sqrt(np.finfo(float).eps) * len(values) * np.max(np.abs(eigenvalues))
+        np.sqrt(np.finfo(float).eps) * len(sd) * np.max(np.abs(eigenvalues))
     )
     if eigenvalues[0] <= accuracy_floor:
         return None
-    reference = values[0]
-    projected_one = eigenvectors.T @ (np.ones(len(values)) / sd)
-    projected_y = eigenvectors.T @ ((values - reference) / sd)
+    projected_one = eigenvectors.T @ (np.ones(len(sd)) / sd)
     diagonal_logdet = float(2 * np.log(sd).sum())
+    return sd, eigenvalues, eigenvectors, projected_one, diagonal_logdet
+
+
+def _zero_error_lambda_profile(
+    covariance, values, errors, prepare_profile=None, cached_paths=None
+):
+    """Prepare an exact-observation profile from the covariance spectrum."""
+    if np.any(errors) or np.ptp(values) == 0:
+        return None
+    # Check the endpoints first, including rejection of a singular covariance.
+    if prepare_profile is None:
+        boundary = {
+            0.0: rate_fit(np.diag(np.diag(covariance)), values, errors),
+            1.0: rate_fit(covariance, values, errors),
+        }
+        spectrum = _zero_error_lambda_spectrum(covariance)
+    else:
+        boundary, spectrum = prepare_profile(values)
+    if spectrum is None:
+        return None
+    sd, eigenvalues, eigenvectors, projected_one, diagonal_logdet = spectrum
+    reference = values[0]
+    projected_y = eigenvectors.T @ ((values - reference) / sd)
 
     def profile(value):
         if value in boundary:
             return boundary[value]
-        variance = (1 - value) + value * eigenvalues
-        weight = projected_one / np.sqrt(variance)
-        response = projected_y / np.sqrt(variance)
+        cached = None if cached_paths is None else cached_paths.get(value)
+        if cached is None:
+            variance = (1 - value) + value * eigenvalues
+            deviation = np.sqrt(variance)
+            logdet = diagonal_logdet + float(np.log(variance).sum())
+            if cached_paths is not None and len(cached_paths) < 64:
+                cached_paths[value] = deviation, logdet
+        else:
+            deviation, logdet = cached
+        weight = projected_one / deviation
+        response = projected_y / deviation
         mean = float(weight @ response / (weight @ weight))
         residual = response - mean * weight
         rate = float(residual @ residual / len(values))
         if rate <= 0:
             raise ValueError("Zero residual variance has no finite Gaussian density.")
-        logdet = diagonal_logdet + float(np.log(variance).sum())
-        likelihood = -0.5 * (len(values) * (1 + np.log(2 * np.pi * rate)) + logdet)
+        likelihood = -0.5 * (len(values) * (1 + _log_gaussian_variance(rate)) + logdet)
         return float(likelihood), rate, float(mean + reference)
 
     return profile
@@ -225,12 +319,33 @@ def _zero_error_lambda_profile(covariance, values, errors):
 
 def lambda_fit(covariance, values, errors, ci_level=0.95):
     """Fit lambda; a None interval level skips profile limits for resampling."""
+    return _fit_lambda(covariance, values, errors, ci_level)
+
+
+def _lambda_covariance_parts(covariance):
     diagonal = np.diag(np.diag(covariance))
     shared = covariance - diagonal
-    if not np.any(shared):
+    return diagonal, shared, bool(np.any(shared))
+
+
+def _fit_lambda(
+    covariance,
+    values,
+    errors,
+    ci_level,
+    prepare_profile=None,
+    parts=None,
+    cached_paths=None,
+):
+    diagonal, shared, identifiable = (
+        _lambda_covariance_parts(covariance) if parts is None else parts
+    )
+    if not identifiable:
         return {"status": "unidentifiable_lambda"}
     cache = {}
-    spectral_profile = _zero_error_lambda_profile(covariance, values, errors)
+    spectral_profile = _zero_error_lambda_profile(
+        covariance, values, errors, prepare_profile, cached_paths
+    )
 
     def profile(value):
         value = float(value)
@@ -277,7 +392,8 @@ def lambda_parametric_bootstrap(
 ):
     """Simulate at the fitted lambda=0 null and refit both models each time."""
     diagonal = np.diag(covariance)
-    _, null_rate, null_mean = rate_fit(np.diag(diagonal), values, errors)
+    diagonal_matrix = np.diag(diagonal)
+    _, null_rate, null_mean = rate_fit(diagonal_matrix, values, errors)
     standard_deviation = np.sqrt(null_rate * diagonal + errors**2)
     if not np.all(np.isfinite(standard_deviation)):
         raise ValueError("Non-finite lambda null simulation variance.")
@@ -285,11 +401,48 @@ def lambda_parametric_bootstrap(
     # simulations would count as exceedances, so the Monte Carlo P is 1.
     if observed_lr == 0:
         return 1.0
+    shared = covariance - diagonal_matrix
+    parts = diagonal_matrix, shared, bool(np.any(shared))
+
+    @cache
+    def prepare_spectrum():
+        return _zero_error_lambda_spectrum(covariance)
+
+    @cache
+    def prepare_null():
+        return _prepare_gls(diagonal_matrix, len(diagonal))
+
+    @cache
+    def prepare_bm():
+        return _prepare_gls(covariance, len(diagonal))
+
+    cache_endpoints = False
+    cached_paths: dict[float, tuple[np.ndarray, float]] = {}
+
+    def prepare_profile(simulated):
+        nonlocal cache_endpoints
+        # Finish the first eigensolve before retaining the endpoint factors.
+        if not cache_endpoints:
+            boundary = {
+                0.0: rate_fit(diagonal_matrix, simulated, errors),
+                1.0: rate_fit(covariance, simulated, errors),
+            }
+            spectrum = prepare_spectrum()
+            cache_endpoints = spectrum is not None
+            return boundary, spectrum
+        boundary = {
+            0.0: _exact_rate_fit(prepare_null(), simulated),
+            1.0: _exact_rate_fit(prepare_bm(), simulated),
+        }
+        return boundary, prepare_spectrum()
+
     exceed = 0
     tolerance = 1e-12 * max(1.0, abs(observed_lr))
     for _ in range(simulations):
         simulated = null_mean + standard_deviation * rng.standard_normal(len(values))
-        fit = lambda_fit(covariance, simulated, errors, ci_level=None)
+        fit = _fit_lambda(
+            covariance, simulated, errors, None, prepare_profile, parts, cached_paths
+        )
         # A zero-rate or flat replicate has no detectable lambda effect (LR=0).
         lr = fit.get("likelihood_ratio", 0.0)
         exceed += lr >= observed_lr - tolerance

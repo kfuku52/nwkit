@@ -5,7 +5,11 @@ import math
 
 import numpy as np
 
-from nwkit.shift_native_model import ShiftData, covariance_geometry
+from nwkit.shift_native_model import (
+    ShiftData,
+    _restore_trait_variance,
+    covariance_geometry,
+)
 
 
 def simulate_native_data(data, result, rng):
@@ -37,7 +41,7 @@ def simulate_native_data(data, result, rng):
         )
         values[:, trait] = data.centers[trait] + data.scales[trait] * observed
     values[~np.isfinite(data.values)] = np.nan
-    errors = data.variances * data.scales[None, :] ** 2
+    errors = _restore_trait_variance(data.variances, data.scales)
     return ShiftData.build(tree, values, data.trait_names, errors)
 
 

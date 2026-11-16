@@ -3,8 +3,9 @@
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
+import numpy as np
 import pandas as pd
 
 from nwkit.util import assign_branch_ids
@@ -19,6 +20,48 @@ class RegimeAssignment:
     @property
     def root_regime(self):
         return next(regime for node, regime in self.by_node.items() if node.is_root)
+
+
+def _regime_design_rank(matrix):
+    scales = np.max(np.abs(matrix), axis=0, initial=0.0)
+    nonzero = scales > 0.0
+    if not np.any(nonzero):
+        return 0
+    normalized = matrix[:, nonzero] / scales[nonzero]
+    return int(np.linalg.matrix_rank(normalized / np.linalg.norm(normalized, axis=0)))
+
+
+def _observed_split_regime_lengths(
+    tree, observed_leaves: Iterable[Any], assignment: RegimeAssignment
+):
+    """Sum branch lengths by the bipartition they induce on observed tips."""
+    regime_index = {regime: index for index, regime in enumerate(assignment.regimes)}
+    observed = set(observed_leaves)
+    num_observed = len(observed)
+    # Observed tips in depth-first order form a contiguous interval per clade.
+    descendant_counts: dict[Any, int] = {}
+    rows: dict[tuple[int, int], np.ndarray] = {}
+    seen = 0
+    for node in tree.traverse(strategy="postorder"):
+        local = int(node in observed)
+        seen += local
+        count = local + sum(descendant_counts.pop(child) for child in node.children)
+        descendant_counts[node] = count
+        if node.is_root or count in {0, num_observed}:
+            continue
+        # Orient each split away from the first observed tip. The complement
+        # of any interval that contains the first tip is also contiguous.
+        start = seen - count
+        if start == 0:
+            split = (seen, num_observed)
+        else:
+            split = (start, seen)
+        row = rows.get(split)
+        if row is None:
+            row = np.zeros(len(regime_index), dtype=float)
+            rows[split] = row
+        row[regime_index[assignment.by_node[node]]] += float(node.dist)
+    return np.asarray(list(rows.values())).reshape(-1, len(regime_index))
 
 
 def _read_tsv(path, option_name):

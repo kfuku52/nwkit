@@ -57,6 +57,7 @@ def gaussian_cross_validation(
         training.update(dict.fromkeys(held_out))
         process = refit_process(training)
         posterior = condition_gaussian_tree(process, training, standard_errors=errors)
+        num_training = sum(value is not None for value in training.values())
         for name in held_out:
             node = compiled.nodes[compiled.leaf_index_by_name[name]]
             marginal = posterior.marginals[node]
@@ -74,9 +75,7 @@ def gaussian_cross_validation(
                     "fold": fold,
                     "holdout": mode,
                     "name": name,
-                    "num_training": sum(
-                        value is not None for value in training.values()
-                    ),
+                    "num_training": num_training,
                     "num_held_out": len(held_out),
                     "observed": value,
                     "predicted_mean": marginal.mean,

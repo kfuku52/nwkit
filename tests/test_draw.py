@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from ete4 import Tree
+from ete4.parser.newick import NewickError
 from matplotlib.figure import Figure
 from matplotlib.patches import Arc, Circle
 from matplotlib.path import Path as MatplotlibPath
@@ -554,6 +555,26 @@ class TestDrawMain:
                     species_overlap_node_plot="no",
                     densitree_trees=str(mismatched),
                     densitree="all",
+                )
+            )
+
+    def test_densitree_reports_parse_errors_in_discarded_samples(
+        self, tmp_nwk, tmp_path
+    ):
+        infile = tmp_nwk("(A:1,B:1);")
+        samples = tmp_path / "samples.nwk"
+        samples.write_text("(A:bad,B:1);\n(A:1,B:1);\n")
+        with pytest.raises(NewickError, match="could not convert string to float"):
+            draw_main(
+                make_draw_args(
+                    infile=str(infile),
+                    format=0,
+                    outfile=str(tmp_path / "selected.svg"),
+                    image_format="svg",
+                    species_overlap_node_plot="no",
+                    densitree_trees=str(samples),
+                    densitree="all",
+                    posterior_burnin=1,
                 )
             )
 

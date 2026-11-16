@@ -8,16 +8,23 @@ time-transformed BM, drift, and regime models differ only in how they build a
 
 import math
 from dataclasses import dataclass
+from sys import float_info
 from typing import Any, Mapping
 
 import numpy as np
 
 from nwkit.compiled_tree import CompiledTree
-from nwkit.gaussian_tree import GaussianTreeProcess
+from nwkit.gaussian_tree import (
+    GaussianTreeProcess,
+    _mean_at_tiny_variance_ratio,
+    _propagated_variance,
+    _recover_affine_mean,
+)
 
 _LOG_2PI = math.log(2.0 * math.pi)
 _LOG_2 = math.log(2.0)
-_LOG_MAX = math.log(np.finfo(float).max)
+_MAX_FINITE = float(np.finfo(float).max)
+_MIN_SLOPE_FOR_FINITE_NORMALIZED_VARIANCE = math.sqrt(np.finfo(float).tiny)
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +53,34 @@ class GaussianLikelihoodResult:
 
 
 @dataclass(frozen=True, slots=True)
+class GaussianTreeLikelihood:
+    """Fixed tip observations and tree indices for repeated likelihoods."""
+
+    compiled_tree: CompiledTree
+    records: tuple[tuple[int, float, float], ...]
+    center: float
+    observed_size: float
+
+    @classmethod
+    def prepare(
+        cls,
+        compiled_tree: CompiledTree,
+        values_by_leaf: Mapping[str, float | None],
+        standard_errors: Mapping[str, float] | None = None,
+    ) -> "GaussianTreeLikelihood":
+        records = _gaussian_observation_records(
+            compiled_tree, values_by_leaf, standard_errors
+        )
+        center, size = _gaussian_observation_scale(records)
+        return cls(compiled_tree, records, center, size)
+
+    def evaluate(self, process: GaussianTreeProcess) -> GaussianLikelihoodResult:
+        self.compiled_tree.require_tree(process.tree)
+        messages = _message_pass_prepared(process, self, likelihood_only=True)
+        return _summarize_tree_likelihood(messages)
+
+
+@dataclass(frozen=True, slots=True)
 class _Factor:
     """A weighted normalized Gaussian, exact point mass, or constant factor."""
 
@@ -54,6 +89,9 @@ class _Factor:
     log_weight: float = 0.0
     density_rank: int = 0
     roundoff: float = 0.0
+
+
+_UNIT_FACTOR = _Factor()
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,19 +112,54 @@ class _MessagePass:
     upward: tuple[_Factor, ...]
     root_posterior: _Factor
     observed_positions: int
+    exact_nodes: tuple[tuple[int, float], ...]
+    exact_root: float | None
 
 
 def _normal_log_density(value: float, mean: float, variance: float) -> float:
     if not math.isfinite(variance) or variance <= 0.0:
         raise ValueError("A Gaussian likelihood variance must be positive and finite.")
-    standardized = (value - mean) / math.sqrt(variance)
+    standard_deviation = math.sqrt(variance)
+    difference = value - mean
+    standardized = (
+        difference / standard_deviation
+        if math.isfinite(difference)
+        else value / standard_deviation - mean / standard_deviation
+    )
     if not math.isfinite(standardized):
         return -math.inf
-    return -0.5 * (_LOG_2PI + math.log(variance) + standardized * standardized)
+    quadratic = standardized * standardized
+    if math.isfinite(quadratic):
+        return -0.5 * (_LOG_2PI + math.log(variance) + quadratic)
+    return -0.5 * (_LOG_2PI + math.log(variance)) - (0.5 * standardized) * standardized
+
+
+def _normal_log_overlap(first, second, variance_sum):
+    if math.isfinite(variance_sum):
+        return _normal_log_density(first.mean, second.mean, variance_sum)
+    return _normal_log_density_with_large_variance(
+        first.mean, second.mean, first.variance, second.variance
+    )
+
+
+def _normal_log_density_with_large_variance(
+    value, mean, first_variance, second_variance
+):
+    largest = max(first_variance, second_variance)
+    relative_sum = 1.0 + min(first_variance, second_variance) / largest
+    standard_deviation = math.sqrt(largest) * math.sqrt(relative_sum)
+    standardized = value / standard_deviation - mean / standard_deviation
+    log_variance = math.log(largest) + math.log(relative_sum)
+    return -0.5 * (_LOG_2PI + log_variance) - (0.5 * standardized) * standardized
 
 
 def _combine(first: _Factor, second: _Factor) -> _Factor:
     if first.mean is None:
+        # Adding the unit weight would turn a negative zero into positive zero.
+        if first is _UNIT_FACTOR and (
+            second.log_weight != 0.0 or math.copysign(1.0, second.log_weight) > 0.0
+        ):
+            return second
         return _Factor(
             second.mean,
             second.variance,
@@ -95,6 +168,10 @@ def _combine(first: _Factor, second: _Factor) -> _Factor:
             second.roundoff,
         )
     if second.mean is None:
+        if second is _UNIT_FACTOR and (
+            first.log_weight != 0.0 or math.copysign(1.0, first.log_weight) > 0.0
+        ):
+            return first
         return _Factor(
             first.mean,
             first.variance,
@@ -103,19 +180,16 @@ def _combine(first: _Factor, second: _Factor) -> _Factor:
             first.roundoff,
         )
     variance_sum = first.variance + second.variance
-    if not math.isfinite(variance_sum):
-        raise ValueError(
-            "A conditional Gaussian variance exceeds floating-point range."
-        )
     base_weight = first.log_weight + second.log_weight
     base_rank = first.density_rank + second.density_rank
     if variance_sum == 0.0:
         # Deterministic affine messages can arrive a few ulps apart after
         # forward/backward transforms, even for identical exact observations.
-        tolerance = max(
-            first.roundoff + second.roundoff,
-            8 * max(math.ulp(first.mean), math.ulp(second.mean)),
-        )
+        tolerance = first.roundoff + second.roundoff
+        if tolerance:
+            tolerance = max(
+                tolerance, 8 * max(math.ulp(first.mean), math.ulp(second.mean))
+            )
         if abs(first.mean - second.mean) > tolerance:
             raise ValueError(
                 "Conflicting exact observations have zero likelihood under the "
@@ -128,7 +202,7 @@ def _combine(first: _Factor, second: _Factor) -> _Factor:
             base_rank,
             max(first.roundoff, second.roundoff),
         )
-    log_overlap = _normal_log_density(first.mean, second.mean, variance_sum)
+    log_overlap = _normal_log_overlap(first, second, variance_sum)
     if not math.isfinite(log_overlap):
         raise ValueError("Observed values have zero Gaussian likelihood.")
     if first.variance == 0.0:
@@ -142,6 +216,10 @@ def _combine(first: _Factor, second: _Factor) -> _Factor:
         first_weight = (second.variance / larger) / denominator
         second_weight = (first.variance / larger) / denominator
         mean = first_weight * first.mean + second_weight * second.mean
+        if ratio < float_info.min:
+            mean = _mean_at_tiny_variance_ratio(
+                first.mean, second.mean, first.variance, second.variance
+            )
         variance = min(first.variance, second.variance) / denominator
         if variance <= 0.0 or not math.isfinite(variance):
             raise ValueError("A positive Gaussian variance underflowed during pruning.")
@@ -158,14 +236,26 @@ def _combine(first: _Factor, second: _Factor) -> _Factor:
     )
 
 
+def _combine_constant(constant: _Factor, factor: _Factor) -> _Factor:
+    if constant.log_weight == 0.0 and constant.density_rank == 0:
+        return factor
+    return _Factor(
+        factor.mean,
+        factor.variance,
+        constant.log_weight + factor.log_weight,
+        constant.density_rank + factor.density_rank,
+        factor.roundoff,
+    )
+
+
 def _push_up(
     factor: _Factor, slope: float, intercept: float, innovation: float
 ) -> _Factor:
     if factor.mean is None:
         return factor
     total = factor.variance + innovation
-    if not math.isfinite(total) or total < 0.0:
-        raise ValueError("A Gaussian pruning variance is invalid or non-finite.")
+    if not math.isfinite(total):
+        return _push_up_large_variance(factor, slope, intercept, innovation)
     absolute_slope = abs(slope)
     if absolute_slope == 0.0:
         if total == 0.0:
@@ -187,35 +277,92 @@ def _push_up(
             density_rank=factor.density_rank + 1,
         )
     if total == 0.0:
+        if slope == 1.0 and intercept == 0.0:
+            return factor
         difference = factor.mean - intercept
-        parent_mean = difference / slope
+        parent_mean = _inverse_affine_mean(factor.mean, intercept, slope)
+        if not math.isfinite(parent_mean):
+            raise ValueError("A Gaussian pruning message exceeds floating-point range.")
+        roundoff = (
+            math.ulp(difference) / absolute_slope
+            if math.isfinite(difference)
+            else math.ulp(factor.mean / slope) + math.ulp(intercept / slope)
+        )
         return _Factor(
             parent_mean,
             0.0,
             factor.log_weight - math.log(absolute_slope),
             factor.density_rank,
-            (factor.roundoff + math.ulp(difference)) / absolute_slope
-            + math.ulp(parent_mean),
+            factor.roundoff / absolute_slope + roundoff + math.ulp(parent_mean),
         )
-    log_parent_variance = math.log(total) - 2.0 * math.log(absolute_slope)
-    if log_parent_variance >= _LOG_MAX:
-        log_density = _normal_log_density(factor.mean, intercept, total)
-        if not math.isfinite(log_density):
-            raise ValueError("Observed values have zero Gaussian likelihood.")
-        return _Factor(
-            None,
-            log_weight=factor.log_weight + log_density,
-            density_rank=factor.density_rank + 1,
-        )
-    parent_mean = (factor.mean - intercept) / slope
+    parent_mean = _inverse_affine_mean(factor.mean, intercept, slope)
     parent_variance = total / slope / slope
     if not math.isfinite(parent_mean) or not math.isfinite(parent_variance):
         raise ValueError("A Gaussian pruning message exceeds floating-point range.")
+    if total > 0.0 and parent_variance == 0.0:
+        raise ValueError("A positive Gaussian variance underflowed during pruning.")
     return _Factor(
         parent_mean,
         parent_variance,
         factor.log_weight - math.log(absolute_slope),
         factor.density_rank,
+    )
+
+
+def _independent_branch_likelihood(factor, intercept, variance):
+    if variance == 0.0:
+        if factor.mean != intercept:
+            raise ValueError(
+                "An exact deterministic branch conflicts with an observation."
+            )
+        return _Factor(
+            None, log_weight=factor.log_weight, density_rank=factor.density_rank
+        )
+    log_density = _normal_log_density(factor.mean, intercept, variance)
+    if not math.isfinite(log_density):
+        raise ValueError("Observed values have zero Gaussian likelihood.")
+    return _Factor(
+        None,
+        log_weight=factor.log_weight + log_density,
+        density_rank=factor.density_rank + 1,
+    )
+
+
+def _inverse_affine_mean(value, intercept, slope):
+    difference = value - intercept
+    if math.isfinite(difference):
+        return difference / slope
+    return value / slope - intercept / slope
+
+
+def _push_up_large_variance(factor, slope, intercept, innovation):
+    absolute_slope = abs(slope)
+    if absolute_slope > 1.0:
+        parent_variance = (factor.variance / absolute_slope) / absolute_slope
+        parent_variance += (innovation / absolute_slope) / absolute_slope
+        if math.isfinite(parent_variance):
+            parent_mean = _inverse_affine_mean(factor.mean, intercept, slope)
+            if not math.isfinite(parent_mean):
+                raise ValueError(
+                    "A Gaussian pruning message exceeds floating-point range."
+                )
+            return _Factor(
+                parent_mean,
+                parent_variance,
+                factor.log_weight - math.log(absolute_slope),
+                factor.density_rank,
+            )
+    if absolute_slope != 0.0:
+        raise ValueError("A Gaussian pruning variance is invalid or non-finite.")
+    log_density = _normal_log_density_with_large_variance(
+        factor.mean, intercept, factor.variance, innovation
+    )
+    if not math.isfinite(log_density):
+        raise ValueError("Observed values have zero Gaussian likelihood.")
+    return _Factor(
+        None,
+        log_weight=factor.log_weight + log_density,
+        density_rank=factor.density_rank + 1,
     )
 
 
@@ -226,8 +373,10 @@ def _push_down(
         if slope != 0.0:
             return factor
         return _Factor(intercept, innovation, factor.log_weight, factor.density_rank)
-    variance = slope * slope * factor.variance + innovation
+    variance = _propagated_variance(slope, factor.variance, innovation)
     mean = slope * factor.mean + intercept
+    if not math.isfinite(mean):
+        mean = _recover_affine_mean(slope, factor.mean, intercept, mean)
     if not math.isfinite(mean) or not math.isfinite(variance) or variance < 0.0:
         raise ValueError("A Gaussian smoothing message exceeds floating-point range.")
     roundoff = (
@@ -257,12 +406,7 @@ def _coordinate_roundoff(value: float, exponent: int) -> float:
     return 8 * math.ldexp(math.ulp(value), -exponent)
 
 
-def _scaled_process_and_observations(
-    process: GaussianTreeProcess,
-    compiled: CompiledTree,
-    values_by_leaf,
-    standard_errors,
-):
+def _gaussian_observation_records(compiled, values_by_leaf, standard_errors):
     records = []
     for index in compiled.leaf_indices:
         name = str(compiled.nodes[index].name)
@@ -278,9 +422,12 @@ def _scaled_process_and_observations(
             nonnegative=True,
         )
         records.append((index, observed, error))
+    return tuple(records)
 
+
+def _gaussian_observation_scale(records):
     if not records:
-        return records, 0.0, 0, process
+        return 0.0, 0.0
     center = min(records, key=lambda item: (item[2], abs(item[1])))[1]
     differences = [value - center for _, value, _ in records]
     if any(not math.isfinite(value) for value in differences):
@@ -293,19 +440,28 @@ def _scaled_process_and_observations(
     if any(not math.isfinite(value) for value in differences):
         raise ValueError("Trait range exceeds floating-point range; rescale units.")
 
-    magnitudes = [abs(value) for value in differences]
-    magnitudes.extend(error for _, _, error in records)
+    return center, max(
+        max(abs(value) for value in differences),
+        max(error for _, _, error in records),
+    )
+
+
+def _scaled_process_and_observations(process, observations):
+    records = observations.records
+    if not records:
+        return records, 0.0, 0, process
+    center = observations.center
+    magnitudes = [observations.observed_size]
+    # Form overflowing centered offsets again after trait normalization.
     for transition in process.transitions.values():
         if transition.variance:
             magnitudes.append(math.sqrt(transition.variance))
-        offset = math.fsum(((transition.slope - 1.0) * center, transition.intercept))
-        if math.isfinite(offset):
-            magnitudes.append(abs(offset))
+        offset = (transition.slope - 1.0) * center + transition.intercept
+        magnitudes.append(abs(offset) if math.isfinite(offset) else _MAX_FINITE)
     if process.root.variance:
         magnitudes.append(math.sqrt(process.root.variance))
     root_offset = process.root.mean - center
-    if math.isfinite(root_offset):
-        magnitudes.append(abs(root_offset))
+    magnitudes.append(abs(root_offset) if math.isfinite(root_offset) else _MAX_FINITE)
     size = max(magnitudes, default=0.0)
     exponent = math.frexp(size)[1] - 1 if size > 0.0 else 0
 
@@ -329,11 +485,8 @@ def _scaled_process_and_observations(
     ]
     transitions = {}
     for node, transition in process.transitions.items():
-        transformed_intercept = math.fsum(
-            (
-                (transition.slope - 1.0) * scaled_center,
-                scaled(transition.intercept),
-            )
+        transformed_intercept = (transition.slope - 1.0) * scaled_center + scaled(
+            transition.intercept
         )
         transitions[node] = type(transition)(
             transition.slope,
@@ -364,19 +517,30 @@ def _message_pass(
     compiled_tree,
     *,
     retain_inside=False,
+    likelihood_only=False,
 ):
     compiled = (
         CompiledTree.from_tree(process.tree) if compiled_tree is None else compiled_tree
     )
     compiled.require_tree(process.tree)
+    prepared = GaussianTreeLikelihood.prepare(compiled, values_by_leaf, standard_errors)
+    return _message_pass_prepared(
+        process, prepared, retain_inside=retain_inside, likelihood_only=likelihood_only
+    )
+
+
+def _message_pass_prepared(
+    process, prepared, *, retain_inside=False, likelihood_only=False
+):
+    compiled = prepared.compiled_tree
     records, center, exponent, scaled_process = _scaled_process_and_observations(
-        process, compiled, values_by_leaf, standard_errors
+        process, prepared
     )
     if not records and scaled_process.root.mode == "flat":
         raise ValueError(
             "A flat-root Gaussian process requires at least one observation."
         )
-    local = [_Factor() for _ in compiled.nodes]
+    local = [_UNIT_FACTOR] * len(compiled.nodes)
     latent_positions = list(range(len(compiled.nodes)))
     for index in range(1, len(compiled.nodes)):
         transition = scaled_process.transitions[compiled.nodes[index]]
@@ -387,34 +551,37 @@ def _message_pass(
         ):
             latent_positions[index] = latent_positions[compiled.parents[index]]
     observed_positions = set()
-    for index, value, error in records:
+    exact_by_position = {0: process.root.mean} if process.root.mode == "fixed" else {}
+    for (index, value, error), (_, original, _) in zip(
+        records, prepared.records, strict=True
+    ):
         variance = error * error
         if error > 0.0 and variance == 0.0:
             raise ValueError("A positive observation variance underflowed.")
-        original_value = float(values_by_leaf[str(compiled.nodes[index].name)])
-        roundoff = (
-            _coordinate_roundoff(original_value, exponent) if variance == 0.0 else 0.0
-        )
-        local[index] = _combine(
-            local[index], _Factor(value, variance, roundoff=roundoff)
-        )
-        observed_positions.add(latent_positions[index])
-    inside = list(local)
-    upward = [_Factor() for _ in compiled.nodes]
-    for index in compiled.postorder:
-        factor = inside[index]
-        for child in compiled.children[index]:
-            factor = _combine(factor, upward[child])
-        inside[index] = factor
-        parent = compiled.parents[index]
-        if parent >= 0:
-            transition = scaled_process.transitions[compiled.nodes[index]]
-            upward[index] = _push_up(
-                factor,
-                transition.slope,
-                transition.intercept,
-                transition.variance,
+        roundoff = _coordinate_roundoff(original, exponent) if variance == 0.0 else 0.0
+        local[index] = _Factor(value, variance, roundoff=roundoff)
+        position = latent_positions[index]
+        observed_positions.add(position)
+        if (
+            error == 0.0
+            and exact_by_position.setdefault(position, original) != original
+        ):
+            raise ValueError(
+                "Conflicting exact observations have zero likelihood under the Gaussian tree process."
             )
+    exact_nodes = (
+        tuple(
+            (index, exact_by_position[position])
+            for index, position in enumerate(latent_positions)
+            if position in exact_by_position
+        )
+        if exact_by_position and not likelihood_only
+        else ()
+    )
+    inside = local if likelihood_only else list(local)
+    upward = _prune_gaussian_messages(
+        scaled_process, compiled, inside, likelihood_only=likelihood_only
+    )
     root = scaled_process.root
     if root.mode == "flat":
         if inside[0].mean is None:
@@ -442,12 +609,50 @@ def _message_pass(
         center,
         exponent,
         scaled_process,
-        tuple(local),
+        tuple(local) if not likelihood_only else (),
         tuple(inside) if retain_inside else (),
-        tuple(upward),
+        tuple(upward) if not likelihood_only else (),
         root_posterior,
         len(observed_positions),
+        exact_nodes,
+        exact_by_position.get(0),
     )
+
+
+def _prune_gaussian_messages(process, compiled, inside, *, likelihood_only):
+    empty = _Factor()
+    upward = inside if likelihood_only else [empty] * len(compiled.nodes)
+    contracting = None
+    for index in compiled.postorder:
+        factor = inside[index]
+        for child in compiled.children[index]:
+            factor = _combine(factor, upward[child])
+        inside[index] = factor
+        parent = compiled.parents[index]
+        if parent >= 0:
+            transition = process.transitions[compiled.nodes[index]]
+            slope = transition.slope
+            if process.root.is_proper and _unrepresentable_parent_variance(
+                slope, factor.variance, transition.variance
+            ):
+                if contracting is None:
+                    contracting = all(
+                        abs(item.slope) <= 1.0 for item in process.transitions.values()
+                    )
+                if contracting:
+                    slope = 0.0
+            upward[index] = _push_up(
+                factor, slope, transition.intercept, transition.variance
+            )
+    return upward
+
+
+def _unrepresentable_parent_variance(slope, factor_variance, innovation):
+    # For a proper root and contracting transitions, this weak a branch
+    # contributes its child density alone at working precision.
+    if 0.0 < abs(slope) < _MIN_SLOPE_FOR_FINITE_NORMALIZED_VARIANCE:
+        return ((factor_variance + innovation) / slope) / slope == math.inf
+    return False
 
 
 def condition_gaussian_tree(
@@ -459,7 +664,12 @@ def condition_gaussian_tree(
 ) -> GaussianConditioningResult:
     """Condition every process node on observed tip values in linear time."""
 
-    messages = _message_pass(process, values_by_leaf, standard_errors, compiled_tree)
+    messages = _message_pass(
+        process,
+        values_by_leaf,
+        standard_errors,
+        compiled_tree,
+    )
     compiled = messages.compiled
     records = messages.records
     center = messages.center
@@ -470,14 +680,14 @@ def condition_gaussian_tree(
     root_posterior = messages.root_posterior
     root = scaled_process.root
 
-    outside = [_Factor() for _ in compiled.nodes]
+    outside = [_UNIT_FACTOR] * len(compiled.nodes)
     root_roundoff = (
         _coordinate_roundoff(process.root.mean, exponent)
         if root.variance == 0.0
         else 0.0
     )
     outside[0] = (
-        _Factor()
+        _UNIT_FACTOR
         if root.mode == "flat"
         else _Factor(root.mean, root.variance or 0.0, roundoff=root_roundoff)
     )
@@ -489,7 +699,7 @@ def condition_gaussian_tree(
         for child in children:
             prefix.append(_combine(prefix[-1], upward[child]))
         posterior[index] = prefix[-1]
-        suffix = _Factor()
+        suffix = _UNIT_FACTOR
         for position in range(len(children) - 1, -1, -1):
             child = children[position]
             cavity = _combine(prefix[position], suffix)
@@ -510,34 +720,10 @@ def condition_gaussian_tree(
         factor for factor in posterior if factor is not None and factor.mean is not None
     )
 
-    def restore_mean(value):
-        try:
-            result = center + math.ldexp(value, exponent)
-        except OverflowError as exc:
-            raise ValueError(
-                "A posterior Gaussian mean exceeds floating-point range."
-            ) from exc
-        if not math.isfinite(result):
-            raise ValueError("A posterior Gaussian mean exceeds floating-point range.")
-        return result
-
-    def restore_variance(value):
-        try:
-            result = math.ldexp(value, 2 * exponent)
-        except OverflowError as exc:
-            raise ValueError(
-                "A posterior Gaussian variance exceeds floating-point range."
-            ) from exc
-        if not math.isfinite(result) or result < 0.0:
-            raise ValueError(
-                "A posterior Gaussian variance exceeds floating-point range."
-            )
-        return result
-
+    exact_by_node = dict(messages.exact_nodes)
     marginals = {
-        node: GaussianMarginal(
-            restore_mean(final_posterior[index].mean),
-            restore_variance(final_posterior[index].variance),
+        node: _restore_gaussian_marginal(
+            final_posterior[index], center, exponent, exact_by_node.get(index)
         )
         for index, node in enumerate(compiled.nodes)
     }
@@ -553,6 +739,35 @@ def condition_gaussian_tree(
     )
 
 
+def _restore_gaussian_marginal(factor, center, exponent, exact):
+    if exact is not None:
+        return GaussianMarginal(exact, 0.0)
+    try:
+        mean = center + math.ldexp(factor.mean, exponent)
+    except OverflowError:
+        mean = _recover_gaussian_mean(factor.mean, center, exponent)
+    if not math.isfinite(mean):
+        raise ValueError("A posterior Gaussian mean exceeds floating-point range.")
+    try:
+        variance = math.ldexp(factor.variance, 2 * exponent)
+    except OverflowError as exc:
+        raise ValueError(
+            "A posterior Gaussian variance exceeds floating-point range."
+        ) from exc
+    if not math.isfinite(variance) or variance < 0.0:
+        raise ValueError("A posterior Gaussian variance exceeds floating-point range.")
+    return GaussianMarginal(mean, variance)
+
+
+def _recover_gaussian_mean(value, center, exponent):
+    try:
+        return math.ldexp(value + math.ldexp(center, -exponent), exponent)
+    except OverflowError as exc:
+        raise ValueError(
+            "A posterior Gaussian mean exceeds floating-point range."
+        ) from exc
+
+
 def gaussian_tree_likelihood(
     process: GaussianTreeProcess,
     values_by_leaf: Mapping[str, float | None],
@@ -562,7 +777,13 @@ def gaussian_tree_likelihood(
 ) -> GaussianLikelihoodResult:
     """Evaluate a Gaussian tree likelihood without the smoothing pass."""
 
-    messages = _message_pass(process, values_by_leaf, standard_errors, compiled_tree)
+    messages = _message_pass(
+        process, values_by_leaf, standard_errors, compiled_tree, likelihood_only=True
+    )
+    return _summarize_tree_likelihood(messages)
+
+
+def _summarize_tree_likelihood(messages):
     rank = messages.root_posterior.density_rank
     log_likelihood = (
         messages.root_posterior.log_weight - rank * messages.exponent * _LOG_2
@@ -576,7 +797,16 @@ def gaussian_tree_likelihood(
     )
 
 
-def gaussian_process_parameter_rank(process_for, parameters, observed_nodes, bounds):
+def _gaussian_root_posterior(process, prepared):
+    messages = _message_pass_prepared(process, prepared, likelihood_only=True)
+    return _restore_gaussian_marginal(
+        messages.root_posterior, messages.center, messages.exponent, messages.exact_root
+    )
+
+
+def gaussian_process_parameter_rank(
+    process_for, parameters, observed_nodes, bounds, *, trait_exponent=0
+):
     """Numerically rank free parameters through observed means and covariances."""
 
     parameters = np.asarray(parameters, dtype=float)
@@ -596,7 +826,12 @@ def gaussian_process_parameter_rank(process_for, parameters, observed_nodes, bou
         means, _ = process.marginal_moments()
         mean_vector = np.asarray([means[node] for node in observed_nodes], dtype=float)
         covariance = process.covariance(observed_nodes)
-        result = np.concatenate((mean_vector, covariance[triangle]))
+        result = np.concatenate(
+            (
+                np.ldexp(mean_vector, -trait_exponent),
+                np.ldexp(covariance[triangle], -2 * trait_exponent),
+            )
+        )
         if np.any(~np.isfinite(result)):
             raise ValueError("Gaussian parameter-rank summary is not finite.")
         return result
@@ -624,8 +859,12 @@ def gaussian_process_parameter_rank(process_for, parameters, observed_nodes, bou
         )
     jacobian = np.column_stack(derivatives)
     row_scales = np.max(np.abs(jacobian), axis=1)
-    global_scale = float(np.max(row_scales, initial=0.0))
-    informative = row_scales > max(np.finfo(float).tiny, global_scale * 1e-10)
+    informative = np.concatenate(
+        (
+            _informative_rank_rows(row_scales[: len(observed_nodes)]),
+            _informative_rank_rows(row_scales[len(observed_nodes) :]),
+        )
+    )
     if not np.any(informative):
         return 0
     normalized = jacobian[informative] / row_scales[informative, None]
@@ -635,6 +874,13 @@ def gaussian_process_parameter_rank(process_for, parameters, observed_nodes, bou
         return 0
     normalized[:, nonzero] /= column_scales[nonzero]
     return _relative_parameter_rank(normalized[:, nonzero])
+
+
+def _informative_rank_rows(scales):
+    # Means and covariances have different dimensions. Apply the numerical
+    # threshold within each block so a change of units cannot erase one block.
+    largest = float(np.max(scales, initial=0.0))
+    return scales > largest * 1e-10
 
 
 def _relative_parameter_rank(normalized):
@@ -648,12 +894,63 @@ def _relative_parameter_rank(normalized):
     return int(np.sum(singular_values > tolerance))
 
 
-def _draw_factor(factor, rng):
-    if factor.mean is None:
-        raise ValueError("Cannot sample an improper Gaussian factor.")
-    if factor.variance == 0.0:
-        return factor.mean
-    return float(rng.normal(factor.mean, math.sqrt(factor.variance)))
+def _posterior_draw_parameters(transition, inside):
+    """Return conditional affine weights, offset and standard deviation."""
+
+    variance = transition.variance
+    if inside.mean is None:
+        return 1.0, 0.0, math.sqrt(variance)
+    if inside.variance == 0.0:
+        # Pruning already checked compatibility, including exact observations
+        # propagated back through deterministic affine branches.
+        return 0.0, inside.mean, 0.0
+    if variance == 0.0:
+        return 1.0, 0.0, 0.0
+    larger = max(variance, inside.variance)
+    smaller = min(variance, inside.variance)
+    denominator = 1.0 + smaller / larger
+    parent_weight = (inside.variance / larger) / denominator
+    inside_weight = (variance / larger) / denominator
+    conditional_variance = smaller / denominator
+    if conditional_variance <= 0.0:
+        raise ValueError("A positive Gaussian variance underflowed during sampling.")
+    return parent_weight, inside_weight * inside.mean, math.sqrt(conditional_variance)
+
+
+def _draw_gaussian_messages(messages, num_samples, rng):
+    compiled = messages.compiled
+    parameters = [
+        _posterior_draw_parameters(
+            messages.process.transitions[compiled.nodes[index]], messages.inside[index]
+        )
+        for index in range(1, len(compiled.nodes))
+    ]
+    root = messages.root_posterior
+    assert root.mean is not None
+    root_sd = math.sqrt(root.variance)
+    stochastic_count = int(root_sd > 0.0) + sum(sd > 0.0 for _, _, sd in parameters)
+    draws = np.empty((num_samples, len(compiled.nodes)), dtype=float)
+    # Keep the original sample-major random-number order. Batch the normals
+    # so temporary storage is bounded even for a large number of samples.
+    batch_size = max(1, 131_072 // max(1, stochastic_count))
+    for start in range(0, num_samples, batch_size):
+        batch = draws[start : start + batch_size]
+        noise = rng.standard_normal((len(batch), stochastic_count)).T
+        next_noise = iter(noise)
+        batch[:, 0] = root.mean
+        if root_sd > 0.0:
+            batch[:, 0] += root_sd * next(next_noise)
+        for index, (weight, offset, sd) in enumerate(parameters, start=1):
+            transition = messages.process.transitions[compiled.nodes[index]]
+            parent = compiled.parents[index]
+            if weight == 0.0:
+                batch[:, index] = offset
+            else:
+                prior = _affine_sample_means(transition, batch[:, parent])
+                batch[:, index] = weight * prior + offset
+            if sd > 0.0:
+                batch[:, index] += sd * next(next_noise)
+    return draws
 
 
 def sample_gaussian_posterior(
@@ -679,25 +976,35 @@ def sample_gaussian_posterior(
         compiled_tree,
         retain_inside=True,
     )
-    rng = np.random.default_rng(seed)
-    draws = np.empty((num_samples, len(messages.compiled.nodes)), dtype=float)
-    for sample_index in range(num_samples):
-        draws[sample_index, 0] = _draw_factor(messages.root_posterior, rng)
-        for node_index in range(1, len(messages.compiled.nodes)):
-            parent = messages.compiled.parents[node_index]
-            transition = messages.process.transitions[
-                messages.compiled.nodes[node_index]
-            ]
-            prior = _Factor(
-                transition.slope * draws[sample_index, parent] + transition.intercept,
-                transition.variance,
-            )
-            conditional = _combine(prior, messages.inside[node_index])
-            draws[sample_index, node_index] = _draw_factor(conditional, rng)
-    draws = messages.center + np.ldexp(draws, messages.exponent)
+    draws = _draw_gaussian_messages(messages, num_samples, np.random.default_rng(seed))
+    _restore_gaussian_draw_means(draws, messages.exponent, messages.center)
+    if messages.exact_nodes:
+        indices, exact = zip(*messages.exact_nodes, strict=True)
+        draws[:, indices] = exact
     if np.any(~np.isfinite(draws)):
         raise ValueError("A posterior Gaussian sample exceeds floating-point range.")
     return GaussianSamples(messages.compiled.nodes, draws)
+
+
+def _restore_gaussian_draw_means(draws, exponent, center):
+    if exponent > 0 and center != 0.0:
+        limit = math.ldexp(_MAX_FINITE, -exponent)
+        if max(float(np.max(draws)), -float(np.min(draws))) > limit:
+            _restore_overflowing_draw_means(draws, exponent, center)
+            return
+    np.ldexp(draws, exponent, out=draws)
+    draws += center
+
+
+def _restore_overflowing_draw_means(draws, exponent, center):
+    with np.errstate(over="ignore", invalid="ignore"):
+        restored = np.ldexp(draws, exponent)
+        overflowing = np.isinf(restored) & np.isfinite(draws)
+        restored += center
+        restored[overflowing] = np.ldexp(
+            draws[overflowing] + math.ldexp(center, -exponent), exponent
+        )
+    draws[:] = restored
 
 
 def simulate_gaussian_process(
@@ -707,6 +1014,7 @@ def simulate_gaussian_process(
     seed: int | None = None,
     root_values=None,
     compiled_tree: CompiledTree | None = None,
+    _output_indices: tuple[int, ...] | None = None,
 ) -> GaussianSamples:
     """Simulate joint process realizations in original trait units."""
 
@@ -720,35 +1028,149 @@ def simulate_gaussian_process(
     )
     compiled.require_tree(process.tree)
     rng = np.random.default_rng(seed)
+    root_draws = _simulation_root_draws(process, root_values, num_samples, rng)
+    if _output_indices is not None:
+        return _simulate_selected_nodes(
+            process, compiled, root_draws, rng, _output_indices
+        )
+    if num_samples == 1:
+        return _simulate_single_draw(process, compiled, root_draws, rng)
     draws = np.empty((num_samples, len(compiled.nodes)), dtype=float)
+    draws[:, 0] = root_draws
+    for node_index in range(1, len(compiled.nodes)):
+        parent = compiled.parents[node_index]
+        transition = process.transitions[compiled.nodes[node_index]]
+        _simulate_branch(transition, draws[:, parent], draws[:, node_index], rng)
+    if np.any(~np.isfinite(draws)):
+        raise ValueError("A Gaussian process simulation exceeds floating-point range.")
+    return GaussianSamples(compiled.nodes, draws)
+
+
+def _simulate_single_draw(process, compiled, root, rng):
+    draws = np.empty(len(compiled.nodes), dtype=float)
+    draws[0] = root[0]
+    for index, node in enumerate(compiled.nodes[1:], start=1):
+        transition = process.transitions[node]
+        parent = float(draws[compiled.parents[index]])
+        value = transition.slope * parent + transition.intercept
+        if not math.isfinite(value):
+            value = _recover_affine_mean(
+                transition.slope, parent, transition.intercept, value
+            )
+        if transition.variance > 0.0:
+            value += rng.normal(0.0, math.sqrt(transition.variance))
+        draws[index] = value
+    if not np.isfinite(draws).all():
+        raise ValueError("A Gaussian process simulation exceeds floating-point range.")
+    return GaussianSamples(compiled.nodes, draws[None, :])
+
+
+def prepare_gaussian_single_draw(process, compiled, root_values):
+    """Prepare a reusable one-draw simulator with fixed branch transitions."""
+    compiled.require_tree(process.tree)
+    parents = compiled.parents[1:]
+    transitions = [process.transitions[node] for node in compiled.nodes[1:]]
+    positive = tuple(item.variance > 0.0 for item in transitions)
+    deviations = np.asarray(
+        [math.sqrt(item.variance) for item in transitions if item.variance > 0.0]
+    )
+    branches = tuple(
+        (parent, item.slope, item.intercept, stochastic)
+        for parent, item, stochastic in zip(parents, transitions, positive, strict=True)
+    )
+
+    def draw(rng):
+        root = _simulation_root_draws(process, root_values, 1, rng)
+        innovations = iter(rng.normal(0.0, deviations).tolist())
+        states = [float(root[0])]
+        for parent, slope, intercept, stochastic in branches:
+            value = slope * states[parent] + intercept
+            if not math.isfinite(value):
+                value = _recover_affine_mean(slope, states[parent], intercept, value)
+            if stochastic:
+                value += next(innovations)
+            states.append(value)
+        values = np.asarray(states)
+        if not np.isfinite(values).all():
+            raise ValueError(
+                "A Gaussian process simulation exceeds floating-point range."
+            )
+        return values
+
+    return draw
+
+
+def _simulation_root_draws(process, root_values, num_samples, rng):
     if root_values is None:
         if process.root.mode == "flat":
             raise ValueError("A flat-root process simulation requires root_values.")
         assert process.root.variance is not None
         if process.root.variance == 0.0:
-            draws[:, 0] = process.root.mean
-        else:
-            draws[:, 0] = rng.normal(
-                process.root.mean, math.sqrt(process.root.variance), num_samples
-            )
-    else:
-        values = np.asarray(root_values, dtype=float)
-        if values.ndim == 0:
-            draws[:, 0] = float(values)
-        elif values.shape == (num_samples,):
-            draws[:, 0] = values
-        else:
-            raise ValueError("root_values must be scalar or have num_samples values.")
-    for node_index in range(1, len(compiled.nodes)):
-        parent = compiled.parents[node_index]
-        transition = process.transitions[compiled.nodes[node_index]]
-        draws[:, node_index] = (
-            transition.slope * draws[:, parent] + transition.intercept
+            return np.full(num_samples, process.root.mean)
+        return rng.normal(
+            process.root.mean, math.sqrt(process.root.variance), num_samples
         )
-        if transition.variance > 0.0:
-            draws[:, node_index] += rng.normal(
-                0.0, math.sqrt(transition.variance), num_samples
+    values = np.asarray(root_values, dtype=float)
+    if values.ndim == 0:
+        return np.full(num_samples, float(values))
+    if values.shape == (num_samples,):
+        return values
+    raise ValueError("root_values must be scalar or have num_samples values.")
+
+
+def _affine_sample_means(transition, parent_draws):
+    if abs(transition.slope) <= 1.0:
+        return transition.slope * parent_draws + transition.intercept
+    try:
+        with np.errstate(over="raise", invalid="raise"):
+            return transition.slope * parent_draws + transition.intercept
+    except FloatingPointError:
+        with np.errstate(over="ignore", invalid="ignore"):
+            child_draws = transition.slope * parent_draws + transition.intercept
+        for index in np.flatnonzero(~np.isfinite(child_draws)):
+            child_draws[index] = _recover_affine_mean(
+                transition.slope,
+                float(parent_draws[index]),
+                transition.intercept,
+                float(child_draws[index]),
             )
-    if np.any(~np.isfinite(draws)):
+        return child_draws
+
+
+def _simulate_branch(transition, parent_draws, child_draws, rng):
+    child_draws[:] = _affine_sample_means(transition, parent_draws)
+    if transition.variance > 0.0:
+        child_draws += rng.normal(0.0, math.sqrt(transition.variance), len(child_draws))
+
+
+def _simulate_selected_nodes(process, compiled, root, rng, output_indices):
+    outputs = np.empty((len(root), len(output_indices)), dtype=float)
+    output_rows = {index: row for row, index in enumerate(output_indices)}
+    if len(output_rows) != len(output_indices) or any(
+        not 0 <= index < len(compiled.nodes) for index in output_rows
+    ):
+        raise ValueError("Gaussian simulation node indices must be distinct and valid.")
+    remaining = [len(children) for children in compiled.children]
+    # Keep a parent's draws until its last child, and fill selected tip rows
+    # directly. Traversal and random-number consumption match the full draws.
+    active = {0: root}
+    if 0 in output_rows:
+        outputs[:, output_rows[0]] = root
+    finite = bool(np.isfinite(root).all())
+    for index, parent in enumerate(compiled.parents[1:], start=1):
+        selected = output_rows.get(index)
+        draws = np.empty_like(root) if selected is None else outputs[:, selected]
+        _simulate_branch(
+            process.transitions[compiled.nodes[index]], active[parent], draws, rng
+        )
+        finite &= bool(np.isfinite(draws).all())
+        remaining[parent] -= 1
+        if remaining[parent] == 0:
+            del active[parent]
+        if remaining[index]:
+            active[index] = draws
+    if not finite:
         raise ValueError("A Gaussian process simulation exceeds floating-point range.")
-    return GaussianSamples(compiled.nodes, draws)
+    return GaussianSamples(
+        tuple(compiled.nodes[index] for index in output_indices), outputs
+    )

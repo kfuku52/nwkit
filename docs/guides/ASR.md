@@ -417,6 +417,9 @@ states are averaged over categories. Primary output is stacked by `trait`.
 Because the mixture is across characters rather than along branches, a single
 branchwise stochastic map is undefined and rejected. Transition matrices are
 computed once per category/unique branch length and reused across characters.
+Both COVARION and MK-MIXTURE require at least one positive-length branch
+ancestral to an informative tip observation, including when the base rate is
+fixed.
 
 `--model THRESHOLD --states low,medium,high` treats the ordered categories as
 intervals of a latent Brownian liability. Scale and location are not jointly

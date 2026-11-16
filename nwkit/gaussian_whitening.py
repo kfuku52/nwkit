@@ -152,16 +152,29 @@ class TreeWhitening:
         root_variance = float(root_variance)
         if not math.isfinite(root_variance) or root_variance < 0:
             raise ValueError("Root variance must be finite and nonnegative.")
-        variances = innovations[list(indices)] + errors
-        if not np.isfinite(variances).all() or np.any(variances <= 0):
+        observed_nodes = list(indices)
+        terminal = innovations[observed_nodes]
+        with np.errstate(over="ignore"):
+            variances = terminal + errors
+        if np.any(variances <= 0):
             raise ValueError("Whitening requires positive observed terminal variances.")
-        leaf_scales = 1 / np.sqrt(variances)
+        deviations = np.sqrt(variances)
+        log_variances = np.log(variances)
+        overflow = np.isinf(variances)
+        if overflow.any():
+            # The standard deviation and log variance remain representable.
+            large_deviations = np.hypot(
+                np.sqrt(terminal[overflow]), np.sqrt(errors[overflow])
+            )
+            deviations[overflow] = large_deviations
+            log_variances[overflow] = 2 * np.log(large_deviations)
+        leaf_scales = 1 / deviations
         precision_roots = np.zeros(n)
-        precision_roots[list(indices)] = slopes[list(indices)] * leaf_scales
+        precision_roots[observed_nodes] = slopes[observed_nodes] * leaf_scales
         steps, structure, rows = _whitening_structure(
             compiled.children, compiled.postorder, compiled.parents, indices
         )
-        logdet = float(np.log(variances).sum())
+        logdet = float(log_variances.sum())
         if len(steps) >= 32 * len(structure):
             cosines, sines, scales, divisors = _level_rotations(
                 structure, precision_roots, slopes, innovations, root_variance
@@ -241,6 +254,18 @@ class TreeWhitening:
         return result[:, 0] if vector else result
 
 
+def _normalize_mean_design(design):
+    with np.errstate(over="ignore", under="ignore"):
+        norms = np.linalg.norm(design, axis=0)
+    # Squaring can overflow or underflow before the column norm does.
+    affected = (norms < math.sqrt(np.finfo(float).tiny)) | ~np.isfinite(norms)
+    if affected.any():
+        norms[affected] = np.hypot.reduce(design[:, affected], axis=0, initial=0.0)
+    if np.any(norms == 0) or not np.isfinite(norms).all():
+        raise ValueError("The observed mean design is rank deficient.")
+    return design / norms, norms
+
+
 def tree_gls(factor: TreeWhitening, values, design):
     """Profile ordinary ML mean coefficients with rank-checked QR."""
     y, x = np.asarray(values, dtype=float), np.asarray(design, dtype=float)
@@ -250,10 +275,8 @@ def tree_gls(factor: TreeWhitening, values, design):
         )
     whitened = factor.apply(np.column_stack((y, x)))
     response, predictors = whitened[:, 0], whitened[:, 1:]
-    norms = np.linalg.norm(predictors, axis=0)
-    if np.any(norms == 0):
-        raise ValueError("The observed mean design is rank deficient.")
-    q, r = np.linalg.qr(predictors / norms)
+    normalized, norms = _normalize_mean_design(predictors)
+    q, r = np.linalg.qr(normalized)
     if np.linalg.matrix_rank(r) < x.shape[1]:
         raise ValueError("The observed mean design is rank deficient.")
     coefficients = np.linalg.solve(r, q.T @ response) / norms

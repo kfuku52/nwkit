@@ -20,6 +20,20 @@ from nwkit.regression_selection_cli import selection_output_paths
 from nwkit.rooting_state import require_rooted
 from nwkit.util import read_tree
 
+_FIT_ERRORS = (ValueError, RuntimeError, FloatingPointError, np.linalg.LinAlgError)
+_TUNING_COLUMNS = (
+    "stage",
+    "fold",
+    "strength",
+    "l1_ratio",
+    "n_train",
+    "n_test",
+    "status",
+    "error",
+    "boundary_warning",
+    "loss",
+)
+
 
 class SelectionFailure(RuntimeError):
     """A tuning grid had no candidate successful in every required fold."""
@@ -61,55 +75,60 @@ def _predict_rows(fit, x, covariance, train, test, prediction):
     return fit.predict(x[test], cross_covariance=cross)
 
 
-def _tune(x, y, covariance, groups, rows, grid, family, unpenalized, prediction, stage):
-    records = []
-    labels = sorted(set(groups[rows]))
-    for fold in labels:
-        train = rows[groups[rows] != fold]
-        test = rows[groups[rows] == fold]
-        previous: dict[float, SelectionFit] = {}
-        for strength, ratio in grid:
-            record = dict(
-                stage=stage,
-                fold=fold,
-                strength=strength,
-                l1_ratio=ratio,
-                n_train=len(train),
-                n_test=len(test),
-                status="ok",
-                error="",
-                boundary_warning="",
-                loss=np.nan,
+def _tune_split(
+    x, y, covariance, train, targets, grid, family, unpenalized, prediction
+):
+    records: list[list[tuple]] = [[] for _ in targets]
+    previous: dict[float, SelectionFit] = {}
+    for strength, ratio in grid:
+        try:
+            fitted = _fit_rows(
+                x,
+                y,
+                covariance,
+                train,
+                family,
+                strength,
+                ratio,
+                unpenalized,
+                previous.get(ratio),
             )
-            try:
-                fitted = _fit_rows(
-                    x,
-                    y,
-                    covariance,
-                    train,
-                    family,
+        except _FIT_ERRORS as exc:
+            fitted, fit_error = None, str(exc)
+        else:
+            previous[ratio] = fitted
+            fit_error = ""
+        for output, (stage, fold, test) in zip(records, targets, strict=True):
+            status = "failed" if fitted is None else "ok"
+            error, warning, loss = fit_error, "", np.nan
+            if fitted is not None:
+                try:
+                    predicted = _predict_rows(
+                        fitted, x, covariance, train, test, prediction
+                    )
+                    loss = float(np.mean(prediction_loss(y[test], predicted, family)))
+                    warning = fitted.boundary_warning
+                except _FIT_ERRORS as exc:
+                    status, error = "failed", str(exc)
+            output.append(
+                (
+                    stage,
+                    fold,
                     strength,
                     ratio,
-                    unpenalized,
-                    previous.get(ratio),
+                    len(train),
+                    len(test),
+                    status,
+                    error,
+                    warning,
+                    loss,
                 )
-                previous[ratio] = fitted
-                predicted = _predict_rows(
-                    fitted, x, covariance, train, test, prediction
-                )
-                record["loss"] = float(
-                    np.mean(prediction_loss(y[test], predicted, family))
-                )
-                record["boundary_warning"] = fitted.boundary_warning
-            except (
-                ValueError,
-                RuntimeError,
-                FloatingPointError,
-                np.linalg.LinAlgError,
-            ) as exc:
-                record["status"], record["error"] = "failed", str(exc)
-            records.append(record)
-    table = pd.DataFrame(records)
+            )
+    return records
+
+
+def _choose_tuning(records, grid, stage):
+    table = pd.DataFrame(records, columns=_TUNING_COLUMNS)
     candidates = []
     for strength, ratio in grid:
         subset = table[(table.strength == strength) & (table.l1_ratio == ratio)]
@@ -124,6 +143,26 @@ def _tune(x, y, covariance, groups, rows, grid, family, unpenalized, prediction,
         )
     _, negative_strength, negative_ratio = min(candidates)
     return -negative_strength, -negative_ratio, table
+
+
+def _tune(x, y, covariance, groups, rows, grid, family, unpenalized, prediction, stage):
+    records = []
+    for fold in sorted(set(groups[rows])):
+        train = rows[groups[rows] != fold]
+        test = rows[groups[rows] == fold]
+        (fold_records,) = _tune_split(
+            x,
+            y,
+            covariance,
+            train,
+            ((stage, fold, test),),
+            grid,
+            family,
+            unpenalized,
+            prediction,
+        )
+        records.extend(fold_records)
+    return _choose_tuning(records, grid, stage)
 
 
 def _baseline_prediction(
@@ -144,7 +183,7 @@ def _baseline_prediction(
         )
         values = _predict_rows(fit, reduced, covariance, train, test, prediction)
         return values, prediction_loss(y[test], values, family), "ok", ""
-    except (ValueError, RuntimeError, FloatingPointError, np.linalg.LinAlgError) as exc:
+    except _FIT_ERRORS as exc:
         return (
             np.full(len(test), np.nan),
             np.full(len(test), np.nan),
@@ -188,30 +227,40 @@ def nested_selection(
         raise ValueError("prediction must be conditional or fixed.")
     grid = _grid(strengths, l1_ratios)
     rows = np.arange(len(y))
+    test_by_group = {label: rows[groups == label] for label in labels}
     # Fail before expensive work if an inner split is intrinsically unusable.
-    for outer in labels:
-        for inner in labels:
-            if outer == inner:
-                continue
+    for index, outer in enumerate(labels):
+        for inner in labels[index + 1 :]:
             train = rows[(groups != outer) & (groups != inner)]
             validate_inputs(
                 x[train], y[train], covariance[np.ix_(train, train)], family
             )
     predictions, fits, tuning = [], [], []
-    for fold in labels:
-        train, test = rows[groups != fold], rows[groups == fold]
-        strength, ratio, table = _tune(
-            x,
-            y,
-            covariance,
-            groups,
-            train,
-            grid,
-            family,
-            unpenalized,
-            prediction,
-            f"outer:{fold}",
-        )
+    pending: dict[str, list[tuple]] = {label: [] for label in labels}
+    for index, fold in enumerate(labels):
+        train, test = rows[groups != fold], test_by_group[fold]
+        stage = f"outer:{fold}"
+        for inner in labels[index + 1 :]:
+            # Both directions hold out the same two groups from the training fit.
+            training = train[groups[train] != inner]
+            targets = (
+                (stage, inner, test_by_group[inner]),
+                (f"outer:{inner}", fold, test),
+            )
+            forward, reverse = _tune_split(
+                x,
+                y,
+                covariance,
+                training,
+                targets,
+                grid,
+                family,
+                unpenalized,
+                prediction,
+            )
+            pending[fold].extend(forward)
+            pending[inner].extend(reverse)
+        strength, ratio, table = _choose_tuning(pending.pop(fold), grid, stage)
         tuning.append(table)
         fitted = _fit_rows(
             x, y, covariance, train, family, strength, ratio, unpenalized

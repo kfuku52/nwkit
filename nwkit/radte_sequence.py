@@ -16,7 +16,7 @@ from scipy.optimize import minimize
 from scipy.special import logsumexp
 from scipy.stats import gamma
 
-from nwkit.fasta import parse_fasta
+from nwkit.fasta import iter_fasta
 from nwkit.radte_codon import CODON_MODELS, CODONS, codon_matrix, encode_codons
 
 DNA_STATES = "ACGT"
@@ -37,46 +37,60 @@ DNA_CODES.update(
     **{"?": "ACGT", "-": "ACGT", "U": "T"},
 )
 AA_STATES = "ARNDCQEGHILKMFPSTWYV"
+AA_CODES = {
+    **dict(zip(AA_STATES, AA_STATES, strict=True)),
+    "B": "DN",
+    "Z": "EQ",
+    "J": "IL",
+    "X": AA_STATES,
+    "?": AA_STATES,
+    "-": AA_STATES,
+}
 
 
-def read_alignment(path, names, alphabet="dna"):
+def read_alignment_sequences(path, names):
     with open(path, encoding="utf-8") as handle:
-        records = parse_fasta(handle)
-    seqs = {}
-    for record in records:
-        if record.name in seqs:
-            raise ValueError(f"Duplicate alignment sequence: {record.name}")
-        seqs[record.name] = (
-            "".join(record.raw.splitlines()[1:]).replace(" ", "").upper()
-        )
+        seqs = {}
+        for record in iter_fasta(handle):
+            if record.name in seqs:
+                raise ValueError(f"Duplicate alignment sequence: {record.name}")
+            seqs[record.name] = (
+                "".join(record.raw.splitlines()[1:])
+                .replace(" ", "")
+                .replace("\t", "")
+                .upper()
+            )
     if set(seqs) != set(names):
         raise ValueError("Alignment names must exactly match the gene-tree tips.")
     lengths = {len(s) for s in seqs.values()}
     if len(lengths) != 1 or not next(iter(lengths)):
         raise ValueError("Alignment must have a positive, equal sequence length.")
+    return seqs
+
+
+def read_alignment(path, names, alphabet="dna"):
+    seqs = read_alignment_sequences(path, names)
     if alphabet == "codon":
         return encode_codons(seqs, names, DNA_CODES)
     states = DNA_STATES if alphabet == "dna" else AA_STATES
-    codes = (
-        DNA_CODES
-        if alphabet == "dna"
-        else {
-            **dict(zip(states, states, strict=True)),
-            "B": "DN",
-            "Z": "EQ",
-            "J": "IL",
-            "X": states,
-            "?": states,
-            "-": states,
-        }
-    )
-    matrix = np.empty((len(names), next(iter(lengths))), dtype=np.uint32)
+    codes = DNA_CODES if alphabet == "dna" else AA_CODES
+    matrix = np.empty((len(names), len(next(iter(seqs.values())))), dtype=np.uint32)
     state_id = {s: i for i, s in enumerate(states)}
+    lookup = np.zeros(128, dtype=matrix.dtype)
+    for code, compatible_states in codes.items():
+        lookup[ord(code)] = sum(1 << state_id[state] for state in compatible_states)
     for i, name in enumerate(names):
-        for j, code in enumerate(seqs[name]):
-            if code not in codes:
-                raise ValueError(f"Unsupported {alphabet} alignment character: {code}")
-            matrix[i, j] = sum(1 << state_id[s] for s in codes[code])
+        sequence = seqs[name]
+        if not sequence.isascii():
+            invalid = next(code for code in sequence if code not in codes)
+            raise ValueError(f"Unsupported {alphabet} alignment character: {invalid}")
+        encoded = np.frombuffer(sequence.encode("ascii"), dtype=np.uint8)
+        row = lookup[encoded]
+        invalid_positions = row == 0
+        if invalid_positions.any():
+            invalid = sequence[invalid_positions.argmax()]
+            raise ValueError(f"Unsupported {alphabet} alignment character: {invalid}")
+        matrix[i] = row
     return matrix, states
 
 
@@ -144,6 +158,45 @@ def substitution_matrix(
     return matrix, frequencies
 
 
+def _site_patterns(matrix, states):
+    if (
+        states != DNA_STATES
+        or type(matrix) is not np.ndarray
+        or matrix.dtype != np.uint32
+        or matrix.ndim != 2
+        or not matrix.size
+        or matrix.shape[1] < max(64, 4 * len(matrix))
+        or matrix.max() > 15
+    ):
+        return np.unique(matrix, axis=1, return_counts=True)
+
+    # Keep the first tip in each word in its most significant position.
+    # Unsigned lexicographic order then matches the original tip columns.
+    num_words = (len(matrix) + 15) // 16
+    packed = np.empty((matrix.shape[1], num_words), dtype=np.uint64)
+    word = np.empty(len(packed), dtype=np.uint64) if num_words > 1 else packed[:, 0]
+    for index, first in enumerate(range(0, len(matrix), 16)):
+        word[:] = matrix[first]
+        for row in matrix[first + 1 : first + 16]:
+            word <<= 4
+            word |= row
+        if num_words > 1:
+            packed[:, index] = word
+    del word
+    if num_words == 1:
+        keys, counts = np.unique(packed[:, 0], return_counts=True)
+        keys = keys[:, None]
+    else:
+        keys, counts = np.unique(packed, axis=0, return_counts=True)
+    del packed
+    patterns = np.empty((len(matrix), len(counts)), dtype=matrix.dtype, order="F")
+    for index in range(len(matrix) - 1, -1, -1):
+        word = keys[:, index // 16]
+        np.bitwise_and(word, 15, out=patterns[index], casting="unsafe")
+        word >>= 4
+    return patterns, counts
+
+
 class SequenceLikelihood:
     def __init__(
         self,
@@ -188,7 +241,7 @@ class SequenceLikelihood:
                 else (AA_STATES if alphabet == "protein" else DNA_STATES)
             )
         self.raw_matrix = matrix
-        self.patterns, self.counts = np.unique(matrix, axis=1, return_counts=True)
+        self.patterns, self.counts = _site_patterns(matrix, self.states)
         self.rates = gamma_rates(gamma_shape, gamma_categories)
         self.kappa, self.gamma_shape, self.gamma_categories = (
             kappa,
@@ -270,13 +323,14 @@ class SequenceLikelihood:
                     transition[child], derivatives[child] = p, dp
                     messages[child] = partials[child] @ p.T
                     value *= messages[child]
-                    scale += scales[child]
+                    scale += scales.pop(child)
                 norm = value.max(axis=1)
                 if np.any(norm <= 0):
                     raise ValueError(
                         "Sequence likelihood underflow: incompatible zero-length branches."
                     )
-                partials[node] = value / norm[:, None]
+                value /= norm[:, None]
+                partials[node] = value
                 scales[node] = scale + np.log(norm)
         root = self.chronology.gene
         log_likelihood = np.log(partials[root] @ self.pi) + scales[root]
@@ -285,16 +339,20 @@ class SequenceLikelihood:
         for node in self.preorder:
             if node.is_leaf:
                 continue
+            parent_outside = outside.pop(node)
             first, second = node.children
             for child, sibling in [(first, second), (second, first)]:
-                context = outside[node] * messages[sibling]
+                context = parent_outside * messages[sibling]
                 denominator = np.sum(context * messages[child], axis=1)
                 numerator = np.sum(
                     context * (partials[child] @ derivatives[child].T), axis=1
                 )
                 gradient[self.edge_id[child]] = numerator / denominator
-                value = context @ transition[child]
-                outside[child] = value / value.max(axis=1)[:, None]
+                # The outside message is only read when visiting a parent.
+                if not child.is_leaf:
+                    value = context @ transition[child]
+                    value /= value.max(axis=1)[:, None]
+                    outside[child] = value
         return log_likelihood, gradient
 
     def value_gradient(self, lengths):

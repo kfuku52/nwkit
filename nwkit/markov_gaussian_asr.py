@@ -1,6 +1,7 @@
 """CTMC-modulated scalar BM/OU, integrating uncertain regime histories."""
 
 import math
+from functools import lru_cache
 
 import numpy as np
 
@@ -51,16 +52,18 @@ def validate_regime_config(config, model):
 
 def sample_bridge_segments(start, end, length, context, rng):
     """Uniformization bridge including event times and self-transition durations."""
-    from nwkit.asr import _bridge_probabilities, _draw_bridge_event_count
+    from nwkit.asr import _bridge_step_probabilities, _draw_bridge_event_count
 
-    count, backward = _draw_bridge_event_count(start, end, context, rng)
+    count, messages = _draw_bridge_event_count(start, end, context, rng)
     times = np.concatenate(([0.0], np.sort(rng.uniform(0, length, count)), [length]))
     current = start
     segments = []
     for index in range(count):
         segments.append((current, float(times[index + 1] - times[index])))
-        probabilities = _bridge_probabilities(
-            context["r_matrix"][current] * backward[count - index - 1]
+        assert messages is not None
+        backward, logged = messages
+        probabilities = _bridge_step_probabilities(
+            context, backward[count - index - 1], current, logged
         )
         current = int(rng.choice(len(probabilities), p=probabilities))
     segments.append((current, float(times[-1] - times[-2])))
@@ -109,6 +112,7 @@ def fit_markov_gaussian(
     """
     from nwkit.asr import (
         _build_uniformization_context,
+        _conditional_node_state_probabilities,
         _sample_node_states,
         compute_mk_marginals,
     )
@@ -141,8 +145,18 @@ def fit_markov_gaussian(
         for length in set(lengths.values())
     }
 
+    @lru_cache(maxsize=4096)
+    def conditional_probabilities(child, parent_state):
+        return _conditional_node_state_probabilities(discrete_fit, child, parent_state)
+
     def propose(rng):
-        node_states = _sample_node_states(tree, states, discrete_fit, rng)
+        node_states = _sample_node_states(
+            tree,
+            states,
+            discrete_fit,
+            rng,
+            conditional_probabilities=conditional_probabilities,
+        )
         segments = {
             node: sample_bridge_segments(
                 node_states[node.up],

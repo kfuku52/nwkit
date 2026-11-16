@@ -11,7 +11,8 @@ from nwkit.asr_averaging import (
     gaussian_mixture_summary,
     normalized_weights,
 )
-from nwkit.util import assign_branch_ids, get_node_class
+from nwkit.clade_index import LcaIndex
+from nwkit.util import assign_branch_ids, get_node_class, get_subtree_leaf_index_extents
 
 
 def validate_tree_ensemble_options(args, settings=None):
@@ -162,11 +163,14 @@ def summarize_vector_tree_ensemble(
     return pd.concat(tables, ignore_index=True)
 
 
-def descendant_clades(tree):
-    """Map nodes to immutable descendant-tip sets; reject duplicate tip labels."""
-    names = list(tree.leaf_names())
+def _validate_ensemble_tip_names(names):
     if len(names) != len(set(names)) or any(name in (None, "") for name in names):
         raise ValueError("Tree ensembles require unique nonempty tip names.")
+
+
+def descendant_clades(tree):
+    """Map nodes to immutable descendant-tip sets; reject duplicate tip labels."""
+    _validate_ensemble_tip_names(list(tree.leaf_names()))
     clades: dict[Any, frozenset[str]] = {}
     for node in tree.traverse("postorder"):
         clades[node] = (
@@ -185,6 +189,45 @@ def align_ensemble_nodes(reference, tree, *, mapping="clade"):
     """
     if mapping not in {"clade", "mrca"}:
         raise ValueError("Tree ensemble mapping must be clade or mrca.")
+    reference_names = tuple(reference.leaf_names())
+    _validate_ensemble_tip_names(reference_names)
+    if any(type(name) is not str for name in reference_names):
+        return _align_ensemble_nodes_by_sets(reference, tree, mapping)
+    sampled_tips = tuple(tree.leaves())
+    sampled_names = tuple(tip.name for tip in sampled_tips)
+    _validate_ensemble_tip_names(sampled_names)
+    if any(type(name) is not str for name in sampled_names):
+        return _align_ensemble_nodes_by_sets(reference, tree, mapping)
+    positions = {name: index for index, name in enumerate(sampled_names)}
+    if positions.keys() != set(reference_names):
+        raise ValueError(
+            "Every ensemble tree must contain exactly the reference tip set."
+        )
+
+    exact: dict[tuple[int, int], Any] = {}
+    for node, (first, last, _) in get_subtree_leaf_index_extents(
+        tree, positions
+    ).items():
+        exact.setdefault((first, last), node)
+    result = {}
+    lca = None
+    for node, (first, last, count) in get_subtree_leaf_index_extents(
+        reference, positions
+    ).items():
+        if node is reference:
+            result[node] = tree
+        # A sampled clade occupies every position in its DFS leaf interval.
+        elif count == last - first + 1 and (first, last) in exact:
+            result[node] = exact[first, last]
+        elif mapping == "mrca":
+            if lca is None:
+                lca = LcaIndex(tree)
+            result[node] = lca.common_ancestor(sampled_tips[first], sampled_tips[last])
+    return result
+
+
+def _align_ensemble_nodes_by_sets(reference, tree, mapping):
+    # Keep the string conversion semantics for Python callers with non-string names.
     reference_clades = descendant_clades(reference)
     sampled_clades = descendant_clades(tree)
     if reference_clades[reference] != sampled_clades[tree]:

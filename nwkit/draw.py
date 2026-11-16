@@ -866,14 +866,14 @@ def draw_main(args):
             raise ValueError("'--posterior-burnin' must be zero or greater.")
         if thin < 1:
             raise ValueError("'--posterior-thin' must be at least one.")
-        all_sample_trees = read_trees(
+        densitree_sample_trees = read_trees(
             densitree_tree_path,
             args.format,
             args.quoted_node_names,
             quiet=True,
             rooted=getattr(args, "densitree_trees_rooted", "auto"),
+            retain=slice(burnin, None, thin),
         )
-        densitree_sample_trees = all_sample_trees[burnin::thin]
         if not densitree_sample_trees:
             raise ValueError(
                 "'--posterior-burnin' and '--posterior-thin' retained no "

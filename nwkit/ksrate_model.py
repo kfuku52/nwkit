@@ -1,6 +1,9 @@
 """Family-aware focal-lineage Ks correction on a rooted species tree."""
 
+import math
 from dataclasses import dataclass
+from functools import lru_cache
+from itertools import islice
 
 import numpy as np
 from scipy.stats import binom
@@ -28,37 +31,58 @@ def corrected_ks(focal_sister, focal_outgroup, sister_outgroup):
     values = np.asarray([focal_sister, focal_outgroup, sister_outgroup], dtype=float)
     if np.any(~np.isfinite(values)) or np.any(values < 0):
         raise ValueError("Pairwise Ks distances must be finite and nonnegative.")
-    first, second, third = (float(value) for value in values)
-    correction = (
-        (first - third) + second if first >= third else second - (third - first)
-    )
+    with np.errstate(over="ignore"):
+        correction = float(_ks_difference(*values))
     if not np.isfinite(correction):
         raise ValueError("Corrected Ks must be representable as a finite float.")
     return correction
 
 
+def _ks_difference(first, second, third):
+    # Subtract from the larger distance first. If the outgroup distances
+    # cancel, this retains a small focal/sister distance through the subtraction.
+    return (np.maximum(first, second) - third) + np.minimum(first, second)
+
+
 def _midpoint(low, high):
     low, high = float(low), float(high)
-    return (low + high) / 2 if low < 0 < high else low + (high - low) / 2
+    total = low + high
+    # Sum before halving to round adjacent subnormals correctly. If the sum
+    # overflows, both terms are large enough to halve without losing precision.
+    return total / 2 if math.isfinite(total) else low / 2 + high / 2
 
 
 def _stable_median(values):
-    values = np.sort(np.asarray(values, dtype=float))
+    values = np.array(values, dtype=float, copy=True)
     if not len(values) or np.any(np.isnan(values)):
         return float("nan")
-    return _midpoint(values[(len(values) - 1) // 2], values[len(values) // 2])
+    return _median_in_place(values)
+
+
+def _median_in_place(values):
+    lower, upper = (len(values) - 1) // 2, len(values) // 2
+    if len(values) >= 128:
+        values.partition((lower, upper))
+    else:
+        values.sort()
+    return _midpoint(values[lower], values[upper])
 
 
 def _weighted_median(values, weights):
+    values = np.asarray(values)
     order = np.argsort(values, kind="stable")
-    values = np.asarray(values)[order]
-    weights = np.asarray(weights, dtype=np.int64)[order]
-    total = int(weights.sum())
-    if total == 0:
+    return _ordered_weighted_median(
+        values[order], np.asarray(weights, dtype=np.int64)[order]
+    )
+
+
+def _ordered_weighted_median(values, weights):
+    cumulative = np.cumsum(weights, dtype=np.int64)
+    if not cumulative.size or not cumulative[-1]:
         return float("nan")
-    cumulative = np.cumsum(weights)
-    low = int(np.searchsorted(cumulative, (total - 1) // 2, side="right"))
-    high = int(np.searchsorted(cumulative, total // 2, side="right"))
+    total = int(cumulative[-1])
+    low = int(cumulative.searchsorted((total - 1) // 2, side="right"))
+    high = int(cumulative.searchsorted(total // 2, side="right"))
     return _midpoint(values[low], values[high])
 
 
@@ -109,7 +133,9 @@ class PairKs:
 
     def estimates(self, family_weights=None):
         if family_weights is None:
-            family_weights = np.ones(len(self.families), dtype=int)
+            return {
+                pair: _stable_median(values) for pair, (values, _) in self.pairs.items()
+            }
         weights = np.asarray(family_weights)
         if (
             weights.shape != (len(self.families),)
@@ -132,19 +158,39 @@ class PairKs:
         return 0 if values is None else len(values[0])
 
 
+def _trio_pairs(trio):
+    return tuple(
+        tuple(sorted(pair))
+        for pair in (
+            (trio.focal, trio.sister),
+            (trio.focal, trio.outgroup),
+            (trio.sister, trio.outgroup),
+        )
+    )
+
+
 def trio_values(trios, estimates):
-    values = np.full(len(trios), np.nan)
-    for index, trio in enumerate(trios):
-        distances = [
-            estimates.get(tuple(sorted(pair)), np.nan)
-            for pair in (
-                (trio.focal, trio.sister),
-                (trio.focal, trio.outgroup),
-                (trio.sister, trio.outgroup),
-            )
-        ]
-        if np.all(np.isfinite(distances)):
-            values[index] = corrected_ks(*distances)
+    values = np.empty(len(trios))
+    iterator = iter(trios)
+    # Bound temporary storage while evaluating the corrections in arrays.
+    for start in range(0, len(trios), 4096):
+        stop = min(start + 4096, len(trios))
+        distances = np.array(
+            [
+                [estimates.get(pair, np.nan) for pair in _trio_pairs(trio)]
+                for trio in islice(iterator, stop - start)
+            ],
+            dtype=float,
+        )
+        complete = np.isfinite(distances).all(axis=1)
+        if np.any((distances < 0).any(axis=1) & complete):
+            raise ValueError("Pairwise Ks distances must be finite and nonnegative.")
+        with np.errstate(over="ignore", invalid="ignore"):
+            corrected = _ks_difference(*distances.T)
+        corrected[~complete] = np.nan
+        if np.any(np.isinf(corrected)):
+            raise ValueError("Corrected Ks must be representable as a finite float.")
+        values[start:stop] = corrected
     return values
 
 
@@ -164,19 +210,66 @@ def bootstrap_corrections(pairs, trios, draws, seed):
     """Resample shared family IDs jointly, preserving across-pair dependence."""
     if not isinstance(draws, int) or draws < 0 or not isinstance(seed, int) or seed < 0:
         raise ValueError("Ks bootstrap count and seed must be nonnegative integers.")
-    keys = tuple(grouped_corrections(trios, np.zeros(len(trios))))
-    results = {key: np.full(draws, np.nan) for key in keys}
+    groups: dict[tuple[str, str], list[int]] = {}
+    positions: dict[tuple[str, ...], int] = {}
+    trio_rows = []
+    for index, trio in enumerate(trios):
+        groups.setdefault((trio.focal, trio.species_event_id), []).append(index)
+        trio_rows.append(
+            [positions.setdefault(pair, len(positions)) for pair in _trio_pairs(trio)]
+        )
+    results = {key: np.full(draws, np.nan) for key in groups}
+    if not draws or not results:
+        return results
+
+    group_rows = [(np.asarray(rows), results[key]) for key, rows in groups.items()]
+    pair_values = np.full(len(positions), np.nan)
+    trio_rows = np.asarray(trio_rows, dtype=int)
+    prepared = []
+    for pair, position in positions.items():
+        observations = pairs.pairs.get(pair)
+        if observations is not None:
+            values, families = observations
+            order = np.argsort(values, kind="stable")
+            prepared.append((position, values[order], families[order]))
+
     rng = np.random.default_rng(seed)
     num_families = len(pairs.families)
     for draw in range(draws):
         selected = rng.integers(0, num_families, size=num_families)
         weights = np.bincount(selected, minlength=num_families)
-        corrections = grouped_corrections(
-            trios, trio_values(trios, pairs.estimates(weights))
-        )
-        for key in keys:
-            results[key][draw] = corrections[key]
+        for position, values, families in prepared:
+            pair_values[position] = _ordered_weighted_median(values, weights[families])
+        first, second, third = pair_values[trio_rows].T
+        with np.errstate(over="ignore"):
+            corrected = _ks_difference(first, second, third)
+        if np.any(np.isinf(corrected)):
+            raise ValueError("Corrected Ks must be representable as a finite float.")
+        for indices, output in group_rows:
+            selected_values = corrected[indices]
+            available = selected_values[~np.isnan(selected_values)]
+            if len(available):
+                output[draw] = _median_in_place(available)
     return results
+
+
+@lru_cache(maxsize=256)
+def _median_interval_rank(n, error_probability):
+    # The binomial tail increases with rank. Keep the same inclusive tail
+    # comparison, including when the requested error equals a discrete tail.
+    half = n // 2
+    # For small samples one vectorized call costs less than repeated CDF calls.
+    if half <= 1024:
+        ranks = np.arange(half)
+        return int(np.count_nonzero(2 * binom.cdf(ranks, n, 0.5) <= error_probability))
+    low, high = 0, half + 1
+    while low + 1 < high:
+        rank = (low + high) // 2
+        if 2 * binom.cdf(rank - 1, n, 0.5) <= error_probability:
+            low = rank
+        else:
+            high = rank
+    return low
 
 
 def median_order_statistic_interval(values, error_probability):
@@ -190,14 +283,13 @@ def median_order_statistic_interval(values, error_probability):
         or not 0 < error_probability < 1
     ):
         raise ValueError("Median intervals need finite samples and error in (0,1).")
-    values = np.sort(values)
     n = len(values)
-    ranks = np.arange(1, n // 2 + 1)
-    admissible = ranks[2 * binom.cdf(ranks - 1, n, 0.5) <= error_probability]
-    if not len(admissible):
+    rank = _median_interval_rank(n, np.asarray(error_probability).item())
+    if rank == 0:
         return float("nan"), float("nan")
-    k = int(admissible[-1])
-    return float(values[k - 1]), float(values[n - k])
+    lower, upper = rank - 1, n - rank
+    selected = np.partition(values, (lower, upper))
+    return float(selected[lower]), float(selected[upper])
 
 
 def simultaneous_median_corrections(pairs, trios, ci_level):

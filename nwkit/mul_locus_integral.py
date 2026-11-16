@@ -7,6 +7,7 @@ genealogy draw, but are never truncated, rejected or retried to fit a work cap.
 import math
 from collections import Counter, defaultdict
 from dataclasses import dataclass
+from functools import lru_cache
 from itertools import combinations, product
 from typing import Any
 
@@ -253,8 +254,12 @@ def bounded_interval(moments, alpha):
 def chernoff_interval(moments, alpha):
     """Invert the two-sided unit-interval Chernoff bound (Foong et al., 2022)."""
     bounded_interval(moments, alpha)  # Validate the same IID bounded moments.
-    mean = moments.mean
-    threshold = (math.log(2) - math.log(alpha)) / moments.n
+    return _chernoff_bounds(moments.n, moments.mean, alpha)
+
+
+@lru_cache(maxsize=1024, typed=True)
+def _chernoff_bounds(n, mean, alpha):
+    threshold = (math.log(2) - math.log(alpha)) / n
 
     def divergence(p):
         if p in (0, 1):

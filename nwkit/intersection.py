@@ -4,6 +4,7 @@ import shutil
 import stat
 import sys
 import tempfile
+from bisect import bisect_left
 from typing import Any
 
 from nwkit.output_transaction import commit_outputs, new_output_mode
@@ -89,22 +90,40 @@ def validate_labels_for_partial_match(arr, mode):
     return [str(item) for item in arr]
 
 
+def _remove_names_without_prefix_match(
+    names: list[str], candidates: list[str], *, reverse: bool
+) -> list[str]:
+    keys = (label[::-1] for label in candidates) if reverse else candidates
+    prefixes: list[str] = []
+    for label in sorted(keys):
+        # A stored prefix covers all matches of its extensions.
+        if not prefixes or not label.startswith(prefixes[-1]):
+            prefixes.append(label)
+
+    unmatched = []
+    for name in names:
+        label = name[::-1] if reverse else name
+        index = bisect_left(prefixes, label)
+        # After removing extensions, only the two neighbors can match.
+        if (index and label.startswith(prefixes[index - 1])) or (
+            index < len(prefixes) and prefixes[index].startswith(label)
+        ):
+            continue
+        unmatched.append(name)
+    return unmatched
+
+
 def get_remove_names(arr1, arr2, match):
     if match == "complete":
         arr2_set = set(arr2)
         return [a1 for a1 in arr1 if a1 not in arr2_set]
-    if match == "prefix":
+    if match in ("prefix", "backward"):
         arr1 = validate_labels_for_partial_match(arr1, mode=match)
         arr2 = validate_labels_for_partial_match(arr2, mode=match)
-        trie = build_prefix_trie(arr2)
-        return [a1 for a1 in arr1 if not has_prefix_relation(a1, trie)]
-    elif match == "backward":
-        arr1 = validate_labels_for_partial_match(arr1, mode=match)
-        arr2 = validate_labels_for_partial_match(arr2, mode=match)
-        reverse_trie = build_prefix_trie([a2[::-1] for a2 in arr2])
-        return [a1 for a1 in arr1 if not has_prefix_relation(a1[::-1], reverse_trie)]
-    else:
-        raise ValueError("Unsupported match mode: {}".format(match))
+        return _remove_names_without_prefix_match(
+            arr1, arr2, reverse=match == "backward"
+        )
+    raise ValueError("Unsupported match mode: {}".format(match))
 
 
 def _resolve_output_target(target):

@@ -1,11 +1,12 @@
 """Transition structures and fixed generators for discrete ASR."""
 
-import math
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from scipy.sparse.csgraph import connected_components
+from scipy.special import logsumexp
 
 _ROUNDOFF_FACTOR = 128.0
 FREQUENCY_RATIO_BOUNDS = (1e-8, 1e8)
@@ -315,6 +316,14 @@ def initial_parameters(model, states, initial_rate, graph=None, rate_design=None
     )
 
 
+def _rate_matrix_diagonal(off_diagonal):
+    with np.errstate(over="ignore"):
+        totals = off_diagonal.sum(axis=1)
+    if np.any(~np.isfinite(totals)):
+        raise ValueError("Rate-matrix row totals exceed floating-point range.")
+    return -totals
+
+
 def build_rate_matrix(model, states, rates, graph=None, rate_design=None):
     if model == "MK-DESIGN":
         labels = parameter_labels(model, states, graph, rate_design)
@@ -329,7 +338,7 @@ def build_rate_matrix(model, states, rates, graph=None, rate_design=None):
         matrix = np.zeros((len(states), len(states)), dtype=float)
         for class_index, rate in enumerate(rates):
             matrix[rate_design.class_by_edge == class_index] = rate
-        np.fill_diagonal(matrix, -matrix.sum(axis=1))
+        np.fill_diagonal(matrix, _rate_matrix_diagonal(matrix))
         return matrix
     graph = (
         complete_transition_graph(len(states))
@@ -365,8 +374,9 @@ def build_rate_matrix(model, states, rates, graph=None, rate_design=None):
         frequency_weights = np.concatenate(
             (np.ones(1, dtype=float), rates[num_exchangeabilities:])
         )
-        if not np.any(frequency_weights > 0.0):
-            raise ValueError("GTR stationary-frequency weights cannot all be zero.")
+        # The reference state contributes a strictly positive weight of one.
+        if np.max(frequency_weights) > np.finfo(float).max / len(frequency_weights):
+            frequency_weights /= np.max(frequency_weights)
         frequencies = frequency_weights / frequency_weights.sum()
         parameter_index = 0
         for i in range(len(states)):
@@ -377,7 +387,7 @@ def build_rate_matrix(model, states, rates, graph=None, rate_design=None):
                 parameter_index += 1
     elif model != "CUSTOM":
         raise ValueError(f"Unsupported '--model': {model}")
-    np.fill_diagonal(matrix, -matrix.sum(axis=1))
+    np.fill_diagonal(matrix, _rate_matrix_diagonal(matrix))
     return matrix
 
 
@@ -411,21 +421,17 @@ def read_rate_matrix(path):
     np.fill_diagonal(off_diagonal, 0.0)
     if np.any(off_diagonal < 0.0):
         raise ValueError("'--rate-matrix' off-diagonal rates must be non-negative.")
-    expected_diagonal = -off_diagonal.sum(axis=1)
     diagonal = np.diag(matrix)
     if np.all(diagonal == 0.0):
         matrix = off_diagonal
-        np.fill_diagonal(matrix, expected_diagonal)
-    else:
-        diagonal_scale = np.abs(diagonal) + np.abs(expected_diagonal)
-        valid_diagonal = _roundoff_close(diagonal - expected_diagonal, diagonal_scale)
-        if np.all(valid_diagonal):
-            return states, validate_rate_matrix(matrix)
+        np.fill_diagonal(matrix, _rate_matrix_diagonal(matrix))
+    try:
+        return states, validate_rate_matrix(matrix)
+    except ValueError as exc:
         raise ValueError(
             "'--rate-matrix' diagonals must be zero (to derive them) or the "
             "negative row sums of off-diagonal rates."
-        )
-    return states, validate_rate_matrix(matrix)
+        ) from exc
 
 
 def validate_rate_matrix(rate_matrix, *, num_states=None):
@@ -461,39 +467,62 @@ def stationary_distribution(rate_matrix):
     """Return the unique stationary distribution of a finite CTMC generator."""
 
     matrix = validate_rate_matrix(rate_matrix)
-    # Stationary probabilities are independent of the overall rate units.
-    # Normalize before mixing generator equations with the unit-sum equation.
-    rate_scale = float(np.max(np.abs(matrix)))
-    if rate_scale > 0.0:
-        matrix /= rate_scale
-    system = matrix.T.copy()
-    system[-1, :] = 1.0
-    target = np.zeros(matrix.shape[0], dtype=float)
-    target[-1] = 1.0
-    try:
-        distribution = np.linalg.solve(system, target)
-    except np.linalg.LinAlgError as exc:
+    np.fill_diagonal(matrix, 0.0)
+    adjacency = matrix > 0.0
+    count, labels = connected_components(adjacency, directed=True, connection="strong")
+    source, target = np.nonzero(adjacency)
+    between_classes = labels[source] != labels[target]
+    closed = np.ones(count, dtype=bool)
+    closed[labels[source[between_classes]]] = False
+    if np.count_nonzero(closed) != 1:
         raise ValueError(
             "--root-prior stationary requires a unique stationary distribution."
-        ) from exc
-    probability_tolerance = _ROUNDOFF_FACTOR * np.finfo(float).eps
-    residual_scale = float(np.linalg.norm(distribution, ord=1)) * float(
-        np.linalg.norm(matrix, ord=np.inf)
+        )
+    recurrent = np.flatnonzero(closed[labels])
+    distribution = np.zeros(len(matrix), dtype=float)
+    distribution[recurrent] = _stationary_recurrent_class(
+        matrix[np.ix_(recurrent, recurrent)]
     )
-    residual_tolerance = _ROUNDOFF_FACTOR * np.finfo(float).eps * residual_scale
-    residual = float(np.linalg.norm(distribution @ matrix, ord=np.inf))
-    if (
-        np.any(distribution < -probability_tolerance)
-        or not math.isclose(
-            float(distribution.sum()),
-            1.0,
-            rel_tol=0.0,
-            abs_tol=probability_tolerance,
+    return distribution
+
+
+def _stationary_recurrent_class(rates):
+    """Apply Grassmann–Taksar–Heyman state reduction to a recurrent class."""
+
+    positive = rates[rates > 0.0]
+    if len(positive) and len(positive) == len(rates) * (len(rates) - 1):
+        largest = float(np.max(positive))
+        if float(np.min(positive)) / largest >= 1e-8:
+            return _stationary_positive_rates(rates / largest)
+    with np.errstate(divide="ignore"):
+        log_rates = np.log(rates)
+    num_states = len(rates)
+    for index in range(num_states - 1, 0, -1):
+        log_exit_rates = log_rates[index, :index]
+        log_exit_total = float(np.logaddexp.reduce(log_exit_rates))
+        log_rates[:index, index] -= log_exit_total
+        # Eliminate paths that enter this state and exit to an earlier state.
+        remaining = log_rates[:index, :index]
+        np.logaddexp(
+            remaining,
+            log_rates[:index, index, None] + log_exit_rates[None, :],
+            out=remaining,
         )
-        or residual > residual_tolerance
-    ):
-        raise ValueError(
-            "--root-prior stationary requires a unique valid stationary distribution."
+    log_weights = np.zeros(num_states, dtype=float)
+    for index in range(1, num_states):
+        log_weights[index] = np.logaddexp.reduce(
+            log_weights[:index] + log_rates[:index, index]
         )
-    distribution = np.maximum(distribution, 0.0)
-    return distribution / distribution.sum()
+    return np.exp(log_weights - logsumexp(log_weights))
+
+
+def _stationary_positive_rates(rates):
+    """Use subtraction-free state reduction for well-scaled complete graphs."""
+    for index in range(len(rates) - 1, 0, -1):
+        exits = rates[index, :index]
+        rates[:index, index] /= exits.sum()
+        rates[:index, :index] += rates[:index, index, None] * exits
+    weights = np.ones(len(rates), dtype=float)
+    for index in range(1, len(rates)):
+        weights[index] = weights[:index] @ rates[:index, index]
+    return weights / weights.sum()

@@ -1,7 +1,13 @@
+import math
+from types import SimpleNamespace
+
 import numpy as np
 import pandas as pd
 import pytest
+from scipy.linalg import expm
+from scipy.special import logsumexp
 
+import nwkit.asr as asr
 from nwkit.asr import (
     _discrete_gamma_category_rates,
     compute_mk_mixture_marginals,
@@ -126,6 +132,217 @@ def test_mk_mixture_rejects_unidentifiable_zero_fixed_base_rate():
             categories=2,
             rate=0.0,
         )
+
+
+def test_mk_mixture_averages_only_categories_with_posterior_mass():
+    tree = tree_from("(A:1,B:1)R;")
+    states = ["0", "1"]
+    observed = {"first": {"A": "0", "B": "1"}, "second": {"A": "1", "B": "0"}}
+    likelihoods = {
+        character: {name: np.eye(2)[int(value)] for name, value in values.items()}
+        for character, values in observed.items()
+    }
+    posterior, fit = compute_mk_mixture_marginals(
+        tree, states, observed, likelihoods, rate=np.nextafter(0.0, 1.0)
+    )
+    assert np.isfinite(fit["log_likelihood"])
+    for character, values in posterior.items():
+        probabilities = fit["category_posterior_by_character"][character]
+        assert np.any(probabilities == 0.0)
+        assert probabilities.sum() == pytest.approx(1.0)
+        np.testing.assert_allclose(values[tree], [0.5, 0.5])
+        np.testing.assert_allclose(values[tree["A"]], likelihoods[character]["A"])
+        np.testing.assert_allclose(values[tree["B"]], likelihoods[character]["B"])
+
+
+@pytest.mark.parametrize(
+    "rate,time,multiplier",
+    [
+        (1e308, 1e-308, 3.0),
+        (1e308, 1e308, 3.0),
+        (1e-320, 1e308, 1e-5),
+        (1e-320, 1.5e308, 2.0),
+    ],
+)
+def test_mk_mixture_category_preserves_reciprocal_rate_and_branch_units(
+    rate, time, multiplier
+):
+    tree = tree_from(f"(A:{time},B:{time})R;")
+    matrix = rate * np.array([[-1.0, 1.0], [1.0, -1.0]])
+    with np.errstate(over="raise", invalid="raise", under="raise"):
+        transitions = asr._mixture_category_transitions(
+            tree, matrix, multiplier, asr._mk_branch_lengths(tree)
+        )
+    expected = -0.5 * math.expm1(-2.0 * ((rate * time) * multiplier))
+    for transition in transitions.values():
+        np.testing.assert_allclose(
+            transition,
+            [[1.0 - expected, expected], [expected, 1.0 - expected]],
+            atol=0.0,
+            rtol=3e-15,
+        )
+
+
+@pytest.mark.parametrize(
+    "rate,time,multiplier", [(4e307, 1e-308, 3.0), (2.0**-1060, 1e308, 2.0)]
+)
+def test_mk_mixture_category_preserves_asymmetric_generator_units(
+    rate, time, multiplier
+):
+    tree = tree_from(f"(A:{time},B:0)R;")
+    generator = np.array([[-2.0, 2.0, 0.0], [1.0, -2.0, 1.0], [0.0, 2.0, -2.0]])
+    transitions = asr._mixture_category_transitions(
+        tree, rate * generator, multiplier, asr._mk_branch_lengths(tree)
+    )
+    expected = expm(generator * ((rate * time) * multiplier))
+    np.testing.assert_allclose(transitions[tree["A"]], expected, atol=0.0, rtol=4e-15)
+    np.testing.assert_array_equal(transitions[tree["B"]], np.eye(3))
+
+
+def test_fitted_mk_mixture_is_invariant_to_extreme_reciprocal_time_units():
+    states, observed, likelihoods = character_data(
+        {"slow": "000111", "fast": "010101", "middle": "001101"}
+    )
+    fitted = []
+    for time, rate in ((1.0, 1.0), (2.0**-1023, 2.0**1023)):
+        tree = tree_from(
+            f"(((A:{time},B:{time}):{time},C:{time}):{time},"
+            f"((D:{time},E:{time}):{time},F:{time}):{time})R;"
+        )
+        fitted.append(
+            compute_mk_mixture_marginals(
+                tree, states, observed, likelihoods, rate=rate, categories=4
+            )
+        )
+    (reference, expected), (scaled, actual) = fitted
+    assert actual["log_likelihood"] == pytest.approx(
+        expected["log_likelihood"], abs=1e-10
+    )
+    for character in reference:
+        np.testing.assert_allclose(
+            list(scaled[character].values()),
+            list(reference[character].values()),
+            atol=1e-7,
+        )
+
+
+def test_mk_mixture_rejects_a_character_with_no_feasible_category(monkeypatch):
+    tree = tree_from("(A:0,B:0,C:1)R;")
+    states = ["0", "1"]
+    observed = {
+        "first": {"A": "0", "B": "1", "C": "0"},
+        "second": {"A": "1", "B": "1", "C": "0"},
+    }
+    likelihoods = {
+        character: {name: np.eye(2)[int(value)] for name, value in values.items()}
+        for character, values in observed.items()
+    }
+    monkeypatch.setattr(
+        asr,
+        "deterministic_multistart",
+        lambda _objective, initial, *_args, **_kwargs: SimpleNamespace(x=initial),
+    )
+    with pytest.raises(ValueError, match="zero likelihood under MK-MIXTURE"):
+        compute_mk_mixture_marginals(tree, states, observed, likelihoods, rate=0.6)
+
+
+def test_fixed_mk_mixture_stationary_prior_for_an_asymmetric_graph():
+    tree = tree_from("((A:0.7,B:0.2,C:0.4):0.9,D:0.3,E:0.1,F:0.8)R;")
+    states = ("a", "b", "c")
+    names = tuple("ABCDEF")
+    observations = {
+        "first": dict(zip(names, "abcabc", strict=True)),
+        "second": dict(zip(names, "aabbcc", strict=True)),
+    }
+    one_hot = dict(zip(states, np.eye(3), strict=True))
+    likelihoods = {
+        character: {name: one_hot[value] for name, value in states_by_leaf.items()}
+        for character, states_by_leaf in observations.items()
+    }
+    graph = np.array([[False, True, True], [True, False, False], [False, True, False]])
+    _, result = compute_mk_mixture_marginals(
+        tree,
+        states,
+        observations,
+        likelihoods,
+        rate=0.6,
+        root_prior_mode="stationary",
+        transition_graph=graph,
+    )
+    np.testing.assert_allclose(result["root_prior"], [0.25, 0.5, 0.25], atol=1e-14)
+    assert np.isfinite(result["log_likelihood"])
+
+
+def test_batched_mk_mixture_matches_independent_character_likelihoods(monkeypatch):
+    tree = tree_from("((A:0.7,B:0.2,C:0.4):0.9,D:0.3,E:0.1,F:0.8)R;")
+    states, observed, likelihoods = character_data(
+        {"first": "000111", "second": "010101", "third": "001101"}
+    )
+    observed["second"]["A"] = None
+    likelihoods["second"]["A"] = np.ones(2)
+    monkeypatch.setattr(asr, "_MAX_MIXTURE_EDGE_VALUES", 8)
+    posterior, fit = compute_mk_mixture_marginals(
+        tree, states, observed, likelihoods, rate=0.6, root_prior_mode="empirical"
+    )
+    expected_total = 0.0
+    for character, tips in likelihoods.items():
+        terms = [
+            np.log(weight)
+            + asr._log_likelihood(
+                tree, tips, fit["root_prior"], fit["rate_matrix"] * rate
+            )
+            for rate, weight in zip(
+                fit["mixture_category_rates"], fit["mixture_weights"], strict=True
+            )
+        ]
+        score = logsumexp(terms)
+        expected_total += score
+        np.testing.assert_allclose(
+            fit["category_posterior_by_character"][character],
+            np.exp(terms - score),
+            atol=1e-13,
+        )
+        expected = {node: np.zeros(len(states)) for node in tree.traverse()}
+        for rate, weight in zip(
+            fit["mixture_category_rates"], np.exp(terms - score), strict=True
+        ):
+            if weight == 0.0:
+                continue
+            inside, _, child_terms, matrices = asr._compute_inside_likelihoods(
+                tree, tips, fit["rate_matrix"] * rate, log_space=True
+            )
+            outside = asr._compute_outside_likelihoods(
+                tree, child_terms, matrices, fit["root_prior"], log_space=True
+            )
+            for node in expected:
+                expected[node] += weight * asr._probabilities_from_logs(
+                    inside[node] + outside[node]
+                )
+        for node in expected:
+            np.testing.assert_allclose(
+                posterior[character][node], expected[node], atol=1e-13
+            )
+    assert fit["log_likelihood"] == pytest.approx(expected_total, abs=1e-12)
+
+
+@pytest.mark.parametrize("informative_zero_edges", [False, True])
+def test_mk_mixture_rejects_data_without_an_informative_positive_branch(
+    informative_zero_edges,
+):
+    tree = tree_from("((A:0)I:0,B:1)R;")
+    observed = {
+        character: {"A": "0" if informative_zero_edges else None, "B": None}
+        for character in ("first", "second")
+    }
+    likelihoods = {
+        character: {
+            "A": np.array([1.0, 0.0]) if informative_zero_edges else np.ones(2),
+            "B": np.ones(2),
+        }
+        for character in observed
+    }
+    with pytest.raises(ValueError, match="positive-length branch ancestral"):
+        compute_mk_mixture_marginals(tree, ["0", "1"], observed, likelihoods, rate=0.4)
 
 
 def test_mk_mixture_rejects_fractional_category_count():

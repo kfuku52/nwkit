@@ -4,6 +4,7 @@ import stat
 from pathlib import Path
 
 from setuptools import setup
+from setuptools.command.bdist_wheel import bdist_wheel as _bdist_wheel
 from setuptools.command.build_py import build_py as _build_py
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -69,4 +70,18 @@ class CleanBuildPy(_build_py):
         super().run()
 
 
-setup(cmdclass={"build_py": CleanBuildPy})
+class ReproducibleBdistWheel(_bdist_wheel):
+    """Match the sdist file modes in the staged package and wheel metadata."""
+
+    def write_wheelfile(self, wheelfile_base, *args, **kwargs):
+        super().write_wheelfile(wheelfile_base, *args, **kwargs)
+        dist_info = Path(wheelfile_base)
+        # Setuptools copies the modes of package data and license files.
+        # Normalize the staged files before their permissions enter the ZIP.
+        for directory in (dist_info.parent / "nwkit", dist_info):
+            for path in directory.rglob("*"):
+                if not path.is_symlink() and path.is_file():
+                    path.chmod(0o644)
+
+
+setup(cmdclass={"build_py": CleanBuildPy, "bdist_wheel": ReproducibleBdistWheel})

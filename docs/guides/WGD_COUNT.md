@@ -15,6 +15,20 @@ are `NA` and `count_support=not_calibrated`. Increasing the number of bootstrap
 datasets improves Monte Carlo precision, not model adequacy. A p-value is never
 an event posterior probability. The command can be computationally expensive.
 
+With `--model-out`, optionally set `--background-adequacy-draws 999` to compare
+the observed species means, zero-copy and multiple-copy fractions, and the
+within-family mean count difference between each clade and its complement
+with simulated datasets. Both sides of each contrast need observations in a
+family. The diagnostic preserves the original missingness and ascertainment,
+uses an independent seeded random stream, and does not refit each dataset.
+The JSON includes pointwise 95% simulated ranges and a joint discrepancy
+within each group of summaries. Half the draws set the standardization;
+the remaining draws show the empirical range of the standardized RMS with
+the dependence between taxa and branches preserved. Constant or entirely
+unobserved summaries cannot contribute to that joint discrepancy. Low tail
+fractions flag limitations of the fitted background; they are descriptive,
+not goodness-of-fit P-values, and do not change genome-event P-values or calls.
+
 See the [scientific audit](../validation/WGD_SCIENTIFIC_VALIDATION.md) for
 independent numerical and simulation evidence. In its small deliberately
 misspecified local-SSD pilot, the branch-burst AIC gate still admitted conditional
@@ -87,11 +101,19 @@ Pruning sums latent copy counts and averages family rate categories. Survival
 conditioning is applied **after** averaging categories. Missing tips have a
 flat observation likelihood. Zero observed copies have a binomial observation
 likelihood, not the same treatment as missing data.
+When survival probabilities approach the floating-point limit, the likelihood
+computes observation conditioning in log space for the affected missingness
+patterns.
 
 State probabilities and root tails are never renormalized to hide omitted
 mass. Every fitted model is checked by doubling the maximum count state and
 requiring the maximum per-family log-likelihood change to be below
 `--state-tolerance`. Failed optimization or truncation checks abort the scan.
+The initial upper count is `max(8, largest observed count + 2)`, so
+`--max-states` must allow at least twice that value. If the input does not
+fit, the command reports the largest observed count, its family and species,
+and the lower bound on the required setting. This is not a recommendation to
+discard high-copy families or a guarantee of convergence at that setting.
 This is a numerical convergence diagnostic, not a mathematical uniform error
 bound over all parameter values. Numerical rate bounds and root-mean upper
 bounds are recorded in JSON; inspect `nuisance_bound_reached`.
@@ -109,6 +131,17 @@ not a simultaneous multiple-event search and does not produce dated-event
 confidence intervals. `--candidate-branches` restricts the search; bootstrap
 calibration repeats that exact branch set and fraction grid.
 
+`--fixed-events-tsv` can condition the search on prespecified events at
+distinct positive-length branches. Columns are `branch_id`, `retention`
+in `(0,1]`, `event_fraction` in `[0,1]` measured from the parent, and
+integer `multiplicity` of at least two. Those branches are excluded from the
+search. Their pulses remain fixed in the background, candidate, branch-burst,
+and simulated-null models; JSON records them in `fixed_background_events`.
+This is a conditional sensitivity analysis, not joint event inference or
+calibration over the selection of background events. `wgd-tree` can use these
+models when every fixed event is a doubling, and marks origins only at the
+additional candidate under test.
+
 The statistic is twice the event-versus-background log-likelihood improvement.
 The bootstrap simulates from the fitted null, preserves tip detection and each
 family's missingness mask, conditions on observation, refits the null, and
@@ -118,6 +151,29 @@ estimate is `(1 + exceedances)/(1 + draws)`. Failed simulated refits abort;
 draws are not silently discarded. This handles the finite search and retention
 boundary but remains a plug-in, model-conditional calibration, not a supremum
 test over nuisance parameters or guaranteed composite-null error control.
+The model JSON's `bootstrap_tail_audit` reports the exceedance count and a
+pointwise 95% Clopper-Pearson interval for the underlying simulated tail
+probability. `alpha_resolution=overlaps` means more draws may be needed to
+resolve Monte Carlo uncertainty near `--alpha`. This interval is not a
+confidence interval for a biological event and does not change the TSV call.
+Use `--bootstrap-workers` to run multiple null refits concurrently. Use one
+BLAS thread per worker (for example, set `OPENBLAS_NUM_THREADS=1` and
+`OMP_NUM_THREADS=1` before launching the command) and allow memory for one
+fit per worker. Simulation and reduction order stay the same for a fixed seed.
+Use `--scan-workers` to run candidate-branch fits on the observed counts
+concurrently after the common background fit. The observed scan and null
+bootstrap run in sequence, so their worker pools do not multiply each other.
+
+For long scans, `--bootstrap-checkpoint /path/to/bootstrap.json` saves each
+completed null refit. Rerun with the same file inputs, search settings, seed,
+and implementation to fill missing draws; worker counts may change.
+The draw target may stay the same or increase, but not decrease. Decide the
+new total independently of the interim result; this is not a sequential test
+or an adjustment for optional stopping. The observed fit is recomputed and
+checked before reuse. The original draw order is preserved even after
+out-of-order worker completions. This file
+is separate from the final TSV and model JSON and cannot replace an input or
+another output. Do not edit or share checkpoints between distinct analyses.
 
 Each candidate also has an independently fitted branch-burst alternative:
 the branch gets its own continuous DL rates without a genome pulse. The

@@ -16,6 +16,13 @@ TREE_ASSIGNMENT = re.compile(
 )
 MCMCTREE_MARKER = re.compile(r"^\s*Species tree for FigTree\b[^\n]*$", re.MULTILINE)
 CI_KEY = re.compile(rf"(?:height_)?({NUMBER})%(?:_?(HPD))?", re.IGNORECASE)
+_UNQUOTED_CHARACTER = r"""[^\s(),'"\[\]:;]"""
+_UNQUOTED_TOKEN_TAIL = re.compile(rf"{_UNQUOTED_CHARACTER}*")
+# Lookaheads make each token atomic on Python 3.10 as well.
+_PLAIN_NAME = rf"(?=({_UNQUOTED_CHARACTER}+))\1"
+_PLAIN_LENGTH = rf"(?=({_UNQUOTED_CHARACTER}+))\2"
+_PLAIN_SUFFIX = rf"(?:{_PLAIN_NAME})?(?::{_PLAIN_LENGTH})?"
+_COMPACT_PLAIN_SUFFIXES = re.compile(rf"(?:{_PLAIN_SUFFIX}(?:[(),;]|\Z))*")
 AGE_FIELDS = frozenset({"age", "age_mean", "age_median", "age_ci_low", "age_ci_high"})
 CI_FIELDS = frozenset({"age_ci_low", "age_ci_high", "age_ci_kind", "age_ci_level"})
 HEIGHT_FIELDS = {
@@ -33,9 +40,13 @@ class Token:
 
 def tokens(text):
     """Tokenize punctuation only outside quoted names and nested comments."""
-    result = []
+    return list(_iter_tokens(text))
+
+
+def _iter_tokens(text):
     i = 0
-    while i < len(text):
+    length = len(text)
+    while i < length:
         char = text[i]
         if char.isspace():
             i += 1
@@ -51,14 +62,11 @@ def tokens(text):
             i += 1
             kind = char
         else:
-            i += 1
-            while (
-                i < len(text) and not text[i].isspace() and text[i] not in "(),'\"[]:;"
-            ):
-                i += 1
+            tail = _UNQUOTED_TOKEN_TAIL.match(text, i + 1)
+            assert tail is not None
+            i = tail.end()
             kind = "name"
-        result.append(Token(kind, text[start:i]))
-    return result
+        yield Token(kind, text[start:i])
 
 
 def _quote_end(text, start):
@@ -357,6 +365,8 @@ def _node_suffix(
     properties="keep",
     internal=False,
 ):
+    if not parts:
+        return ""
     attributes: dict[str, str] = {}
     comments: list[str] = []
     fields: list[Token] = []
@@ -381,7 +391,8 @@ def _node_suffix(
     kinds = [field.kind for field in fields]
     if kinds not in ([], ["name"], [":", "name"], ["name", ":", "name"]):
         raise ValueError("Malformed Newick node label or branch length.")
-    validate_age_attributes(attributes)
+    if attributes:
+        validate_age_attributes(attributes)
     if internal and node_label and node_label in attributes:
         value = attributes[node_label]
         label = Token("name", "'" + value.replace("'", "''") + "'")
@@ -433,33 +444,81 @@ def transform_annotations(
         raise ValueError("--age-ci must be keep or drop.")
     if properties not in {"keep", "drop"}:
         raise ValueError("--properties must be keep or drop.")
+    if (
+        parser
+        and factor == 1
+        and not node_label
+        and "[" not in text
+        and "]" not in text
+    ):
+        # Plain suffixes need validation but have no annotations to normalize.
+        # A compact unquoted tree already has exactly the spelling produced by
+        # the lexer; validate the same suffix grammar without token objects.
+        if _COMPACT_PLAIN_SUFFIXES.fullmatch(text):
+            return text
+        return _normalize_plain_suffixes(text)
     result: list[str] = []
     suffix: list[Token] = []
     internal = False
-    for token in tokens(text):
-        if token.kind in {"(", ")", ",", ";"}:
-            result.append(
-                _node_suffix(
-                    suffix,
-                    output,
-                    factor,
-                    age_ci,
-                    parser,
-                    node_label,
-                    properties,
-                    internal,
+    stream = _iter_tokens(text)
+    try:
+        for token in stream:
+            if token.kind in {"(", ")", ",", ";"}:
+                result.append(
+                    _node_suffix(
+                        suffix,
+                        output,
+                        factor,
+                        age_ci,
+                        parser,
+                        node_label,
+                        properties,
+                        internal,
+                    )
                 )
-            )
-            result.append(token.text)
-            suffix = []
-            internal = token.kind == ")"
-        else:
-            suffix.append(token)
+                result.append(token.text)
+                suffix = []
+                internal = token.kind == ")"
+            else:
+                suffix.append(token)
+    except (ValueError, ArithmeticError):
+        # Report a lexical error anywhere in the input before semantic errors.
+        for _ in stream:
+            pass
+        raise
     result.append(
         _node_suffix(
             suffix, output, factor, age_ci, parser, node_label, properties, internal
         )
     )
+    return "".join(result)
+
+
+def _normalize_plain_suffixes(text):
+    result: list[str] = []
+    kinds: list[str] = []
+    stream = _iter_tokens(text)
+    allowed: tuple[list[str], ...] = (
+        [],
+        ["name"],
+        [":", "name"],
+        ["name", ":", "name"],
+    )
+    try:
+        for token in stream:
+            if token.kind in {"(", ")", ",", ";"}:
+                if kinds not in allowed:
+                    raise ValueError("Malformed Newick node label or branch length.")
+                kinds.clear()
+            else:
+                kinds.append(token.kind)
+            result.append(token.text)
+    except (ValueError, ArithmeticError):
+        for _ in stream:
+            pass
+        raise
+    if kinds not in allowed:
+        raise ValueError("Malformed Newick node label or branch length.")
     return "".join(result)
 
 

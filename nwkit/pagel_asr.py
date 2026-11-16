@@ -174,6 +174,7 @@ def compute_pagel_marginals(
     rate=None,
     root_prior_mode="equal",
     rate_bounds=None,
+    _compute_posterior=True,
 ):
     """Fit one Pagel binary-pair model and return joint ancestral marginals."""
 
@@ -190,6 +191,7 @@ def compute_pagel_marginals(
         root_prior_mode=root_prior_mode,
         rate_bounds=rate_bounds,
         rate_design=design,
+        _compute_posterior=_compute_posterior,
     )
     fit.update(
         {

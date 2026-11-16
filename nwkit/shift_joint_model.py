@@ -14,7 +14,7 @@ from scipy.linalg import solve_triangular
 
 from nwkit.gaussian_whitening import TreeWhitening
 from nwkit.shift_native_model import covariance_geometry
-from nwkit.vector_whitening import VectorTreeWhitening, vector_gls
+from nwkit.vector_whitening import VectorTreeWhitening, _mean_design_qr, vector_gls
 
 
 def integral_decay(rate, duration):
@@ -22,15 +22,27 @@ def integral_decay(rate, duration):
     rate, duration = np.broadcast_arrays(
         np.asarray(rate, float), np.asarray(duration, float)
     )
-    result = np.empty_like(rate)
-    zero = rate == 0
-    result[zero] = duration[zero]
-    result[~zero] = -np.expm1(-rate[~zero] * duration[~zero]) / rate[~zero]
+    exponent = np.zeros_like(rate)
+    np.multiply(-rate, duration, out=exponent, where=rate != 0)
+    # The correction rounds away at subnormal exponents. Dividing a rounded
+    # subnormal product by its rate can lose a representable duration.
+    result = duration.copy()
+    np.divide(
+        -np.expm1(exponent),
+        rate,
+        out=result,
+        where=~(np.abs(exponent) < np.finfo(float).tiny),
+    )
     return result
 
 
-def joint_covariance_geometry(tree, alpha, covariance, root_model):
-    """Return diagonal slopes, innovations, root, tip, and diffusion covariance."""
+def joint_covariance_geometry(
+    tree, alpha, covariance, root_model, *, _include_branches=True
+):
+    """Return diagonal slopes, innovations, root, tip, and diffusion covariance.
+
+    Callers using their own tree factor can omit the branch arrays.
+    """
     alpha = np.asarray(alpha, float)
     covariance = np.asarray(covariance, float)
     p = len(alpha)
@@ -70,6 +82,8 @@ def joint_covariance_geometry(tree, alpha, covariance, root_model):
             raise ValueError(
                 "Joint covariance does not define mixed finite/infinite alpha limits."
             )
+        if not _include_branches:
+            return None, None, None, covariance.copy(), None
         innovations = np.broadcast_to(covariance, (len(tree.times), p, p)).copy()
         root = covariance.copy() if root_model == "OUrandomRoot" else np.zeros((p, p))
         return (
@@ -89,14 +103,16 @@ def joint_covariance_geometry(tree, alpha, covariance, root_model):
     scale = np.sqrt(marginal_integrals)
     diffusion = covariance / scale[:, None] / scale[None, :]
     sums = alpha[:, None] + alpha[None, :]
-    innovations = diffusion[None] * integral_decay(
-        sums[None], tree.times[:, None, None]
-    )
     root = diffusion / sums if root_model == "OUrandomRoot" else np.zeros((p, p))
     tip = (
         root.copy()
         if root_model == "OUrandomRoot"
         else diffusion * integral_decay(sums, 1.0)
+    )
+    if not _include_branches:
+        return None, None, root, tip, diffusion
+    innovations = diffusion[None] * integral_decay(
+        sums[None], tree.times[:, None, None]
     )
     slopes = np.exp(-tree.times[:, None] * alpha[None])
     return slopes, innovations, root, tip, diffusion
@@ -110,7 +126,8 @@ def original_diffusion_coordinate(tree, alpha, diffusion, root_model):
         if root_model == "OUrandomRoot"
         else integral_decay(2 * np.asarray(alpha), 1.0)
     )
-    return diffusion * np.sqrt(integral[:, None] * integral[None])
+    scales = np.sqrt(integral)
+    return diffusion * (scales[:, None] * scales[None])
 
 
 @dataclass(frozen=True)
@@ -130,16 +147,47 @@ class NativeJointFit:
     engine: str
 
 
+def _trait_designs(data, layout, alpha):
+    node_groups = layout.node_groups(data.tree)
+    by_rate: dict[float, np.ndarray] = {}
+    designs = []
+    for trait in range(len(data.trait_names)):
+        rate = float(alpha[trait])
+        if rate not in by_rate:
+            by_rate[rate] = layout.design(data.tree, rate, node_groups=node_groups)
+        designs.append(by_rate[rate])
+    return designs
+
+
 def joint_design(data, layout, alpha):
     """Trait-major coefficients and tip-major observed coordinates."""
-    p, q = len(data.trait_names), len(layout.groups)
-    matrix = np.zeros((len(data.values), p, p * q))
-    node_groups = layout.node_groups(data.tree)
-    for trait in range(p):
-        matrix[:, trait, trait * q : (trait + 1) * q] = layout.design(
-            data.tree, float(alpha[trait]), node_groups=node_groups
-        )
+    designs = _trait_designs(data, layout, alpha)
+    p, n, q = len(designs), len(data.values), len(layout.groups)
+    matrix = np.zeros((n, p, p * q))
+    for trait, design in enumerate(designs):
+        matrix[:, trait, trait * q : (trait + 1) * q] = design
     return matrix
+
+
+def _joint_observed_design(data, layout, alpha, observed):
+    designs = _trait_designs(data, layout, alpha)
+    p, q = len(designs), len(layout.groups)
+    tips, traits = np.nonzero(observed)
+    matrix = np.zeros((len(tips), p * q))
+    for trait, design in enumerate(designs):
+        rows = traits == trait
+        matrix[rows, trait * q : (trait + 1) * q] = design[tips[rows]]
+    return matrix, designs
+
+
+def _joint_predictions(designs, coefficients):
+    by_trait = coefficients.reshape(len(designs), -1)
+    return np.column_stack(
+        [
+            np.einsum("ij,j->i", design, beta)
+            for design, beta in zip(designs, by_trait, strict=True)
+        ]
+    )
 
 
 def joint_factor(data, alpha, covariance, noise, *, root_model, plan=None):
@@ -175,10 +223,10 @@ def evaluate_joint(
     factor, tip, diffusion = joint_factor(
         data, alpha, covariance, noise, root_model=root_model, plan=_plan
     )
-    design = joint_design(data, layout, alpha)
     observed = np.isfinite(data.values)
+    design, trait_designs = _joint_observed_design(data, layout, alpha, observed)
     coefficients, loglik, quadratic, coefficient_covariance = vector_gls(
-        factor, data.values[observed], design[observed]
+        factor, data.values[observed], design
     )
     p, q = len(alpha), len(layout.groups)
     return NativeJointFit(
@@ -189,7 +237,7 @@ def evaluate_joint(
         noise,
         coefficients.reshape(p, q).T,
         coefficient_covariance,
-        np.einsum("ijk,k->ij", design, coefficients),
+        _joint_predictions(trait_designs, coefficients),
         loglik,
         quadratic,
         int(observed.sum()),
@@ -227,10 +275,7 @@ def evaluate_separable(
         )
     white = factor.apply(np.column_stack((data.values, design)))
     y, x = white[:, :p], white[:, p:]
-    norms = np.linalg.norm(x, axis=0)
-    if np.any(norms == 0) or np.linalg.matrix_rank(x / norms) < q:
-        raise ValueError("The observed mean design is rank deficient.")
-    basis, r = np.linalg.qr(x / norms, mode="reduced")
+    basis, r, norms = _mean_design_qr(x)
     coefficients = solve_triangular(r, basis.T @ y, check_finite=False) / norms[:, None]
     residual = y - basis @ (basis.T @ y)
     covariance = residual.T @ residual / n
@@ -250,7 +295,7 @@ def evaluate_separable(
     )
     alphas = np.full(p, alpha)
     _, _, _, tip, diffusion = joint_covariance_geometry(
-        data.tree, alphas, covariance, root_model
+        data.tree, alphas, covariance, root_model, _include_branches=False
     )
     return NativeJointFit(
         alphas,

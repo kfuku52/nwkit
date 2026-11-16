@@ -1,10 +1,11 @@
 import csv
 import math
+from itertools import combinations
 
 import pytest
 from ete4 import Tree
 
-from nwkit.dist import _path_distance, dist_main
+from nwkit.dist import _calculate_distances, _path_distance, dist_main
 from tests.helpers import make_args
 
 
@@ -133,6 +134,31 @@ class TestDistMain:
 
 
 class TestDistanceMetrics:
+    def test_branch_score_remains_available_when_weighted_rf_overflows(self):
+        first = Tree("(A:1e308,B:1e308,C:0);", parser=1)
+        second = Tree("(A:0,B:0,C:0);", parser=1)
+        names = ["A", "B", "C"]
+        result = _calculate_distances(first, second, names, ("branch-score",), "rooted")
+        assert result == {"branch-score": (math.sqrt(2) * 1e308, "")}
+        with pytest.raises(ValueError, match="weighted RF distance is too large"):
+            _calculate_distances(first, second, names, ("weighted-rf",), "rooted")
+
+    def test_topological_path_rows_match_explicit_paths(self):
+        first = Tree("(((B,C),A),((D),E,F));", parser=1)
+        second = Tree("(F,(A,(E,(C,D))),B);", parser=1)
+        names = list("EBCAFD")
+        squared = 0
+        for left, right in combinations(names, 2):
+            first_distance = first.get_distance(left, right, topological=True)
+            if (left in "ABC") != (right in "ABC"):
+                first_distance -= 1
+            second_distance = second.get_distance(left, right, topological=True)
+            squared += int(first_distance - second_distance) ** 2
+
+        assert _path_distance(first, second, names, topological=True) == math.sqrt(
+            squared
+        )
+
     def test_path_length_falls_back_for_nearly_identical_distance_matrices(self):
         def balanced_newick(names):
             if len(names) == 1:
@@ -162,6 +188,82 @@ class TestDistanceMetrics:
             rel=10**-12,
             abs=0.0,
         )
+
+    def test_path_length_sums_subnormal_differences_before_rounding(self):
+        step = math.ulp(0.0)
+        first = Tree(f"(A:{step},B:0,C:0,D:1);", parser=1)
+        second = Tree(f"(A:{2 * step},B:0,C:0,D:1);", parser=1)
+        # Three pairs differ by one subnormal step. sqrt(3) rounds to two steps.
+        assert (
+            _path_distance(first, second, list("ABCD"), topological=False) == 2 * step
+        )
+
+    def test_path_length_rounds_subnormal_norm_once(self):
+        step = math.ulp(0.0)
+        names = list("ABC")
+        ends = [
+            (25686890370570, 44939368185031, 31454958493669),
+            (94884213870195, 92535252312417, 87180037960354),
+        ]
+        first, second = [
+            Tree(
+                "("
+                + ",".join(
+                    f"{name}:{unit * step!r}"
+                    for name, unit in zip(names, units, strict=True)
+                )
+                + ");",
+                parser=1,
+            )
+            for units in ends
+        ]
+        deltas = [a - b for a, b in zip(*ends, strict=True)]
+        squared = sum((a + b) ** 2 for a, b in combinations(deltas, 2))
+        nearest = math.isqrt(squared)
+        nearest += 4 * squared > (2 * nearest + 1) ** 2
+        assert _path_distance(first, second, names, topological=False) == nearest * step
+
+    def test_path_length_recovers_a_difference_hidden_by_rounded_path_sums(self):
+        first = Tree("(A:1.0,B:549755813888.0);", parser=1)
+        second = Tree("(A:1.0000000000000002,B:549755813888.0);", parser=1)
+        assert _path_distance(first, second, ["A", "B"], topological=False) == math.ulp(
+            1.0
+        )
+
+    def test_path_length_counts_joint_crossings_of_changed_splits(self, monkeypatch):
+        names = list("CABED")
+        first = Tree("(((A:2,B:1):3,C:4):1,(D:5,E:6):1);", parser=1)
+        second = Tree("(((A:1,B:1):2,C:4):1,(D:6,E:6):1);", parser=1)
+        expected = math.sqrt(
+            sum(
+                (first.get_distance(a, b) - second.get_distance(a, b)) ** 2
+                for a, b in combinations(names, 2)
+            )
+        )
+        # Force exact computation on a small tree as well.
+        monkeypatch.setattr("nwkit.dist.PATH_MATRIX_MAX_TAXA", 0)
+        assert _path_distance(first, second, names, topological=False) == pytest.approx(
+            expected, rel=1e-15
+        )
+
+    @pytest.mark.parametrize(
+        ("lengths", "message"),
+        [
+            ([1e308, 1e308], "A branch-length difference is too large"),
+            ([1e308, 0, 0, 0, 0], "The path distance is too large"),
+        ],
+    )
+    def test_path_length_distinguishes_pair_and_total_overflow(self, lengths, message):
+        names = list("ABCDE")[: len(lengths)]
+        first = Tree(
+            "("
+            + ",".join(f"{n}:{d}" for n, d in zip(names, lengths, strict=True))
+            + ");",
+            parser=1,
+        )
+        second = Tree("(" + ",".join(f"{name}:0" for name in names) + ");", parser=1)
+        with pytest.raises(ValueError, match=message):
+            _path_distance(first, second, names, topological=False)
 
     def test_all_is_default_and_uses_stable_long_form_rows(self, tmp_nwk, tmp_outfile):
         path1 = tmp_nwk("((A:1,B:1):1,(C:1,D:1):1);", "tree1.nwk")
@@ -308,6 +410,30 @@ class TestDistanceMetrics:
         )
 
     @pytest.mark.parametrize(
+        ("comparison", "score"),
+        [("rooted", math.sqrt(82)), ("unrooted", math.sqrt(162))],
+    )
+    def test_branch_metrics_combine_repeated_noncontiguous_splits(
+        self, tmp_nwk, tmp_outfile, comparison, score
+    ):
+        first = tmp_nwk("(((A:1,B:1):2):3,(C:1,D:1):4);", "first.nwk")
+        second = tmp_nwk("(((A:1,C:1):2):3,(B:1,D:1):4);", "second.nwk")
+        args = make_args(
+            infile=first,
+            infile2=second,
+            outfile=tmp_outfile,
+            format2="auto",
+            metric=["weighted-rf,branch-score"],
+            comparison=comparison,
+        )
+
+        dist_main(args)
+
+        rows = {row["metric"]: row for row in _read_tsv(tmp_outfile)}
+        assert float(rows["weighted-rf"]["distance"]) == pytest.approx(18.0)
+        assert float(rows["branch-score"]["distance"]) == pytest.approx(score)
+
+    @pytest.mark.parametrize(
         ("source_length", "expected_distance"),
         [
             ("1e308", 0.0),
@@ -348,6 +474,27 @@ class TestDistanceMetrics:
         assert float(rows["branch-score"]["distance"]) == pytest.approx(
             expected_distance
         )
+
+    def test_branch_metrics_retain_short_change_beside_shared_large_edge(
+        self, tmp_nwk, tmp_outfile
+    ):
+        first = tmp_nwk("(((A:1,B:1):1e300):1e-40,C:1,D:1);", "first.nwk")
+        second = tmp_nwk("(((A:1,B:1):1e300):0,C:1,D:1);", "second.nwk")
+        args = make_args(
+            infile=first,
+            infile2=second,
+            outfile=tmp_outfile,
+            format2="auto",
+            metric=["weighted-rf,branch-score"],
+            comparison="rooted",
+            input_rooted="yes",
+            infile2_rooted="yes",
+        )
+
+        dist_main(args)
+
+        rows = _read_tsv(tmp_outfile)
+        assert [float(row["distance"]) for row in rows] == [1e-40, 1e-40]
 
     @pytest.mark.parametrize(
         ("tree1", "tree2", "expected_distance"),

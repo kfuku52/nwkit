@@ -26,15 +26,59 @@ def center_response(response, design, *, excluded_columns=()):
             and values[0] != 0.0
             and np.all(values == values[0])
         ):
-            mean = float(np.mean(response))
+            mean = finite_mean(response)
             offset[column] = mean / float(values[0])
             return response - mean, offset
     return response, offset
 
 
+def finite_mean(values):
+    """Average finite values without overflowing their sum."""
+    values = np.asarray(values, dtype=float)
+    magnitude = float(np.max(np.abs(values), initial=0.0))
+    if magnitude <= np.finfo(float).max / max(values.size, 1):
+        return float(np.mean(values))
+    _, exponent = math.frexp(magnitude)
+    return math.ldexp(float(np.mean(np.ldexp(values, -exponent))), exponent)
+
+
+def sample_standard_errors(samples):
+    """Column-wise sample standard deviations across the floating-point range."""
+    size = np.max(np.abs(samples), axis=0)
+    _, exponents = np.frexp(size)
+    exponents = np.where(np.abs(exponents) > 450, exponents, 0)
+    if not np.any(exponents):
+        return np.std(samples, axis=0, ddof=1)
+    with np.errstate(under="ignore"):
+        working = np.ldexp(samples, -exponents)
+        return np.ldexp(np.std(working, axis=0, ddof=1), exponents)
+
+
+def symmetric_average(matrix: np.ndarray) -> np.ndarray:
+    """Average transposed entries across the finite floating-point range."""
+    try:
+        with np.errstate(over="raise"):
+            return 0.5 * (matrix + matrix.T)
+    except FloatingPointError:
+        with np.errstate(over="ignore"):
+            averaged = 0.5 * (matrix + matrix.T)
+        large = np.isinf(averaged)
+        averaged[large] = 0.5 * matrix[large] + 0.5 * matrix.T[large]
+        return averaged
+
+
+def scale_covariance_by_slope(covariance, slope):
+    """Multiply by a squared slope without overflowing the slope alone."""
+    mantissa, exponent = math.frexp(float(slope))
+    if abs(exponent) < 500:
+        return (slope * slope) * covariance
+    mantissas, exponents = np.frexp(covariance)
+    return np.ldexp(mantissas * (mantissa * mantissa), exponents + 2 * exponent)
+
+
 def residual_variance_scale(response, residual, sampling_diagonal):
     """Choose variance bounds in residual units, independent of a fitted mean."""
-    sampling_scale = float(np.mean(sampling_diagonal))
+    sampling_scale = finite_mean(sampling_diagonal)
     residual_scale = float(np.mean(np.square(residual)))
     # The floor follows response units and only affects a numerically exact
     # fit. The response passed here has already had its intercept removed.
@@ -66,6 +110,9 @@ class GroupedDiagonalLowRankFactor:
     group_index: np.ndarray
     group_loading: np.ndarray
     group_denominator: np.ndarray
+    group_exponents: np.ndarray | None
+    group_inverse_loading: np.ndarray | None
+    group_anchor: np.ndarray | None
     low_rank: np.ndarray
     base_inverse_low_rank: np.ndarray
     woodbury_cholesky: np.ndarray
@@ -96,6 +143,7 @@ class SparseDiagonalLowRankFactor:
 
     diagonal: np.ndarray
     low_rank: sparse.csr_matrix
+    weighted_loading: sparse.csr_matrix
     woodbury_factor: SuperLU
     logdet: float
 
@@ -120,6 +168,7 @@ class DiagonalSparsePrecisionFactor:
 
     diagonal: np.ndarray
     loading: sparse.csr_matrix
+    weighted_loading: sparse.csr_matrix | None
     prior_precision: sparse.csc_matrix
     prior_precision_factor: sparse.csr_matrix
     posterior_factor: SuperLU
@@ -180,9 +229,119 @@ class NestedLowRankFactor:
     woodbury_cholesky: np.ndarray
 
 
+@dataclass(frozen=True)
+class ScaledCovarianceFactor:
+    """Covariance in power-of-two working units and its trait-unit exponent."""
+
+    factor: (
+        np.ndarray
+        | DiagonalLowRankFactor
+        | GroupedDiagonalLowRankFactor
+        | SparseDiagonalLowRankFactor
+        | SparseCovarianceFactor
+        | DiagonalSparsePrecisionFactor
+    )
+    exponent: int
+    dimension: int
+
+
+def regression_total_quadratic(factor, response, *, intercept=False):
+    """Compute a GLS null-model quadratic in the covariance's working units."""
+    if isinstance(factor, ScaledCovarianceFactor):
+        response = np.ldexp(response, -factor.exponent)
+        factor = factor.factor
+    if intercept:
+        null_design = np.ones((len(response), 1))
+        inverse_null = solve_factor(factor, null_design)
+        null_beta = np.linalg.solve(
+            null_design.T @ inverse_null,
+            null_design.T @ solve_factor(factor, response),
+        )
+        response = response - null_design @ null_beta
+    return float(response @ solve_factor(factor, response))
+
+
+def _rescale_covariance_loading(loading, exponent):
+    if sparse.issparse(loading):
+        result = loading.copy()
+        result.data = np.ldexp(result.data, exponent)
+        return result
+    return np.ldexp(loading, exponent)
+
+
+def _rescale_optional_variances(values, exponent):
+    return None if values is None else np.ldexp(values, 2 * exponent)
+
+
+def rescale_gaussian_covariance(covariance, exponent):
+    """Change trait units while retaining the covariance representation."""
+    if isinstance(covariance, DiagonalSparsePrecisionCovariance):
+        return DiagonalSparsePrecisionCovariance(
+            np.ldexp(covariance.diagonal, 2 * exponent),
+            _rescale_covariance_loading(covariance.loading, exponent),
+            covariance.precision,
+            _rescale_optional_variances(covariance.marginal_diagonal, exponent),
+            _rescale_optional_variances(covariance.grouped_marginal_diagonal, exponent),
+        )
+    if isinstance(covariance, DiagonalLowRankCovariance):
+        return DiagonalLowRankCovariance(
+            np.ldexp(covariance.diagonal, 2 * exponent),
+            _rescale_covariance_loading(covariance.low_rank, exponent),
+        )
+    return np.ldexp(covariance, 2 * exponent)
+
+
+def gaussian_response_units(response, sampling_diagonal):
+    """Normalize extreme response and sampling scales before fitting."""
+    response_size = float(np.max(np.abs(response), initial=0.0))
+    sampling_size = math.sqrt(float(np.max(sampling_diagonal, initial=0.0)))
+    exponent = math.frexp(max(response_size, sampling_size))[1]
+    if -250 <= exponent <= 250:
+        return response, sampling_diagonal, 0
+    return (
+        np.ldexp(response, -exponent),
+        np.ldexp(sampling_diagonal, -2 * exponent),
+        exponent,
+    )
+
+
+def restore_gaussian_response_units(fit, exponent, effective_likelihood_count):
+    """Restore model estimates and the likelihood Jacobian in original units."""
+    if exponent == 0:
+        return fit
+    log_variance_shift = 2 * exponent * math.log(2.0)
+    try:
+        with np.errstate(over="raise", under="ignore"):
+            fit["beta"] = np.ldexp(fit["beta"], exponent)
+            fit["beta_covariance"] = np.ldexp(fit["beta_covariance"], 2 * exponent)
+            fit["residual"] = np.ldexp(fit["residual"], exponent)
+            fit["inverse_residual"] = np.ldexp(fit["inverse_residual"], -exponent)
+            fit["covariance"] = rescale_gaussian_covariance(fit["covariance"], exponent)
+            fit["component_variances"] = {
+                name: math.ldexp(value, 2 * exponent)
+                for name, value in fit["component_variances"].items()
+            }
+            fit["lower_variance"] = np.ldexp(fit["lower_variance"], 2 * exponent)
+    except (FloatingPointError, OverflowError) as exc:
+        raise ValueError(
+            "Gaussian regression estimates exceed the range of the response units."
+        ) from exc
+    fit["cholesky"] = ScaledCovarianceFactor(
+        fit["cholesky"], exponent, len(fit["residual"])
+    )
+    # Search bounds can extend past representable covariance in trait units.
+    with np.errstate(over="ignore", under="ignore"):
+        fit["upper_variance"] = min(
+            np.finfo(float).max, np.ldexp(fit["upper_variance"], 2 * exponent)
+        )
+    fit["log_variances"] = fit["log_variances"] + log_variance_shift
+    fit["objective"] += 0.5 * effective_likelihood_count * log_variance_shift
+    return fit
+
+
 def _positive_diagonal(values: np.ndarray) -> np.ndarray:
     diagonal = np.asarray(values, dtype=float)
-    if diagonal.ndim != 1 or np.any(diagonal <= 0.0):
+    if diagonal.ndim != 1 or not np.all((diagonal > 0.0) & np.isfinite(diagonal)):
         raise np.linalg.LinAlgError("Covariance diagonal is not positive.")
     return diagonal
 
@@ -190,6 +349,22 @@ def _positive_diagonal(values: np.ndarray) -> np.ndarray:
 def _factor_sparse_lu(matrix, label: str) -> SuperLU:
     solver, _ = _factor_sparse_lu_with_pivots(matrix, label)
     return solver
+
+
+def _symmetric_sparse_factor_input(matrix, label):
+    with np.errstate(over="ignore"):
+        difference = matrix - matrix.T
+    if not difference.nnz:
+        return matrix
+    scale = float(np.max(np.abs(matrix.data), initial=0.0))
+    relative_asymmetry = float(np.max(np.abs(difference.data))) / scale
+    tolerance = np.finfo(float).eps * matrix.shape[0] * 100.0
+    if relative_asymmetry > tolerance:
+        raise np.linalg.LinAlgError("{} is not symmetric.".format(label))
+    # Average the two triangles identically without doubling the diagonal.
+    symmetric = (matrix * 0.5 + matrix.T * 0.5).tocsc()
+    symmetric.setdiag(matrix.diagonal())
+    return symmetric
 
 
 def _factor_sparse_lu_with_pivots(matrix, label: str) -> tuple[SuperLU, np.ndarray]:
@@ -207,12 +382,7 @@ def _factor_sparse_lu_with_pivots(matrix, label: str) -> tuple[SuperLU, np.ndarr
         raise np.linalg.LinAlgError("{} must be non-empty and square.".format(label))
     if not np.isfinite(matrix.data).all():
         raise np.linalg.LinAlgError("{} contains non-finite values.".format(label))
-    difference = matrix - matrix.T
-    scale = max(1.0, float(np.max(np.abs(matrix.data), initial=0.0)))
-    tolerance = np.finfo(float).eps * scale * matrix.shape[0] * 100.0
-    if difference.nnz and float(np.max(np.abs(difference.data))) > tolerance:
-        raise np.linalg.LinAlgError("{} is not symmetric.".format(label))
-    matrix = ((matrix + matrix.T) * 0.5).tocsc()
+    matrix = _symmetric_sparse_factor_input(matrix, label)
     if np.any(matrix.diagonal() <= 0.0):
         raise np.linalg.LinAlgError("{} is not positive definite.".format(label))
     try:
@@ -277,6 +447,38 @@ def is_diagonal(matrix: np.ndarray) -> bool:
     return True
 
 
+def validate_psd_covariance(matrix, label, *, clip_negative_diagonal=False):
+    """Validate symmetry and nonnegative eigenvalues in covariance units."""
+    matrix = np.asarray(matrix, dtype=float)
+    if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
+        raise ValueError("{} must be a square matrix.".format(label))
+    if not np.isfinite(matrix).all():
+        raise ValueError("{} must contain finite values.".format(label))
+    relative_tolerance = np.finfo(float).eps * len(matrix) * 100.0
+    if is_diagonal(matrix):
+        diagonal = np.diag(matrix)
+        magnitude = float(np.max(np.abs(diagonal), initial=0.0))
+        _, exponent = math.frexp(magnitude)
+        scaled_diagonal = np.ldexp(diagonal, -exponent)
+        if float(np.min(scaled_diagonal, initial=0.0)) < -relative_tolerance:
+            raise ValueError("{} must be positive semidefinite.".format(label))
+        if clip_negative_diagonal:
+            return np.diag(np.maximum(diagonal, 0.0))
+        return matrix.copy()
+    _, exponent = math.frexp(float(np.max(np.abs(matrix))))
+    scaled = np.ldexp(matrix, -exponent)
+    if float(np.max(np.abs(scaled - scaled.T))) > relative_tolerance:
+        raise ValueError("{} must be symmetric.".format(label))
+    symmetric = 0.5 * (scaled + scaled.T)
+    if float(np.min(np.linalg.eigvalsh(symmetric))) < -relative_tolerance:
+        raise ValueError("{} must be positive semidefinite.".format(label))
+    restored = np.where(matrix == matrix.T, matrix, np.ldexp(symmetric, exponent))
+    if clip_negative_diagonal:
+        diagonal_indices = np.diag_indices(len(restored))
+        restored[diagonal_indices] = np.maximum(restored[diagonal_indices], 0.0)
+    return restored
+
+
 def factor_covariance(covariance: np.ndarray) -> np.ndarray:
     """Factor a positive-definite covariance, preserving diagonal structure."""
     covariance = np.asarray(covariance, dtype=float)
@@ -325,7 +527,7 @@ def factor_diagonal_sparse_low_rank(
         )
         logdet = _sparse_lu_logdet(solver, "Sparse covariance matrix", pivots)
         return SparseCovarianceFactor(diagonal, loading, solver, logdet)
-    weighted = loading.multiply((1.0 / diagonal)[:, None])
+    weighted = _inverse_diagonal_sparse_loading(loading, diagonal)
     woodbury = (
         sparse.eye(loading.shape[1], format="csc") + loading.T @ weighted
     ).tocsc()
@@ -333,7 +535,27 @@ def factor_diagonal_sparse_low_rank(
     logdet = float(np.log(diagonal).sum()) + _sparse_lu_logdet(
         solver, "Sparse Woodbury matrix", pivots
     )
-    return SparseDiagonalLowRankFactor(diagonal, loading, solver, logdet)
+    return SparseDiagonalLowRankFactor(diagonal, loading, weighted, solver, logdet)
+
+
+def _inverse_diagonal_sparse_loading(loading, diagonal):
+    # Dividing each stored entry directly avoids an overflowing reciprocal
+    # of a subnormal variance when the weighted loading is still finite.
+    rows = np.repeat(np.arange(loading.shape[0]), np.diff(loading.indptr))
+    row_variance = diagonal[rows]
+    with np.errstate(over="ignore"):
+        inverse = 1.0 / row_variance
+        finite = np.isfinite(inverse)
+        data = np.empty_like(loading.data)
+        np.multiply(loading.data, inverse, out=data, where=finite)
+        np.divide(loading.data, row_variance, out=data, where=~finite)
+    return sparse.csr_matrix(
+        (data, loading.indices, loading.indptr), shape=loading.shape
+    )
+
+
+def _subnormal_weighted_loading(loading, diagonal):
+    return loading if np.min(diagonal) < np.finfo(float).tiny else None
 
 
 def factor_diagonal_sparse_precision_updates(
@@ -366,11 +588,8 @@ def factor_diagonal_sparse_precision_updates(
     prior_factor, prior_pivots = _factor_sparse_lu_with_pivots(
         prior_precision, "Sparse prior precision"
     )
-    inverse_diagonal = 1.0 / diagonal
-    posterior_precision = (
-        prior_precision
-        + loading.T @ sparse.diags(inverse_diagonal, format="csc") @ loading
-    ).tocsc()
+    weighted_loading = _inverse_diagonal_sparse_loading(loading, diagonal)
+    posterior_precision = (prior_precision + loading.T @ weighted_loading).tocsc()
     posterior_factor, posterior_pivots = _factor_sparse_lu_with_pivots(
         posterior_precision, "Sparse posterior precision"
     )
@@ -384,6 +603,7 @@ def factor_diagonal_sparse_precision_updates(
     return DiagonalSparsePrecisionFactor(
         diagonal=diagonal,
         loading=loading,
+        weighted_loading=_subnormal_weighted_loading(weighted_loading, diagonal),
         prior_precision=prior_precision,
         prior_precision_factor=prior_precision_factor,
         posterior_factor=posterior_factor,
@@ -432,6 +652,12 @@ def _group_base_solve(
     factor: GroupedDiagonalLowRankFactor, values: np.ndarray
 ) -> np.ndarray:
     values = np.asarray(values, dtype=float)
+    if factor.group_anchor is not None:
+        return _scaled_group_base_solve(factor, values)
+    return _ordinary_group_base_solve(factor, values)
+
+
+def _ordinary_group_base_solve(factor, values):
     if values.ndim == 1:
         inverse_values = values / factor.diagonal
         group_rhs = np.bincount(
@@ -460,6 +686,47 @@ def _group_base_solve(
             * (group_rhs / factor.group_denominator[:, None])[factor.group_index]
         )
     return inverse_values - correction
+
+
+def _scaled_group_base_solve(factor, values):
+    # Remove a shared loading-aligned component before solving. Its inverse
+    # has a direct expression even when subtracting Woodbury terms would
+    # erase the result along that direction.
+    vector = values.ndim == 1
+    matrix = values.reshape(len(factor.diagonal), -1)
+    index = factor.group_index
+    anchors = factor.group_anchor
+    assert anchors is not None
+    loading_ratio = factor.group_loading / factor.group_loading[anchors][index]
+    residual = matrix - loading_ratio[:, None] * matrix[anchors][index]
+    inverse = residual / factor.diagonal[:, None]
+    weighted = factor.group_inverse_loading
+    assert weighted is not None and factor.group_exponents is not None
+    group_rhs = np.zeros((len(anchors), matrix.shape[1]), dtype=float)
+    np.add.at(group_rhs, index, weighted[:, None] * residual)
+    inverse -= (
+        weighted[:, None] * (group_rhs / factor.group_denominator[:, None])[index]
+    )
+    inverse += _aligned_group_inverse(
+        weighted,
+        matrix[anchors][index],
+        factor.group_loading[anchors][index],
+        factor.group_exponents[index],
+        factor.group_denominator[index],
+    )
+    return inverse[:, 0] if vector else inverse
+
+
+def _aligned_group_inverse(weighted, values, anchor, scale_exp, denominator):
+    # Combine binary exponents before division so a tiny aligned component
+    # survives when the final inverse is representable.
+    weight, weight_exp = np.frexp(weighted)
+    value, value_exp = np.frexp(values)
+    anchor_value, anchor_exp = np.frexp(anchor)
+    mantissa = (weight[:, None] * value) / ((anchor_value * denominator)[:, None])
+    return np.ldexp(
+        mantissa, value_exp + (weight_exp - anchor_exp - scale_exp)[:, None]
+    )
 
 
 def _disjoint_column_groups(factor: np.ndarray) -> tuple[np.ndarray, np.ndarray] | None:
@@ -497,6 +764,8 @@ def _merge_compatible_grouped_updates(updates: list[np.ndarray]) -> list[np.ndar
             reference_index += 1
             continue
         group_index, group_loading = reference_groups
+        first_by_group = np.full(merged[reference_index].shape[1], len(group_index))
+        np.minimum.at(first_by_group, group_index, np.arange(len(group_index)))
         candidate_index = reference_index + 1
         while candidate_index < len(merged):
             candidate_groups = _disjoint_column_groups(merged[candidate_index])
@@ -509,32 +778,38 @@ def _merge_compatible_grouped_updates(updates: list[np.ndarray]) -> list[np.ndar
             if np.any(group_loading == 0.0):
                 candidate_index += 1
                 continue
-            ratios = candidate_loading / group_loading
-            ratio_by_group = np.zeros(merged[reference_index].shape[1], dtype=float)
-            compatible = True
-            for group in range(len(ratio_by_group)):
-                selected = ratios[group_index == group]
-                ratio_by_group[group] = float(selected[0])
-                if not np.allclose(
-                    selected,
-                    ratio_by_group[group],
-                    rtol=1e-12,
-                    atol=1e-14,
-                ):
-                    compatible = False
-                    break
-            if not compatible:
+            replacement = _combined_group_loadings(
+                group_loading, candidate_loading, first_by_group[group_index]
+            )
+            if replacement is None:
                 candidate_index += 1
                 continue
-            group_loading = group_loading * np.sqrt(
-                1.0 + np.square(ratio_by_group[group_index])
-            )
+            group_loading = replacement
             combined = merged[reference_index].copy()
             combined[np.arange(len(combined)), group_index] = group_loading
             merged[reference_index] = combined
             del merged[candidate_index]
         reference_index += 1
     return merged
+
+
+def _combined_group_loadings(reference, candidate, anchors):
+    # The direct ratio preserves the ordinary computation and its relative
+    # proportionality check until squaring the ratio approaches overflow.
+    if np.all(np.abs(candidate) * 2.0**-500 <= np.abs(reference)):
+        ratios = candidate / reference
+        if np.allclose(ratios, ratios[anchors], rtol=1e-12, atol=1e-14):
+            return reference * np.sqrt(1.0 + np.square(ratios[anchors]))
+        return None
+    # Normalize both columns by the larger entry in each row. Proportional
+    # columns have the same signed direction throughout the group.
+    scale = np.maximum(np.abs(reference), np.abs(candidate))
+    first, second = reference / scale, candidate / scale
+    cross_left = first * second[anchors]
+    cross_right = second * first[anchors]
+    if not np.allclose(cross_left, cross_right, rtol=1e-12, atol=0.0):
+        return None
+    return np.copysign(np.hypot(reference, candidate), reference)
 
 
 def _factor_sparse_updates(diagonal, updates):
@@ -595,17 +870,18 @@ def _factor_dense_updates(diagonal, updates):
         if low_rank_updates
         else np.zeros((len(diagonal), 0), dtype=float)
     )
-    inverse_group_weight = np.square(group_loading) / diagonal
-    group_denominator = 1.0 + np.bincount(
-        group_index,
-        weights=inverse_group_weight,
-        minlength=normalized[grouped_index].shape[1],
+    group_count = normalized[grouped_index].shape[1]
+    group_denominator, group_exponents, inverse_loading, anchor = (
+        _group_base_parameters(diagonal, group_index, group_loading, group_count)
     )
     provisional = GroupedDiagonalLowRankFactor(
         diagonal=diagonal,
         group_index=group_index,
         group_loading=group_loading,
         group_denominator=group_denominator,
+        group_exponents=group_exponents,
+        group_inverse_loading=inverse_loading,
+        group_anchor=anchor,
         low_rank=low_rank,
         base_inverse_low_rank=np.empty_like(low_rank),
         woodbury_cholesky=np.empty((0, 0), dtype=float),
@@ -617,10 +893,50 @@ def _factor_dense_updates(diagonal, updates):
         group_index=group_index,
         group_loading=group_loading,
         group_denominator=group_denominator,
+        group_exponents=group_exponents,
+        group_inverse_loading=inverse_loading,
+        group_anchor=anchor,
         low_rank=low_rank,
         base_inverse_low_rank=base_inverse_low_rank,
         woodbury_cholesky=np.linalg.cholesky(woodbury),
     )
+
+
+def _group_base_parameters(diagonal, index, loading, count):
+    with np.errstate(over="ignore", under="ignore"):
+        inverse_group_weight = np.square(loading) / diagonal
+        denominator = 1.0 + np.bincount(
+            index, weights=inverse_group_weight, minlength=count
+        )
+    if np.all(denominator < 1e12) and np.min(np.abs(loading)) >= math.sqrt(
+        np.finfo(float).tiny
+    ):
+        return denominator, None, None, None
+
+    # Separate the exponent of |L| / sqrt(D) so the quotient itself can
+    # exceed binary64 range without losing the signed normalized entries.
+    roots = np.sqrt(diagonal)
+    load_mantissa, load_exponent = np.frexp(loading)
+    root_mantissa, root_exponent = np.frexp(roots)
+    load_exponent -= root_exponent
+    group_exponents = np.zeros(count, dtype=int)
+    np.maximum.at(group_exponents, index, load_exponent)
+    scaled_loading = np.ldexp(
+        load_mantissa / root_mantissa, load_exponent - group_exponents[index]
+    )
+    denominator = np.ldexp(np.ones(count), -2 * group_exponents) + np.bincount(
+        index, weights=scaled_loading**2, minlength=count
+    )
+    rows = np.arange(len(index))
+    max_loading = np.zeros(count, dtype=float)
+    np.maximum.at(max_loading, index, np.abs(loading))
+    anchors = np.full(count, len(index), dtype=int)
+    np.minimum.at(
+        anchors,
+        index,
+        np.where(np.abs(loading) == max_loading[index], rows, len(index)),
+    )
+    return denominator, group_exponents, scaled_loading / roots, anchors
 
 
 def factor_diagonal_low_rank_updates(
@@ -649,10 +965,14 @@ def solve_factor(
     | SparseDiagonalLowRankFactor
     | SparseCovarianceFactor
     | DiagonalSparsePrecisionFactor
-    | NestedLowRankFactor,
+    | NestedLowRankFactor
+    | ScaledCovarianceFactor,
     values: np.ndarray,
 ) -> np.ndarray:
     """Apply the inverse covariance represented by a Cholesky-style factor."""
+    if isinstance(factor, ScaledCovarianceFactor):
+        result = solve_factor(factor.factor, np.ldexp(values, -factor.exponent))
+        return np.ldexp(result, -factor.exponent)
     if isinstance(factor, DiagonalLowRankFactor):
         values = np.asarray(values, dtype=float)
         if values.ndim == 1:
@@ -678,8 +998,7 @@ def solve_factor(
             else values / factor.diagonal[:, None]
         )
         correction = factor.woodbury_factor.solve(factor.low_rank.T @ inverse_values)
-        weighted_loading = factor.low_rank.multiply((1.0 / factor.diagonal)[:, None])
-        return inverse_values - np.asarray(weighted_loading @ correction)
+        return inverse_values - np.asarray(factor.weighted_loading @ correction)
     if isinstance(factor, SparseCovarianceFactor):
         return np.asarray(
             factor.covariance_factor.solve(np.asarray(values, dtype=float))
@@ -694,27 +1013,26 @@ def solve_factor(
     factor = np.asarray(factor, dtype=float)
     values = np.asarray(values, dtype=float)
     if factor.ndim == 1:
-        inverse_diagonal = 1.0 / np.square(factor)
-        if values.ndim == 1:
-            return inverse_diagonal * values
-        return inverse_diagonal[:, None] * values
+        return _solve_diagonal_cholesky(factor, values)
     return cho_solve((factor, True), values)
 
 
 def _solve_sparse_precision_factor(factor, values):
     values = np.asarray(values, dtype=float)
-    inverse_values = (
-        values / factor.diagonal
-        if values.ndim == 1
-        else values / factor.diagonal[:, None]
-    )
+    scale = factor.diagonal.reshape((-1,) + (1,) * (values.ndim - 1))
+    inverse_values = values / scale
     correction = factor.posterior_factor.solve(factor.loading.T @ inverse_values)
+    if factor.weighted_loading is not None:
+        return inverse_values - np.asarray(factor.weighted_loading @ correction)
     projected = np.asarray(factor.loading @ correction)
-    return inverse_values - (
-        projected / factor.diagonal
-        if projected.ndim == 1
-        else projected / factor.diagonal[:, None]
-    )
+    return inverse_values - projected / scale
+
+
+def _solve_diagonal_cholesky(factor, values):
+    scale = factor if values.ndim == 1 else factor[:, None]
+    # Applying the two triangular solves sequentially retains finite results
+    # when forming the reciprocal variance would overflow.
+    return (values / scale) / scale
 
 
 def factor_logdet(
@@ -724,9 +1042,18 @@ def factor_logdet(
     | SparseDiagonalLowRankFactor
     | SparseCovarianceFactor
     | DiagonalSparsePrecisionFactor
-    | NestedLowRankFactor,
+    | NestedLowRankFactor
+    | ScaledCovarianceFactor,
 ) -> float:
     """Return the covariance log determinant from its factor."""
+    if isinstance(factor, ScaledCovarianceFactor):
+        return factor_logdet(
+            factor.factor
+        ) + 2 * factor.exponent * factor.dimension * math.log(2.0)
+    return _native_factor_logdet(factor)
+
+
+def _native_factor_logdet(factor):
     if isinstance(factor, DiagonalLowRankFactor):
         return float(np.log(factor.diagonal).sum()) + 2.0 * float(
             np.log(np.diag(factor.woodbury_cholesky)).sum()
@@ -735,6 +1062,7 @@ def factor_logdet(
         return (
             float(np.log(factor.diagonal).sum())
             + float(np.log(factor.group_denominator).sum())
+            + _group_scale_logdet(factor)
             + 2.0 * float(np.log(np.diag(factor.woodbury_cholesky)).sum())
         )
     if isinstance(
@@ -755,6 +1083,14 @@ def factor_logdet(
     return 2.0 * float(np.log(diagonal).sum())
 
 
+def _group_scale_logdet(factor):
+    return (
+        0.0
+        if factor.group_exponents is None
+        else 2.0 * math.log(2.0) * float(factor.group_exponents.sum())
+    )
+
+
 def draw_from_factor(
     factor: np.ndarray
     | DiagonalLowRankFactor
@@ -762,12 +1098,20 @@ def draw_from_factor(
     | SparseDiagonalLowRankFactor
     | SparseCovarianceFactor
     | DiagonalSparsePrecisionFactor
-    | NestedLowRankFactor,
+    | NestedLowRankFactor
+    | ScaledCovarianceFactor,
     standard_normal: np.ndarray,
     *,
     rng: np.random.Generator | None = None,
 ) -> np.ndarray:
     """Transform standard-normal draws by a covariance factor."""
+    if isinstance(factor, ScaledCovarianceFactor):
+        draw = draw_from_factor(factor.factor, standard_normal, rng=rng)
+        return np.ldexp(draw, factor.exponent)
+    return _draw_native_covariance_factor(factor, standard_normal, rng)
+
+
+def _draw_native_covariance_factor(factor, standard_normal, rng):
     if isinstance(factor, DiagonalLowRankFactor):
         standard_normal = np.asarray(standard_normal, dtype=float)
         if standard_normal.ndim != 1:
@@ -838,14 +1182,19 @@ def materialize_covariance(
 ) -> np.ndarray:
     """Materialize a diagonal-vector or dense covariance representation."""
     if isinstance(covariance, DiagonalLowRankCovariance):
-        update = covariance.low_rank @ covariance.low_rank.T
-        if sparse.issparse(update):
-            update = update.toarray()
-        return np.diag(covariance.diagonal) + np.asarray(update)
+        return np.diag(covariance.diagonal) + materialize_low_rank_covariance(
+            covariance.low_rank
+        )
     if isinstance(covariance, DiagonalSparsePrecisionCovariance):
         return _materialize_sparse_precision_covariance(covariance)
     covariance = np.asarray(covariance, dtype=float)
     return np.diag(covariance) if covariance.ndim == 1 else covariance
+
+
+def materialize_low_rank_covariance(loading):
+    """Return the covariance induced by a dense or sparse loading."""
+    covariance = loading @ loading.T
+    return covariance.toarray() if sparse.issparse(covariance) else covariance
 
 
 def project_covariance(covariance, operator):
@@ -886,9 +1235,42 @@ def sparse_precision_update_diagonal(loading, precision, *, solver=None) -> np.n
         if solver is None
         else solver
     )
-    n_rows = loading.shape[0]
-    if n_rows == 0:
+    if loading.shape[0] == 0:
         return np.empty(0, dtype=float)
+    if np.all(np.diff(loading.indptr) <= 1):
+        diagonal = _single_state_loading_diagonal(loading, solver)
+    else:
+        diagonal = _blocked_loading_diagonal(loading, solver)
+    scale = max(1.0, float(np.max(np.abs(diagonal), initial=0.0)))
+    tolerance = np.finfo(float).eps * scale * max(1, loading.shape[1]) * 100.0
+    if np.any(diagonal < -tolerance):
+        raise np.linalg.LinAlgError(
+            "Sparse precision covariance has a negative marginal variance."
+        )
+    diagonal[diagonal < 0.0] = 0.0
+    return diagonal
+
+
+def _single_state_loading_diagonal(loading, solver):
+    # Observations that load the same latent state need the same precision solve.
+    states, inverse = np.unique(loading.indices, return_inverse=True)
+    if len(states) == loading.nnz:
+        return _blocked_loading_diagonal(loading, solver)
+    selectors = sparse.csr_matrix(
+        (np.ones(len(states)), (np.arange(len(states)), states)),
+        shape=(len(states), loading.shape[1]),
+    )
+    state_variances = _blocked_loading_diagonal(selectors, solver)
+    diagonal = np.zeros(loading.shape[0], dtype=float)
+    # Apply each observation's own loading to the shared state variance.
+    diagonal[np.diff(loading.indptr) == 1] = (
+        loading.data * state_variances[inverse] * loading.data
+    )
+    return diagonal
+
+
+def _blocked_loading_diagonal(loading, solver):
+    n_rows = loading.shape[0]
     # A 100k-element dense RHS/output block is under 1 MiB in float64.  Sparse
     # direct solvers need additional work arrays, so this conservative block
     # size keeps 5,000-tip exact diagonals well below dense-covariance memory.
@@ -905,13 +1287,6 @@ def sparse_precision_update_diagonal(loading, precision, *, solver=None) -> np.n
         diagonal[start:stop] = np.asarray(
             block.multiply(np.asarray(solved).T).sum(axis=1)
         ).reshape(-1)
-    scale = max(1.0, float(np.max(np.abs(diagonal), initial=0.0)))
-    tolerance = np.finfo(float).eps * scale * max(1, loading.shape[1]) * 100.0
-    if np.any(diagonal < -tolerance):
-        raise np.linalg.LinAlgError(
-            "Sparse precision covariance has a negative marginal variance."
-        )
-    diagonal[diagonal < 0.0] = 0.0
     return diagonal
 
 
@@ -968,6 +1343,34 @@ def _normalized_covariance_groups(groups, n_observations):
     return groups, counts
 
 
+def _grouped_dense_covariance_diagonal(covariance, groups, counts):
+    if covariance.ndim == 1:
+        row_weights = 1.0 / counts[groups].astype(float)
+        return np.bincount(
+            groups, weights=np.square(row_weights) * covariance, minlength=len(counts)
+        )
+    if covariance.shape != (len(groups), len(groups)):
+        raise ValueError("Covariance has the wrong dimensions.")
+    if len(counts) == len(groups):
+        values = np.empty(len(counts), dtype=float)
+        values[groups] = np.diag(covariance)
+        return values
+
+    result = np.empty(len(counts), dtype=float)
+    singletons = counts[groups] == 1
+    rows = np.flatnonzero(singletons)
+    result[groups[rows]] = covariance[rows, rows]
+    multiple = np.flatnonzero(~singletons)
+    order = multiple[np.argsort(groups[multiple], kind="stable")]
+    ends = np.cumsum(np.where(counts == 1, 0, counts))
+    for group in np.flatnonzero(counts > 1):
+        end = ends[group]
+        count = counts[group]
+        selected = order[end - count : end]
+        result[group] = finite_mean(covariance[np.ix_(selected, selected)])
+    return result
+
+
 def grouped_mean_covariance_diagonal(
     covariance, groups, *, precision_factor=None
 ) -> np.ndarray:
@@ -979,6 +1382,12 @@ def grouped_mean_covariance_diagonal(
     """
     n_observations = _covariance_observation_count(covariance)
     groups, counts = _normalized_covariance_groups(groups, n_observations)
+    if not isinstance(
+        covariance, (DiagonalLowRankCovariance, DiagonalSparsePrecisionCovariance)
+    ):
+        return _grouped_dense_covariance_diagonal(
+            np.asarray(covariance, dtype=float), groups, counts
+        )
     n_groups = len(counts)
     row_weights = 1.0 / counts[groups].astype(float)
     aggregation = sparse.csr_matrix(
@@ -1000,44 +1409,26 @@ def grouped_mean_covariance_diagonal(
             else np.einsum("ij,ij->i", grouped_loading, grouped_loading, optimize=True)
         ).reshape(-1)
 
-    if isinstance(covariance, DiagonalSparsePrecisionCovariance):
-        if covariance.grouped_marginal_diagonal is not None:
-            grouped = np.asarray(covariance.grouped_marginal_diagonal, dtype=float)
-            if grouped.shape != (n_groups,):
-                raise ValueError("Cached grouped covariance diagonal is malformed.")
-            return grouped.copy()
-        grouped_diagonal = np.bincount(
-            groups,
-            weights=np.square(row_weights) * covariance.diagonal,
-            minlength=n_groups,
-        )
-        grouped_loading = sparse.csr_matrix(aggregation @ covariance.loading)
-        return grouped_diagonal + sparse_precision_update_diagonal(
-            grouped_loading,
-            covariance.precision,
-            solver=(
-                precision_factor.prior_factor
-                if isinstance(precision_factor, DiagonalSparsePrecisionFactor)
-                else None
-            ),
-        )
-
-    covariance = np.asarray(covariance, dtype=float)
-    if covariance.ndim == 1:
-        return np.bincount(
-            groups,
-            weights=np.square(row_weights) * covariance,
-            minlength=n_groups,
-        )
-    if covariance.shape != (n_observations, n_observations):
-        raise ValueError("Covariance has the wrong dimensions.")
-    result = np.empty(n_groups, dtype=float)
-    for group in range(n_groups):
-        selected = np.flatnonzero(groups == group)
-        result[group] = float(
-            covariance[np.ix_(selected, selected)].sum() / np.square(len(selected))
-        )
-    return result
+    if covariance.grouped_marginal_diagonal is not None:
+        grouped = np.asarray(covariance.grouped_marginal_diagonal, dtype=float)
+        if grouped.shape != (n_groups,):
+            raise ValueError("Cached grouped covariance diagonal is malformed.")
+        return grouped.copy()
+    grouped_diagonal = np.bincount(
+        groups,
+        weights=np.square(row_weights) * covariance.diagonal,
+        minlength=n_groups,
+    )
+    grouped_loading = sparse.csr_matrix(aggregation @ covariance.loading)
+    return grouped_diagonal + sparse_precision_update_diagonal(
+        grouped_loading,
+        covariance.precision,
+        solver=(
+            precision_factor.prior_factor
+            if isinstance(precision_factor, DiagonalSparsePrecisionFactor)
+            else None
+        ),
+    )
 
 
 def grouped_average_marginal_logdet(

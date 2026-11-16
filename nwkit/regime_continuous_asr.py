@@ -1,12 +1,13 @@
 """Linear-Gaussian ancestral reconstruction for branch-regime BM and OU."""
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import numpy as np
 from scipy.optimize import minimize
 
+from nwkit.asr_regimes import _observed_split_regime_lengths, _regime_design_rank
 from nwkit.continuous_asr import (
     GaussianMarginal,
     _finite_number,
@@ -17,6 +18,7 @@ from nwkit.gaussian_tree import (
     GaussianRootPrior,
     GaussianTransition,
     GaussianTreeProcess,
+    _propagated_variance,
     brownian_transition,
     ou_transition_from_root_variance,
 )
@@ -129,8 +131,8 @@ def _predict_down(factor, transition):
         return factor
     marginal = factor.marginal
     mean = transition.slope * marginal.mean + transition.intercept
-    variance = (
-        transition.slope * transition.slope * marginal.variance + transition.variance
+    variance = _propagated_variance(
+        transition.slope, marginal.variance, transition.variance
     )
     if not math.isfinite(mean) or not math.isfinite(variance) or variance < 0.0:
         raise ValueError("A regime-model smoothing message is not finite.")
@@ -138,27 +140,29 @@ def _predict_down(factor, transition):
 
 
 def _prune(data, transitions, root_prior):
-    inside = list(data.local)
-    upward = [_Factor(None) for _ in data.parents]
+    upward = list(data.local)
     for group in range(len(data.parents) - 1, -1, -1):
-        factor = inside[group]
+        factor = upward[group]
         for child in data.children[group]:
             factor = _combine(factor, upward[child])
-        inside[group] = factor
-        if data.parents[group] >= 0:
-            upward[group] = _propagate_up(factor, transitions[group])
+        upward[group] = (
+            _propagate_up(factor, transitions[group])
+            if data.parents[group] >= 0
+            else factor
+        )
+    root_factor = upward[0]
     if root_prior is None:
-        if inside[0].marginal is None:
+        if root_factor.marginal is None:
             raise ValueError("A flat root prior requires informative observations.")
-        log_likelihood = inside[0].log_weight
+        log_likelihood = root_factor.log_weight
     else:
-        posterior_root = _combine(_Factor(root_prior), inside[0])
+        posterior_root = _combine(_Factor(root_prior), root_factor)
         log_likelihood = posterior_root.log_weight
     if not math.isfinite(log_likelihood):
         raise ValueError(
             "The observations have zero likelihood under the regime model."
         )
-    return tuple(inside), tuple(upward), log_likelihood
+    return upward, log_likelihood
 
 
 def _smooth(data, transitions, root_prior, upward):
@@ -220,6 +224,26 @@ def _rate_scale(data):
     return max(variance / mean_length, floor / mean_length)
 
 
+def _reported_bms_rate_bound(value, exponent):
+    try:
+        return max(math.ulp(0.0), math.ldexp(float(value), exponent))
+    except OverflowError:
+        return np.finfo(float).max
+
+
+def _normalized_bms_times(data):
+    _, exponent = math.frexp(max(data.lengths))
+    lengths = tuple(math.ldexp(length, -exponent) for length in data.lengths)
+    # A tree can contain enough distinct scales that uniform normalization
+    # would conflate a positive branch and an exact equality.
+    if any(
+        length == 0.0 < original
+        for length, original in zip(lengths, data.lengths, strict=True)
+    ):
+        return data, 0
+    return replace(data, lengths=lengths), exponent
+
+
 def _bms_regime_design_rank(tree, data, regime_assignment):
     observed_groups = {
         group for group, local in enumerate(data.local) if local.marginal is not None
@@ -229,46 +253,11 @@ def _bms_regime_design_rank(tree, data, regime_assignment):
         group = data.node_groups[leaf]
         if group in observed_groups:
             representative.setdefault(group, leaf)
-    ordered_groups = sorted(observed_groups)
-    regimes = regime_assignment.regimes
-    regime_index = {regime: index for index, regime in enumerate(regimes)}
-    positive_lengths = [
-        float(node.dist)
-        for node in tree.traverse()
-        if not node.is_root and float(node.dist) > 0.0
-    ]
-    length_scale = max(positive_lengths, default=1.0)
-    rng = np.random.default_rng(1729)
-    signatures = []
-    for _ in range(max(8, 4 * len(regimes))):
-        weights = rng.standard_normal(len(ordered_groups))
-        weights -= np.mean(weights)
-        norm = float(np.linalg.norm(weights))
-        if norm == 0.0:
-            continue
-        weights /= norm
-        local = {
-            representative[group]: float(weight)
-            for group, weight in zip(ordered_groups, weights, strict=True)
-        }
-        descendant: dict[Any, float] = {}
-        for node in tree.traverse(strategy="postorder"):
-            descendant[node] = local.get(node, 0.0) + math.fsum(
-                descendant[child] for child in node.children
-            )
-        row = np.zeros(len(regimes), dtype=float)
-        for node in tree.traverse():
-            if node.is_root or float(node.dist) == 0.0:
-                continue
-            index = regime_index[regime_assignment.by_node[node]]
-            row[index] += float(node.dist) / length_scale * descendant[node] ** 2
-        signatures.append(row)
-    matrix = np.vstack(signatures)
-    norms = np.linalg.norm(matrix, axis=0)
-    threshold = 1024.0 * np.finfo(float).eps * max(1.0, float(np.max(norms)))
-    if np.any(norms <= threshold):
-        return int(np.sum(norms > threshold))
-    return int(np.linalg.matrix_rank(matrix / norms))
+    # Pairwise distances determine the lengths of the observed splits. Their
+    # contrasts and the split design therefore have the same nullspace.
+    return _regime_design_rank(
+        _observed_split_regime_lengths(tree, representative.values(), regime_assignment)
+    )
 
 
 def _unique_starts(starts):
@@ -341,7 +330,13 @@ def _positive_multistart(objective, initial, lower, upper):
 
 
 def _fixed_bms_marginals(
-    tree, values_by_leaf, regime_assignment, sigma2_by_regime, standard_errors
+    tree,
+    values_by_leaf,
+    regime_assignment,
+    sigma2_by_regime,
+    standard_errors,
+    *,
+    compute_posterior,
 ):
     transitions = {}
     for node in tree.traverse(strategy="preorder"):
@@ -368,6 +363,7 @@ def _fixed_bms_marginals(
         standard_errors=standard_errors,
         _tree_validated=True,
         _process=process,
+        _compute_posterior=compute_posterior,
     )
     return posterior, bm_fit
 
@@ -382,6 +378,7 @@ def compute_bms_marginals(
     regime_parameters_source=None,
     standard_errors=None,
     _tree_validated=False,
+    _compute_posterior=True,
 ):
     """Return flat-root marginals under regime-specific Brownian rates."""
 
@@ -424,6 +421,7 @@ def compute_bms_marginals(
             regime_assignment,
             sigma2_by_regime,
             standard_errors,
+            compute_posterior=_compute_posterior,
         )
         singular_support = (
             bm_fit.num_effective_observations < data.num_effective_observations
@@ -472,16 +470,22 @@ def compute_bms_marginals(
             "BMS regime rates are not separately identifiable from the "
             "observed branch-regime covariance design; fix rates or revise the regime map."
         )
+    data, time_exponent = _normalized_bms_times(data)
+    rate_exponent = 2 * data.trait_exponent - time_exponent
     scale = _rate_scale(data)
-    lower = np.full(len(regime_assignment.regimes), scale * 1e-8)
-    upper = np.full(len(regime_assignment.regimes), scale * 1e8)
-    initial = np.full(len(regime_assignment.regimes), scale)
+    minimum = _reported_bms_rate_bound(math.ulp(0.0), -rate_exponent)
+    maximum = _reported_bms_rate_bound(np.finfo(float).max, -rate_exponent)
+    lower = np.full(len(regime_assignment.regimes), max(minimum, scale * 1e-8))
+    upper = np.full(len(regime_assignment.regimes), min(maximum, scale * 1e8))
+    if np.any(lower >= upper):
+        raise ValueError("BMS diffusion bounds exceed floating-point range.")
+    initial = np.clip(np.full(len(regime_assignment.regimes), scale), lower, upper)
 
     def objective(log_rates):
         try:
             values = np.exp(log_rates)
             rates = dict(zip(regime_assignment.regimes, values, strict=True))
-            return -_prune(data, transitions_for(rates), None)[2]
+            return -_prune(data, transitions_for(rates), None)[1]
         except (ValueError, ArithmeticError):
             return 1e100
 
@@ -491,15 +495,16 @@ def compute_bms_marginals(
     del objective_value
     values = np.exp(selected.x)
     scaled_rates = dict(zip(regime_assignment.regimes, values, strict=True))
-    _, upward, log_likelihood = _prune(data, transitions_for(scaled_rates), None)
+    transitions = transitions_for(scaled_rates)
+    upward, log_likelihood = _prune(data, transitions, None)
     fitted = {
-        regime: _ldexp(value, 2 * data.trait_exponent, "Fitted BMS sigma2")
+        regime: _ldexp(value, rate_exponent, "Fitted BMS sigma2")
         for regime, value in scaled_rates.items()
     }
     bounds_by_regime = {
         regime: (
-            _ldexp(lower[index], 2 * data.trait_exponent, "BMS sigma2 bound"),
-            _ldexp(upper[index], 2 * data.trait_exponent, "BMS sigma2 bound"),
+            _reported_bms_rate_bound(lower[index], rate_exponent),
+            _reported_bms_rate_bound(upper[index], rate_exponent),
         )
         for index, regime in enumerate(regime_assignment.regimes)
     }
@@ -516,9 +521,11 @@ def compute_bms_marginals(
     optimizer_message = (
         f"deterministic multistart: {converged}/{starts} starts converged; {message}"
     )
-    transitions = transitions_for(scaled_rates)
-    smoothed = _smooth(data, transitions, None, upward)
-    posterior = _restore_posterior(data, smoothed)
+    posterior = (
+        _restore_posterior(data, _smooth(data, transitions, None, upward))
+        if _compute_posterior
+        else {}
+    )
     residual_df = data.num_effective_observations - 1
     restored_log_likelihood = (
         log_likelihood - residual_df * data.trait_exponent * _LOG_2
@@ -566,10 +573,13 @@ def _oum_theta_design_rank(tree, data, regime_assignment, alpha):
             value = np.zeros(len(regime_index), dtype=float)
             value[regime_index[regime_assignment.root_regime]] = 1.0
         else:
-            decay = math.exp(-alpha * float(node.dist))
+            exponent = alpha * float(node.dist)
+            decay = math.exp(-exponent)
             value = decay * coefficients[node.up]
             value = value.copy()
-            value[regime_index[regime_assignment.by_node[node]]] += 1.0 - decay
+            value[regime_index[regime_assignment.by_node[node]]] -= math.expm1(
+                -exponent
+            )
         coefficients[node] = value
     by_group: dict[int, np.ndarray] = {}
     for node, group in data.node_groups.items():

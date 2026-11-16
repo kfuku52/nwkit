@@ -60,6 +60,21 @@ def test_compressed_profiles_keep_unobservable_shift_rank_deficient():
     assert quick.score(ShiftLayout.build(data.tree, [branches[0]])) == -float("inf")
 
 
+def test_quick_profile_retains_different_short_paths_below_one_shift():
+    tree = read_tree(
+        "(((a:1e-20,b:3e-20):1e-20,c:5e-20):1,d:1);", "auto", True, quiet=True
+    )
+    data = ShiftData.build(tree, np.array([[1.0], [2.0], [-1.0], [4.0]]), ["x"])
+    node = data.tree.compiled.children[data.tree.compiled.children[0][0]][0]
+    branch = data.tree.branch_ids[node]
+    layout = ShiftLayout.build(data.tree, [branch])
+    args = dict(alpha_height=1e20, process_variance=1.0, measurement_variance=0.1)
+    null = fit_native_layout(data, ShiftLayout.build(data.tree), **args)
+    profile = NativeQuickProfile(data, null, [branch], 1e20)
+    expected = fit_native_layout(data, layout, **args)["log_likelihood"]
+    assert profile.score(layout) == pytest.approx(expected, abs=1e-12)
+
+
 @pytest.mark.parametrize("alpha", [0, 0.7, float("inf")])
 def test_compressed_nested_return_and_shared_regime_matches_full_fit(alpha):
     values = np.random.default_rng(93).normal(size=(128, 2))

@@ -106,7 +106,7 @@ def test_tiny_asymmetric_rates_are_not_misclassified_as_er():
     )
 
 
-def test_symmetric_generator_batch_matches_independent_matrix_exponential():
+def test_tree_transitions_match_independent_matrix_exponential():
     tree = Tree("((A:0.2,B:0.7):0.4,C:1.3);", parser=1)
     off_diagonal = np.asarray([[0.0, 0.3, 0.8], [0.3, 0.0, 0.5], [0.8, 0.5, 0.0]])
     matrix = off_diagonal.copy()
@@ -114,6 +114,64 @@ def test_symmetric_generator_batch_matches_independent_matrix_exponential():
     transitions = asr._transition_matrices_for_tree(tree, matrix)
     for node, transition in transitions.items():
         assert transition == pytest.approx(expm(matrix * float(node.dist)), abs=2e-15)
+
+
+def test_tree_transitions_preserve_asymmetric_rates_in_reciprocal_units():
+    tree = Tree("(A:1e18,B:1e18);", parser=1)
+    matrix = np.array([[-1.0, 1.0], [2.0, -2.0]])
+    expected = expm(matrix)
+    for transition in asr._transition_matrices_for_tree(tree, matrix * 1e-18).values():
+        np.testing.assert_allclose(transition, expected, rtol=1e-14)
+
+
+def test_symmetric_tree_transitions_reach_equilibrium_on_extreme_branches():
+    tree = Tree("(A:1e200,B:1e200);", parser=1)
+    matrix = np.array([[-2.2, 0.8, 1.4], [0.8, -1.7, 0.9], [1.4, 0.9, -2.3]])
+    expected = np.full((3, 3), 1.0 / 3.0)
+    for transition in asr._transition_matrices_for_tree(tree, matrix).values():
+        np.testing.assert_allclose(transition, expected, rtol=1e-14)
+
+
+def test_short_ordered_mk_branch_keeps_two_step_changes_possible():
+    length = 1e-10
+    tree = Tree(f"(A:0,B:{length});", parser=1)
+    matrix = np.array([[-1.0, 1.0, 0.0], [1.0, -3.0, 2.0], [0.0, 2.0, -2.0]])
+    posterior, fit = asr.compute_mk_marginals(
+        tree,
+        ["x", "y", "z"],
+        {"A": "x", "B": "z"},
+        {"A": np.array([1.0, 0.0, 0.0]), "B": np.array([0.0, 0.0, 1.0])},
+        model="CUSTOM",
+        fixed_rate_matrix=matrix,
+    )
+    # First nonzero term of exp(Qt)[x, z] is Q[x, y] * Q[y, z] * t² / 2.
+    assert fit["log_likelihood"] == pytest.approx(math.log(length**2 / 3.0), abs=1e-9)
+    np.testing.assert_array_equal(posterior[tree], [1.0, 0.0, 0.0])
+
+
+@pytest.mark.parametrize("num_states,length", [(8, 1e-20), (16, 1e-15)])
+def test_short_ordered_mk_branch_resolves_small_many_step_likelihood(
+    num_states, length
+):
+    tree = Tree(f"(A:0,B:{length});", parser=1)
+    states = list(map(str, range(num_states)))
+    neighboring_rates = np.ones(num_states - 1)
+    matrix = np.diag(neighboring_rates, 1) + np.diag(neighboring_rates, -1)
+    np.fill_diagonal(matrix, -matrix.sum(axis=1))
+    tip_likelihoods = np.eye(num_states)
+    _, fit = asr.compute_mk_marginals(
+        tree,
+        states,
+        {"A": states[0], "B": states[-1]},
+        {"A": tip_likelihoods[0], "B": tip_likelihoods[-1]},
+        model="CUSTOM",
+        fixed_rate_matrix=matrix,
+    )
+    num_jumps = num_states - 1
+    leading_term = num_jumps * math.log(length) - math.lgamma(num_jumps + 1)
+    assert fit["log_likelihood"] == pytest.approx(
+        leading_term - math.log(num_states), abs=3e-12
+    )
 
 
 def test_rsc_origin_mapping_preserves_a_fixed_process_across_time_units(monkeypatch):
@@ -149,6 +207,47 @@ def test_rsc_origin_mapping_preserves_a_fixed_process_across_time_units(monkeypa
     pd.testing.assert_frame_equal(results[0], results[1])
     assert omissions[0] == omissions[1]
     assert results[0]["total_count"].sum() >= 40
+
+
+@pytest.mark.parametrize(
+    "length, matrix", [(0.0, [[-1, 1], [1, -1]]), (1.0, [[0, 0], [0, 0]])]
+)
+def test_impossible_zero_event_bridge_is_rejected(length, matrix):
+    with pytest.raises(ValueError, match="cannot change state"):
+        asr._sample_bridge_event_count(
+            0, 1, length, np.asarray(matrix), np.random.default_rng(0)
+        )
+
+
+def test_unreachable_stochastic_bridge_is_rejected():
+    matrix = np.asarray([[-1.0, 1.0, 0.0], [1.0, -1.0, 0.0], [0.0, 0.0, 0.0]])
+    with pytest.raises(ValueError, match="No feasible stochastic bridge"):
+        asr._sample_bridge_event_count(0, 2, 1.0, matrix, np.random.default_rng(0))
+
+
+def test_stochastic_bridge_retains_two_changes_below_probability_range():
+    matrix = np.array(
+        [
+            [-1.0, 1e-180, 0.0, 1.0],
+            [0.0, -1.0, 1e-180, 1.0],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0],
+        ]
+    )
+    context = asr._build_uniformization_context(matrix, 0.01)
+    rng = np.random.default_rng(89)
+    for _ in range(8):
+        counts = asr._draw_bridge_transition_counts(0, 2, context, rng)
+        assert counts == {(0, 1): 1, (1, 2): 1}
+
+
+def test_stochastic_bridge_retains_event_weights_below_intensity_range():
+    rate = 1e-200
+    matrix = np.array([[-rate, rate], [0.0, 0.0]])
+    count = asr._sample_bridge_event_count(
+        0, 1, 1e-200, matrix, np.random.default_rng(1)
+    )
+    assert count == 1
 
 
 def test_uniformization_context_avoids_dense_power_history_at_high_event_count():
@@ -522,6 +621,31 @@ class TestAsrMain:
         assert matrix[0, 1] == pytest.approx(0.5 - 0.5 * decay)
         assert matrix[1, 0] == pytest.approx(0.5 - 0.5 * decay)
         assert matrix[1, 1] == pytest.approx(0.5 + 0.5 * decay)
+
+    def test_inside_likelihood_reuses_transition_matrix_for_equal_branch_lengths(
+        self, monkeypatch
+    ):
+        tree = Tree("((A:1,B:1):1,C:1);", parser=1)
+        states = ["red", "blue"]
+        likelihood_by_leaf = {
+            "A": pd.Series([1.0, 0.0]).to_numpy(),
+            "B": pd.Series([1.0, 0.0]).to_numpy(),
+            "C": pd.Series([0.0, 1.0]).to_numpy(),
+        }
+        rate_matrix = asr._build_rate_matrix("ER", states, [0.2])
+        lengths = []
+        original_transition_matrix = asr._er_transition_matrix
+
+        def counted_transition_matrix(length, rate, num_states):
+            lengths.append(length)
+            return original_transition_matrix(length, rate, num_states)
+
+        monkeypatch.setattr(asr, "_er_transition_matrix", counted_transition_matrix)
+        _, _, _, transitions = asr._compute_inside_likelihoods(
+            tree, likelihood_by_leaf, rate_matrix
+        )
+        assert lengths == [1.0]
+        assert all(matrix is transitions[tree["A"]] for matrix in transitions.values())
 
     def test_model_out_reports_fixed_er_metadata(self, tmp_nwk, tmp_path):
         infile = tmp_nwk("((A:1,B:1):1,C:2);", "tree.nwk")

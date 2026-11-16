@@ -20,33 +20,26 @@ def _propagate_clade_flag(tree, source_property, clade_property):
 
 def annotate_tree_attr(tree, args):
     pattern = re.compile(args.pattern)
-    leaf_counts = dict()
-    target_leaf_counts = dict()
-    for node in tree.traverse():
+    first_target = last_target = None
+    for node in tree.traverse(strategy="postorder"):
+        is_target_leaf = node.is_leaf and pattern.fullmatch(node.name or "") is not None
+        if is_target_leaf:
+            if first_target is None:
+                first_target = node
+            last_target = node
+        all_target = (
+            is_target_leaf
+            if node.is_leaf
+            else all(child.props["is_descendant_all_target"] for child in node.children)
+        )
         node.add_props(
-            is_target_leaf=False,
-            is_descendant_all_target=False,
+            is_target_leaf=is_target_leaf,
+            is_descendant_all_target=all_target,
             is_target_only_mrca=False,
             is_target_only_mrca_clade=False,
             is_all_mrca=False,
             is_all_mrca_clade=False,
         )
-    for node in tree.traverse(strategy="postorder"):
-        if node.is_leaf:
-            is_target_leaf = pattern.fullmatch(node.name or "") is not None
-            node.props["is_target_leaf"] = is_target_leaf
-            leaf_counts[node] = 1
-            target_leaf_counts[node] = int(is_target_leaf)
-        else:
-            leaf_count = 0
-            target_leaf_count = 0
-            for child in node.get_children():
-                leaf_count += leaf_counts[child]
-                target_leaf_count += target_leaf_counts[child]
-            leaf_counts[node] = leaf_count
-            target_leaf_counts[node] = target_leaf_count
-        if (leaf_counts[node] > 0) and (target_leaf_counts[node] == leaf_counts[node]):
-            node.props["is_descendant_all_target"] = True
     for node in tree.traverse():
         if node.is_root:
             node.props["is_target_only_mrca"] = node.props["is_descendant_all_target"]
@@ -56,13 +49,13 @@ def annotate_tree_attr(tree, args):
         ):
             node.props["is_target_only_mrca"] = True
     _propagate_clade_flag(tree, "is_target_only_mrca", "is_target_only_mrca_clade")
-    target_leaves = [leaf for leaf in tree.leaves() if leaf.props.get("is_target_leaf")]
-    num_target_leaves = len(target_leaves)
-    if num_target_leaves > 0:
-        if num_target_leaves == 1:
-            all_mrca_node = target_leaves[0]
-        else:
-            all_mrca_node = tree.common_ancestor(target_leaves)
+    if first_target is not None and last_target is not None:
+        # A clade's leaves form a contiguous span in depth-first order.
+        all_mrca_node = (
+            first_target
+            if first_target is last_target
+            else tree.common_ancestor([first_target, last_target])
+        )
         all_mrca_node.props["is_all_mrca"] = True
     _propagate_clade_flag(tree, "is_all_mrca", "is_all_mrca_clade")
     return tree

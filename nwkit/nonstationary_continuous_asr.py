@@ -6,8 +6,14 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.optimize import minimize_scalar
 
-from nwkit.continuous_asr import GaussianMarginal, _finite_number, compute_bm_marginals
-from nwkit.evolution import build_evolutionary_process
+from nwkit.continuous_asr import (
+    GaussianMarginal,
+    _finite_number,
+    _ldexp,
+    compute_bm_marginals,
+)
+from nwkit.evolution import _finite_rate_bound
+from nwkit.transformed_continuous_asr import compute_transformed_bm_marginals
 
 
 @dataclass(frozen=True)
@@ -55,7 +61,8 @@ def default_eb_rate_bounds(tree):
     depths = _node_depths(tree)
     maximum = max(depths.values(), default=0.0)
     scale = maximum if maximum > 0.0 else 1.0
-    return -10.0 / scale, 10.0 / scale
+    limit = _finite_rate_bound(10.0, scale)
+    return -limit, limit
 
 
 def parse_eb_rate_bounds(value, tree):
@@ -77,28 +84,6 @@ def parse_eb_rate_bounds(value, tree):
     return lower, upper
 
 
-def _run_eb(tree, values_by_leaf, rate, sigma2, standard_errors, tree_validated):
-    # The ASR command historically calls the two-sided exponential rate-change
-    # model EB.  Internally it is the same process that regression calls ACDC,
-    # including positive acceleration parameters.
-    process = build_evolutionary_process(
-        tree,
-        model="acdc",
-        parameter=rate,
-        root_mode="flat",
-        allow_zero=True,
-    )
-    posterior, fit = compute_bm_marginals(
-        tree,
-        values_by_leaf,
-        sigma2=sigma2,
-        standard_errors=standard_errors,
-        _tree_validated=tree_validated,
-        _process=process,
-    )
-    return posterior, fit
-
-
 def compute_eb_marginals(
     tree,
     values_by_leaf,
@@ -118,97 +103,34 @@ def compute_eb_marginals(
     bounds = float(bounds[0]), float(bounds[1])
     if not all(math.isfinite(value) for value in bounds) or bounds[0] >= bounds[1]:
         raise ValueError("EB rate bounds must be two increasing finite values.")
-    if eb_rate is not None:
-        fitted_rate = _finite_number(eb_rate, "--eb-rate")
-        posterior, bm_fit = _run_eb(
+    fixed_rate = None if eb_rate is None else _finite_number(eb_rate, "--eb-rate")
+    # This API historically permits acceleration and uses its own bounds.
+    try:
+        posterior, bm_fit = compute_transformed_bm_marginals(
             tree,
             values_by_leaf,
-            fitted_rate,
-            fixed_sigma2,
-            standard_errors,
-            _tree_validated,
+            model="acdc",
+            sigma2=fixed_sigma2,
+            evolution_parameter=fixed_rate,
+            evolution_parameter_bounds=bounds,
+            standard_errors=standard_errors,
+            _tree_validated=_tree_validated,
         )
-        evaluations = 1
-        success = True
-        message = "EB rate fixed"
-    else:
-        cache = {}
-
-        def evaluate(rate):
-            key = float(rate)
-            if key not in cache:
-                try:
-                    cache[key] = _run_eb(
-                        tree,
-                        values_by_leaf,
-                        key,
-                        fixed_sigma2,
-                        standard_errors,
-                        _tree_validated,
-                    )
-                except (ValueError, ArithmeticError):
-                    cache[key] = None
-            result = cache[key]
-            if result is None or result[1].restricted_log_likelihood is None:
-                return 1e100
-            return -result[1].restricted_log_likelihood
-
-        grid = np.linspace(bounds[0], bounds[1], 41)
-        objectives = np.asarray([evaluate(value) for value in grid])
-        candidates = [
-            (float(objectives[index]), float(grid[index]), "grid")
-            for index in range(len(grid))
-            if math.isfinite(float(objectives[index]))
-            and float(objectives[index]) < 1e99
-        ]
-        for index in range(1, len(grid) - 1):
-            if (
-                objectives[index] <= objectives[index - 1]
-                and objectives[index] <= objectives[index + 1]
-            ):
-                result = minimize_scalar(
-                    evaluate,
-                    bounds=(float(grid[index - 1]), float(grid[index + 1])),
-                    method="bounded",
-                    options={"xatol": 1e-10},
-                )
-                if result.success and math.isfinite(float(result.fun)):
-                    candidates.append(
-                        (float(result.fun), float(result.x), str(result.message))
-                    )
-        zero = 0.0
-        if bounds[0] <= zero <= bounds[1]:
-            candidates.append((evaluate(zero), zero, "BM boundary candidate"))
-        if not candidates:
-            raise ValueError("Failed to find a finite EB likelihood.")
-        _, fitted_rate, message = min(candidates, key=lambda item: item[0])
-        posterior, bm_fit = _run_eb(
-            tree,
-            values_by_leaf,
-            fitted_rate,
-            fixed_sigma2,
-            standard_errors,
-            _tree_validated,
-        )
-        evaluations = len(cache)
-        success = True
-        message = f"profile grid and bounded polishing; {message}"
-        # A flat profile means EB rate and sigma2 are confounded on this tree.
-        finite_objectives = objectives[np.isfinite(objectives) & (objectives < 1e99)]
-        if len(finite_objectives) > 1 and np.ptp(finite_objectives) <= 1e-10 * max(
-            1.0, abs(float(np.min(finite_objectives)))
-        ):
+    except ValueError as exc:
+        message = str(exc)
+        if message.startswith("ACDC parameter is not identifiable"):
             raise ValueError(
                 "EB rate is not identifiable on this tree and observation pattern; fix --eb-rate."
-            )
-    statuses = []
-    tolerance = 1e-6 * max(1.0, abs(bounds[0]), abs(bounds[1]))
-    if eb_rate is None and abs(fitted_rate - bounds[0]) <= tolerance:
-        statuses.append("eb_rate_lower_boundary")
-    if eb_rate is None and abs(fitted_rate - bounds[1]) <= tolerance:
-        statuses.append("eb_rate_upper_boundary")
-    if bm_fit.fit_status != "ok":
-        statuses.append(bm_fit.fit_status)
+            ) from exc
+        if message == "Failed to find a finite ACDC likelihood.":
+            raise ValueError("Failed to find a finite EB likelihood.") from exc
+        raise
+    fitted_rate = bm_fit.evolution_parameter
+    statuses = bm_fit.fit_status.split("+")
+    if statuses[0] == "evolution_parameter_boundary":
+        midpoint = 0.5 * bounds[0] + 0.5 * bounds[1]
+        edge = "lower" if fitted_rate <= midpoint else "upper"
+        statuses[0] = f"eb_rate_{edge}_boundary"
     fit = EarlyBurstFit(
         sigma2=bm_fit.sigma2,
         sigma2_estimated=bm_fit.sigma2_estimated,
@@ -219,10 +141,12 @@ def compute_eb_marginals(
         num_observed=bm_fit.num_observed,
         num_effective_observations=bm_fit.num_effective_observations,
         residual_df=bm_fit.residual_df,
-        fit_status="+".join(statuses) if statuses else "ok",
-        optimizer_success=success,
-        optimizer_message=message,
-        optimizer_grid_evaluations=evaluations,
+        fit_status="+".join(statuses),
+        optimizer_success=bm_fit.optimizer_success,
+        optimizer_message="EB rate fixed"
+        if eb_rate is not None
+        else bm_fit.optimizer_message,
+        optimizer_grid_evaluations=bm_fit.optimizer_grid_evaluations,
     )
     return posterior, fit
 
@@ -236,6 +160,8 @@ def _run_drift(
     sigma2,
     standard_errors,
     tree_validated,
+    *,
+    compute_posterior=True,
 ):
     residual_values = {
         name: None
@@ -249,6 +175,7 @@ def _run_drift(
         sigma2=sigma2,
         standard_errors=standard_errors,
         _tree_validated=tree_validated,
+        _compute_posterior=compute_posterior,
     )
     posterior = {
         node: GaussianMarginal(marginal.mean + drift * depths[node], marginal.variance)
@@ -336,6 +263,7 @@ def compute_bm_drift_marginals(
     drift=None,
     standard_errors=None,
     _tree_validated=False,
+    _compute_posterior=True,
 ):
     """Return Brownian marginals with a fixed or fitted directional trend."""
 
@@ -360,80 +288,80 @@ def compute_bm_drift_marginals(
             fixed_sigma2,
             standard_errors,
             _tree_validated,
+            compute_posterior=_compute_posterior,
         )
         evaluations = 1
         success = True
         message = "drift fixed"
     else:
         tip_depths = np.asarray([depths[node] for node, _ in observed], dtype=float)
-        if len(tip_depths) < 2 or np.ptp(tip_depths) == 0.0:
+        if not np.isfinite(tip_depths).all():
+            raise ValueError("BM-DRIFT sampling depths must be finite.")
+        if len(tip_depths) < 2 or tip_depths.max() == tip_depths.min():
             raise ValueError(
                 "BM-DRIFT drift is not identifiable when observed tips have one sampling depth; fix --drift."
             )
         responses = np.asarray([value for _, value in observed], dtype=float)
+        _, time_exponent = math.frexp(float(np.max(np.abs(tip_depths))))
+        _, trait_exponent = math.frexp(float(np.max(np.abs(responses))))
+        scaled_depths = np.ldexp(tip_depths, -time_exponent)
+        scaled_responses = np.ldexp(responses, -trait_exponent)
+        centered_depths = scaled_depths - scaled_depths.mean()
+        centered_responses = scaled_responses - scaled_responses.mean()
         ordinary_slope = float(
-            np.dot(tip_depths - tip_depths.mean(), responses - responses.mean())
-            / np.dot(tip_depths - tip_depths.mean(), tip_depths - tip_depths.mean())
+            np.dot(centered_depths, centered_responses)
+            / np.dot(centered_depths, centered_depths)
         )
-        if not math.isfinite(ordinary_slope):
-            raise ValueError(
-                "BM-DRIFT trend exceeds floating-point range; rescale trait or time units."
-            )
         scale = max(
             abs(ordinary_slope),
-            float(np.ptp(responses)) / float(np.ptp(tip_depths)),
+            float(np.ptp(scaled_responses)) / float(np.ptp(scaled_depths)),
             np.finfo(float).eps,
         )
-        try:
-            boundary_candidate = _run_drift(
-                tree,
-                values_by_leaf,
-                depths,
-                leaf_by_name,
-                ordinary_slope,
-                fixed_sigma2,
-                standard_errors,
-                _tree_validated,
-            )
-        except (ValueError, ArithmeticError):
-            boundary_candidate = None
+
+        def original_drift(slope):
+            return _ldexp(slope, trait_exponent - time_exponent, "BM-DRIFT trend")
+
+        def trial_fit(slope):
+            try:
+                _, fit = _run_drift(
+                    tree,
+                    values_by_leaf,
+                    depths,
+                    leaf_by_name,
+                    original_drift(slope),
+                    fixed_sigma2,
+                    standard_errors,
+                    _tree_validated,
+                    compute_posterior=False,
+                )
+            except (ValueError, ArithmeticError):
+                return None
+            return fit
+
+        boundary_candidate = trial_fit(ordinary_slope)
         if (
             boundary_candidate is not None
-            and boundary_candidate[1].sigma2 == 0.0
-            and boundary_candidate[1].restricted_log_likelihood is None
+            and boundary_candidate.sigma2 == 0.0
+            and boundary_candidate.restricted_log_likelihood is None
         ):
-            fitted_drift = ordinary_slope
-            posterior, bm_fit = boundary_candidate
+            fitted_slope = ordinary_slope
             evaluations = 1
             success = True
             message = "exact zero-diffusion boundary"
         else:
-            cache = {}
-            if boundary_candidate is not None:
-                cache[ordinary_slope] = boundary_candidate
+            objectives = {}
 
             def evaluate(current_drift):
                 key = float(current_drift)
-                if key not in cache:
-                    try:
-                        cache[key] = _run_drift(
-                            tree,
-                            values_by_leaf,
-                            depths,
-                            leaf_by_name,
-                            key,
-                            fixed_sigma2,
-                            standard_errors,
-                            _tree_validated,
-                        )
-                    except (ValueError, ArithmeticError):
-                        cache[key] = None
-                result = cache[key]
-                if result is None or result[1].restricted_log_likelihood is None:
-                    return 1e100
-                return -result[1].restricted_log_likelihood
+                if key not in objectives:
+                    fit = (
+                        boundary_candidate if key == ordinary_slope else trial_fit(key)
+                    )
+                    likelihood = None if fit is None else fit.restricted_log_likelihood
+                    objectives[key] = 1e100 if likelihood is None else -likelihood
+                return objectives[key]
 
-            fitted_drift, objective, optimizer_message = _minimize_unbounded_profile(
+            fitted_slope, objective, optimizer_message = _minimize_unbounded_profile(
                 evaluate,
                 ordinary_slope,
                 scale,
@@ -441,19 +369,21 @@ def compute_bm_drift_marginals(
             )
             if not math.isfinite(objective) or objective >= 1e99:
                 raise ValueError("Failed to estimate a finite BM-DRIFT trend.")
-            posterior, bm_fit = _run_drift(
-                tree,
-                values_by_leaf,
-                depths,
-                leaf_by_name,
-                fitted_drift,
-                fixed_sigma2,
-                standard_errors,
-                _tree_validated,
-            )
-            evaluations = len(cache)
+            evaluations = len(objectives)
             success = True
             message = f"adaptive unbounded profile; {optimizer_message}"
+        fitted_drift = original_drift(fitted_slope)
+        posterior, bm_fit = _run_drift(
+            tree,
+            values_by_leaf,
+            depths,
+            leaf_by_name,
+            fitted_drift,
+            fixed_sigma2,
+            standard_errors,
+            _tree_validated,
+            compute_posterior=_compute_posterior,
+        )
     fit = BrownianDriftFit(
         sigma2=bm_fit.sigma2,
         sigma2_estimated=bm_fit.sigma2_estimated,

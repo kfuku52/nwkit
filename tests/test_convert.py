@@ -7,11 +7,55 @@ import pytest
 
 from nwkit.cli import main
 from nwkit.convert import convert_tree_text
+from nwkit.tree_formats import _normalize_plain_suffixes, transform_annotations
 from nwkit.util import read_tree
 
 
 def parsed(text):
     return read_tree(text, "auto", True, quiet=True)
+
+
+def test_annotation_transform_reports_later_lexical_error_first():
+    source = "(A[&age=1,age=2],B);('unclosed,C);"
+    with pytest.raises(ValueError, match="Unterminated quoted tree label"):
+        transform_annotations(source)
+
+
+@pytest.mark.parametrize("source", ["(A B,C);", "(A:,B);", "(A:1:2,B);"])
+def test_parser_normalization_rejects_malformed_plain_suffix(source):
+    with pytest.raises(ValueError, match="Malformed Newick"):
+        transform_annotations(source, parser=True)
+
+
+def test_parser_normalization_retains_plain_suffix_text_and_annotated_nodes():
+    source = "('A B':1.001e-10, (C,D)095:2.50[&&NHX:S=CD])root;"
+    assert (
+        transform_annotations(source, parser=True)
+        == "('A B':1.001e-10,(C,D)095:2.50[&&NHX:S=CD])root;"
+    )
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "((A_A:1.001e-10,B:0)095:2.50,C:3)root;",
+        "((A+B,Sp.C-1),D2)X;",
+        "(\u03b1:1.2,B:3e+5);",
+        "(A:1, B:2);",
+        "('A B':1,\"C D\":2);",
+        "(A:1,\u2003B:2);",
+        "(A:1,B::2);",
+        "(A:" + "9" * 20_000 + "::1,B);",
+    ],
+)
+def test_compact_plain_normalization_agrees_with_the_tokenizer(source):
+    try:
+        expected = _normalize_plain_suffixes(source)
+    except ValueError as error:
+        with pytest.raises(ValueError, match=str(error).removesuffix(".")):
+            transform_annotations(source, parser=True)
+    else:
+        assert transform_annotations(source, parser=True) == expected
 
 
 def test_property_labels_are_internal_only_and_precede_removal():

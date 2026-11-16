@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -7,13 +9,16 @@ from nwkit.contrast import calculate_contrasts
 from nwkit.evolution import (
     build_evolutionary_covariance,
     build_sparse_evolutionary_model,
+    optimization_parameterization,
     parameter_near_boundary,
     read_custom_covariance,
     transformed_edge_variances,
     validate_custom_covariance,
     validate_evolution_parameter,
 )
+from nwkit.nonstationary_continuous_asr import default_eb_rate_bounds
 from nwkit.ordinary_regression import fit_ordinary_regression
+from nwkit.ou_asr import default_alpha_bounds
 from nwkit.sparse_laplace import (
     combine_sparse_covariance_models,
     condition_sparse_tip_model,
@@ -26,6 +31,24 @@ LEAF_NAMES = ["A", "B", "C", "D", "E"]
 
 def _tree(text=TREE_TEXT):
     return Tree(text, parser=1)
+
+
+@pytest.mark.parametrize("model", ["ou", "eb", "acdc"])
+def test_default_rate_bounds_are_finite_on_short_trees(model):
+    tree = _tree("(A:1e-310,B:1e-310);")
+    bounds, decode = optimization_parameterization(tree, model)
+    assert np.all(np.isfinite(bounds))
+    lower, upper = (decode(value) for value in bounds)
+    assert math.isfinite(lower) and math.isfinite(upper)
+    assert lower < upper
+    assert upper > 0.0 if model != "eb" else upper == 0.0
+
+
+@pytest.mark.parametrize("bounds_for", [default_alpha_bounds, default_eb_rate_bounds])
+def test_ancestral_rate_defaults_stay_finite_on_short_trees(bounds_for):
+    lower, upper = bounds_for(_tree("(A:1e-310,B:1e-310);"))
+    assert math.isfinite(lower) and math.isfinite(upper)
+    assert lower < upper
 
 
 def _values(values):
@@ -151,6 +174,46 @@ def test_delta_covariance_raises_ultrametric_node_depths_to_power():
     assert covariance[3, 4] == pytest.approx(4.0 / 3.0)
 
 
+@pytest.mark.parametrize("length", [1e-20, 1e-200])
+def test_delta_preserves_positive_short_branches_at_large_parent_depth(length):
+    tree = _tree(f"((A:{length},B:{length})I:1,C:1)R;")
+    edges = transformed_edge_variances(tree, model="delta", parameter=2.0)
+    assert edges[tree["A"]] == pytest.approx(2 * length, rel=1e-14, abs=0.0)
+
+
+def test_large_delta_retains_child_depth_below_one_ulp_before_exponentiation():
+    tree = _tree(
+        "((A:8.673617379884035e-19,B:1.1102230246251565e-16)I:1,C:1.0000000000000002)R;"
+    )
+    # For a parent at 1 and height 1 + 2**-52, use the ratio of
+    # (1 + 2**-60) to the height without rounding either short edge away.
+    delta = 1e16
+    rise = -math.expm1(-delta * math.log1p(2.0**-60))
+    decay = math.exp(-delta * math.log1p((2.0**-52 - 2.0**-60) / (1.0 + 2.0**-60)))
+    expected = (1.0 + 2.0**-52) * decay * rise
+    actual = transformed_edge_variances(tree, model="delta", parameter=delta)
+    assert actual[tree["A"]] == pytest.approx(expected, rel=2e-15, abs=0.0)
+
+
+def test_large_delta_restores_subnormal_relative_branch_length_before_exponentiation():
+    tree = _tree("((A:1e-10,B:1e-10)I:1e308,C:1e308)R;")
+    actual = transformed_edge_variances(tree, model="delta", parameter=1e308)
+    expected = 1e308 * math.expm1(1e-10)
+    assert actual[tree["A"]] == pytest.approx(expected, rel=2e-15, abs=0.0)
+
+
+@pytest.mark.parametrize(
+    "model, parameter, expected",
+    [("delta", 2.0, 2e-18), ("delta", 1.0, 1e-18), ("ou", 1e-300, 1e-18)],
+)
+def test_edge_transform_retains_branches_shorter_than_depth_precision(
+    model, parameter, expected
+):
+    tree = _tree("((A:1e-18,B:1e-18):1,C:1);")
+    edges = transformed_edge_variances(tree, model=model, parameter=parameter)
+    assert edges[tree["A"]] == pytest.approx(expected, rel=1e-14, abs=0)
+
+
 @pytest.mark.parametrize("model,rate_change", [("eb", -0.4), ("acdc", 0.2)])
 def test_rate_change_covariance_integrates_exponential_rate(model, rate_change):
     covariance = build_evolutionary_covariance(
@@ -164,6 +227,27 @@ def test_rate_change_covariance_integrates_exponential_rate(model, rate_change):
     assert covariance[0, 1] == pytest.approx(transformed(2.0))
     assert covariance[0, 2] == pytest.approx(transformed(1.0))
     assert covariance[0, 3] == pytest.approx(0.0)
+
+
+@pytest.mark.parametrize(
+    ("model", "tree_text", "rate", "expected"),
+    [
+        ("acdc", "(A:7.2e-298,B:1e-299)R;", 1e300, math.exp(720 - math.log(1e300))),
+        (
+            "eb",
+            "((A:1e300,B:1e300)I:7.4e302,C:1e300)R;",
+            -1e-300,
+            math.exp(-740 - math.log(1e-300)) * -math.expm1(-1.0),
+        ),
+        ("acdc", "(A:1e-300,B:2e-300)R;", 1e-300, 1e-300),
+    ],
+)
+def test_rate_change_retains_finite_branch_variance_at_extreme_scales(
+    model, tree_text, rate, expected
+):
+    tree = _tree(tree_text)
+    edges = transformed_edge_variances(tree, model=model, parameter=rate)
+    assert edges[tree["A"]] == pytest.approx(expected, rel=2e-13, abs=0.0)
 
 
 @pytest.mark.parametrize(
@@ -188,6 +272,56 @@ def test_ou_tends_to_brownian_as_alpha_approaches_zero():
     brownian = build_evolutionary_covariance(_tree(), LEAF_NAMES)
     ou = build_evolutionary_covariance(_tree(), LEAF_NAMES, model="ou", parameter=1e-9)
     np.testing.assert_allclose(ou, brownian, rtol=1e-7, atol=1e-7)
+
+
+def test_fixed_root_ou_covariance_retains_brownian_limit_at_subnormal_alpha():
+    brownian = build_evolutionary_covariance(_tree(), LEAF_NAMES)
+    ou = build_evolutionary_covariance(
+        _tree(), LEAF_NAMES, model="ou", parameter=1e-310
+    )
+    np.testing.assert_array_equal(ou, brownian)
+
+
+def test_custom_covariance_can_validate_large_diagonals_without_overflow():
+    covariance = np.array([[1e308, 1e307], [1e307, 1.1e308]])
+    with np.errstate(over="raise", invalid="raise"):
+        result = validate_custom_covariance(covariance, ["a", "b"])
+    np.testing.assert_array_equal(result, covariance)
+
+
+def test_custom_covariance_accepts_heterogeneous_variance_units():
+    covariance = np.array([[1e308, 0.1], [0.1, 1e-308]])
+    np.testing.assert_array_equal(
+        validate_custom_covariance(covariance, ["a", "b"]), covariance
+    )
+
+
+def test_custom_covariance_checks_symmetry_relative_to_small_matrix_units():
+    covariance = np.array([[1e-100, 0.0], [1e-100, 1e-100]])
+    with pytest.raises(ValueError, match="must be symmetric"):
+        validate_custom_covariance(covariance, ["a", "b"])
+
+
+@pytest.mark.parametrize("alpha", [1e-18, 1e-300, 1e-323])
+def test_ou_contrasts_preserve_brownian_limit_below_absolute_roundoff(alpha):
+    tree = _tree()
+    brownian = transformed_edge_variances(tree)
+    ou = transformed_edge_variances(tree, model="ou", parameter=alpha)
+    assert ou == pytest.approx(brownian, rel=1e-14, abs=0.0)
+
+
+def test_ou_contrasts_preserve_short_branch_innovation_at_nonzero_depth():
+    tree = _tree("((A:1e-20,B:1e-20)I:1,C:1)R;")
+    alpha = 0.8
+    ou = transformed_edge_variances(tree, model="ou", parameter=alpha)
+    assert ou[tree["A"]] == pytest.approx(1e-20, rel=1e-14, abs=0.0)
+
+
+def test_ou_contrasts_scale_large_innovation_before_attenuation_underflows():
+    tree = _tree("((A:5e302,B:5e302)I:1e300,C:5.01e302)R;")
+    ou = transformed_edge_variances(tree, model="ou", parameter=8e-301)
+    expected = math.exp(math.log(-math.expm1(-1.6) / 1.6e-300) - 800.0)
+    assert ou[tree["I"]] == pytest.approx(expected, rel=2e-13, abs=0.0)
 
 
 def test_parameter_boundary_uses_explicit_natural_bounds():
@@ -267,8 +401,12 @@ def test_supported_contrast_transform_whitens_its_tip_covariance(model, paramete
     )
 
 
-def test_delta_and_contrast_ou_reject_non_ultrametric_trees():
+@pytest.mark.parametrize("time_scale", [1.0, 1e-20, 1e20])
+def test_delta_and_contrast_ou_reject_non_ultrametric_trees(time_scale):
     tree = _tree(TREE_TEXT.replace("C:2", "C:1"))
+    for node in tree.traverse():
+        if not node.is_root:
+            node.dist *= time_scale
     with pytest.raises(ValueError, match="ultrametric"):
         build_evolutionary_covariance(tree, LEAF_NAMES, model="delta", parameter=1.2)
     with pytest.raises(ValueError, match="ultrametric"):

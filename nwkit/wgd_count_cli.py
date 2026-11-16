@@ -32,6 +32,12 @@ def register_wgd_count(subparsers, tree_input, table_output, table_policy):
             "Optional branch_id,regime TSV covering all non-root input branches.",
         ),
         (
+            "fixed-events-tsv",
+            None,
+            str,
+            "Condition on fixed branch_id,retention,event_fraction,multiplicity rows; scan other branches.",
+        ),
+        (
             "candidate-branches",
             None,
             str,
@@ -68,6 +74,30 @@ def register_wgd_count(subparsers, tree_input, table_output, table_policy):
             "Null bootstrap datasets (default 0: exploratory scan with no p-values).",
         ),
         ("seed", 1, int, "Nonnegative seed for local simulation RNG (default 1)."),
+        (
+            "scan-workers",
+            1,
+            int,
+            "Concurrent candidate-branch fits before calibration; use one BLAS thread per worker (default 1).",
+        ),
+        (
+            "bootstrap-workers",
+            1,
+            int,
+            "Concurrent null refits; use one BLAS thread per worker (default 1).",
+        ),
+        (
+            "bootstrap-checkpoint",
+            None,
+            str,
+            "Save completed null refits and resume with identical settings except for an optional larger draw target.",
+        ),
+        (
+            "background-adequacy-draws",
+            0,
+            int,
+            "Optional fitted-background adequacy simulations (0 or at least 4); requires --model-out.",
+        ),
         (
             "alpha",
             0.05,

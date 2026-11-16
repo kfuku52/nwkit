@@ -1,42 +1,69 @@
 """Validated count-model inputs and transactional WGM candidate outputs."""
 
 import json
+import math
 import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from scipy.stats import beta
 
 from nwkit import __version__
 from nwkit.clade_index import CladeIndex
-from nwkit.gene_family_input import read_gene_family_table
+from nwkit.gene_family_input import read_gene_family_rows, read_gene_family_table
 from nwkit.output_transaction import output_transaction, validate_output_targets
 from nwkit.rooting_state import require_rooted
 from nwkit.util import (
     assign_branch_ids,
-    is_missing_table_value,
+    parse_table_missing_values,
     read_tree,
     validate_outputs_do_not_replace_inputs,
     validate_unique_named_leaves,
 )
-from nwkit.wgd_count_fit import _burst_model, calibrate_scan, scan_counts
-from nwkit.wgd_count_model import CountLikelihood, CountTree, rate_categories
+from nwkit.wgd_count_adequacy import count_background_adequacy
+from nwkit.wgd_count_checkpoint import (
+    checkpoint_identity,
+    checkpoint_inputs,
+    open_checkpoint,
+)
+from nwkit.wgd_count_fit import (
+    _burst_model,
+    bootstrap_exceedances,
+    calibrate_scan,
+    initial_count_bound,
+    scan_counts,
+)
+from nwkit.wgd_count_model import (
+    CountLikelihood,
+    CountTree,
+    MultiplicationEvent,
+    rate_categories,
+)
 
 
 def read_counts(path, names, missing_values):
-    header, rows = read_gene_family_table(path, ["family_id", *names])
+    header, rows = read_gene_family_rows(path, ["family_id", *names])
     if set(header) != {"family_id", *names}:
         raise ValueError(
             "Count columns must exactly match the species-tree tips plus family_id."
         )
-    families = [row["family_id"] for row in rows]
+    index_by_name = {name: index for index, name in enumerate(header)}
+    family_column = index_by_name["family_id"]
+    families = [row[family_column] for row in rows]
     if any(not family for family in families) or len(set(families)) != len(families):
         raise ValueError("family_id values must be nonempty and unique.")
+    columns = [(name, index_by_name[name]) for name in names]
+    markers = (
+        missing_values
+        if isinstance(missing_values, set)
+        else parse_table_missing_values(missing_values)
+    )
     counts = np.empty((len(rows), len(names)))
     for i, row in enumerate(rows):
-        for j, name in enumerate(names):
-            value = row[name]
-            if is_missing_table_value(value, missing_values):
+        for j, (name, column) in enumerate(columns):
+            value = row[column]
+            if value.strip() in markers:
                 counts[i, j] = np.nan
                 continue
             try:
@@ -45,7 +72,7 @@ def read_counts(path, names, missing_values):
                 raise ValueError(
                     f"{families[i]}/{name}: count must be a nonnegative integer or missing."
                 ) from exc
-            if not np.isfinite(number) or number < 0 or number != np.floor(number):
+            if not math.isfinite(number) or number < 0 or not number.is_integer():
                 raise ValueError(
                     f"{families[i]}/{name}: count must be a nonnegative integer or missing."
                 )
@@ -123,6 +150,36 @@ def _groups(args, design):
     ), unique
 
 
+def _fixed_events(path, design):
+    if not path:
+        return ()
+    fields = ["branch_id", "retention", "event_fraction", "multiplicity"]
+    header, rows = read_gene_family_table(path, fields)
+    if set(header) != set(fields) or not rows:
+        raise ValueError(
+            "Fixed events TSV needs exactly branch_id, retention, event_fraction and multiplicity, and at least one row."
+        )
+    nodes = {
+        branch: node
+        for node, branch in enumerate(design.branch_ids)
+        if node and design.lengths[node] > 0
+    }
+    events = {}
+    for row in rows:
+        branch = int(row["branch_id"])
+        if branch not in nodes or branch in events:
+            raise ValueError(
+                "Fixed events TSV requires distinct positive-length non-root branch IDs."
+            )
+        events[branch] = MultiplicationEvent(
+            nodes[branch],
+            float(row["retention"]),
+            float(row["event_fraction"]),
+            int(row["multiplicity"]),
+        )
+    return tuple(events[branch] for branch in sorted(events))
+
+
 def _fit_json(fit):
     return {
         "rates": fit.rates.tolist(),
@@ -147,12 +204,53 @@ def _fit_json(fit):
     }
 
 
+def bootstrap_tail_audit(result, design, alpha):
+    """Monte Carlo uncertainty of the simulated tail, not model uncertainty."""
+    if not result.bootstrap_statistics:
+        return None
+    draws = len(result.bootstrap_statistics)
+    counts = bootstrap_exceedances(result.bootstrap_statistics, result.candidates)
+    lower = np.zeros(len(counts))
+    upper = np.ones(len(counts))
+    has_exceedances = counts > 0
+    has_misses = counts < draws
+    lower_counts = counts[has_exceedances]
+    upper_counts = counts[has_misses]
+    lower[has_exceedances] = beta.ppf(0.025, lower_counts, draws - lower_counts + 1)
+    upper[has_misses] = beta.ppf(0.975, upper_counts + 1, draws - upper_counts)
+    details = []
+    for candidate, count, low, high in zip(
+        result.candidates, counts, lower, upper, strict=True
+    ):
+        details.append(
+            {
+                "branch_id": design.branch_ids[candidate.node],
+                "num_exceedances": int(count),
+                "tail_probability_lower": float(low),
+                "tail_probability_upper": float(high),
+                "alpha_resolution": "below"
+                if high < alpha
+                else "above"
+                if low > alpha
+                else "overlaps",
+            }
+        )
+    return {
+        "method": "pointwise-clopper-pearson",
+        "level": 0.95,
+        "num_draws": draws,
+        "minimum_plus_one_p": 1 / (1 + draws),
+        "candidates": details,
+    }
+
+
 def _paths(args):
     inputs = [
         ("--infile", args.infile),
         ("--counts", args.counts),
         ("--detection-tsv", args.detection_tsv),
         ("--rate-groups-tsv", args.rate_groups_tsv),
+        ("--fixed-events-tsv", getattr(args, "fixed_events_tsv", None)),
     ]
     paths = {}
     for role in ("outfile", "model_out"):
@@ -164,14 +262,37 @@ def _paths(args):
         if path not in (None, "-"):
             paths[role] = path
     validate_outputs_do_not_replace_inputs(
-        inputs, [(role, path) for role, path in paths.items()]
+        inputs,
+        [(role, path) for role, path in paths.items()]
+        + [("--bootstrap-checkpoint", getattr(args, "bootstrap_checkpoint", None))],
     )
-    validate_output_targets(paths.values())
+    checkpoint = getattr(args, "bootstrap_checkpoint", None)
+    if checkpoint in ("", "-"):
+        raise ValueError("--bootstrap-checkpoint requires a nonempty file path.")
+    validate_output_targets(
+        [*paths.values(), *([checkpoint] if checkpoint is not None else [])]
+    )
     return paths
+
+
+def _adequacy_draw_count(args, paths):
+    adequacy_draws = getattr(args, "background_adequacy_draws", 0)
+    if adequacy_draws != 0 and (adequacy_draws < 4 or "model_out" not in paths):
+        raise ValueError(
+            "--background-adequacy-draws requires at least four draws and --model-out."
+        )
+    return adequacy_draws
 
 
 def wgd_count_main(args):
     paths = _paths(args)
+    adequacy_draws = _adequacy_draw_count(args, paths)
+    workers = getattr(args, "bootstrap_workers", 1)
+    scan_workers = getattr(args, "scan_workers", 1)
+    if workers < 1:
+        raise ValueError("--bootstrap-workers must be positive.")
+    if scan_workers < 1:
+        raise ValueError("--scan-workers must be positive.")
     if (
         args.bootstrap < 0
         or args.seed < 0
@@ -185,6 +306,10 @@ def wgd_count_main(args):
         raise ValueError("--alpha must be in (0, 1).")
     if args.multiplicity < 2:
         raise ValueError("--multiplicity must be >= 2.")
+    checkpoint_path = getattr(args, "bootstrap_checkpoint", None)
+    if checkpoint_path is not None and not args.bootstrap:
+        raise ValueError("--bootstrap-checkpoint requires positive --bootstrap.")
+    checkpoint_source = checkpoint_inputs(args) if checkpoint_path is not None else None
     fractions = tuple(float(value) for value in args.event_fractions.split(","))
     shape = (
         None if args.family_gamma_shape == "none" else float(args.family_gamma_shape)
@@ -203,7 +328,17 @@ def wgd_count_main(args):
         rate_scales=scales,
         branch_groups=groups,
         ascertainment=args.ascertainment,
+        fixed_events=_fixed_events(getattr(args, "fixed_events_tsv", None), design),
     )
+    maximum = np.nanmax(counts)
+    bound = initial_count_bound(maximum)
+    if 2 * bound > args.max_states:
+        row, column = np.unravel_index(np.nanargmax(counts), counts.shape)
+        raise ValueError(
+            f"--max-states={args.max_states} must be at least {2 * bound} for the "
+            f"state-doubling check; the largest observed count is {int(maximum)} "
+            f"in family {families[row]!r}, tip {design.tip_names[column]!r}."
+        )
     selected = None
     if args.candidate_branches:
         requested = [int(value) for value in args.candidate_branches.split(",")]
@@ -221,15 +356,33 @@ def wgd_count_main(args):
         state_tolerance=args.state_tolerance,
         max_iterations=args.max_iterations,
     )
-    result = scan_counts(model, nodes=selected, **options)
+    result = scan_counts(model, nodes=selected, workers=scan_workers, **options)
     if args.bootstrap:
 
         def progress(done, total):
             print(f"WGM count bootstrap: {done}/{total}", file=sys.stderr)
 
-        result = calibrate_scan(
-            model, result, args.bootstrap, args.seed, progress=progress, **options
+        identity = (
+            checkpoint_identity(args, result, checkpoint_source)
+            if checkpoint_path is not None
+            else None
         )
+        with open_checkpoint(checkpoint_path, identity, args.bootstrap) as checkpoint:
+            result = calibrate_scan(
+                model,
+                result,
+                args.bootstrap,
+                args.seed,
+                progress=progress,
+                workers=workers,
+                checkpoint=checkpoint,
+                **options,
+            )
+        if (
+            checkpoint_source is not None
+            and checkpoint_inputs(args) != checkpoint_source
+        ):
+            raise ValueError("WGD bootstrap inputs changed during null calibration.")
     rows = []
     for rank, candidate in enumerate(result.candidates, 1):
         fit = candidate.event_fit
@@ -312,6 +465,7 @@ def wgd_count_main(args):
         ],
         "calibration": result.calibration,
         "bootstrap_max_statistics": list(result.bootstrap_statistics),
+        "bootstrap_tail_audit": bootstrap_tail_audit(result, design, args.alpha),
         "seed": args.seed,
         "alpha": args.alpha,
         "ascertainment": f"{args.ascertainment}; conditional on observation, separately for each missingness mask, after mixing family rate categories",
@@ -326,6 +480,24 @@ def wgd_count_main(args):
             "Rates have numerical bounds exp(-16)..20 per median positive branch length; root mean upper bound is max(10, twice maximum observed count). Inspect nuisance_bound_reached.",
         ],
     }
+    if model.fixed_events:
+        metadata["fixed_background_events"] = [
+            {
+                "branch_id": design.branch_ids[event.node],
+                "species_event_id": design.clade_ids[event.node],
+                "retention": event.retention,
+                "event_fraction": event.fraction,
+                "multiplicity": event.multiplicity,
+            }
+            for event in model.fixed_events
+        ]
+        metadata["limitations"].append(
+            "Supplied background events are treated as exact and retained in every fit and null draw; their selection and uncertainty are not calibrated."
+        )
+    if adequacy_draws:
+        metadata["background_adequacy"] = count_background_adequacy(
+            model, result.background, adequacy_draws, args.seed
+        )
     model_text = (
         json.dumps(metadata, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
     )

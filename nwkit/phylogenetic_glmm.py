@@ -4,6 +4,8 @@ import json
 import math
 import warnings
 from dataclasses import dataclass, replace
+from decimal import Decimal, localcontext
+from functools import lru_cache
 from typing import Callable, Mapping, Sequence
 
 import numpy as np
@@ -11,18 +13,23 @@ from scipy import sparse
 from scipy.linalg import cho_solve
 from scipy.optimize import brentq, linprog, minimize
 from scipy.special import (
+    betainc,
     betaln,
     digamma,
+    erfcx,
     expit,
     gammaln,
     log_ndtr,
     logsumexp,
+    pdtrc,
     polygamma,
 )
 from scipy.stats import chi2
 from scipy.stats import nbinom as nbinom_distribution
 from scipy.stats import poisson as poisson_distribution
 
+from nwkit.evolution import EvolutionaryCovarianceFactory
+from nwkit.gaussian import finite_mean, symmetric_average
 from nwkit.measurement_error import _finite_difference_hessian
 from nwkit.model_matrix import CategoricalObservation, ReplicatedObservation
 from nwkit.regression_inference import (
@@ -48,6 +55,27 @@ from nwkit.sparse_laplace import (
     grouped_predictor_loading,
     joint_predictor_loading,
     prepare_sparse_latent_sampler,
+)
+
+_SMALL_NB_DISPERSION = 1e-4
+_POISSON_LIMIT_DISPERSION = (np.finfo(float).eps / 2.0) ** 2
+_NB_LOG_GAMMA_RATIO_SERIES = (0.0,) + tuple(
+    (-1.0) ** (order + 1) / (order * (order + 1)) for order in range(1, 9)
+)
+_SMALL_BETA_PRECISION = 1e-20
+_LARGE_BETA_PRECISION = 1e6
+_LARGE_GAMMA_SHAPE = 128.0
+_LARGE_POISSON_COUNT = 128.0
+_LARGE_NEGATIVE_BINOMIAL_COUNT = 1e6
+_HIGH_PRECISION_COUNT = 1e20
+_HIGH_PRECISION_GAMMA_SHAPE = 1e20
+_LOG_NORMAL_PROBABILITY_LIMIT = -math.log(np.finfo(float).tiny)
+_EXPONENTIAL_DEVIANCE_SERIES = tuple(
+    1.0 / math.factorial(order) for order in range(2, 11)
+)
+_LOG1P_REMAINDER_SERIES = tuple((-1.0) ** (order + 1) / order for order in range(2, 15))
+_INTERVAL_NODES, _INTERVAL_WEIGHTS = (
+    values * 0.5 for values in np.polynomial.legendre.leggauss(8)
 )
 
 
@@ -330,11 +358,22 @@ def response_count_matrix(
 def _positive_definite_cholesky(matrix: np.ndarray) -> np.ndarray:
     symmetric = (matrix + matrix.T) / 2.0
     scale = max(1.0, float(np.max(np.diag(symmetric))))
+    finite_scale = math.isfinite(scale)
+    if finite_scale:
+        symmetric = symmetric.astype(
+            np.result_type(symmetric.dtype, np.float64), copy=False
+        )
+        diagonal = symmetric.diagonal().copy()
+        # Match the off-diagonal addition of positive zero.
+        np.add(symmetric, 0.0, out=symmetric)
     for multiplier in (0.0, 1e-12, 1e-10, 1e-8, 1e-6):
+        if finite_scale:
+            np.fill_diagonal(symmetric, diagonal + scale * multiplier)
+            candidate = symmetric
+        else:
+            candidate = symmetric + np.eye(len(symmetric)) * scale * multiplier
         try:
-            return np.linalg.cholesky(
-                symmetric + np.eye(len(symmetric)) * scale * multiplier
-            )
+            return np.linalg.cholesky(candidate)
         except np.linalg.LinAlgError:
             continue
     raise np.linalg.LinAlgError("Matrix is not positive definite.")
@@ -453,19 +492,37 @@ def _robust_minimize(
     return min(candidates, key=lambda candidate: float(candidate.fun))
 
 
-def _normalize_covariance(
-    matrix: np.ndarray, size: int, label: str, *, allow_semidefinite: bool = False
-) -> np.ndarray:
+def _scale_covariance_by_mean_variance(matrix, size, label):
     matrix = np.asarray(matrix, dtype=float)
-    if matrix.shape != (size, size) or not np.isfinite(matrix).all():
+    if not size or matrix.shape != (size, size) or not np.isfinite(matrix).all():
         raise ValueError(
             "{} covariance has invalid dimensions or values.".format(label)
         )
-    matrix = (matrix + matrix.T) / 2.0
-    diagonal_mean = float(np.mean(np.diag(matrix)))
+    matrix = symmetric_average(matrix)
+    diagonal_mean = finite_mean(np.diag(matrix))
+    if diagonal_mean < np.finfo(float).tiny:
+        # Normalize a subnormal mean before rounding it to float precision.
+        # Conversely, normal means can divide the original matrix directly,
+        # preserving entries that would underflow in an intermediate rescaling.
+        _, exponent = math.frexp(float(np.max(np.diag(matrix))))
+        with np.errstate(over="ignore"):
+            matrix = np.ldexp(matrix, -exponent)
+        diagonal_mean = finite_mean(np.diag(matrix))
     if diagonal_mean <= 0.0:
         raise ValueError("{} covariance needs a positive diagonal.".format(label))
-    normalized = matrix / diagonal_mean
+    with np.errstate(over="ignore"):
+        normalized = matrix / diagonal_mean
+    if not np.isfinite(normalized).all():
+        raise ValueError(
+            "{} covariance has non-finite normalized values.".format(label)
+        )
+    return normalized
+
+
+def _normalize_covariance(
+    matrix: np.ndarray, size: int, label: str, *, allow_semidefinite: bool = False
+) -> np.ndarray:
+    normalized = _scale_covariance_by_mean_variance(matrix, size, label)
     if allow_semidefinite:
         eigenvalues = np.linalg.eigvalsh(normalized)
         if float(np.min(eigenvalues)) < -1e-9 * max(1.0, float(np.max(eigenvalues))):
@@ -477,60 +534,70 @@ def _normalize_covariance(
     return normalized
 
 
+def _glmm_covariance_at(factory, size, estimate_shape, *, use_sparse):
+    def prepared(parameter):
+        if use_sparse:
+            return _sparse_covariance_from_factory(factory, parameter)
+        return _normalize_covariance(factory(parameter), size, "Phylogenetic")
+
+    # An in-memory tree covariance is fixed within this fit. User callbacks
+    # and external custom matrices keep their existing evaluation behavior.
+    if (
+        type(factory) is EvolutionaryCovarianceFactory
+        and factory.custom_covariance is None
+        and not estimate_shape
+    ):
+        return lru_cache(maxsize=1)(prepared)
+    return prepared
+
+
 def _multinomial_terms(
     counts: np.ndarray, linear: np.ndarray
 ) -> tuple[float, np.ndarray, np.ndarray]:
-    zeros = np.zeros((len(linear), 1), dtype=float)
-    all_linear = np.column_stack([linear, zeros])
-    normalizer = logsumexp(all_linear, axis=1)
-    probabilities = np.exp(all_linear - normalizer[:, None])
+    log_probabilities = _multinomial_log_probabilities(linear)
+    probabilities = np.exp(log_probabilities)
     totals = counts.sum(axis=1)
     log_likelihood = float(
-        np.sum(counts[:, :-1] * linear) - np.sum(totals * normalizer)
+        np.sum(
+            np.multiply(
+                counts,
+                log_probabilities,
+                out=np.zeros_like(log_probabilities),
+                where=counts != 0.0,
+            )
+        )
     )
-    gradient = totals[:, None] * probabilities[:, :-1] - counts[:, :-1]
-    dimension = linear.shape[1]
-    weights = np.empty((len(linear), dimension, dimension), dtype=float)
-    for row, (total, probability) in enumerate(
-        zip(totals, probabilities[:, :-1], strict=True)
-    ):
-        block = total * (np.diag(probability) - np.outer(probability, probability))
-        weights[row] = block
+    nonreference = probabilities[:, :-1]
+    # Obtain the complement without subtracting a probability rounded to one.
+    remaining = _multinomial_competing_sum(probabilities)
+    competing_counts = _multinomial_competing_sum(counts)
+    gradient = competing_counts * nonreference
+    gradient -= counts[:, :-1] * remaining
+    weights = -nonreference[:, :, None] * nonreference[:, None, :]
+    diagonal = np.arange(linear.shape[1])
+    weights[:, diagonal, diagonal] = nonreference * remaining
+    weights *= totals[:, None, None]
     return log_likelihood, gradient.reshape(-1), weights
 
 
 def _ordinal_thresholds(parameters: np.ndarray) -> np.ndarray:
     thresholds = np.empty(len(parameters), dtype=float)
     thresholds[0] = parameters[0]
-    if len(parameters) > 1:
+    with np.errstate(over="ignore"):
         thresholds[1:] = parameters[0] + np.cumsum(np.exp(parameters[1:]))
+    if not np.isfinite(thresholds).all():
+        raise ValueError("Ordinal response thresholds must be finite.")
     return thresholds
 
 
 def _ordinal_terms(
-    counts: np.ndarray, linear: np.ndarray, thresholds: np.ndarray
+    counts: np.ndarray,
+    linear: np.ndarray,
+    thresholds: np.ndarray,
 ) -> tuple[float, np.ndarray, np.ndarray]:
-    negative_infinity = np.full(len(linear), -np.inf)
-    positive_infinity = np.full(len(linear), np.inf)
-    lower = np.column_stack([negative_infinity, thresholds[None, :] - linear[:, None]])
-    upper = np.column_stack([thresholds[None, :] - linear[:, None], positive_infinity])
-    lower_cdf = expit(lower)
-    upper_cdf = expit(upper)
-    probabilities = np.maximum(upper_cdf - lower_cdf, np.finfo(float).tiny)
-    lower_density = lower_cdf * (1.0 - lower_cdf)
-    upper_density = upper_cdf * (1.0 - upper_cdf)
-    first_probability = lower_density - upper_density
-    lower_derivative = lower_density * (1.0 - 2.0 * lower_cdf)
-    upper_derivative = upper_density * (1.0 - 2.0 * upper_cdf)
-    second_probability = upper_derivative - lower_derivative
-    ratios = first_probability / probabilities
-    gradient = -np.sum(counts * ratios, axis=1)
-    curvature = np.sum(
-        counts * (ratios**2 - second_probability / probabilities), axis=1
+    return _ordinal_terms_with_widths(
+        counts, linear, thresholds, _ordinal_interval_log_widths(thresholds)
     )
-    curvature = np.maximum(curvature, 1e-9)
-    log_likelihood = float(np.sum(counts * np.log(probabilities)))
-    return log_likelihood, gradient, curvature
 
 
 def _dense_weight_matrix(weights: np.ndarray) -> np.ndarray:
@@ -548,14 +615,14 @@ def _sparse_weight_matrix(weights: np.ndarray) -> sparse.csr_matrix:
     if weights.ndim == 1:
         return sparse.diags(weights, format="csr")
     n_blocks, dimension, _ = weights.shape
-    block_offsets = np.arange(n_blocks, dtype=int) * dimension
-    local_rows = np.repeat(np.arange(dimension, dtype=int), dimension)
-    local_columns = np.tile(np.arange(dimension, dtype=int), dimension)
-    rows = (block_offsets[:, None] + local_rows[None, :]).reshape(-1)
-    columns = (block_offsets[:, None] + local_columns[None, :]).reshape(-1)
+    size = n_blocks * dimension
+    index_type = np.int32 if weights.size <= np.iinfo(np.int32).max else np.int64
+    block_columns = np.arange(size, dtype=index_type).reshape(n_blocks, 1, dimension)
+    columns = np.broadcast_to(block_columns, weights.shape).flatten()
+    row_starts = np.arange(size + 1, dtype=index_type) * dimension
     matrix = sparse.csr_matrix(
-        (weights.reshape(-1), (rows, columns)),
-        shape=(n_blocks * dimension, n_blocks * dimension),
+        (np.array(weights, order="C", copy=True).reshape(-1), columns, row_starts),
+        shape=(size, size),
     )
     matrix.eliminate_zeros()
     return matrix
@@ -567,8 +634,7 @@ def _sparse_covariance_from_factory(factory, parameter):
 
 
 def _sparse_glmm_latent_model(
-    phylogenetic_covariance,
-    parameter,
+    phylogenetic,
     component_variances,
     group_covariance,
     random_dimension,
@@ -576,7 +642,6 @@ def _sparse_glmm_latent_model(
     predictor_columns=(),
     coefficients=None,
 ):
-    phylogenetic = _sparse_covariance_from_factory(phylogenetic_covariance, parameter)
     if phylogenetic is None:
         return None
     components = {"phylogenetic": (component_variances["phylogenetic"], phylogenetic)}
@@ -620,40 +685,43 @@ def _sparse_latent_mode(
     label,
 ):
     mode = np.zeros(precision.shape[0], dtype=float)
+    loading_transpose = loading.T
 
-    def terms(candidate):
+    def evaluate(candidate):
         linear = fixed_linear + np.asarray(loading @ candidate).reshape(-1)
-        return likelihood_terms(linear)
+        log_likelihood, likelihood_gradient, weights = likelihood_terms(linear)
+        prior_score = precision @ candidate
+        gradient = np.asarray(loading_transpose @ likelihood_gradient).reshape(-1)
+        gradient += prior_score
+        value = -log_likelihood + 0.5 * float(candidate @ prior_score)
+        return value, gradient, weights
 
-    def state(candidate):
-        log_likelihood, likelihood_gradient, weights = terms(candidate)
-        gradient = np.asarray(loading.T @ likelihood_gradient).reshape(-1)
-        gradient += precision @ candidate
-        weight_matrix = _sparse_weight_matrix(weights)
-        hessian = precision + loading.T @ weight_matrix @ loading
-        factor = factor_sparse_positive_definite(hessian)
-        value = -log_likelihood + 0.5 * float(candidate @ (precision @ candidate))
-        return value, gradient, weights, factor
+    def factor_hessian(weights):
+        hessian = precision + _weighted_sparse_hessian(
+            loading, loading_transpose, weights, entry_rows
+        )
+        return factor_sparse_positive_definite(hessian)
 
+    state = evaluate(mode)
+    entry_rows = _scalar_sparse_entry_rows(loading, state[2])
     converged = False
     for _iteration in range(80):
-        value, gradient, _weights, factor = state(mode)
+        value, gradient, weights = state
         if not np.isfinite(gradient).all():
             break
         if float(np.max(np.abs(gradient))) < 1e-7:
             converged = True
             break
-        step = factor.solve(gradient)
+        step = factor_hessian(weights).solve(gradient)
         accepted = False
         step_scale = 1.0
         for _backtrack in range(24):
             candidate = mode - step_scale * step
-            candidate_log_likelihood, _, _ = terms(candidate)
-            candidate_value = -candidate_log_likelihood + 0.5 * float(
-                candidate @ (precision @ candidate)
-            )
+            candidate_state = evaluate(candidate)
+            candidate_value = candidate_state[0]
             if np.isfinite(candidate_value) and candidate_value <= value:
                 mode = candidate
+                state = candidate_state
                 accepted = True
                 break
             step_scale *= 0.5
@@ -665,10 +733,7 @@ def _sparse_latent_mode(
     if not converged:
 
         def value_and_gradient(candidate):
-            log_likelihood, likelihood_gradient, _weights = terms(candidate)
-            gradient = np.asarray(loading.T @ likelihood_gradient).reshape(-1)
-            gradient += precision @ candidate
-            value = -log_likelihood + 0.5 * float(candidate @ (precision @ candidate))
+            value, gradient, _weights = evaluate(candidate)
             return value, gradient
 
         fallback = minimize(
@@ -685,10 +750,11 @@ def _sparse_latent_mode(
                 )
             )
         mode = np.asarray(fallback.x, dtype=float)
-    value, gradient, weights, factor = state(mode)
+        state = evaluate(mode)
+    value, gradient, weights = state
     if not np.isfinite(value) or float(np.max(np.abs(gradient))) >= 1e-5:
         raise RuntimeError("{} random-effect mode did not converge.".format(label))
-    return mode, value, weights, factor
+    return mode, value, weights, factor_hessian(weights)
 
 
 def _sparse_marginal_coefficient_covariance(design, weights, loading, posterior_factor):
@@ -749,7 +815,7 @@ def _random_mode(
         if float(np.max(np.abs(gradient))) < 1e-7:
             converged = True
             break
-        hessian = _dense_weight_matrix(weights) + precision
+        hessian = _weighted_dense_hessian(precision, weights)
         try:
             cholesky = _positive_definite_cholesky(hessian)
         except np.linalg.LinAlgError:
@@ -808,7 +874,7 @@ def _random_mode(
         mode = np.asarray(fallback.x, dtype=float)
     log_likelihood, _, weights = terms(mode)
     objective = -log_likelihood + 0.5 * float(mode @ precision @ mode)
-    _positive_definite_cholesky(_dense_weight_matrix(weights) + precision)
+    _positive_definite_cholesky(_weighted_dense_hessian(precision, weights))
     if not np.isfinite(objective):
         raise RuntimeError("Categorical random-effect mode is non-finite.")
     return mode, objective, weights
@@ -999,46 +1065,29 @@ def _reported_log_likelihood(
 
 
 def _negative_binomial_log_pmf(values, log_means, dispersion):
-    """NB2 probabilities with a smooth, accurate Poisson limit."""
-    if dispersion is None or dispersion <= 0.0:
-        raise ValueError("Negative-binomial dispersion must be positive.")
-    size = 1.0 / dispersion
-    if size < 128.0:
-        log_ratio = gammaln(values + size) - gammaln(size) - values * math.log(size)
-    else:
-        # log(Gamma(size+y)/Gamma(size)) - y*log(size). Direct subtraction
-        # loses precision near the Poisson limit and corrupts numerical scores.
-        scaled = values / size
-        increment = np.log1p(scaled)
-        log1pmx = increment - scaled
-        small = scaled < 0.01
-        x = scaled[small]
-        log1pmx[small] = (
-            x
-            * x
-            * (
-                -0.5
-                + x
-                * (
-                    1 / 3
-                    + x * (-1 / 4 + x * (1 / 5 + x * (-1 / 6 + x * (1 / 7 - x / 8))))
-                )
-            )
+    log_dispersion = math.log(dispersion)
+    log_relative_mean = log_means + log_dispersion
+    log_zero = _negative_binomial_log_zero(log_means, log_relative_mean, dispersion)
+    if np.max(values, initial=0.0) >= _LARGE_NEGATIVE_BINOMIAL_COUNT:
+        return (
+            _negative_binomial_with_large_counts(
+                values,
+                log_means,
+                log_relative_mean,
+                log_zero,
+                dispersion,
+                log_dispersion,
+            ),
+            log_zero,
+            log_relative_mean,
         )
-        # The first omitted Stirling term is at most 1/(1680*128**7) < 1.1e-18.
-        correction = sum(
-            coefficient * dispersion**power * np.expm1(-power * increment)
-            for power, coefficient in ((1, 1 / 12), (3, -1 / 360), (5, 1 / 1260))
-        )
-        log_ratio = size * log1pmx + (values - 0.5) * increment + correction
-    log_zero = -size * np.logaddexp(0.0, log_means - math.log(size))
-    log_pmf = (
-        log_ratio
-        - gammaln(values + 1.0)
-        + values * log_means
-        + (1.0 + values / size) * log_zero
+    return (
+        _ordinary_negative_binomial_log_mass(
+            values, log_means, log_relative_mean, log_zero, dispersion
+        ),
+        log_zero,
+        log_relative_mean,
     )
-    return log_pmf, log_zero
 
 
 def _count_log_pmf(
@@ -1047,18 +1096,23 @@ def _count_log_pmf(
     if "negative-binomial" not in family:
         log_pmf = values * np.log(means) - means - gammaln(values + 1.0)
         return log_pmf, -means
-    return _negative_binomial_log_pmf(values, np.log(means), dispersion)
+    log_mass, log_zero, _ = _negative_binomial_log_pmf(
+        values, np.log(means), dispersion
+    )
+    return log_mass, log_zero
 
 
 def _count_log_likelihood(values, linear, family, dispersion, zero_probability, offset):
     log_means = linear + offset
-    with np.errstate(over="ignore", invalid="ignore"):
-        means = np.exp(log_means)
     if "negative-binomial" not in family:
-        log_pmf = values * log_means - means - gammaln(values + 1.0)
-        log_zero = -means
+        log_pmf, log_zero = _poisson_log_mass(values, log_means)
+        log_relative_mean = log_means
     else:
-        log_pmf, log_zero = _negative_binomial_log_pmf(values, log_means, dispersion)
+        if dispersion is None or dispersion <= 0.0:
+            raise ValueError("Negative-binomial dispersion must be positive.")
+        log_pmf, log_zero, log_relative_mean = _negative_binomial_log_pmf(
+            values, log_means, dispersion
+        )
     if family in {"poisson", "negative-binomial"}:
         return log_pmf
     if zero_probability is None or not 0.0 < zero_probability < 1.0:
@@ -1072,7 +1126,9 @@ def _count_log_likelihood(values, linear, family, dispersion, zero_probability, 
             np.logaddexp(log_pi, log_one_minus_pi + log_zero),
             log_one_minus_pi + log_pmf,
         )
-    positive_normalizer = np.log(np.maximum(-np.expm1(log_zero), 1e-300))
+    positive_normalizer = _log_positive_count_probability(
+        log_zero, log_means, log_relative_mean
+    )
     return np.where(
         is_zero,
         log_pi,
@@ -1083,15 +1139,9 @@ def _count_log_likelihood(values, linear, family, dispersion, zero_probability, 
 def _gamma_log_likelihood(values, linear, dispersion):
     if dispersion is None or dispersion <= 0.0:
         raise ValueError("Gamma shape must be positive.")
-    with np.errstate(over="ignore", invalid="ignore"):
-        inverse_means = np.exp(-linear)
-        return (
-            dispersion * np.log(dispersion)
-            - gammaln(dispersion)
-            + (dispersion - 1.0) * np.log(values)
-            - dispersion * linear
-            - dispersion * values * inverse_means
-        )
+    log_values = np.log(values)
+    log_ratio = _gamma_log_mean_difference(values, linear, log_values, dispersion)
+    return _gamma_log_density(log_values, log_ratio, dispersion)
 
 
 def _lognormal_log_likelihood(values, linear, dispersion):
@@ -1109,12 +1159,13 @@ def _lognormal_log_likelihood(values, linear, dispersion):
 def _beta_parameters(linear, dispersion, label):
     if dispersion is None or dispersion <= 0.0:
         raise ValueError("{} precision must be positive.".format(label))
-    means = np.clip(expit(linear), 1e-10, 1.0 - 1e-10)
-    return means * dispersion, (1.0 - means) * dispersion
+    mean = _beta_mean(linear)
+    complement = 1.0 - mean
+    return mean, complement, mean * dispersion, complement * dispersion
 
 
 def _beta_log_likelihood(values, linear, dispersion):
-    alpha, beta = _beta_parameters(linear, dispersion, "Beta")
+    _, _, alpha, beta = _beta_parameters(linear, dispersion, "Beta")
     return (
         -betaln(alpha, beta)
         + (alpha - 1.0) * np.log(values)
@@ -1125,7 +1176,7 @@ def _beta_log_likelihood(values, linear, dispersion):
 def _beta_binomial_log_likelihood(values, linear, dispersion, trials):
     if trials is None:
         raise ValueError("Beta-binomial responses require trial counts.")
-    alpha, beta = _beta_parameters(linear, dispersion, "Beta-binomial")
+    _, _, alpha, beta = _beta_parameters(linear, dispersion, "Beta-binomial")
     return (
         gammaln(trials + 1.0)
         - gammaln(values + 1.0)
@@ -1140,49 +1191,21 @@ def _censored_gaussian_log_likelihood(
 ):
     if dispersion is None or dispersion <= 0.0:
         raise ValueError("Censored-Gaussian SD must be positive.")
-    lower = np.full(len(values), np.nan) if censor_lower is None else censor_lower
-    upper = np.full(len(values), np.nan) if censor_upper is None else censor_upper
-    exact = np.isnan(lower) & np.isnan(upper)
-    left = np.isnan(lower) & ~np.isnan(upper)
-    right = ~np.isnan(lower) & np.isnan(upper)
-    interval = ~np.isnan(lower) & ~np.isnan(upper)
-    result = np.empty(len(values), dtype=float)
-    standardized = (values - linear) / dispersion
-    result[exact] = (
-        -0.5 * standardized[exact] ** 2
-        - math.log(dispersion)
-        - 0.5 * math.log(2.0 * math.pi)
+    lower, upper, exact, left, right, interval = _censor_observations(
+        len(values), censor_lower, censor_upper
     )
-    result[left] = log_ndtr((upper[left] - linear[left]) / dispersion)
-    result[right] = log_ndtr((linear[right] - lower[right]) / dispersion)
-    if np.any(interval):
-        standardized_lower = (lower[interval] - linear[interval]) / dispersion
-        standardized_upper = (upper[interval] - linear[interval]) / dispersion
-        interval_result = np.empty(len(standardized_lower), dtype=float)
-        negative = standardized_upper <= 0.0
-        positive = standardized_lower >= 0.0
-        central = ~(negative | positive)
-
-        def log_difference(larger: np.ndarray, smaller: np.ndarray) -> np.ndarray:
-            ratio = np.exp(np.minimum(smaller - larger, 0.0))
-            return larger + np.log1p(-ratio)
-
-        if np.any(negative):
-            interval_result[negative] = log_difference(
-                log_ndtr(standardized_upper[negative]),
-                log_ndtr(standardized_lower[negative]),
-            )
-        if np.any(positive):
-            interval_result[positive] = log_difference(
-                log_ndtr(-standardized_lower[positive]),
-                log_ndtr(-standardized_upper[positive]),
-            )
-        if np.any(central):
-            interval_result[central] = log_difference(
-                log_ndtr(standardized_upper[central]),
-                log_ndtr(standardized_lower[central]),
-            )
-        result[interval] = interval_result
+    result, _, _ = _censored_gaussian_log_contributions(
+        values,
+        linear,
+        dispersion,
+        lower,
+        upper,
+        exact,
+        left,
+        right,
+        interval,
+        derivatives=False,
+    )
     return result
 
 
@@ -1225,20 +1248,27 @@ def _scalar_log_likelihood_contributions(
 
 
 def _poisson_scalar_terms(values, linear, offset):
+    log_means = linear + offset
     with np.errstate(over="ignore"):
-        means = np.exp(linear + offset)
-    return means - values, means
+        means = np.exp(log_means)
+    gradient = means - values
+    _refine_poisson_count_score(gradient, values, log_means)
+    return gradient, means
 
 
 def _negative_binomial_scalar_terms(values, linear, offset, dispersion):
     assert dispersion is not None
-    size = 1.0 / dispersion
     log_means = linear + offset
-    log_denominator = np.logaddexp(math.log(size), log_means)
-    mean_fraction = expit(log_means - math.log(size))
-    inverse_denominator = np.exp(-log_denominator)
-    gradient = size * (mean_fraction - values * inverse_denominator)
-    curvature = size * mean_fraction * (size + values) * inverse_denominator
+    log_dispersion = math.log(dispersion)
+    log_relative_mean = log_means + log_dispersion
+    scaled_mean, complement, zero_curvature = _negative_binomial_score_terms(
+        log_means, log_relative_mean, log_dispersion
+    )
+    gradient = scaled_mean - values * complement
+    curvature = zero_curvature + (values * complement) * expit(log_relative_mean)
+    _refine_negative_binomial_count_terms(
+        gradient, curvature, values, log_means, log_relative_mean, log_dispersion
+    )
     return gradient, curvature
 
 
@@ -1280,11 +1310,15 @@ def _zero_truncation_terms(eta, dispersion):
         exponent = q
         leading_derivative = np.ones_like(q)
     else:
-        size = np.longdouble(1.0) / np.longdouble(dispersion)
-        log_relative_mean = eta - np.log(size)
-        fraction = np.exp(-_softplus_extended(-log_relative_mean))
-        q = size * fraction
-        exponent = size * _softplus_extended(log_relative_mean)
+        log_relative_mean = eta + np.log(np.longdouble(dispersion))
+        log_denominator = _softplus_extended(log_relative_mean)
+        with np.errstate(over="ignore", under="ignore"):
+            fraction = np.exp(-_softplus_extended(-log_relative_mean))
+            q = np.exp(eta - log_denominator)
+            tiny = log_relative_mean < -36.0
+            exponent = np.empty_like(eta)
+            exponent[tiny] = np.exp(eta[tiny])
+            exponent[~tiny] = log_denominator[~tiny] / dispersion
         leading_derivative = 1.0 - fraction
     correction = np.zeros_like(q)
     small = exponent <= 1.0
@@ -1318,13 +1352,19 @@ def _zero_component_count_scalar_terms(
     eta = np.asarray(linear + offset, dtype=float)
     negative_binomial = dispersion is not None
     if negative_binomial:
-        size = float(1.0 / dispersion)
-        fraction = expit(eta - math.log(size))
-        zero_log_probability = -size * np.logaddexp(0.0, eta - math.log(size))
-        zero_score = -size * fraction
-        zero_second = -size * fraction * (1.0 - fraction)
-        base_gradient, base_curvature = _negative_binomial_scalar_terms(
-            values, linear, offset, dispersion
+        log_dispersion = math.log(dispersion)
+        log_relative_mean = eta + log_dispersion
+        zero_log_probability = _negative_binomial_log_zero(
+            eta, log_relative_mean, dispersion
+        )
+        scaled_mean, complement, zero_curvature = _negative_binomial_score_terms(
+            eta, log_relative_mean, log_dispersion
+        )
+        zero_score = -scaled_mean
+        zero_second = -zero_curvature
+        base_gradient = scaled_mean - values * complement
+        base_curvature = zero_curvature + (values * complement) * expit(
+            log_relative_mean
         )
     else:
         with np.errstate(over="ignore"):
@@ -1381,27 +1421,34 @@ def _zero_component_count_scalar_terms(
 
 def _gamma_scalar_terms(values, linear, dispersion):
     assert dispersion is not None
+    log_ratio = _gamma_log_mean_difference(values, linear, np.log(values), dispersion)
     with np.errstate(over="ignore"):
-        scaled = values * np.exp(-linear)
-    return dispersion * (1.0 - scaled), dispersion * scaled
+        curvature = np.exp(math.log(dispersion) + log_ratio)
+        gradient = np.where(
+            np.abs(log_ratio) < 0.5,
+            -dispersion * np.expm1(log_ratio),
+            dispersion - curvature,
+        )
+    return gradient, curvature
 
 
 def _lognormal_scalar_terms(values, linear, dispersion):
     assert dispersion is not None
-    variance = dispersion**2
-    return (linear - np.log(values)) / variance, np.full(len(values), 1.0 / variance)
+    difference = linear - np.log(values)
+    with np.errstate(over="ignore"):
+        gradient = (difference / dispersion) / dispersion
+        curvature = np.full(len(values), np.divide(1.0, dispersion) / dispersion)
+    return gradient, curvature
 
 
 def _beta_scalar_terms(values, linear, dispersion):
     assert dispersion is not None
-    means = np.clip(expit(linear), 1e-10, 1.0 - 1e-10)
-    alpha = means * dispersion
-    beta = (1.0 - means) * dispersion
+    means, complement, alpha, beta = _beta_parameters(linear, dispersion, "Beta")
     likelihood_derivative = dispersion * (
         -digamma(alpha) + digamma(beta) + np.log(values) - np.log1p(-values)
     )
     likelihood_second = -(dispersion**2) * (polygamma(1, alpha) + polygamma(1, beta))
-    first = means * (1.0 - means)
+    first = means * complement
     second = first * (1.0 - 2.0 * means)
     gradient = -likelihood_derivative * first
     curvature = -(likelihood_second * first**2 + likelihood_derivative * second)
@@ -1411,9 +1458,9 @@ def _beta_scalar_terms(values, linear, dispersion):
 def _beta_binomial_scalar_terms(values, linear, dispersion, trials):
     assert dispersion is not None
     assert trials is not None
-    means = np.clip(expit(linear), 1e-10, 1.0 - 1e-10)
-    alpha = means * dispersion
-    beta = (1.0 - means) * dispersion
+    means, complement, alpha, beta = _beta_parameters(
+        linear, dispersion, "Beta-binomial"
+    )
     likelihood_mean_derivative = dispersion * (
         digamma(values + alpha)
         - digamma(alpha)
@@ -1426,7 +1473,7 @@ def _beta_binomial_scalar_terms(values, linear, dispersion, trials):
         + polygamma(1, trials - values + beta)
         - polygamma(1, beta)
     )
-    first = means * (1.0 - means)
+    first = means * complement
     second = first * (1.0 - 2.0 * means)
     gradient = -likelihood_mean_derivative * first
     curvature = -(
@@ -1456,7 +1503,18 @@ def _scalar_terms(
     trials: np.ndarray | None,
     censor_lower: np.ndarray | None,
     censor_upper: np.ndarray | None,
+    center_small_beta: bool = False,
 ) -> tuple[float, np.ndarray, np.ndarray]:
+    if center_small_beta:
+        assert dispersion is not None
+        return _small_beta_terms(values, linear, dispersion, centered=True)
+    if family in {"beta", "beta-binomial"}:
+        return _beta_family_terms(values, linear, dispersion, trials, family)
+    if family == "censored-gaussian":
+        return _censored_gaussian_scalar_terms(
+            values, linear, dispersion, censor_lower, censor_upper
+        )
+
     def contributions(candidate: np.ndarray) -> np.ndarray:
         return _scalar_log_likelihood_contributions(
             values,
@@ -1488,10 +1546,6 @@ def _scalar_terms(
         derivative = _gamma_scalar_terms(values, linear, dispersion)
     elif family == "lognormal":
         derivative = _lognormal_scalar_terms(values, linear, dispersion)
-    elif family == "beta":
-        derivative = _beta_scalar_terms(values, linear, dispersion)
-    elif family == "beta-binomial":
-        derivative = _beta_binomial_scalar_terms(values, linear, dispersion, trials)
     else:
         derivative = _numerical_scalar_terms(contributions, current, linear)
     gradient, curvature = derivative
@@ -1930,27 +1984,38 @@ def _profile_endpoint(
     bounds: Sequence[tuple[float | None, float | None]],
     coefficient_index: int,
     standard_error: float,
-    target: float,
+    fitted_objective: float,
+    likelihood_drop: float,
     direction: float,
 ) -> float:
     estimate = float(optimized[coefficient_index])
+    scale = _coefficient_profile_scale(estimate, standard_error)
 
-    def difference(value: float) -> float:
+    def difference(offset: float) -> float:
+        value = estimate + direction * scale * offset
         return (
             _optimize_with_fixed_coefficient(
                 objective, optimized, bounds, coefficient_index, value
             )
-            - target
+            - fitted_objective
+            - likelihood_drop
         )
 
-    inner = estimate
-    outer = estimate + direction * max(standard_error, 0.1)
+    outer = 1.0
     for _attempt in range(12):
         value = difference(outer)
-        if np.isfinite(value) and value >= 0.0:
-            lower, upper = sorted((inner, outer))
-            return float(brentq(difference, lower, upper, maxiter=60))
-        outer = estimate + 2.0 * (outer - estimate)
+        if 0.0 <= value < math.inf:
+            endpoint = float(
+                brentq(
+                    lambda offset: difference(offset) if offset else -likelihood_drop,
+                    0.0,
+                    outer,
+                    xtol=1e-12,
+                    maxiter=100,
+                )
+            )
+            return estimate + direction * scale * endpoint
+        outer *= 2.0
     return float("nan")
 
 
@@ -1971,7 +2036,7 @@ def _coefficient_likelihood_inference(
     p_values = np.empty(coefficient_count, dtype=float)
     lower = np.full(coefficient_count, np.nan, dtype=float)
     upper = np.full(coefficient_count, np.nan, dtype=float)
-    profile_target = fitted_objective + 0.5 * float(chi2.ppf(confidence_level, 1))
+    likelihood_drop = 0.5 * float(chi2.ppf(confidence_level, 1))
     for index in range(coefficient_count):
         null_objective = _optimize_with_fixed_coefficient(
             objective, optimized, bounds, index, 0.0
@@ -1988,7 +2053,8 @@ def _coefficient_likelihood_inference(
                 bounds,
                 index,
                 standard_error,
-                profile_target,
+                fitted_objective,
+                likelihood_drop,
                 -1.0,
             )
             upper[index] = _profile_endpoint(
@@ -1997,7 +2063,8 @@ def _coefficient_likelihood_inference(
                 bounds,
                 index,
                 standard_error,
-                profile_target,
+                fitted_objective,
+                likelihood_drop,
                 1.0,
             )
     return statistics, p_values, lower, upper
@@ -2147,11 +2214,9 @@ def _draw_count(
     family: str,
     dispersion: float | None,
 ) -> np.ndarray:
-    if "negative-binomial" in family:
-        assert dispersion is not None
-        size = 1.0 / dispersion
-        probability = size / (size + means)
-        return rng.negative_binomial(size, probability).astype(float)
+    dispersion = _negative_binomial_sampling_dispersion(family, dispersion)
+    if dispersion is not None:
+        return _draw_negative_binomial(rng, means, dispersion)
     return rng.poisson(means).astype(float)
 
 
@@ -2161,24 +2226,16 @@ def _draw_zero_truncated_count(
     family: str,
     dispersion: float | None,
 ) -> np.ndarray:
-    if "negative-binomial" in family:
-        assert dispersion is not None
-        size = 1.0 / dispersion
-        probability = size / (size + means)
-        zero_cdf = nbinom_distribution.cdf(0, size, probability)
-        quantiles = zero_cdf + rng.random(len(means)) * (1.0 - zero_cdf)
-        return nbinom_distribution.ppf(
-            np.minimum(quantiles, np.nextafter(1.0, 0.0)), size, probability
-        ).astype(float)
-    zero_cdf = poisson_distribution.cdf(0, means)
-    quantiles = zero_cdf + rng.random(len(means)) * (1.0 - zero_cdf)
-    return poisson_distribution.ppf(
-        np.minimum(quantiles, np.nextafter(1.0, 0.0)), means
-    ).astype(float)
+    dispersion = _negative_binomial_sampling_dispersion(family, dispersion)
+    if np.any(means < np.finfo(float).tiny):
+        return _draw_zero_truncated_count_with_underflow(rng, means, dispersion)
+    return _draw_representable_positive_counts(
+        rng.random(len(means)), means, dispersion
+    )
 
 
 def _draw_mixture_count(rng, linear, family, dispersion, zero_probability, offset):
-    means = np.exp(np.clip(linear + offset, -30.0, 30.0))
+    means = _count_bootstrap_means(linear, offset)
     if family.startswith("hurdle"):
         assert zero_probability is not None
         values = _draw_zero_truncated_count(rng, means, family, dispersion)
@@ -2192,9 +2249,13 @@ def _draw_mixture_count(rng, linear, family, dispersion, zero_probability, offse
 
 
 def _draw_gamma(rng, linear, dispersion):
-    assert dispersion is not None
-    means = np.exp(np.clip(linear, -30.0, 30.0))
-    return rng.gamma(dispersion, means / dispersion)
+    with np.errstate(over="ignore", under="ignore"):
+        scale = np.exp(linear) / dispersion
+    if _gamma_draw_uses_finite_scale(dispersion, scale):
+        values = rng.gamma(dispersion, scale)
+    else:
+        values = _draw_gamma_in_log_units(rng, linear, dispersion)
+    return _check_gamma_draw_range(values)
 
 
 def _draw_lognormal(rng, linear, dispersion):
@@ -2203,16 +2264,18 @@ def _draw_lognormal(rng, linear, dispersion):
 
 
 def _draw_beta(rng, linear, dispersion):
-    assert dispersion is not None
-    means = np.clip(expit(linear), 1e-10, 1.0 - 1e-10)
-    return rng.beta(means * dispersion, (1.0 - means) * dispersion)
+    _, _, alpha, beta = _beta_parameters(linear, dispersion, "Beta")
+    if dispersion < _SMALL_BETA_PRECISION:
+        raise RuntimeError(
+            "Beta bootstrap draws round to 0 or 1 at the fitted precision, "
+            "outside the open response interval."
+        )
+    return rng.beta(alpha, beta)
 
 
 def _draw_beta_binomial(rng, linear, dispersion, trials):
     assert dispersion is not None and trials is not None
-    means = np.clip(expit(linear), 1e-10, 1.0 - 1e-10)
-    probabilities = rng.beta(means * dispersion, (1.0 - means) * dispersion)
-    return rng.binomial(trials.astype(int), probabilities).astype(float)
+    return _draw_beta_binomial_with_precision(rng, linear, dispersion, trials)
 
 
 def _draw_scalar_observations(
@@ -2400,6 +2463,7 @@ def _scalar_random_mode(
     trials: np.ndarray | None,
     censor_lower: np.ndarray | None,
     censor_upper: np.ndarray | None,
+    center_small_beta: bool = False,
 ) -> tuple[np.ndarray, float, np.ndarray]:
     mode = np.zeros(len(precision), dtype=float)
 
@@ -2414,6 +2478,7 @@ def _scalar_random_mode(
             trials=trials,
             censor_lower=censor_lower,
             censor_upper=censor_upper,
+            center_small_beta=center_small_beta,
         )
 
     converged = False
@@ -2559,8 +2624,9 @@ def _scalar_initial_coefficient(
         "hurdle-poisson",
         "hurdle-negative-binomial",
     }:
-        mean = float(np.mean(values / np.exp(offset)))
-        coefficients[0, 0] = math.log(max(mean, 1e-3))
+        with np.errstate(divide="ignore"):
+            log_mean = logsumexp(np.log(values) - offset) - math.log(len(values))
+        coefficients[0, 0] = max(log_mean, math.log(1e-3))
     elif family in {"gamma", "lognormal"}:
         coefficients[0, 0] = float(np.mean(np.log(values)))
     elif family == "beta":
@@ -2568,7 +2634,7 @@ def _scalar_initial_coefficient(
         coefficients[0, 0] = math.log(mean / (1.0 - mean))
     elif family == "beta-binomial":
         assert trials is not None
-        mean = float(np.clip(np.sum(values) / np.sum(trials), 1e-4, 1.0 - 1e-4))
+        mean = _initial_beta_binomial_mean(values, trials)
         coefficients[0, 0] = math.log(mean / (1.0 - mean))
     elif family == "censored-gaussian":
         finite = values[np.isfinite(values)]
@@ -2676,6 +2742,15 @@ def _fit_scalar_phylogenetic_glmm(
         component_names.append("group")
     coefficient_count = design.shape[1]
     estimate_dispersion = family in DISPERSION_FAMILIES and dispersion is None
+    # The large constant can hide changes in the scalar Laplace objective from
+    # numerical differences when beta precision is fixed near zero.
+    beta_offset = None
+    if (
+        family == "beta"
+        and dispersion is not None
+        and dispersion < _SMALL_BETA_PRECISION
+    ):
+        beta_offset = float(np.sum(_small_beta_log_base(values, dispersion)))
     estimate_zero = family in ZERO_COMPONENT_FAMILIES and zero_probability is None
     estimate_shape = evolution_parameter_bounds is not None
     initial = _scalar_initial_coefficient(
@@ -2737,6 +2812,10 @@ def _fit_scalar_phylogenetic_glmm(
             decoded_parameter,
         )
 
+    covariance_at = _glmm_covariance_at(
+        phylogenetic_covariance, n_tips, estimate_shape, use_sparse=use_sparse
+    )
+
     def state(parameters: np.ndarray):
         coefficients, fitted_dispersion, fitted_zero, log_variances, decoded = unpack(
             parameters
@@ -2744,8 +2823,7 @@ def _fit_scalar_phylogenetic_glmm(
         components = dict(zip(component_names, np.exp(log_variances), strict=True))
         if use_sparse:
             latent = _sparse_glmm_latent_model(
-                phylogenetic_covariance,
-                decoded,
+                covariance_at(decoded),
                 components,
                 group_covariance,
                 1,
@@ -2768,6 +2846,7 @@ def _fit_scalar_phylogenetic_glmm(
                     trials=trial_values,
                     censor_lower=lower,
                     censor_upper=upper,
+                    center_small_beta=beta_offset is not None,
                 )
 
             mode, posterior_objective, weights, posterior_factor = _sparse_latent_mode(
@@ -2793,9 +2872,7 @@ def _fit_scalar_phylogenetic_glmm(
                 observation_loading,
                 posterior_factor,
             )
-        phylo_base = _normalize_covariance(
-            phylogenetic_covariance(decoded), n_tips, "Phylogenetic"
-        )
+        phylo_base = covariance_at(decoded)
         random_covariance = math.exp(float(log_variances[0])) * phylo_base
         if group_base is not None:
             random_covariance += math.exp(float(log_variances[1])) * group_base
@@ -2819,6 +2896,7 @@ def _fit_scalar_phylogenetic_glmm(
             trials=trial_values,
             censor_lower=lower,
             censor_upper=upper,
+            center_small_beta=beta_offset is not None,
         )
         mapped_weights = np.bincount(
             observation_to_tip,
@@ -2935,7 +3013,8 @@ def _fit_scalar_phylogenetic_glmm(
         component_variances=components,
         evolution_parameter=decoded,
         evolution_parameter_status="estimated" if estimate_shape else "fixed",
-        log_likelihood=_reported_log_likelihood(
+        log_likelihood=(beta_offset or 0.0)
+        + _reported_log_likelihood(
             fitted_objective,
             coefficients,
             coefficient_penalty,
@@ -3216,8 +3295,9 @@ def _prepare_glmm_sampler(fit, design, phylogenetic_covariance, options):
     random_cholesky = None
     if sparse_capable:
         latent_model = _sparse_glmm_latent_model(
-            phylogenetic_covariance,
-            fit.evolution_parameter,
+            _sparse_covariance_from_factory(
+                phylogenetic_covariance, fit.evolution_parameter
+            ),
             fit.component_variances,
             options.group_covariance,
             fit.coefficients.shape[1],
@@ -3591,13 +3671,16 @@ def fit_phylogenetic_glmm(
         )
         return coefficients, thresholds, log_variances, decoded_parameter
 
+    covariance_at = _glmm_covariance_at(
+        phylogenetic_covariance, len(design), estimate_shape, use_sparse=use_sparse
+    )
+
     def state(parameters: np.ndarray):
         coefficients, thresholds, log_variances, decoded_parameter = unpack(parameters)
         components = dict(zip(component_names, np.exp(log_variances), strict=True))
         if use_sparse:
             latent = _sparse_glmm_latent_model(
-                phylogenetic_covariance,
-                decoded_parameter,
+                covariance_at(decoded_parameter),
                 components,
                 group_covariance,
                 random_dimension,
@@ -3644,11 +3727,7 @@ def fit_phylogenetic_glmm(
                 expanded_design,
                 posterior_factor,
             )
-        phylo_base = _normalize_covariance(
-            phylogenetic_covariance(decoded_parameter),
-            len(design),
-            "Phylogenetic",
-        )
+        phylo_base = covariance_at(decoded_parameter)
         random_covariance = np.exp(log_variances[0]) * phylo_base
         if group_base is not None:
             random_covariance = (
@@ -3821,3 +3900,1320 @@ def fit_phylogenetic_glmm(
         coefficient_inference=inference,
         coefficient_covariance_status=covariance_status,
     )
+
+
+def _multinomial_log_probabilities(linear):
+    logits = np.column_stack([linear, np.zeros(len(linear), dtype=float)])
+    with np.errstate(over="ignore"):
+        logits -= np.max(logits, axis=1, keepdims=True)
+    logits -= np.logaddexp.reduce(logits, axis=1, keepdims=True)
+    return logits
+
+
+def _multinomial_competing_sum(values):
+    remaining = np.cumsum(values[:, :0:-1], axis=1)[:, ::-1].copy()
+    remaining[:, 1:] += np.cumsum(values[:, :-2], axis=1)
+    return remaining
+
+
+def _ordinal_log_probabilities(
+    centered_thresholds: np.ndarray, interval_log_widths: np.ndarray
+) -> np.ndarray:
+    log_probabilities = np.zeros(
+        (len(centered_thresholds), centered_thresholds.shape[1] + 1), dtype=float
+    )
+    # The logistic interval mass is sigmoid(upper) * sigmoid(-lower)
+    # times (1 - exp(lower - upper)). Its width is independent of the predictor.
+    log_probabilities[:, :-1] = -np.logaddexp(0.0, -centered_thresholds)
+    log_probabilities[:, 1:] -= np.logaddexp(0.0, centered_thresholds)
+    log_probabilities[:, 1:-1] += interval_log_widths
+    return log_probabilities
+
+
+def _ordinal_interval_log_widths(thresholds):
+    with np.errstate(divide="ignore", over="ignore"):
+        return np.log(-np.expm1(-np.diff(thresholds)))
+
+
+def _ordinal_terms_with_widths(
+    counts: np.ndarray,
+    linear: np.ndarray,
+    thresholds: np.ndarray,
+    interval_log_widths: np.ndarray,
+) -> tuple[float, np.ndarray, np.ndarray]:
+    with np.errstate(over="ignore"):
+        centered = thresholds[None, :] - linear[:, None]
+    log_probabilities = _ordinal_log_probabilities(centered, interval_log_widths)
+    below = expit(centered)
+    above = expit(-centered)
+    gradient = np.sum(counts[:, :-1] * above - counts[:, 1:] * below, axis=1)
+    curvature = np.sum((counts[:, :-1] + counts[:, 1:]) * below * above, axis=1)
+    log_likelihood = float(
+        np.sum(
+            np.multiply(
+                counts,
+                log_probabilities,
+                out=np.zeros_like(log_probabilities),
+                where=counts != 0.0,
+            )
+        )
+    )
+    return log_likelihood, gradient, curvature
+
+
+def _log_positive_count_probability(log_zero, eta, log_relative_mean):
+    # For small mean and relative mean, Pr(Y > 0) = exp(eta) to
+    # leading order, even if the count probability underflows.
+    tiny_mean = (eta < -36.0) & (log_relative_mean < -36.0)
+    with np.errstate(divide="ignore"):
+        return np.where(tiny_mean, eta, np.log(-np.expm1(log_zero)))
+
+
+def _negative_binomial_log_zero(log_means, log_relative_mean, dispersion):
+    with np.errstate(over="ignore", under="ignore"):
+        tiny = log_relative_mean < -36.0
+        log_zero = np.empty_like(log_means)
+        log_zero[tiny] = -np.exp(log_means[tiny])
+        log_zero[~tiny] = -np.logaddexp(0.0, log_relative_mean[~tiny]) / dispersion
+    return log_zero
+
+
+def _small_dispersion_log_rising_factorial(values, dispersion):
+    """Return log(Gamma(size + y) / (Gamma(size) * size**y))."""
+    relative_count = values * dispersion
+    small = relative_count < 1e-3
+    correction = np.empty_like(values)
+    z = relative_count[small]
+    correction[small] = values[small] * np.polynomial.polynomial.polyval(
+        z, _NB_LOG_GAMMA_RATIO_SERIES
+    )
+    z = relative_count[~small]
+    correction[~small] = values[~small] * ((1.0 + z) * (np.log1p(z) / z) - 1.0)
+    correction -= 0.5 * np.log1p(relative_count)
+    # DLMF 5.11.1. The next Stirling term is bounded by dispersion**3 / 360.
+    correction -= (dispersion / 12.0) * (relative_count / (1.0 + relative_count))
+    return np.where(values <= 1.0, 0.0, correction)
+
+
+def _ordinary_negative_binomial_log_mass(
+    values, log_means, log_relative_mean, log_zero, dispersion
+):
+    if dispersion < _SMALL_NB_DISPERSION:
+        return (
+            _small_dispersion_log_rising_factorial(values, dispersion)
+            - gammaln(values + 1.0)
+            + values * (log_means - np.logaddexp(0.0, log_relative_mean))
+            + log_zero
+        )
+    size = 1.0 / dispersion
+    return (
+        gammaln(values + size)
+        - gammaln(size)
+        - gammaln(values + 1.0)
+        + log_zero
+        - values * np.logaddexp(0.0, -log_relative_mean)
+    )
+
+
+def _negative_binomial_with_large_counts(
+    values, log_means, log_relative_mean, log_zero, dispersion, log_dispersion
+):
+    large = values >= _LARGE_NEGATIVE_BINOMIAL_COUNT
+    small = ~large
+    result = np.empty_like(values)
+    result[small] = _ordinary_negative_binomial_log_mass(
+        values[small],
+        log_means[small],
+        log_relative_mean[small],
+        log_zero[small],
+        dispersion,
+    )
+    counts = values[large]
+    log_count = np.log(counts)
+    log_ratio = log_count + log_dispersion
+    # Evaluate the mass at its count-specific mean using Stirling corrections.
+    # The remaining log likelihood is the drop from that mean.
+    peak = (
+        -0.5 * (math.log(math.tau) + log_count + np.logaddexp(0.0, log_ratio))
+        - _negative_binomial_size_correction(dispersion)
+        - _stirling_log_gamma_correction(counts)
+    )
+    inverse_total = np.exp(-np.logaddexp(log_count, -log_dispersion))
+    peak += _stirling_log_gamma_correction_from_inverse(inverse_total)
+    relative = _count_log_mean_difference(counts, log_means[large], log_count)
+    result[large] = peak - _negative_binomial_deviance(
+        relative, log_count, log_ratio, log_dispersion
+    )
+    return result
+
+
+def _negative_binomial_size_correction(dispersion):
+    if dispersion <= 1.0 / _LARGE_GAMMA_SHAPE:
+        return _stirling_log_gamma_correction_from_inverse(dispersion)
+    size = 1.0 / dispersion
+    return (
+        gammaln(1.0 + size)
+        + (size + 0.5) * math.log(dispersion)
+        + size
+        - 0.5 * math.log(math.tau)
+    )
+
+
+def _negative_binomial_deviance(relative, log_count, log_ratio, log_dispersion):
+    with np.errstate(over="ignore", invalid="ignore", under="ignore", divide="ignore"):
+        log_q = -np.logaddexp(0.0, log_ratio)
+        log_p = -np.logaddexp(0.0, -log_ratio)
+        deviance = np.empty_like(relative)
+        nearby = np.abs(relative) < 0.1
+        deviance[nearby] = _nearby_negative_binomial_deviance(
+            relative[nearby], log_count[nearby], log_q[nearby], log_p[nearby]
+        )
+        far = ~nearby
+        change = relative[far]
+        previous = log_ratio[far]
+        new = previous + change
+        deviance[far] = _far_negative_binomial_deviance(
+            change,
+            previous,
+            new,
+            log_count[far],
+            np.broadcast_to(log_dispersion, relative.shape)[far],
+        )
+        return np.where(np.isinf(relative), np.inf, deviance)
+
+
+def _nearby_negative_binomial_deviance(relative, log_count, log_q, log_p):
+    # Split log1p(p * expm1(t)) - p*t into two quadratic remainders.
+    # Use the smaller of p and q so neither remainder is lost to saturation.
+    small_probability = np.exp(np.minimum(log_p, log_q))
+    direction = np.where(log_p <= log_q, relative, -relative)
+    z = small_probability * np.expm1(direction)
+    log_weight = log_count + np.where(log_p <= log_q, 0.0, log_q - log_p)
+    remainder = _exponential_deviance(direction, np.exp(log_weight))
+    ratio = np.expm1(direction) / np.where(direction == 0.0, 1.0, direction)
+    correction = np.polynomial.polynomial.polyval(z, _LOG1P_REMAINDER_SERIES)
+    scale = np.exp(log_weight + np.minimum(log_p, log_q))
+    return remainder + ((scale * direction) * direction) * ratio**2 * correction
+
+
+def _far_negative_binomial_deviance(change, previous, new, log_count, log_dispersion):
+    # Orient the softplus difference so that its arguments have a nonpositive
+    # average. Keep the multiplication by the shape in logarithmic units.
+    mostly_failures = (previous + 0.5 * change) > 0.0
+    direction = np.where(mostly_failures, -1.0, 1.0)
+    first, last = previous * direction, new * direction
+    high, low = np.maximum(first, last), np.minimum(first, last)
+    softplus_high = np.logaddexp(0.0, high)
+    difference = softplus_high - np.logaddexp(0.0, low)
+    # log(softplus(high) - softplus(low)). In the extreme tail, both
+    # arguments are negative and log(softplus(high)) tends to high.
+    tail = high < -36.0
+    log_difference = np.log(difference)
+    log_difference[tail] = high[tail] + np.log(-np.expm1(low[tail] - high[tail]))
+    coefficient = np.logaddexp(log_count, -log_dispersion)
+    log_term = coefficient + log_difference
+    log_linear = np.log(np.abs(change)) + np.where(
+        mostly_failures, -log_dispersion, log_count
+    )
+    larger, smaller = np.maximum(log_term, log_linear), np.minimum(log_term, log_linear)
+    log_deviance = larger + np.log(-np.expm1(smaller - larger))
+    return np.exp(log_deviance)
+
+
+def _poisson_log_mass(values, log_means):
+    with np.errstate(over="ignore", invalid="ignore"):
+        log_zero = -np.exp(log_means)
+        if np.max(values, initial=0.0) < _LARGE_POISSON_COUNT:
+            return values * log_means + log_zero - gammaln(values + 1.0), log_zero
+        result = _poisson_log_mass_with_large_counts(values, log_means, log_zero)
+    return result, log_zero
+
+
+def _poisson_log_mass_with_large_counts(values, log_means, log_zero):
+    large = values >= _LARGE_POISSON_COUNT
+    small = ~large
+    result = np.empty_like(values)
+    y, eta = values[small], log_means[small]
+    result[small] = y * eta + log_zero[small] - gammaln(y + 1.0)
+    counts = values[large]
+    log_counts = np.log(counts)
+    # A Stirling correction plus the Poisson deviance avoids cancellation
+    # between the factorial and the power of the mean. See Loader (2002).
+    result[large] = (
+        -0.5 * (math.log(math.tau) + log_counts)
+        - _stirling_log_gamma_correction(counts)
+        - _exponential_deviance(
+            _count_log_mean_difference(counts, log_means[large], log_counts), counts
+        )
+    )
+    return result
+
+
+def _gamma_log_density(log_values, log_ratio, shape):
+    if shape >= _LARGE_GAMMA_SHAPE:
+        return _large_shape_gamma_log_density(log_values, log_ratio, shape)
+    log_shape = math.log(shape)
+    log_gamma = gammaln(1.0 + shape) - log_shape if shape < 1.0 else gammaln(shape)
+    with np.errstate(over="ignore"):
+        shape_scaled_ratio = np.exp(log_shape + log_ratio)
+    return (
+        shape * log_shape
+        - log_gamma
+        - log_values
+        + shape * log_ratio
+        - shape_scaled_ratio
+    )
+
+
+def _stirling_log_gamma_correction(shape):
+    return _stirling_log_gamma_correction_from_inverse(1.0 / shape)
+
+
+def _stirling_log_gamma_correction_from_inverse(inverse):
+    inverse_squared = inverse * inverse
+    return inverse * (1.0 / 12.0 - inverse_squared * (1.0 / 360.0))
+
+
+def _large_shape_gamma_log_density(log_values, log_ratio, shape):
+    # Cancel the shape-sized terms from the log density using DLMF 5.11.1.
+    correction = _stirling_log_gamma_correction(shape)
+    normalization = 0.5 * (math.log(shape) - math.log(math.tau)) - correction
+    return normalization - log_values - _exponential_deviance(log_ratio, shape)
+
+
+def _exponential_deviance(log_ratio, scale):
+    scale = np.broadcast_to(scale, log_ratio.shape)
+    close = np.abs(log_ratio) < 0.1
+    relative = log_ratio[close]
+    deviance = np.empty_like(log_ratio)
+    deviance[close] = (
+        (scale[close] * relative) * relative
+    ) * np.polynomial.polynomial.polyval(relative, _EXPONENTIAL_DEVIANCE_SERIES)
+    relative = log_ratio[~close]
+    with np.errstate(over="ignore", invalid="ignore"):
+        divergence = np.expm1(relative) - relative
+        deviance[~close] = scale[~close] * np.where(
+            np.isinf(relative), np.inf, divergence
+        )
+    return deviance
+
+
+def _beta_mean(linear):
+    return np.clip(expit(linear), 1e-10, 1.0 - 1e-10)
+
+
+def _small_beta_binomial_log_mass(values, trials, dispersion, mean, complement):
+    log_inner_mass = math.log(dispersion) + np.log(mean) + np.log(complement)
+    # For two positive counts the limiting probability is the beta
+    # interior mass times n / (y * (n-y)).
+    result = np.where(values == trials, np.log(mean), np.log(complement))
+    interior = (values > 0.0) & (values < trials)
+    positive = values[interior]
+    totals = trials[interior]
+    result[interior] = (
+        log_inner_mass[interior]
+        + np.log(totals)
+        - np.log(positive)
+        - np.log(totals - positive)
+    )
+    result[trials == 0.0] = 0.0
+    return result
+
+
+def _small_beta_binomial_terms(values, linear, dispersion, trials):
+    mean = _beta_mean(linear)
+    complement = 1.0 - mean
+    has_successes = (values > 0.0).astype(float)
+    has_failures = (values < trials).astype(float)
+    contributions = _small_beta_binomial_log_mass(
+        values, trials, dispersion, mean, complement
+    )
+    interior_mean = (mean > 1e-10) & (mean < 1.0 - 1e-10)
+    gradient = (mean * has_failures - complement * has_successes) * interior_mean
+    curvature = mean * complement * (has_successes + has_failures) * interior_mean
+    return float(np.sum(contributions)), gradient, curvature
+
+
+def _small_beta_log_base(values, dispersion):
+    return math.log(dispersion) - np.log(values) - np.log1p(-values)
+
+
+def _small_beta_terms(values, linear, dispersion, *, centered=False):
+    mean = _beta_mean(linear)
+    complement = 1.0 - mean
+    # Gamma(1 + shape) is one to working precision at these shapes.
+    # The beta density is then precision * mean * (1 - mean) / (y * (1 - y)).
+    contributions = np.log(mean) + np.log(complement)
+    if not centered:
+        contributions += _small_beta_log_base(values, dispersion)
+    interior_mean = (mean > 1e-10) & (mean < 1.0 - 1e-10)
+    gradient = (mean - complement) * interior_mean
+    curvature = (2.0 * mean * complement) * interior_mean
+    return float(np.sum(contributions)), gradient, curvature
+
+
+def _beta_stirling_terms(shape):
+    """Scaled log-gamma, digamma, and trigamma remainders."""
+    large = shape >= _LARGE_GAMMA_SHAPE
+    inverse = 1.0 / shape[large]
+    inverse2 = inverse * inverse
+    normalizer = np.empty_like(shape)
+    score = np.empty_like(shape)
+    curvature = np.empty_like(shape)
+    normalizer[large] = _stirling_log_gamma_correction_from_inverse(inverse)
+    score[large] = -0.5 - inverse * (1.0 / 12.0 - inverse2 / 120.0)
+    curvature[large] = 0.5 + inverse * (1.0 / 6.0 - inverse2 / 30.0)
+    small = shape[~large]
+    log_shape = np.log(small)
+    normalizer[~large] = (
+        gammaln(small) - (small - 0.5) * log_shape + small - 0.5 * math.log(math.tau)
+    )
+    score[~large] = small * (digamma(small) - log_shape)
+    curvature[~large] = small * (small * polygamma(1, small) - 1.0)
+    return normalizer, score, curvature
+
+
+@lru_cache(maxsize=1024)
+def _precise_log_odds(value, total=1.0):
+    with localcontext() as context:
+        context.prec = 80
+        observed = Decimal.from_float(value)
+        logit = observed.ln() - (Decimal.from_float(total) - observed).ln()
+        leading = float(logit)
+        return leading, float(logit - Decimal.from_float(leading))
+
+
+@lru_cache(maxsize=1024)
+def _split_positive_logarithm(value):
+    with localcontext() as context:
+        context.prec = 80
+        logarithm = Decimal.from_float(value).ln()
+        leading = float(logarithm)
+        return leading, float(logarithm - Decimal.from_float(leading))
+
+
+def _count_log_mean_difference(values, log_means, log_counts):
+    difference = log_means - log_counts
+    near = (values >= _HIGH_PRECISION_COUNT) & (np.abs(difference) < 0.1)
+    for index in np.flatnonzero(near):
+        leading, trailing = _split_positive_logarithm(float(values[index]))
+        difference[index] = (log_means[index] - leading) - trailing
+    return difference
+
+
+def _gamma_log_mean_difference(values, linear, log_values, shape):
+    difference = log_values - linear
+    if shape >= _HIGH_PRECISION_GAMMA_SHAPE:
+        near = (np.abs(difference) < 0.1) & (values != 1.0)
+        for index in np.flatnonzero(near):
+            leading, trailing = _split_positive_logarithm(float(values[index]))
+            difference[index] = (leading - linear[index]) + trailing
+    return difference
+
+
+def _beta_weighted_divergence(observed, fitted, difference, precision):
+    relative = difference / fitted
+    close = np.abs(relative) < 0.1
+    change = relative[close]
+    result = np.empty_like(observed)
+    weight = precision * fitted
+    result[close] = -((weight[close] * change) * change) * (
+        np.polynomial.polynomial.polyval(change, _LOG1P_REMAINDER_SERIES)
+    )
+    far = ~close
+    log_ratio = np.log(observed[far]) - np.log(fitted[far])
+    result[far] = weight[far] * (relative[far] - log_ratio)
+    return result
+
+
+def _beta_logit_difference(values, eta, log_values, log_complement):
+    observed_logit = log_values - log_complement
+    difference = eta - observed_logit
+    # Highly concentrated densities resolve differences much smaller than
+    # an ulp of the observed logit. Keep the logit's residual near the mode.
+    near = np.abs(difference) < 1e-3 * np.abs(observed_logit)
+    for index in np.flatnonzero(near):
+        leading, trailing = _precise_log_odds(float(values[index]))
+        difference[index] = (eta[index] - leading) - trailing
+    return difference
+
+
+def _beta_logit_probabilities(linear):
+    logit_lower = math.log(1e-10) - math.log1p(-1e-10)
+    max_mean = 1.0 - 1e-10
+    logit_upper = math.log(max_mean) - math.log1p(-max_mean)
+    eta = np.clip(linear, logit_lower, logit_upper)
+    active = (linear > logit_lower) & (linear < logit_upper)
+    return eta, expit(eta), expit(-eta), active
+
+
+def _large_beta_terms(values, linear, precision):
+    eta, mean, complement, active = _beta_logit_probabilities(linear)
+    log_values, log_complement = np.log(values), np.log1p(-values)
+    eta_difference = _beta_logit_difference(values, eta, log_values, log_complement)
+    near = np.abs(eta_difference) < 0.1
+    # Subtract probabilities through their log odds where the mean is close
+    # to the observation, even when expit(eta) rounds to the observation.
+    change = np.expm1(eta_difference[near])
+    near_values = values[near]
+    proportion = 1.0 - values
+    difference = np.where(eta > 0.0, proportion - complement, mean - values)
+    difference[near] = (near_values * (1.0 - near_values)) * (
+        change / (1.0 + near_values * change)
+    )
+    a_correction, a_score, a_curvature = _beta_stirling_terms(precision * mean)
+    b_correction, b_score, b_curvature = _beta_stirling_terms(precision * complement)
+    slope = -np.tanh(0.5 * eta)
+    information = (precision * mean) * complement
+    score_correction = complement * a_score - mean * b_score
+    with np.errstate(over="ignore"):
+        divergence = _beta_weighted_divergence(values, mean, -difference, precision)
+        divergence += _beta_weighted_divergence(
+            proportion, complement, difference, precision
+        )
+        gradient = information * eta_difference + score_correction
+        curvature = information * (1.0 + slope * eta_difference) + (
+            complement**2 * a_curvature
+            + mean**2 * b_curvature
+            + slope * score_correction
+        )
+        density = (
+            0.5
+            * (
+                math.log(precision)
+                + np.log(mean)
+                + np.log(complement)
+                - math.log(math.tau)
+            )
+            - log_values
+            - log_complement
+            + _stirling_log_gamma_correction(precision)
+            - a_correction
+            - b_correction
+            - divergence
+        )
+        likelihood = float(np.sum(density))
+    return (
+        likelihood,
+        np.where(active, gradient, 0.0),
+        np.where(active, curvature, 0.0),
+    )
+
+
+def _large_beta_binomial_components(counts, trials, mean, shape, residual):
+    """Negative-binomial mass and scaled shape derivative remainders."""
+    inverse_shape = 1.0 / shape
+    # Both count components have the same NB success probability. Choose it
+    # to put their sum at the observed trial count.
+    log_trials = np.log(trials)
+    log_means = log_trials + np.log(mean)
+    log_shape = np.log(shape)
+    log_relative_mean = log_trials - (log_shape - np.log(mean))
+    log_zero = -shape * np.logaddexp(0.0, log_relative_mean)
+    tiny = log_relative_mean < -36.0
+    log_zero[tiny] = -(trials[tiny] * mean[tiny])
+    large = counts >= _LARGE_POISSON_COUNT
+    small = ~large & (shape >= _LARGE_GAMMA_SHAPE)
+    mass = np.empty_like(counts)
+    small_counts = counts[small]
+    mass[small] = (
+        _small_dispersion_log_rising_factorial(small_counts, inverse_shape[small])
+        - gammaln(small_counts + 1.0)
+        + small_counts
+        * (log_means[small] - np.logaddexp(0.0, log_relative_mean[small]))
+        + log_zero[small]
+    )
+    ordinary = ~large & ~small
+    mass[ordinary] = _beta_binomial_small_component_mass(
+        counts[ordinary],
+        shape[ordinary],
+        log_relative_mean[ordinary],
+        log_zero[ordinary],
+    )
+    selected = counts[large]
+    log_count = np.log(selected)
+    log_ratio = log_count - log_shape[large]
+    log_total = np.logaddexp(log_count, log_shape[large])
+    log_difference = log_means[large] - log_count
+    with np.errstate(over="ignore"):
+        relative = residual[large] / selected
+    close = np.abs(relative) < 0.1
+    log_difference[close] = np.log1p(relative[close])
+    mass[large] = (
+        -0.5 * (math.log(math.tau) + log_count + np.logaddexp(0.0, log_ratio))
+        - _beta_binomial_shape_correction(shape[large], inverse_shape[large])
+        - _stirling_log_gamma_correction(selected)
+        + _stirling_log_gamma_correction_from_inverse(np.exp(-log_total))
+        - _negative_binomial_deviance(
+            log_difference, log_count, log_ratio, -log_shape[large]
+        )
+    )
+    log_factor = _log_count_shape_ratio(counts, shape)
+    score = -0.5 * np.expm1(-log_factor) - (inverse_shape / 12.0) * np.expm1(
+        -2.0 * log_factor
+    )
+    curvature = -0.5 * np.expm1(-2.0 * log_factor) - (inverse_shape / 6.0) * np.expm1(
+        -3.0 * log_factor
+    )
+    small_shape = (shape < _LARGE_GAMMA_SHAPE) & (counts > 0.0)
+    if np.any(small_shape):
+        score[small_shape], curvature[small_shape] = _beta_binomial_small_shape_terms(
+            counts[small_shape], shape[small_shape], log_factor[small_shape]
+        )
+    return mass, score, curvature
+
+
+def _beta_binomial_shape_correction(shape, inverse_shape):
+    correction = np.empty_like(shape)
+    large = shape >= _LARGE_GAMMA_SHAPE
+    correction[large] = _stirling_log_gamma_correction_from_inverse(
+        inverse_shape[large]
+    )
+    small = shape[~large]
+    correction[~large] = (
+        gammaln(1.0 + small)
+        - (small + 0.5) * np.log(small)
+        + small
+        - 0.5 * math.log(math.tau)
+    )
+    return correction
+
+
+def _beta_binomial_small_component_mass(counts, shape, log_relative_mean, log_zero):
+    # Use Gamma(1+a) and one factor of a explicitly when a is tiny.
+    positive = counts > 0.0
+    log_rising = np.zeros_like(counts)
+    log_rising[positive] = (
+        gammaln(counts[positive] + shape[positive])
+        - gammaln(1.0 + shape[positive])
+        + np.log(shape[positive])
+    )
+    return (
+        log_rising
+        - gammaln(counts + 1.0)
+        - counts * np.logaddexp(0.0, -log_relative_mean)
+        + log_zero
+    )
+
+
+def _beta_binomial_small_shape_terms(counts, shape, log_factor):
+    total = counts + shape
+    # Shift the special-function arguments away from the pole at zero.
+    score = 1.0 + shape * (digamma(total) - digamma(1.0 + shape) - log_factor)
+    curvature = 1.0 + shape * (
+        shape * (polygamma(1, 1.0 + shape) - polygamma(1, total)) - counts / total
+    )
+    return score, curvature
+
+
+def _log_count_shape_ratio(counts, shape):
+    return np.logaddexp(0.0, np.log(counts) - np.log(shape))
+
+
+def _large_beta_binomial_terms(values, linear, precision, trials):
+    eta, mean, complement, active = _beta_logit_probabilities(linear)
+    a, b = precision * mean, precision * complement
+    failures = trials - values
+    residual = _beta_binomial_residual(values, failures, trials, eta, mean, complement)
+    with np.errstate(over="ignore", divide="ignore", under="ignore"):
+        x_mass, x_score, x_curvature = _large_beta_binomial_components(
+            values, trials, mean, a, -residual
+        )
+        y_mass, y_score, y_curvature = _large_beta_binomial_components(
+            failures, trials, complement, b, residual
+        )
+        log_trial = np.log(trials)
+        relative_scale = np.logaddexp(0.0, log_trial - math.log(precision))
+        trial_correction = _stirling_log_gamma_correction(trials)
+        small_trials = trials < _LARGE_POISSON_COUNT
+        small_n = trials[small_trials]
+        log_n = log_trial[small_trials]
+        trial_correction[small_trials] = (
+            gammaln(small_n + 1.0)
+            - (small_n + 0.5) * log_n
+            + small_n
+            - 0.5 * math.log(math.tau)
+        )
+        total_mass = (
+            -0.5 * (math.log(math.tau) + log_trial + relative_scale)
+            - _negative_binomial_size_correction(1.0 / precision)
+            - trial_correction
+            + _stirling_log_gamma_correction_from_inverse(
+                np.exp(-np.logaddexp(log_trial, math.log(precision)))
+            )
+        )
+        mass = x_mass + y_mass - total_mass
+        relative_success = values / a
+        relative_failure = failures / b
+        log_success = _log_count_shape_ratio(values, a)
+        log_failure = _log_count_shape_ratio(failures, b)
+        difference = log_success - log_failure
+        nearby = np.abs(difference) < 0.1
+        # The scaled ratio keeps the denominator finite near the upper limit.
+        bounded = nearby & np.isfinite(relative_failure)
+        difference[bounded] = np.log1p(
+            (residual[bounded] / (1.0 + relative_failure[bounded]))
+            / (a[bounded] * complement[bounded])
+        )
+        huge = nearby & ~bounded
+        difference[huge] = np.log1p((residual[huge] / failures[huge]) / mean[huge])
+        gradient = (
+            -(a * complement) * difference - complement * x_score + mean * y_score
+        )
+        slope = complement - mean
+        curvature_correction = (
+            complement**2 * x_curvature
+            + mean**2 * y_curvature
+            + slope * (-complement * x_score + mean * y_score)
+        )
+        curvature = (
+            complement**2 * (a * -np.expm1(-log_success))
+            + mean**2 * (b * -np.expm1(-log_failure))
+            - slope * (a * complement) * difference
+        ) + curvature_correction
+        # In the binomial limit the leading terms combine to n*m*(1-m).
+        # Expand log1p(s)-log1p(f) around s-f before this combination, so
+        # subtracting a saturated score cannot erase the remaining curvature.
+        small = np.maximum(relative_success, relative_failure) < 0.1
+        ratio = np.expm1(difference[small])
+        log_remainder = (ratio * ratio) * np.polynomial.polynomial.polyval(
+            ratio, _LOG1P_REMAINDER_SERIES
+        )
+        s, f = relative_success[small], relative_failure[small]
+        scaled_success = values[small] * (s / (1.0 + s))
+        scaled_failure = failures[small] * (f / (1.0 + f))
+        score_adjustment = (
+            residual[small] * (f / (1.0 + f))
+            - (a[small] * complement[small]) * log_remainder
+        )
+        curvature[small] = (
+            (trials[small] * mean[small]) * complement[small]
+            - complement[small] ** 2 * scaled_success
+            - mean[small] ** 2 * scaled_failure
+            + slope[small] * score_adjustment
+            + curvature_correction[small]
+        )
+        likelihood = float(np.sum(mass))
+    return (
+        likelihood,
+        np.where(active, gradient, 0.0),
+        np.where(active, curvature, 0.0),
+    )
+
+
+def _beta_binomial_residual(values, failures, trials, eta, mean, complement):
+    residual = np.where(
+        eta > 0.0,
+        trials * complement - failures,
+        values - trials * mean,
+    )
+    interior = (values > 0.0) & (failures > 0.0)
+    near = interior & (np.abs(residual) < 1e-3 * np.minimum(values, failures))
+    for index in np.flatnonzero(near):
+        leading, trailing = _precise_log_odds(
+            float(values[index]), float(trials[index])
+        )
+        change = math.expm1((eta[index] - leading) - trailing)
+        p = values[index] / trials[index]
+        residual[index] = -(p * failures[index]) * (change / (1.0 + p * change))
+    return residual
+
+
+def _standardized_censor_bounds(bounds, center, dispersion):
+    difference = bounds - center
+    result = difference / dispersion
+    if dispersion > 1.0:
+        overflowing = np.isinf(difference)
+        result[overflowing] = bounds[overflowing] / dispersion - (
+            center[overflowing] / dispersion
+        )
+    return result
+
+
+def _narrow_normal_interval(log_width, width, midpoint, *, derivatives):
+    # Integrate around the midpoint without differencing nearly equal CDFs.
+    # Here the log density changes by at most one across the interval.
+    offset = width[:, None] * _INTERVAL_NODES
+    weights = _INTERVAL_WEIGHTS * np.exp(-offset * (midpoint[:, None] + 0.5 * offset))
+    relative_mass = weights.sum(axis=1)
+    log_mass = (
+        -((0.5 * midpoint) * midpoint)
+        - 0.5 * math.log(math.tau)
+        + (log_width + np.log(relative_mass))
+    )
+    if not derivatives:
+        return log_mass, None, None
+    shift = np.sum(weights * offset, axis=1) / relative_mass
+    centered = offset - shift[:, None]
+    variance = np.sum(weights * centered**2, axis=1) / relative_mass
+    return log_mass, -(midpoint + shift), 1.0 - variance
+
+
+def _normal_censor_interval_terms(lower, upper, center, dispersion, *, derivatives):
+    with np.errstate(over="ignore", under="ignore", invalid="ignore", divide="ignore"):
+        standardized_lower = _standardized_censor_bounds(lower, center, dispersion)
+        standardized_upper = _standardized_censor_bounds(upper, center, dispersion)
+        reflect = standardized_lower >= 0.0
+        upper_cdf = log_ndtr(np.where(reflect, -standardized_lower, standardized_upper))
+        lower_cdf = log_ndtr(np.where(reflect, -standardized_upper, standardized_lower))
+        difference = np.minimum(lower_cdf - upper_cdf, 0.0)
+        log_mass = upper_cdf + np.log(-np.expm1(difference))
+
+        raw_width = upper - lower
+        width = _standardized_censor_bounds(upper, lower, dispersion)
+        log_width = np.where(
+            (width > 0.0) & np.isfinite(width),
+            np.log(width),
+            np.log(raw_width) - math.log(dispersion),
+        )
+        midpoint = 0.5 * standardized_lower + 0.5 * standardized_upper
+        narrow = (log_width + np.log1p(np.abs(midpoint)) < 0.0) & np.isfinite(midpoint)
+        log_mass[np.isneginf(upper_cdf)] = -np.inf
+        lost_tail = np.isneginf(log_mass) & ~narrow & np.isfinite(upper_cdf)
+        _restore_normal_interval_tail_mass(
+            log_mass, lost_tail, standardized_lower, standardized_upper, width
+        )
+        return _merge_normal_interval_terms(
+            log_mass,
+            standardized_lower,
+            standardized_upper,
+            narrow,
+            width,
+            log_width,
+            midpoint,
+            derivatives=derivatives,
+        )
+
+
+def _restore_normal_interval_tail_mass(log_mass, lost, lower, upper, width):
+    if not np.any(lost):
+        return
+    near = np.maximum(lower[lost], -upper[lost])
+    size = width[lost]
+    far = near + size
+    log_ratio = (
+        -size * (near + 0.5 * size)
+        + np.log(erfcx(far / math.sqrt(2.0)))
+        - np.log(erfcx(near / math.sqrt(2.0)))
+    )
+    log_mass[lost] = log_ndtr(-near) + np.log(-np.expm1(log_ratio))
+
+
+def _merge_normal_interval_terms(
+    log_mass, lower, upper, narrow, width, log_width, midpoint, *, derivatives
+):
+    narrow_gradient = narrow_curvature = None
+    if np.any(narrow):
+        log_mass[narrow], narrow_gradient, narrow_curvature = _narrow_normal_interval(
+            log_width[narrow], width[narrow], midpoint[narrow], derivatives=derivatives
+        )
+    if not derivatives:
+        return log_mass, None, None
+    if narrow_gradient is None:
+        gradient, curvature = _normal_interval_derivatives(
+            lower, upper, log_mass, width
+        )
+        return log_mass, gradient, curvature
+    remaining = ~narrow
+    gradient = np.empty_like(log_mass)
+    curvature = np.empty_like(log_mass)
+    gradient[narrow], curvature[narrow] = narrow_gradient, narrow_curvature
+    gradient[remaining], curvature[remaining] = _normal_interval_derivatives(
+        lower[remaining], upper[remaining], log_mass[remaining], width[remaining]
+    )
+    return log_mass, gradient, curvature
+
+
+def _normal_interval_derivatives(lower, upper, log_mass, width):
+    upper_tail = (lower > 8.0) & np.isfinite(lower)
+    lower_tail = (upper < -8.0) & np.isfinite(upper)
+    regular = ~(upper_tail | lower_tail)
+    a, b, log_p = lower[regular], upper[regular], log_mass[regular]
+    log_a = -(0.5 * a) * a - 0.5 * math.log(math.tau)
+    log_b = -(0.5 * b) * b - 0.5 * math.log(math.tau)
+    ratio_a, ratio_b = np.exp(log_a - log_p), np.exp(log_b - log_p)
+    finite_a, finite_b = (
+        np.where(np.isfinite(a), a, 0.0),
+        np.where(np.isfinite(b), b, 0.0),
+    )
+    mean = ratio_a - ratio_b
+    gradient = np.empty_like(log_mass)
+    curvature = np.empty_like(log_mass)
+    gradient[regular] = -mean
+    curvature[regular] = np.clip(
+        mean**2 - finite_a * ratio_a + finite_b * ratio_b, 0.0, 1.0
+    )
+    mean, curvature[upper_tail] = _normal_interval_tail_moments(
+        lower[upper_tail], upper[upper_tail], width[upper_tail]
+    )
+    gradient[upper_tail] = -mean
+    mean, curvature[lower_tail] = _normal_interval_tail_moments(
+        -upper[lower_tail], -lower[lower_tail], width[lower_tail]
+    )
+    gradient[lower_tail] = mean
+    return gradient, curvature
+
+
+def _normal_interval_tail_moments(lower, upper, width):
+    """Standard normal mean and one minus variance in a right-tail interval."""
+    log_density_ratio = -width * (lower + 0.5 * width)
+    density_ratio = np.exp(log_density_ratio)
+    mills_lower = math.sqrt(math.pi / 2.0) * erfcx(lower / math.sqrt(2.0))
+    mills_upper = math.sqrt(math.pi / 2.0) * erfcx(upper / math.sqrt(2.0))
+    mass_ratio = mills_lower - density_ratio * mills_upper
+    near = _inverse_mills_fraction(lower)
+    excess = 1.0 / (lower + near)
+    q = density_ratio * mills_upper / mass_ratio
+    delta = np.where(np.isfinite(width), width, 0.0)
+    upper_excess = 1.0 / (upper + _inverse_mills_fraction(upper))
+    excess_difference = upper_excess - excess
+    adjustment = q * (delta + excess_difference)
+    shift = excess - adjustment
+    mean = lower + shift
+    tail_weight = 1.0 + excess * (excess - near)
+    # Compute the variance around the lower endpoint. The one-sided moments
+    # at the upper endpoint are shifted by width before their mass is removed.
+    curvature = (
+        tail_weight
+        + (q * delta) * (delta + upper_excess - 2.0 * excess)
+        - (q * excess_difference) * (lower + 2.0 * excess)
+        + adjustment**2
+    )
+    return mean, np.clip(curvature, 0.0, 1.0)
+
+
+def _censor_observations(size, lower, upper):
+    lower = np.full(size, np.nan) if lower is None else lower
+    upper = np.full(size, np.nan) if upper is None else upper
+    lower_missing, upper_missing = np.isnan(lower), np.isnan(upper)
+    return (
+        lower,
+        upper,
+        lower_missing & upper_missing,
+        lower_missing & ~upper_missing,
+        ~lower_missing & upper_missing,
+        ~lower_missing & ~upper_missing,
+    )
+
+
+def _censored_gaussian_log_contributions(
+    values,
+    linear,
+    dispersion,
+    lower,
+    upper,
+    exact,
+    left,
+    right,
+    interval,
+    *,
+    derivatives,
+):
+    result = np.empty(len(values), dtype=float)
+    with np.errstate(over="ignore"):
+        standardized_exact = _standardized_censor_bounds(
+            values[exact], linear[exact], dispersion
+        )
+        result[exact] = (
+            (-0.5 * standardized_exact) * standardized_exact
+            - math.log(dispersion)
+            - 0.5 * math.log(math.tau)
+        )
+        result[left] = log_ndtr(
+            _standardized_censor_bounds(upper[left], linear[left], dispersion)
+        )
+        result[right] = log_ndtr(
+            _standardized_censor_bounds(linear[right], lower[right], dispersion)
+        )
+    interval_score, interval_curvature = None, None
+    if np.any(interval):
+        interval_mass, interval_score, interval_curvature = (
+            _normal_censor_interval_terms(
+                lower[interval],
+                upper[interval],
+                linear[interval],
+                dispersion,
+                derivatives=derivatives,
+            )
+        )
+        result[interval] = interval_mass
+    return result, interval_score, interval_curvature
+
+
+def _refine_poisson_count_score(gradient, values, log_means):
+    if np.max(values, initial=0.0) >= _HIGH_PRECISION_COUNT:
+        indices = np.flatnonzero(values >= _HIGH_PRECISION_COUNT)
+        counts = values[indices]
+        relative = _count_log_mean_difference(
+            counts, log_means[indices], np.log(counts)
+        )
+        near = np.abs(relative) < 0.1
+        gradient[indices[near]] = counts[near] * np.expm1(relative[near])
+
+
+def _large_nb_score(relative, log_counts, log_means, log_dispersion):
+    # |mu - y| = max(mu, y) * (1 - exp(-|log(mu/y)|)).
+    # Keep both subnormal probabilities and their count factors together.
+    with np.errstate(over="ignore", under="ignore", divide="ignore"):
+        ratio = log_means + log_dispersion
+        log_failure = -np.logaddexp(0.0, ratio)
+        log_success = -np.logaddexp(0.0, -ratio)
+        scale = np.where(
+            relative > 0.0, -log_dispersion + log_success, log_counts + log_failure
+        )
+        magnitude = np.exp(scale + np.log(-np.expm1(-np.abs(relative))))
+        curvature = np.exp(
+            -log_dispersion
+            + log_success
+            + log_failure
+            + np.logaddexp(0.0, log_counts + log_dispersion)
+        )
+    return np.copysign(magnitude, relative), curvature
+
+
+def _negative_binomial_score_terms(log_means, log_relative_mean, log_dispersion):
+    log_denominator = np.logaddexp(0.0, log_relative_mean)
+    with np.errstate(over="ignore", under="ignore"):
+        log_scaled_mean = np.where(
+            log_relative_mean <= 0.0,
+            log_means - log_denominator,
+            -log_dispersion - np.logaddexp(0.0, -log_relative_mean),
+        )
+        scaled_mean = np.exp(log_scaled_mean)
+        complement = np.exp(-log_denominator)
+        zero_curvature = np.exp(log_scaled_mean - log_denominator)
+    return scaled_mean, complement, zero_curvature
+
+
+def _refine_negative_binomial_count_terms(
+    gradient, curvature, values, log_means, log_relative_mean, log_dispersion
+):
+    large = (values >= _HIGH_PRECISION_COUNT) | (
+        (log_relative_mean > _LOG_NORMAL_PROBABILITY_LIMIT) & (values > 0.0)
+    )
+    if np.any(large):
+        counts = values[large]
+        log_counts = np.log(counts)
+        selected_means = log_means[large]
+        relative = _count_log_mean_difference(counts, selected_means, log_counts)
+        gradient[large], curvature[large] = _large_nb_score(
+            relative, log_counts, selected_means, log_dispersion
+        )
+
+
+def _normal_one_sided_score_and_curvature(standardized):
+    """Location terms in units of SD for the event Z >= standardized."""
+    lower_mask = standardized < 0.0
+    far_mask = standardized > 8.0
+    center = ~(lower_mask | far_mask)
+    lower = standardized[lower_mask]
+    middle = standardized[center]
+    with np.errstate(over="ignore", under="ignore"):
+        lower_ratio = np.exp(
+            -(0.5 * lower) * lower - 0.5 * math.log(math.tau) - log_ndtr(-lower)
+        )
+    middle_ratio = math.sqrt(2.0 / math.pi) / erfcx(middle / math.sqrt(2.0))
+    # Evaluate the inverse Mills ratio's excess over z directly in the far
+    # tail to avoid cancellation in the Hessian (DLMF 7.9.1).
+    far = standardized[far_mask]
+    nested = _inverse_mills_fraction(far)
+    excess = 1.0 / (far + nested)
+    ratio = np.empty_like(standardized)
+    curvature = np.empty_like(standardized)
+    ratio[lower_mask] = lower_ratio
+    ratio[center] = middle_ratio
+    ratio[far_mask] = far + excess
+    with np.errstate(invalid="ignore"):
+        curvature[lower_mask] = lower_ratio * (lower_ratio - lower)
+    curvature[center] = middle_ratio * (middle_ratio - middle)
+    curvature[far_mask] = 1.0 + excess * (excess - nested)
+    curvature[np.isneginf(standardized)] = 0.0
+    return ratio, curvature
+
+
+def _inverse_mills_fraction(standardized):
+    fraction = np.zeros_like(standardized)
+    for numerator in range(16, 1, -1):
+        fraction = numerator / (standardized + fraction)
+    return fraction
+
+
+def _censored_gaussian_scalar_terms(values, linear, dispersion, lower, upper):
+    if dispersion is None or dispersion <= 0.0:
+        raise ValueError("Censored-Gaussian SD must be positive.")
+    lower, upper, exact, left, right, interval = _censor_observations(
+        len(values), lower, upper
+    )
+    current, interval_gradient, interval_curvature = (
+        _censored_gaussian_log_contributions(
+            values,
+            linear,
+            dispersion,
+            lower,
+            upper,
+            exact,
+            left,
+            right,
+            interval,
+            derivatives=True,
+        )
+    )
+    gradient = np.empty_like(current)
+    curvature = np.empty_like(current)
+    with np.errstate(over="ignore", divide="ignore"):
+        gradient[exact] = (
+            _standardized_censor_bounds(linear[exact], values[exact], dispersion)
+            / dispersion
+        )
+        curvature[exact] = np.divide(1.0, dispersion) / dispersion
+        _set_one_sided_censor_terms(
+            gradient, curvature, linear, dispersion, upper, left, 1.0
+        )
+        _set_one_sided_censor_terms(
+            gradient, curvature, linear, dispersion, lower, right, -1.0
+        )
+        if interval_gradient is not None:
+            gradient[interval] = interval_gradient / dispersion
+            curvature[interval] = (interval_curvature / dispersion) / dispersion
+    return float(np.sum(current)), gradient, curvature
+
+
+def _set_one_sided_censor_terms(
+    gradient, curvature, linear, dispersion, bounds, mask, sign
+):
+    standardized = sign * _standardized_censor_bounds(
+        linear[mask], bounds[mask], dispersion
+    )
+    ratio, weight = _normal_one_sided_score_and_curvature(standardized)
+    gradient[mask] = (sign * ratio) / dispersion
+    curvature[mask] = (weight / dispersion) / dispersion
+
+
+def _beta_family_terms(values, linear, dispersion, trials, family):
+    if family == "beta":
+        if dispersion is not None and 0.0 < dispersion < _SMALL_BETA_PRECISION:
+            return _small_beta_terms(values, linear, dispersion)
+        if dispersion is not None and dispersion >= _LARGE_BETA_PRECISION:
+            return _large_beta_terms(values, linear, dispersion)
+        contributions = _beta_log_likelihood(values, linear, dispersion)
+        gradient, curvature = _beta_scalar_terms(values, linear, dispersion)
+        return float(np.sum(contributions)), gradient, curvature
+    if trials is None:
+        raise ValueError("Beta-binomial responses require trial counts.")
+    if dispersion is not None and 0.0 < dispersion < _SMALL_BETA_PRECISION:
+        return _small_beta_binomial_terms(values, linear, dispersion, trials)
+    if dispersion is not None and dispersion >= _LARGE_GAMMA_SHAPE / 1e-10:
+        return _large_beta_binomial_terms(values, linear, dispersion, trials)
+    large_trials = trials >= _LARGE_NEGATIVE_BINOMIAL_COUNT
+    if dispersion is not None and np.any(large_trials):
+        return _mixed_beta_binomial_terms(
+            values, linear, dispersion, trials, large_trials
+        )
+    contributions = _beta_binomial_log_likelihood(values, linear, dispersion, trials)
+    gradient, curvature = _beta_binomial_scalar_terms(
+        values, linear, dispersion, trials
+    )
+    return float(np.sum(contributions)), gradient, curvature
+
+
+def _mixed_beta_binomial_terms(values, linear, precision, trials, large_trials):
+    small = ~large_trials
+    ordinary_mass = _beta_binomial_log_likelihood(
+        values[small], linear[small], precision, trials[small]
+    )
+    ordinary_gradient, ordinary_curvature = _beta_binomial_scalar_terms(
+        values[small], linear[small], precision, trials[small]
+    )
+    large_mass, large_gradient, large_curvature = _large_beta_binomial_terms(
+        values[large_trials], linear[large_trials], precision, trials[large_trials]
+    )
+    gradient, curvature = np.empty_like(values), np.empty_like(values)
+    gradient[small], curvature[small] = ordinary_gradient, ordinary_curvature
+    gradient[large_trials], curvature[large_trials] = large_gradient, large_curvature
+    return float(np.sum(ordinary_mass)) + large_mass, gradient, curvature
+
+
+def _negative_binomial_sampling_dispersion(family, dispersion):
+    # At this limit the relative Gamma mixing deviation is below a rounding unit.
+    if (
+        "negative-binomial" in family
+        and dispersion is not None
+        and dispersion > _POISSON_LIMIT_DISPERSION
+    ):
+        return dispersion
+    return None
+
+
+def _zero_truncated_negative_binomial(means, dispersion):
+    size = 1.0 / dispersion
+    with np.errstate(divide="ignore"):
+        log_means = np.log(means)
+    log_relative_mean = log_means + math.log(dispersion)
+    parameters: tuple[float | np.ndarray, ...]
+    if dispersion < _SMALL_NB_DISPERSION:
+        distribution, parameters = poisson_distribution, (means,)
+    else:
+        distribution, parameters = nbinom_distribution, (size, size / (size + means))
+    log_zero = _negative_binomial_log_zero(log_means, log_relative_mean, dispersion)
+    with np.errstate(under="ignore"):
+        failure_probability = np.exp(-np.logaddexp(0.0, -log_relative_mean))
+
+    def survival(counts, indices):
+        return betainc(counts + 1.0, size, failure_probability[indices])
+
+    return distribution, parameters, -np.expm1(log_zero), survival
+
+
+def _draw_gamma_in_log_units(rng, linear, shape):
+    log_scale = linear - math.log(shape)
+    with np.errstate(over="ignore", under="ignore", divide="ignore"):
+        if shape < 1.0:
+            # Gamma(shape) = Gamma(shape + 1) * U ** (1 / shape).
+            unit_log = np.log(rng.standard_gamma(shape + 1.0, size=linear.shape))
+            unit_log += np.log(rng.random(linear.shape)) / shape
+        else:
+            unit_log = np.log(rng.standard_gamma(shape, size=linear.shape))
+        return np.exp(log_scale + unit_log)
+
+
+def _gamma_draw_uses_finite_scale(shape, scale):
+    return (
+        shape >= 0.1
+        and np.isfinite(scale).all()
+        and np.all(scale >= np.finfo(float).tiny)
+    )
+
+
+def _check_gamma_draw_range(values):
+    if not np.isfinite(values).all() or np.any(values <= 0.0):
+        raise RuntimeError(
+            "Gamma bootstrap draw exceeds the positive floating-point range."
+        )
+    return values
+
+
+def _draw_beta_binomial_with_precision(rng, linear, dispersion, trials):
+    means = _beta_mean(linear)
+    if dispersion < _SMALL_BETA_PRECISION:
+        return np.where(rng.random(len(linear)) < means, trials, 0.0)
+    probabilities = rng.beta(means * dispersion, (1.0 - means) * dispersion)
+    return rng.binomial(trials.astype(int), probabilities).astype(float)
+
+
+def _initial_beta_binomial_mean(values, trials):
+    scale = float(np.max(trials))
+    if scale > np.finfo(float).max / len(trials):
+        values, trials = values / scale, trials / scale
+    return float(np.clip(np.sum(values) / np.sum(trials), 1e-4, 1.0 - 1e-4))
+
+
+def _coefficient_profile_scale(estimate, standard_error):
+    if standard_error > 0.0:
+        return max(standard_error, math.ulp(estimate))
+    return max(abs(estimate), 0.1)
+
+
+def _draw_negative_binomial(rng, means, dispersion):
+    size = 1.0 / dispersion
+    if dispersion < _SMALL_NB_DISPERSION:
+        # Gamma-Poisson mixing preserves the rate when the NB success
+        # probability would round to one.
+        mixing = rng.gamma(size, size=means.shape) * dispersion
+        return rng.poisson(means * mixing).astype(float)
+    probability = size / (size + means)
+    return rng.negative_binomial(size, probability).astype(float)
+
+
+def _draw_zero_truncated_count_with_underflow(rng, means, dispersion):
+    # P(Y > 1 | Y > 0) is below a rounding unit for underflowed means.
+    active = means >= np.finfo(float).tiny
+    uniforms = rng.random(len(means))
+    values = np.ones(len(means), dtype=float)
+    if np.any(active):
+        values[active] = _draw_representable_positive_counts(
+            uniforms[active], means[active], dispersion
+        )
+    return values
+
+
+def _draw_representable_positive_counts(uniforms, means, dispersion):
+    if dispersion is not None:
+        distribution, parameters, positive_probability, survival = (
+            _zero_truncated_negative_binomial(means, dispersion)
+        )
+    else:
+        distribution = poisson_distribution
+        parameters = (means,)
+        positive_probability = -np.expm1(-means)
+
+        def survival(counts, indices):
+            return pdtrc(counts, means[indices])
+
+    tail = (1.0 - uniforms) * positive_probability
+    quantiles = np.minimum(1.0 - tail, np.nextafter(1.0, 0.0))
+    values = distribution.ppf(quantiles, *parameters).astype(float)
+    return _verify_positive_count_quantiles(values, tail, survival)
+
+
+def _verify_positive_count_quantiles(values, tail, survival):
+    # Direct CDF quantiles can round to the excluded zero mass or to the wrong
+    # count in a narrow tail. Verify the crossing in survival coordinates.
+    indices = np.arange(len(values))
+    valid = (
+        np.isfinite(values)
+        & (values >= 1.0)
+        & (values <= 2**53)
+        & (survival(values, indices) <= tail)
+        & ((values == 1.0) | (survival(values - 1.0, indices) > tail))
+    )
+    for index in indices[~valid]:
+        target = tail[index]
+        lower, upper = 0, 1
+        while survival(float(upper), index) > target:
+            lower, upper = upper, 2 * upper
+            if upper > 2**53:
+                raise ValueError(
+                    "A zero-truncated count draw exceeds integer precision."
+                )
+        while upper - lower > 1:
+            middle = (lower + upper) // 2
+            if survival(float(middle), index) > target:
+                lower = middle
+            else:
+                upper = middle
+        values[index] = upper
+    return values
+
+
+def _count_bootstrap_means(linear, offset):
+    with np.errstate(over="ignore", under="ignore"):
+        means = np.exp(linear + offset)
+    if not np.isfinite(means).all():
+        raise RuntimeError("A count bootstrap mean exceeds the floating-point range.")
+    return means
+
+
+def _scalar_sparse_entry_rows(loading, weights):
+    if weights.ndim == 1:
+        return np.repeat(np.arange(loading.shape[0]), np.diff(loading.indptr))
+    return None
+
+
+def _weighted_sparse_hessian(loading, loading_transpose, weights, entry_rows):
+    if weights.ndim == 1:
+        weighted = sparse.csr_matrix(
+            (loading.data * weights[entry_rows], loading.indices, loading.indptr),
+            shape=loading.shape,
+        )
+        return loading_transpose @ weighted
+    return loading_transpose @ _sparse_weight_matrix(weights) @ loading
+
+
+def _weighted_dense_hessian(precision, weights):
+    if weights.ndim == 1:
+        return precision + np.diag(weights)
+    matrix = precision.copy()
+    dimension = weights.shape[1]
+    indices = np.arange(len(weights) * dimension).reshape(-1, dimension)
+    matrix[indices[:, :, None], indices[:, None, :]] += weights
+    return matrix

@@ -13,13 +13,12 @@ from nwkit.radte_model import DatingProblem, fit_dates, solve_problem
 from tests.test_radte import small_chronology
 
 
-def _export(tmp_path, score="-123.5", gradient="1 2 inf 3 4"):
+def _export(
+    tmp_path, score="-123.5", gradient="1 2 inf 3 4", hessian="1 0 0 0 1\n" * 5
+):
     prefix = tmp_path / "trial"
     prefix.with_suffix(".mcmctree.hessian").write_text(
-        "4\n(A:1,B:2,(C:3,D:4):5);\n1 2 5 3 4\n"
-        + gradient
-        + "\nHessian\n"
-        + "1 0 0 0 1\n" * 5
+        "4\n(A:1,B:2,(C:3,D:4):5);\n1 2 5 3 4\n" + gradient + "\nHessian\n" + hessian
     )
     with gzip.open(prefix.with_suffix(".ckp.gz"), "wt") as handle:
         handle.write(f"CandidateSet:\n 0: {score} (A,B,C,D);\n")
@@ -32,6 +31,15 @@ def test_score_only_export_does_not_accept_undefined_derivatives(tmp_path):
     assert result[3] == 123.5
     assert not np.isfinite(result[4]).all()
     with pytest.raises(ValueError, match="Nonfinite IQ-TREE gradient"):
+        read_export(prefix)
+
+
+@pytest.mark.parametrize(
+    "hessian", ["1 0 0 0 1\n" * 4, "1 0 0 0 1\n" * 4 + "1 0\n", "1 0 0 0 1\n" * 6]
+)
+def test_export_rejects_hessian_with_wrong_row_count_or_width(tmp_path, hessian):
+    prefix = _export(tmp_path, gradient="1 2 3 4 5", hessian=hessian)
+    with pytest.raises(ValueError, match="Unsupported IQ-TREE Hessian export layout"):
         read_export(prefix)
 
 

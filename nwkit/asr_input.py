@@ -3,6 +3,7 @@
 import math
 from copy import copy
 from dataclasses import dataclass
+from itertools import repeat
 
 from nwkit.asr_models import default_model, model_definition, model_names
 from nwkit.util import is_missing_table_value, read_tip_table
@@ -709,11 +710,11 @@ def asr_standard_error_columns(value, model, trait_columns):
 
 def continuous_tip_vectors(dataframe, state_columns, leaf_names):
     vectors = dict.fromkeys(leaf_names)
-    for _, row in dataframe.iterrows():
-        name = str(row["leaf_name"])
+    selected = dataframe.loc[:, ["leaf_name", *state_columns]]
+    for raw_name, *raw_values in selected.itertuples(index=False, name=None):
+        name = str(raw_name)
         vector: list[float | None] = []
-        for column in state_columns:
-            raw = row[column]
+        for column, raw in zip(state_columns, raw_values, strict=True):
             vector.append(
                 None
                 if is_missing_table_value(raw, set())
@@ -734,14 +735,19 @@ def continuous_tip_vector_errors(dataframe, error_columns, state_columns, leaf_n
             "Missing required standard-error column(s): " + ", ".join(missing)
         )
     errors = dict.fromkeys(leaf_names)
-    for _, row in dataframe.iterrows():
-        name = str(row["leaf_name"])
+    selected = dataframe.loc[:, ["leaf_name", *state_columns, *error_columns]]
+    for raw_name, *raw_values in selected.itertuples(index=False, name=None):
+        name = str(raw_name)
         vector: list[float | None] = []
-        for trait_column, error_column in zip(
-            state_columns, error_columns, strict=True
+        for trait_column, error_column, raw_trait, raw_error in zip(
+            state_columns,
+            error_columns,
+            raw_values[: len(state_columns)],
+            raw_values[len(state_columns) :],
+            strict=True,
         ):
-            trait_missing = is_missing_table_value(row[trait_column], set())
-            error_missing = is_missing_table_value(row[error_column], set())
+            trait_missing = is_missing_table_value(raw_trait, set())
+            error_missing = is_missing_table_value(raw_error, set())
             if trait_missing:
                 vector.append(None)
             elif error_missing:
@@ -752,7 +758,7 @@ def continuous_tip_vector_errors(dataframe, error_columns, state_columns, leaf_n
             else:
                 vector.append(
                     _continuous_number(
-                        row[error_column],
+                        raw_error,
                         f"Standard error '{error_column}' for '{name}'",
                         nonnegative=True,
                     )
@@ -786,14 +792,19 @@ def continuous_tip_values(
         raise ValueError("--standard-error-column must differ from --state-column.")
     values = dict.fromkeys(leaf_names)
     errors = {}
-    for _, row in dataframe.iterrows():
-        name = str(row["leaf_name"])
-        raw_value = row[state_column]
+    error_values = (
+        repeat(None, len(dataframe))
+        if standard_error_column is None
+        else dataframe[standard_error_column]
+    )
+    for raw_name, raw_value, raw_error in zip(
+        dataframe["leaf_name"], dataframe[state_column], error_values, strict=True
+    ):
+        name = str(raw_name)
         if is_missing_table_value(raw_value, set()):
             continue
         values[name] = _continuous_number(raw_value, f"Trait value for '{name}'")
         if standard_error_column is not None:
-            raw_error = row[standard_error_column]
             if is_missing_table_value(raw_error, set()):
                 raise ValueError(
                     f"A standard error is required for observed tip '{name}'."

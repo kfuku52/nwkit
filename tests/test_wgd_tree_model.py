@@ -44,6 +44,154 @@ def gene(shape):
     )
 
 
+@pytest.mark.parametrize("retention", [None, 0, 0.1, 0.7, 1.0])
+def test_likelihood_only_agrees_with_full_node_origin_calculation(retention):
+    a, b = ("tip", "A"), ("tip", "B")
+    topology = gene(("node", ("node", a, a), ("node", a, b)))
+    model = TopologyLikelihood(
+        species(),
+        topology,
+        detection=[0.8, 0.9],
+        rate_scales=[0.2, 1.8],
+        ascertainment="root-clades",
+    )
+    event = None if retention is None else MultiplicationEvent(1, retention, 0.25)
+    args = [[0.12, 0.16]], 1.4, event
+    all_nodes = model.evaluate(*args)
+    only = model.evaluate(*args, origins=False)
+    assert only.log_likelihood == all_nodes.log_likelihood
+    assert only.log_likelihood_error == all_nodes.log_likelihood_error
+    assert only.origin_node_ids == () and len(only.origin_probabilities) == 0
+    assert only.origin_probability_error == 0
+
+
+def test_fixed_background_doubling_never_counts_as_candidate_origin():
+    a, b = ("tip", "A"), ("tip", "B")
+    topology = gene(("node", ("node", a, a), ("node", b, b)))
+    fixed, tested = MultiplicationEvent(1, 1.0), MultiplicationEvent(2, 1.0)
+    model = TopologyLikelihood(
+        species(), topology, fixed_events=(fixed,), ascertainment="root-clades"
+    )
+    combined = model.evaluate([[0.0, 0.0]], 1.0, tested)
+    assert combined.log_likelihood == pytest.approx(0.0)
+    np.testing.assert_array_equal(combined.origin_probabilities, [0.0, 1.0, 0.0])
+    assert (
+        model.evaluate([[0.0, 0.0]], 1.0, tested, origins=False).log_likelihood
+        == combined.log_likelihood
+    )
+    with pytest.raises(ValueError, match="overlap"):
+        model.evaluate([[0.0, 0.0]], 1.0, fixed)
+    with pytest.raises(ValueError, match="all fixed background events to be doublings"):
+        TopologyLikelihood(
+            species(), topology, fixed_events=(MultiplicationEvent(1, 0.5, 0.5, 3),)
+        )
+
+
+def test_fixed_background_and_single_candidate_are_equal_without_origin_markers():
+    a, b = ("tip", "A"), ("tip", "B")
+    topology = gene(("node", ("node", a, a), b))
+    event = MultiplicationEvent(1, 0.65, 0.25)
+    settings = dict(
+        detection=(0.7, 0.9), rate_scales=(0.4, 1.6), ascertainment="root-clades"
+    )
+    model = TopologyLikelihood(species(), topology, fixed_events=(event,), **settings)
+    baseline = TopologyLikelihood(species(), topology, **settings)
+    args = [[0.1, 0.22]], 1.12
+    assert (
+        model.evaluate(*args).log_likelihood
+        == baseline.evaluate(*args, event).log_likelihood
+    )
+    assert not np.any(model.evaluate(*args).origin_probabilities)
+
+
+def test_nested_fixed_doubling_marks_only_the_younger_candidate_origins():
+    species_tree = CountTree(
+        (-1, 0, 1, 1, 0),
+        (0.0, 0.4, 0.6, 0.6, 1.0),
+        (2, 3, 4),
+        ("A", "B", "C"),
+        (0, 1, 2, 3, 4),
+        ("ABC", "AB", "A", "B", "C"),
+    )
+    a, b, c = (("tip", tip) for tip in "ABC")
+    ab = ("node", ("node", a, a), b)
+    topology = gene(("node", ("node", ab, ab), c))
+    older, younger = MultiplicationEvent(1, 1.0), MultiplicationEvent(2, 1.0)
+    fit = TopologyLikelihood(
+        species_tree, topology, ascertainment="root-clades", fixed_events=(older,)
+    ).evaluate([[0.0, 0.0]], 1.0, younger)
+    assert fit.log_likelihood == pytest.approx(0.0)
+    assert tuple(
+        i
+        for i, probability in zip(
+            fit.origin_node_ids, fit.origin_probabilities, strict=True
+        )
+        if probability == 1
+    ) == ("g2", "g7")
+    np.testing.assert_array_equal(
+        np.sort(fit.origin_probabilities), [0.0, 0.0, 0.0, 0.0, 1.0, 1.0]
+    )
+    fixed = TopologyLikelihood(
+        species_tree,
+        topology,
+        ascertainment="root-clades",
+        fixed_events=(older, younger),
+    ).evaluate([[0.0, 0.0]], 1.0)
+    assert fixed.log_likelihood == fit.log_likelihood
+    assert not fixed.origin_probabilities.any()
+
+
+@pytest.mark.parametrize("with_background", [False, True])
+@pytest.mark.parametrize("fraction", [0.0, 0.4, 1.0])
+def test_zero_retention_topology_equals_background_exactly(with_background, fraction):
+    a, b = ("tip", "A"), ("tip", "B")
+    topology = gene(("node", ("node", a, a), b))
+    fixed = (MultiplicationEvent(1, 0.65, 0.25),) if with_background else ()
+    model = TopologyLikelihood(
+        species(),
+        topology,
+        fixed_events=fixed,
+        detection=(0.75, 0.9),
+        rate_scales=(0.4, 1.6),
+        ascertainment="root-clades",
+    )
+    args = [[0.13, 0.22]], 1.16
+    baseline = model.evaluate(*args)
+    result = model.evaluate(*args, MultiplicationEvent(2, 0.0, fraction))
+    assert result.log_likelihood == baseline.log_likelihood
+    assert result.log_likelihood_error == baseline.log_likelihood_error
+    assert result.origin_node_ids == baseline.origin_node_ids
+    assert result.origin_probability_error == 0
+    np.testing.assert_array_equal(result.origin_probabilities, [0.0, 0.0])
+
+
+def test_one_ancestral_copy_rejects_crossed_root_before_numerical_evaluation(
+    monkeypatch,
+):
+    a, b = ("tip", "A"), ("tip", "B")
+    crossed = TopologyLikelihood(
+        species(),
+        gene(("node", ("node", a, b), ("node", a, b))),
+        ascertainment="root-clades",
+    )
+    compatible = TopologyLikelihood(
+        species(),
+        gene(("node", ("node", a, a), ("node", b, b))),
+        ascertainment="root-clades",
+    )
+    assert crossed.requires_multiple_root_copies
+    assert not compatible.requires_multiple_root_copies
+    assert np.isfinite(crossed.evaluate([[0.2, 0.3]], 1.2).log_likelihood)
+    assert np.isfinite(compatible.evaluate([[0.2, 0.3]], 1.0).log_likelihood)
+
+    def error(*args, **kwargs):
+        pytest.fail("An impossible topology should not enter the pruning calculation")
+
+    monkeypatch.setattr(crossed, "_evaluate", error)
+    with pytest.raises(ValueError, match="impossible with one ancestral root copy"):
+        crossed.evaluate([[0.2, 0.3]], 1.0)
+
+
 @pytest.mark.parametrize("n", [1, 2, 3, 4, 5])
 def test_small_colored_topology_sum_matches_independent_count_probability(n):
     duplication, loss = 0.35, 0.2

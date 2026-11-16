@@ -11,6 +11,7 @@ from nwkit import multivariate_gaussian_asr as dense
 from nwkit import multivariate_pgls as pgls
 from nwkit.asr_compare import ComparisonCandidate, ComparisonContext, _fit_continuous
 from nwkit.cli import main
+from nwkit.gaussian import DiagonalLowRankCovariance
 from nwkit.multivariate_asr import compute_mvbm_marginals
 from nwkit.optimization import FitResourceError
 from nwkit.sparse_laplace import SparseCovarianceModel
@@ -106,6 +107,48 @@ def test_singular_covariance_is_not_given_artificial_noise():
         )
 
 
+def test_materialized_sparse_covariance_preserves_extreme_finite_entries():
+    loading = np.array([[1e154, 0.0], [-1e154, 0.0], [0.0, 2.0**-537]])
+    precision = sparse.eye(2, format="csc")
+    projected = sparse.csr_matrix(loading)
+    fitted = pgls.SparseFittedCovariance(precision, projected)
+    latent = SparseCovarianceModel(
+        precision=precision,
+        tip_loading=projected,
+        logdet_covariance=0.0,
+        sampling_parent=np.full(2, -1),
+        sampling_transition=np.zeros(2),
+        sampling_variance=np.ones(2),
+    )
+    expected = loading @ loading.T
+    assert expected[-1, -1] == np.nextafter(0.0, 1.0)
+    with np.errstate(over="raise", invalid="raise"):
+        np.testing.assert_array_equal(latent.materialize(), expected)
+        np.testing.assert_array_equal(fitted.materialize(), expected)
+
+
+def test_pgls_cholesky_factors_finite_covariance_near_maximum():
+    correlation = np.array([[1.0, -0.5], [-0.5, 1.0]])
+    with np.errstate(over="raise", invalid="raise"):
+        factor = pgls._positive_cholesky(1e308 * correlation)
+    np.testing.assert_allclose(factor / 1e154, np.linalg.cholesky(correlation))
+
+
+@pytest.mark.parametrize("scale", [2.0**-1060, 2.0**1023])
+def test_pgls_validates_covariance_in_its_own_units(scale):
+    valid = scale * np.array([[1.0, 0.5], [0.5, 1.0]])
+    asymmetric = scale * np.array([[1.0, 0.25], [0.5, 1.0]])
+    indefinite = scale * np.array([[1.0, 1.5], [1.5, 1.0]])
+    with np.errstate(over="raise", invalid="raise"):
+        np.testing.assert_array_equal(
+            pgls._validate_psd_covariance(valid, 2, "Test covariance"), valid
+        )
+        with pytest.raises(ValueError, match="must be symmetric"):
+            pgls._validate_psd_covariance(asymmetric, 2, "Test covariance")
+        with pytest.raises(ValueError, match="must be positive semidefinite"):
+            pgls._validate_psd_covariance(indefinite, 2, "Test covariance")
+
+
 def test_pgls_likelihood_matches_reported_covariance():
     responses = np.array(list(VALUES.values()))
     design = np.ones((6, 1))
@@ -119,6 +162,71 @@ def test_pgls_likelihood_matches_reported_covariance():
         + residual @ np.linalg.solve(fit.fitted_covariance, residual)
     )
     assert fit.log_likelihood == pytest.approx(expected, abs=1e-9)
+
+
+@pytest.mark.parametrize("reml", [False, True])
+@pytest.mark.parametrize("sparse_path", [False, True])
+def test_pgls_rescales_traits_with_missing_values_and_sampling_error(
+    reml, sparse_path, monkeypatch
+):
+    phylogeny = tree()
+    names = list(VALUES)
+    covariance = pgls.EvolutionaryCovarianceFactory(phylogeny, tuple(names))
+    responses = np.asarray(list(VALUES.values()))
+    responses[2, 0] = np.nan
+    design = np.ones((len(names), 1))
+    exponents = np.array([-260, 300])
+    scales = np.ldexp(np.ones(2), exponents)
+    cell_scales = np.repeat(scales, len(names))
+    fixed_loading = np.linspace(-0.03, 0.06, responses.size)[:, None]
+    fixed_diagonal = np.full(responses.size, 0.005)
+    if sparse_path:
+        monkeypatch.setattr(pgls, "MAX_DENSE_MULTIVARIATE_DIMENSION", 1)
+    before = pgls.fit_multivariate_pgls(
+        responses,
+        design,
+        {"tree": covariance},
+        fixed_covariance=DiagonalLowRankCovariance(
+            fixed_diagonal, sparse.csr_matrix(fixed_loading)
+        ),
+        reml=reml,
+    )
+    after = pgls.fit_multivariate_pgls(
+        responses * scales,
+        design,
+        {"tree": covariance},
+        fixed_covariance=DiagonalLowRankCovariance(
+            fixed_diagonal * cell_scales**2,
+            sparse.csr_matrix(fixed_loading * cell_scales[:, None]),
+        ),
+        reml=reml,
+    )
+
+    counts = np.isfinite(responses).sum(axis=0) - int(reml)
+    assert after.log_likelihood + counts @ np.log(scales) == pytest.approx(
+        before.log_likelihood, abs=1e-7
+    )
+    assert after.boundary_warning == before.boundary_warning
+    np.testing.assert_allclose(
+        after.coefficients[:, 0] / scales, before.coefficients[:, 0], atol=1e-6
+    )
+    np.testing.assert_allclose(
+        after.coefficient_covariance / np.outer(scales, scales),
+        before.coefficient_covariance,
+        rtol=2e-5,
+    )
+    before_covariance, after_covariance = (
+        before.fitted_covariance,
+        after.fitted_covariance,
+    )
+    if sparse_path:
+        before_covariance = before_covariance.materialize()
+        after_covariance = after_covariance.materialize()
+    np.testing.assert_allclose(
+        after_covariance / np.outer(cell_scales, cell_scales),
+        before_covariance,
+        rtol=2e-5,
+    )
 
 
 @pytest.mark.parametrize("reml", [False, True])
@@ -235,19 +343,81 @@ def test_multivariate_time_units_preserve_fits_and_posteriors(fitter, scale):
     )
 
 
-def test_fast_bm_rank_and_likelihood_are_time_unit_invariant():
-    fits = []
-    for scale in (1.0, 1e16):
-        current = tree()
-        for node in current.traverse():
-            if not node.is_root:
-                node.dist *= scale
-        _, fit = compute_mvbm_marginals(current, VALUES, ("x", "y"))
-        assert fit.sigma_rank == 2
-        fits.append(fit)
-    assert fits[0].restricted_log_likelihood == pytest.approx(
-        fits[1].restricted_log_likelihood, abs=1e-9
+@pytest.mark.parametrize("scale", [1e-200, 1e200])
+def test_free_mvou_attraction_fit_is_invariant_to_extreme_time_units(scale):
+    original = tree()
+    scaled = tree()
+    for node in scaled.traverse():
+        if not node.is_root:
+            node.dist *= scale
+    errors = {name: (0.05, 0.08) for name in VALUES}
+    _, first = dense.fit_dense_mvou(
+        original, VALUES, ("x", "y"), standard_errors=errors
     )
+    _, second = dense.fit_dense_mvou(scaled, VALUES, ("x", "y"), standard_errors=errors)
+    assert second.alpha * scale == pytest.approx(first.alpha, rel=2e-5)
+    assert second.log_likelihood == pytest.approx(first.log_likelihood, abs=1e-9)
+    assert second.fit_status == first.fit_status
+
+
+@pytest.mark.parametrize("fitter", [dense.fit_dense_mvou, dense.fit_dense_mvou_diag])
+def test_fixed_mvou_attraction_accepts_subnormal_tree_time_units(fitter):
+    original = tree()
+    scaled = tree()
+    scale = 1e-308
+    for node in scaled.traverse():
+        if not node.is_root:
+            node.dist *= scale
+    expected, first = fitter(original, VALUES, ("x", "y"), alpha=0.3)
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        posterior, second = fitter(scaled, VALUES, ("x", "y"), alpha=0.3 / scale)
+    assert second.log_likelihood == pytest.approx(first.log_likelihood, abs=1e-9)
+    np.testing.assert_allclose(second.sigma, first.sigma, rtol=1e-5)
+    np.testing.assert_allclose(
+        posterior[scaled].mean, expected[original].mean, atol=1e-6
+    )
+
+
+def test_diagonal_ou_with_extreme_fixed_attraction_has_finite_diffusion():
+    original = tree()
+    values = np.asarray(list(VALUES.values()))
+    estimated_mean = values.mean(axis=0)
+    centered = values - estimated_mean
+    expected_sigma = centered.T @ centered / len(values)
+
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        _, fit = dense.fit_dense_mvou_diag(original, VALUES, ("x", "y"), alpha=1e308)
+
+    assert fit.optimizer_success
+    assert fit.alpha == 1e308
+    np.testing.assert_allclose(fit.theta, estimated_mean, atol=1e-7)
+    np.testing.assert_allclose(fit.sigma, expected_sigma, rtol=1e-5)
+    np.testing.assert_allclose(
+        fit.diffusion_sigma / 1e308, 2 * expected_sigma, rtol=1e-5
+    )
+
+
+@pytest.mark.parametrize("scale", [1e-180, 1e16, 1e180])
+def test_fast_bm_rank_and_likelihood_are_time_unit_invariant(scale):
+    current = tree()
+    expected, baseline = compute_mvbm_marginals(current, VALUES, ("x", "y"))
+    for node in current.traverse():
+        if not node.is_root:
+            node.dist *= scale
+    with np.errstate(over="raise", invalid="raise"):
+        posterior, fit = compute_mvbm_marginals(current, VALUES, ("x", "y"))
+    assert fit.sigma_rank == baseline.sigma_rank == 2
+    assert fit.restricted_log_likelihood == pytest.approx(
+        baseline.restricted_log_likelihood, abs=1e-9
+    )
+    np.testing.assert_allclose(fit.sigma * scale, baseline.sigma)
+    for node in current.traverse():
+        np.testing.assert_allclose(
+            posterior[node].mean, expected[node].mean, atol=1e-12
+        )
+        np.testing.assert_allclose(
+            posterior[node].covariance, expected[node].covariance
+        )
 
 
 @pytest.mark.parametrize("model", ["MV-BM", "MV-OU", "MV-OU-DIAG"])

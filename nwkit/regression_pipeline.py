@@ -2,6 +2,7 @@
 
 import math
 import os
+from collections import defaultdict
 from dataclasses import dataclass
 from functools import partial
 from types import SimpleNamespace
@@ -15,6 +16,7 @@ from scipy.stats import norm, t
 from nwkit.clade_index import CladeIndex
 from nwkit.contrast import (
     _orient_children,
+    _prepare_contrast_branches,
     _read_mixed_replicate_traits,
     _read_typed_traits,
     _validate_replicate_options,
@@ -34,13 +36,16 @@ from nwkit.evolution import (
     evolutionary_covariance_factory,
     optimization_parameterization,
     parameter_near_boundary,
-    transformed_edge_variances,
 )
-from nwkit.gaussian import DiagonalLowRankCovariance, is_diagonal
+from nwkit.gaussian import (
+    DiagonalLowRankCovariance,
+    finite_mean,
+    is_diagonal,
+    sample_standard_errors,
+)
 from nwkit.measurement_error import fit_latent_predictor, fit_sparse_latent_predictor
 from nwkit.model_matrix import (
     PredictorTerm,
-    ReplicatedObservation,
     encode_predictors,
     parse_key_values,
     parse_name_list,
@@ -53,6 +58,7 @@ from nwkit.model_matrix import (
 from nwkit.multivariate_pgls import fit_multivariate_pgls
 from nwkit.optimization import ScalarFitCache
 from nwkit.ordinary_regression import (
+    _auxiliary_values_by_leaf,
     _categorical_shape_settings,
     _global_bounded_scalar_minimize,
     estimate_marginal_evolution_parameter,
@@ -560,67 +566,24 @@ def _read_gene_response_inputs(
 def _read_gene_auxiliary_values(args, gene_tree, columns, *, allow_missing=False):
     if not columns:
         return {}
+    leaf_names = list(gene_tree.leaf_names())
     dataframe, _, _ = read_tip_table(
         args.expression,
         option_name="--expression",
-        tree_leaf_names=list(gene_tree.leaf_names()),
+        tree_leaf_names=leaf_names,
         required_columns=columns,
         unmatched=args.unmatched,
         missing_values=args.missing_values,
         duplicate_leaf_names="allow",
     )
-    values_by_column = {}
-    for column in columns:
-        values_by_leaf = {}
-        for leaf_name in gene_tree.leaf_names():
-            selected_rows = dataframe.loc[dataframe["leaf_name"] == str(leaf_name)]
-            biological_id = getattr(args, "biological_id", None)
-            if biological_id is None:
-                numeric = pd.to_numeric(
-                    selected_rows[column], errors="coerce"
-                ).to_numpy(float)
-            else:
-                observations = []
-                for _identifier, group in selected_rows.groupby(
-                    biological_id, sort=False, dropna=False
-                ):
-                    group_values = pd.to_numeric(
-                        group[column], errors="coerce"
-                    ).to_numpy(float)
-                    finite_group = group_values[np.isfinite(group_values)]
-                    if len(finite_group) and np.any(finite_group != finite_group[0]):
-                        raise ValueError(
-                            "Auxiliary response column '{}' differs among technical "
-                            "rows for gene tip '{}'.".format(column, leaf_name)
-                        )
-                    observations.append(
-                        float("nan")
-                        if not len(finite_group)
-                        else float(finite_group[0])
-                    )
-                numeric = np.asarray(observations, dtype=float)
-            finite = numeric[np.isfinite(numeric)]
-            if not allow_missing and (not len(numeric) or len(finite) != len(numeric)):
-                raise ValueError(
-                    "Auxiliary response column '{}' must be finite for gene tip '{}'.".format(
-                        column, leaf_name
-                    )
-                )
-            if biological_id is None and len(finite) and np.any(finite != finite[0]):
-                raise ValueError(
-                    "Auxiliary response column '{}' differs among rows for gene tip '{}'.".format(
-                        column, leaf_name
-                    )
-                )
-            values_by_leaf[str(leaf_name)] = (
-                ReplicatedObservation(tuple(numeric))
-                if biological_id is not None
-                else float("nan")
-                if not len(finite)
-                else float(finite[0])
-            )
-        values_by_column[column] = values_by_leaf
-    return values_by_column
+    return _auxiliary_values_by_leaf(
+        dataframe,
+        leaf_names,
+        columns,
+        getattr(args, "biological_id", None),
+        allow_missing=allow_missing,
+        tip_label="gene tip",
+    )
 
 
 def _map_response_auxiliary(column_by_response, values_by_column):
@@ -801,7 +764,7 @@ def _estimate_gene_response_parameter(
     predictor_sampling_covariance: pd.DataFrame | None,
     predictors: list[str],
     predictor_group_uncertainties,
-) -> tuple[pd.DataFrame, pd.DataFrame | None, dict[str, Any]]:
+) -> tuple[pd.DataFrame, pd.DataFrame | None, dict[str, Any], pd.DataFrame]:
     bounds, decode = optimization_parameterization(
         gene_tree,
         args.gene_evolution_model,
@@ -874,7 +837,12 @@ def _estimate_gene_response_parameter(
             branch_length=args.gene_branch_length,
         ),
     }
-    return selected["contrasts"], selected["covariance"], diagnostics
+    return (
+        selected["contrasts"],
+        selected["covariance"],
+        diagnostics,
+        selected["result"],
+    )
 
 
 def _build_gene_contrasts(
@@ -914,7 +882,7 @@ def _build_gene_contrasts(
     diagnostics_by_response = {}
     for response in responses:
         if auto_parameter:
-            contrasts, covariance, diagnostics = _estimate_gene_response_parameter(
+            contrasts, covariance, diagnostics, _ = _estimate_gene_response_parameter(
                 args,
                 gene_tree,
                 reconciliation_by_id,
@@ -1176,9 +1144,9 @@ def _prepare_reconciled_tip_predictors(
                 index=leaf_names,
                 columns=leaf_names,
             )
-            mean_posterior_variance = float(np.mean(np.diag(posterior.covariance)))
-            mean_prior_variance = float(
-                np.mean(np.diag(posterior.evolutionary_rate * prior_covariance))
+            mean_posterior_variance = finite_mean(np.diag(posterior.covariance))
+            mean_prior_variance = posterior.evolutionary_rate * finite_mean(
+                np.diag(prior_covariance)
             )
         diagnostics[predictor].update(
             {
@@ -1229,17 +1197,13 @@ def _prepare_reconciled_tip_predictors(
 
 
 def _positive_semidefinite_loading(matrix, dimension):
-    scale = max(1.0, float(np.max(np.abs(matrix))))
-    tolerance = np.finfo(float).eps * scale * max(1, dimension) * 100.0
-    if float(np.max(np.abs(matrix - matrix.T))) > tolerance:
-        raise ValueError("Categorical predictor sampling covariance must be symmetric.")
-    eigenvalues, eigenvectors = np.linalg.eigh((matrix + matrix.T) / 2.0)
-    if float(np.min(eigenvalues)) < -tolerance:
+    if np.shape(matrix) != (dimension, dimension):
         raise ValueError(
-            "Categorical predictor sampling covariance must be positive semidefinite."
+            "Categorical predictor sampling covariance has invalid dimensions."
         )
-    positive = eigenvalues > tolerance
-    return eigenvectors[:, positive] * np.sqrt(eigenvalues[positive])
+    return _positive_semidefinite_factor(
+        matrix, "Categorical predictor sampling covariance"
+    )
 
 
 def _categorical_sampling_factor(sampling_covariance, n_tips, n_terms):
@@ -1545,23 +1509,26 @@ def _attach_evolution_diagnostics(
     return updated
 
 
+def _scaled_symmetric_sampling_covariance(matrix, label):
+    matrix = np.asarray(matrix, dtype=float)
+    if not np.isfinite(matrix).all():
+        raise ValueError("{} must contain finite values.".format(label))
+    _, exponent = math.frexp(float(np.max(np.abs(matrix), initial=0.0)))
+    scaled = np.ldexp(matrix, -exponent)
+    tolerance = np.finfo(float).eps * len(matrix) * 100.0
+    if float(np.max(np.abs(scaled - scaled.T), initial=0.0)) > tolerance:
+        raise ValueError("{} must be symmetric.".format(label))
+    return (scaled + scaled.T) * 0.5, exponent, tolerance
+
+
 def _positive_semidefinite_factor(matrix: np.ndarray, label: str) -> np.ndarray:
-    symmetric = (
-        np.asarray(matrix, dtype=float) + np.asarray(matrix, dtype=float).T
-    ) / 2.0
-    eigenvalues, eigenvectors = np.linalg.eigh(symmetric)
-    tolerance = (
-        np.finfo(float).eps
-        * max(1.0, float(np.max(np.abs(symmetric))))
-        * max(1, len(symmetric))
-        * 100.0
-    )
-    if float(eigenvalues.min()) < -tolerance:
-        raise ValueError("{} is not positive semidefinite.".format(label))
+    scaled, exponent, tolerance = _scaled_symmetric_sampling_covariance(matrix, label)
+    eigenvalues, eigenvectors = np.linalg.eigh(scaled)
+    if float(eigenvalues.min(initial=0.0)) < -tolerance:
+        raise ValueError("{} must be positive semidefinite.".format(label))
     positive = eigenvalues > tolerance
-    if not positive.any():
-        return np.zeros((len(symmetric), 0), dtype=float)
-    return eigenvectors[:, positive] * np.sqrt(eigenvalues[positive])
+    roots = np.sqrt(np.ldexp(eigenvalues[positive], exponent % 2))
+    return eigenvectors[:, positive] * np.ldexp(roots, exponent // 2)
 
 
 def _prepare_response_tip_simulator(
@@ -1578,36 +1545,14 @@ def _prepare_response_tip_simulator(
     reconciliation_by_id = {
         str(row["gene_clade_id"]): row for row in reconciliation.to_dict("records")
     }
-    orientation = _orient_children(gene_tree, clades, reconciliation_by_id)
     leaf_names = [str(leaf.name) for leaf in gene_tree.leaves()]
-    edge_variances = transformed_edge_variances(
+    branches = _prepare_contrast_branches(
         gene_tree,
-        model=args.gene_evolution_model,
-        parameter=parameter,
-        branch_length=args.gene_branch_length,
+        args.gene_branch_length,
+        args.gene_evolution_model,
+        parameter,
+        _orient_children(gene_tree, clades, reconciliation_by_id),
     )
-    variance_by_node = {}
-    weights_by_node = {}
-    for node in gene_tree.traverse(strategy="postorder"):
-        if node.is_leaf:
-            variance_by_node[node] = float(edge_variances[node])
-            continue
-        numerator, denominator = orientation[node]
-        numerator_variance = variance_by_node[numerator]
-        denominator_variance = variance_by_node[denominator]
-        scale = max(numerator_variance, denominator_variance)
-        scaled_numerator = numerator_variance / scale
-        scaled_denominator = denominator_variance / scale
-        total = scaled_numerator + scaled_denominator
-        weights_by_node[node] = (
-            scaled_denominator / total,
-            scaled_numerator / total,
-        )
-        smaller = min(numerator_variance, denominator_variance)
-        larger = max(numerator_variance, denominator_variance)
-        variance_by_node[node] = smaller / (1.0 + smaller / larger) + float(
-            edge_variances[node]
-        )
     node_by_id = {
         clades.clade_id_for_node(node): node
         for node in gene_tree.traverse()
@@ -1675,9 +1620,10 @@ def _prepare_response_tip_simulator(
                 )
     return {
         "leaf_names": leaf_names,
-        "orientation": orientation,
-        "weights": weights_by_node,
+        "leaves": tuple(gene_tree.leaves()),
+        "branches": branches,
         "selected_nodes": selected_nodes,
+        "reconciliation_by_id": reconciliation_by_id,
         "evolutionary_model": evolutionary_model,
         "sampling_factor": sampling_factor,
     }
@@ -1707,19 +1653,14 @@ def _simulate_response_tip_values(
         else:
             base += sampling_factor @ rng.standard_normal(sampling_factor.shape[1])
 
-    leaves = list(gene_tree.leaves())
+    leaves = simulator["leaves"]
     estimate_by_node = {leaf: float(base[index]) for index, leaf in enumerate(leaves)}
     contrast_by_node = {}
-    orientation = simulator["orientation"]
-    weights = simulator["weights"]
-    for node in gene_tree.traverse(strategy="postorder"):
-        if node.is_leaf:
-            continue
-        numerator, denominator = orientation[node]
+    branches = simulator["branches"]
+    for node, numerator, denominator, _, first_weight, second_weight, _, _ in branches:
         first = estimate_by_node[numerator]
         second = estimate_by_node[denominator]
         contrast_by_node[node] = first - second
-        first_weight, second_weight = weights[node]
         estimate_by_node[node] = first_weight * first + second_weight * second
 
     contrast_mean = fit_state["design"] @ fit_state["beta"]
@@ -1730,11 +1671,9 @@ def _simulate_response_tip_values(
         contrast_by_node[node] += float(mean + extra)
 
     reconstructed = {gene_tree: estimate_by_node[gene_tree]}
-    for node in gene_tree.traverse(strategy="preorder"):
-        if node.is_leaf:
-            continue
-        numerator, denominator = orientation[node]
-        first_weight, second_weight = weights[node]
+    for node, numerator, denominator, _, first_weight, second_weight, _, _ in reversed(
+        branches
+    ):
         contrast = contrast_by_node[node]
         reconstructed[numerator] = reconstructed[node] + second_weight * contrast
         reconstructed[denominator] = reconstructed[node] - first_weight * contrast
@@ -1765,9 +1704,7 @@ def _bootstrap_shape_refitted_coefficients(
         parameter,
         fit_state["contrast_ids"],
     )
-    reconciliation_by_id = {
-        str(row["gene_clade_id"]): row for row in reconciliation.to_dict("records")
-    }
+    reconciliation_by_id = simulator["reconciliation_by_id"]
     rng = np.random.default_rng(seed)
     coefficients: list[np.ndarray] = []
     standard_errors: list[np.ndarray] = []
@@ -1791,7 +1728,7 @@ def _bootstrap_shape_refitted_coefficients(
             tip_summary=response_inputs.tip_summary,
         )
         try:
-            contrasts, covariance, _ = _estimate_gene_response_parameter(
+            _, _, _, bootstrap_result = _estimate_gene_response_parameter(
                 args,
                 gene_tree,
                 reconciliation_by_id,
@@ -1802,16 +1739,7 @@ def _bootstrap_shape_refitted_coefficients(
                 predictors,
                 predictor_group_uncertainties,
             )
-            bootstrap_result = _fit_candidate_reconciled_model(
-                args,
-                contrasts,
-                species_contrasts,
-                response,
-                predictors,
-                covariance,
-                predictor_sampling_covariance,
-                predictor_group_uncertainties,
-            ).set_index("term")
+            bootstrap_result = bootstrap_result.set_index("term")
         except ValueError:
             continue
         if (bootstrap_result["optimizer_converged"] != "yes").any():
@@ -1869,6 +1797,10 @@ def _apply_shape_refitted_bootstrap(
             fit_state,
             args.seed + response_index,
         )
+        standard_errors = sample_standard_errors(bootstrap)
+        lower_bounds, upper_bounds = np.quantile(
+            bootstrap, [alpha, 1.0 - alpha], axis=0
+        )
         for predictor_index, predictor in enumerate(predictors):
             selected = (updated["response"] == response) & (
                 updated["term"] == predictor
@@ -1880,7 +1812,7 @@ def _apply_shape_refitted_bootstrap(
             standard_error = (
                 float(updated.loc[row_index, "standard_error"])
                 if studentized
-                else float(np.std(samples, ddof=1))
+                else float(standard_errors[predictor_index])
             )
             if studentized:
                 sample_errors = bootstrap_standard_errors[:, predictor_index]
@@ -1898,7 +1830,10 @@ def _apply_shape_refitted_bootstrap(
                 lower = coefficient - upper_pivot * standard_error
                 upper = coefficient - lower_pivot * standard_error
             else:
-                lower, upper = np.quantile(samples, [alpha, 1.0 - alpha])
+                lower, upper = (
+                    lower_bounds[predictor_index],
+                    upper_bounds[predictor_index],
+                )
                 updated.loc[row_index, "standard_error"] = standard_error
             updated.loc[row_index, "confidence_interval_lower"] = float(lower)
             updated.loc[row_index, "confidence_interval_upper"] = float(upper)
@@ -2409,11 +2344,11 @@ def _categorical_group_random_rows(
     if "group" not in fit.component_random_modes:
         return []
     modes = fit.component_random_modes["group"]
+    members_by_species: defaultdict[str, list[int]] = defaultdict(list)
+    for index, species in enumerate(gene_species):
+        members_by_species[species].append(index)
     rows = []
-    for species in sorted(set(gene_species)):
-        members = [
-            index for index, value in enumerate(gene_species) if value == species
-        ]
+    for species, members in sorted(members_by_species.items()):
         for level_index, level in enumerate(level_names):
             rows.append(
                 _categorical_random_row(

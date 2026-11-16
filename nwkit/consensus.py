@@ -81,9 +81,11 @@ def _read_tree_weights(weight_tsv, num_trees=None):
         if weight_df["tree_id"].isna().any():
             raise ValueError("--weight-tsv contains missing values in 'tree_id'.")
         parsed_rows = list()
-        for _, row in weight_df.iterrows():
+        for tree_id_raw, weight_raw in zip(
+            weight_df["tree_id"], weight_df["weight"], strict=True
+        ):
             try:
-                tree_id_value = float(row["tree_id"])
+                tree_id_value = float(tree_id_raw)
             except ValueError as exc:
                 raise ValueError(
                     "--weight-tsv 'tree_id' values must be integers."
@@ -95,7 +97,7 @@ def _read_tree_weights(weight_tsv, num_trees=None):
                 raise ValueError(
                     "--weight-tsv tree_id is out of range: {}".format(tree_id)
                 )
-            parsed_rows.append((tree_id, row["weight"]))
+            parsed_rows.append((tree_id, weight_raw))
         expected_count = (
             num_trees
             if num_trees is not None
@@ -159,11 +161,16 @@ def _weighted_median(values, weights):
     return sorted_pairs[-1][0]
 
 
-def _aggregate_branch_lengths(observations, method):
+def _aggregate_branch_lengths(observations, method, *, masks=None):
     if method == "none":
         return dict()
+    records_by_mask = (
+        observations.items()
+        if masks is None
+        else ((mask, observations[mask]) for mask in masks if mask in observations)
+    )
     out = dict()
-    for mask, records in observations.items():
+    for mask, records in records_by_mask:
         if method == "mean" and isinstance(records, tuple):
             running_mean, weight_sum = records
             out[mask] = None if weight_sum == 0 else running_mean
@@ -552,7 +559,9 @@ def _get_method_min_freq(method, min_freq):
     raise ValueError("Unsupported '--method': {}".format(method))
 
 
-def _select_consensus_masks(clade_weights, total_weight, min_freq):
+def _select_consensus_masks(
+    clade_weights, total_weight, min_freq, *, exact_counts=False
+):
     selected_masks: list[tuple[Any, Any, float]] = []
     candidates = list()
     for mask, weight in clade_weights.items():
@@ -560,13 +569,35 @@ def _select_consensus_masks(clade_weights, total_weight, min_freq):
         if freq >= min_freq:
             candidates.append((mask, weight, freq))
     candidates.sort(key=lambda item: (-item[1], -count_set_bits(item[0]), int(item[0])))
-    for mask, weight, freq in candidates:
+    # Two clades found in more than half the trees must occur together in at
+    # least one tree. This shortcut is for exact counts of unweighted trees.
+    if exact_counts and min_freq > 0.5:
+        return candidates
+    majority_count = 0
+    if exact_counts and min_freq == 0.5:
+        # A majority clade is also compatible with every half-frequency
+        # candidate. Only pairs within the tied group need checking.
+        majority_count = next(
+            (
+                index
+                for index, (_, weight, _) in enumerate(candidates)
+                if 2 * weight <= total_weight
+            ),
+            len(candidates),
+        )
+        if majority_count == len(candidates):
+            return candidates
+    for mask, weight, freq in islice(candidates, majority_count, None):
         if all(
             _masks_are_compatible(mask, selected_mask)
             for selected_mask, _, _ in selected_masks
         ):
             selected_masks.append((mask, weight, freq))
-    return selected_masks
+    return (
+        candidates[:majority_count] + selected_masks
+        if majority_count
+        else selected_masks
+    )
 
 
 def _build_consensus_subtree(
@@ -680,7 +711,10 @@ def _annotate_reference_tree(
 
 def consensus_main(args):
     method = getattr(args, "method", "greedy")
-    branch_length = getattr(args, "branch_length", "none")
+    annotate_reference = args.reference not in ("", None)
+    branch_length = (
+        "none" if annotate_reference else getattr(args, "branch_length", "none")
+    )
     comparison = getattr(args, "comparison", "rooted")
     weight_tsv = getattr(args, "weight_tsv", None)
     if comparison not in ("rooted", "unrooted"):
@@ -727,7 +761,7 @@ def consensus_main(args):
         raise ValueError("--weight-tsv must contain exactly one row per input tree.")
     sys.stderr.write("Number of input trees = {:,}\n".format(num_trees))
     total_weight = float(num_trees) if tree_weights is None else math.fsum(tree_weights)
-    if args.reference not in ["", None]:
+    if annotate_reference:
         reference_tree = read_tree(
             args.reference,
             args.reference_format,
@@ -759,6 +793,7 @@ def consensus_main(args):
             clade_weights=clade_weights,
             total_weight=total_weight,
             min_freq=_get_method_min_freq(method, args.min_freq),
+            exact_counts=tree_weights is None and num_trees <= 2**53,
         )
         support_by_mask = {
             mask: _scale_support(freq, args.support_scale)
@@ -767,7 +802,9 @@ def consensus_main(args):
         dist_by_mask = _aggregate_branch_lengths(
             observations=branch_length_observations,
             method=branch_length,
+            masks=chain(support_by_mask, (1 << bit for bit in range(len(leaf_names)))),
         )
+        del branch_length_observations
         output_tree = _build_consensus_tree(
             leaf_names=leaf_names,
             all_mask=all_mask,

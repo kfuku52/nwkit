@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import tempfile
 from collections import OrderedDict
+from itertools import chain, islice
 from pathlib import Path
 
 import numpy as np
@@ -18,6 +19,7 @@ from ete4 import Tree
 
 from nwkit.fasta import parse_fasta
 from nwkit.radte_sequence import read_alignment
+from nwkit.util import get_subtree_leaf_bitmasks
 
 BASES = {
     "JC": "dna",
@@ -199,33 +201,58 @@ def split_key(node, names: frozenset[str]):
     return min((first, second), key=lambda value: (len(value), value))
 
 
+def _canonical_split_mask(side, all_tips):
+    return min(side, all_tips ^ side)
+
+
+def _match_split_masks(keys, expected, edge_keys, error):
+    index_by_split = {key: index for index, key in enumerate(keys)}
+    if len(index_by_split) != len(keys) or index_by_split.keys() != expected:
+        raise ValueError(error)
+    return np.array([index_by_split[key] for key in edge_keys])
+
+
 def read_export(prefix, *, single_tip_root=False, derivatives=True):
     export = Path(str(prefix) + ".mcmctree.hessian")
     if not export.is_file():
         raise ValueError(
             "IQ-TREE did not produce its required IQ2MC derivative export."
         )
-    lines = [line.strip() for line in export.read_text().splitlines() if line.strip()]
-    if len(lines) < 6:
-        raise ValueError("Incomplete IQ-TREE derivative export.")
-    tree = Tree(lines[1], parser=1)
-    nodes = [node for node in tree.traverse("preorder") if node is not tree]
-    if single_tip_root:
-        # IQ2MC puts the first root-tip edge last in its derivative vectors,
-        # while leaving that tip first in the accompanying Newick.
-        nodes = nodes[1:] + nodes[:1]
-    count = 2 * int(lines[0]) - 3
-    lengths = np.fromstring(lines[2], sep=" ")
-    gradient = np.fromstring(lines[3], sep=" ")
-    hessian = np.array([np.fromstring(line, sep=" ") for line in lines[5:]])
-    if (
-        len(nodes) != count
-        or lengths.shape != (count,)
-        or gradient.shape != (count,)
-        or hessian.shape != (count, count)
-        or lines[4] != "Hessian"
-    ):
-        raise ValueError("Unsupported IQ-TREE Hessian export layout.")
+    layout_error = "Unsupported IQ-TREE Hessian export layout."
+    with export.open() as handle:
+        stripped = (line.strip() for line in handle)
+        lines = (line for line in stripped if line)
+        header = list(islice(lines, 6))
+        if len(header) < 6:
+            raise ValueError("Incomplete IQ-TREE derivative export.")
+        tree = Tree(header[1], parser=1)
+        nodes = [node for node in tree.traverse("preorder") if node is not tree]
+        if single_tip_root:
+            # IQ2MC puts the first root-tip edge last in its derivative vectors,
+            # while leaving that tip first in the accompanying Newick.
+            nodes = nodes[1:] + nodes[:1]
+        count = 2 * int(header[0]) - 3
+        lengths = np.fromstring(header[2], sep=" ")
+        gradient = np.fromstring(header[3], sep=" ")
+        if (
+            len(nodes) != count
+            or lengths.shape != (count,)
+            or gradient.shape != (count,)
+            or header[4] != "Hessian"
+        ):
+            raise ValueError(layout_error)
+        hessian = np.empty((count, count))
+        rows = chain(header[5:], lines)
+        for index in range(count):
+            line = next(rows, None)
+            if line is None:
+                raise ValueError(layout_error)
+            row = np.fromstring(line, sep=" ")
+            if row.shape != (count,):
+                raise ValueError(layout_error)
+            hessian[index] = row
+        if next(rows, None) is not None:
+            raise ValueError(layout_error)
     if not np.allclose(lengths, [n.dist for n in nodes], rtol=1e-5, atol=1e-9):
         raise ValueError("IQ-TREE Hessian branch order does not match its tree.")
     if not np.isfinite(lengths).all():
@@ -236,7 +263,9 @@ def read_export(prefix, *, single_tip_root=False, derivatives=True):
     score = float(data["CandidateSet.0"].split()[0])
     if not np.isfinite(score):
         raise ValueError("Nonfinite IQ-TREE likelihood export.")
-    return tree, nodes, lengths, -score, -gradient, -hessian, data
+    np.negative(gradient, out=gradient)
+    np.negative(hessian, out=hessian)
+    return tree, nodes, lengths, -score, gradient, hessian, data
 
 
 def validate_derivatives(lengths, gradient, hessian):
@@ -294,6 +323,23 @@ class IQTreeLikelihood:
         }
         self.aliases = {name: f"T{i}" for i, name in enumerate(self.names)}
         self.all_aliases = frozenset(self.aliases.values())
+        self._alias_positions = {
+            alias: index for index, alias in enumerate(self.aliases.values())
+        }
+        self._full_alias_mask = (1 << len(self._alias_positions)) - 1
+        source_positions = {
+            tip.name: self._alias_positions[self.aliases[str(tip.name)]]
+            for tip in chronology.gene.leaves()
+        }
+        source_keys = {
+            node: _canonical_split_mask(mask, self._full_alias_mask)
+            for node, mask in get_subtree_leaf_bitmasks(
+                chronology.gene, source_positions
+            ).items()
+            if node is not chronology.gene
+        }
+        self._source_split_keys = set(source_keys.values())
+        self._edge_split_keys = tuple(source_keys[node] for node in self.edges)
         self.threads, self.seed = threads, seed
         self._temporary = tempfile.TemporaryDirectory(prefix="nwkit-iqtree-")
         self.directory = Path(self._temporary.name)
@@ -383,26 +429,16 @@ class IQTreeLikelihood:
             ]
         )
 
-        def canonical(side):
-            other = self.all_aliases - side
-            return min(
-                (tuple(sorted(side)), tuple(sorted(other))), key=lambda x: (len(x), x)
-            )
-
-        keys = [canonical(side) for side in self.worker.splits]
-        expected = [
-            canonical(frozenset(self.aliases[str(n.name)] for n in edge.leaves()))
-            for edge in self.edges
-        ]
-        if (
-            len(keys) != len(set(keys))
-            or set(keys) != set(expected)
-            or any(not side <= self.all_aliases for side in self.worker.splits)
-        ):
-            raise ValueError(
-                "IQ-TREE library worker changed the fixed topology or sequence set."
-            )
-        self.worker_mapping = np.array([keys.index(key) for key in expected])
+        error = "IQ-TREE library worker changed the fixed topology or sequence set."
+        keys = []
+        for side in self.worker.splits:
+            if not side <= self.all_aliases:
+                raise ValueError(error)
+            mask = sum(1 << self._alias_positions[alias] for alias in side)
+            keys.append(_canonical_split_mask(mask, self._full_alias_mask))
+        self.worker_mapping = _match_split_masks(
+            keys, set(self._edge_split_keys), self._edge_split_keys, error
+        )
         combined = np.bincount(self.worker_mapping, weights=self.initial_lengths)
         if not np.allclose(combined, self.worker.lengths, rtol=1e-7, atol=1e-12):
             raise ValueError(
@@ -431,17 +467,36 @@ class IQTreeLikelihood:
         return result.stdout
 
     def _newick(self, lengths):
-        parts: dict[object, str] = {}
-        for node in self.chronology.gene.traverse("postorder"):
-            value = (
-                self.aliases[str(node.name)]
-                if node.is_leaf
-                else "(" + ",".join(parts[c] for c in node.children) + ")"
-            )
-            if node in self.edge_id:
-                value += ":" + format(lengths[self.edge_id[node]], ".17g")
-            parts[node] = value
-        return parts[self.chronology.gene] + ";"
+        root = self.chronology.gene
+        parts = []
+        for is_post, node in root.iter_prepostorder():
+            if is_post:
+                parts.append(")")
+            else:
+                if node is not root and node is not node.up.children[0]:
+                    parts.append(",")
+                if not node.is_leaf:
+                    parts.append("(")
+                    continue
+                parts.append(self.aliases[str(node.name)])
+            index = self.edge_id.get(node)
+            if index is not None:
+                parts.append(":" + format(lengths[index], ".17g"))
+        parts.append(";")
+        return "".join(parts)
+
+    def _export_edge_mapping(self, tree, nodes):
+        """Map rooted input edges to the export's unrooted derivative order."""
+        error = "IQ-TREE changed the sequence set or fixed topology."
+        if set(tree.leaf_names()) != self.all_aliases:
+            raise ValueError(error)
+        masks = get_subtree_leaf_bitmasks(tree, self._alias_positions)
+        keys = [
+            _canonical_split_mask(masks[node], self._full_alias_mask) for node in nodes
+        ]
+        return _match_split_masks(
+            keys, self._source_split_keys, self._edge_split_keys, error
+        )
 
     def _evaluate(self, lengths, model, *, fixed, derivatives=True):
         with tempfile.TemporaryDirectory(dir=self.directory) as scratch:
@@ -482,35 +537,7 @@ class IQTreeLikelihood:
                 single_tip_root=self.chronology.gene.children[0].is_leaf,
                 derivatives=derivatives,
             )
-        keys = [split_key(node, self.all_aliases) for node in nodes]
-        source = Tree(self._newick(lengths), parser=1)
-        source_keys = [
-            split_key(node, self.all_aliases)
-            for node in source.traverse("preorder")
-            if node is not source
-        ]
-        # Chronology.edges need not be preorder.
-        source_by_clade = {
-            frozenset(n.name for n in node.leaves()): split_key(node, self.all_aliases)
-            for node in source.traverse()
-            if node is not source
-        }
-        mapping = np.array(
-            [
-                keys.index(
-                    source_by_clade[
-                        frozenset(self.aliases[str(n.name)] for n in edge.leaves())
-                    ]
-                )
-                for edge in self.edges
-            ]
-        )
-        if (
-            len(keys) != len(set(keys))
-            or set(source_keys) != set(keys)
-            or set(n.name for n in tree.leaves()) != self.all_aliases
-        ):
-            raise ValueError("IQ-TREE changed the sequence set or fixed topology.")
+        mapping = self._export_edge_mapping(tree, nodes)
         combined = np.bincount(mapping, weights=lengths)
         # Newick has more precision except when tiny lengths round to zero.
         exported = np.array(

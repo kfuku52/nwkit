@@ -76,6 +76,10 @@ paths and nominal-bound checks are documented in [ANGIOCAL.md](ANGIOCAL.md).
 Its tree/report pair is staged together; an all-excluded import intentionally
 writes the diagnostic report while leaving the result tree untouched.
 
+`constrain`, `root`, and `mcmctree` can use a checksum-verified VertLife
+reference. The [VertLife guide](VERTLIFE.md) describes the cache, source
+selection, topology and age semantics, and companion TSV schemas.
+
 ## Related outputs and node editing
 
 `sample`, `skim`, `annotate`, `transfer`, and `compose` stage a successful tree
@@ -253,8 +257,9 @@ contract:
 
 ## Specialized input TSV schemas
 
-Species mappings (`--species-map-tsv` and `image --species-name-tsv`) and
-rename mappings (`--name-tsv`) accept UTF-8 files with an optional BOM.
+Species mappings (`--species-map-tsv` and `image --species-name-tsv`),
+image overrides (`image --verified-images-tsv`), and rename mappings
+(`--name-tsv`) accept UTF-8 files with an optional BOM.
 Headers must be unique and nonempty, and every row must have the same number
 of fields as its header. Additional named columns are allowed; leave optional
 cells explicitly empty rather than omitting their fields.
@@ -263,6 +268,7 @@ cells explicitly empty rather than omitting their fields.
 |---|---|---|
 | `--species-map-tsv` | `leaf_name`, and at least one of `species_label` or `taxonomy_query` | Every row must define at least one mapping value. |
 | `image --species-name-tsv` | `leaf_name`, `species_name` | Legacy image-only mapping; prefer `--species-map-tsv` for new workflows. |
+| `image --verified-images-tsv` | `leaf_name`, `source_page_url`, `attribution`, and at least one of each pair `local_path` / `media_url` and `license_code` / `license_url` | One pin per leaf. Exactly one image locator per row. Local paths are relative to the TSV. See the [image guide](IMAGE.md). |
 | `draw --tip-image-manifest` | `leaf_name`, `local_path` | Multiple rows per tip are allowed and the first is used. Relative paths use the manifest directory or `--tip-image-root`; broken paths are rejected. |
 | `rename --name-tsv` | `old_name`, `new_name` | Both values are non-empty and `old_name` is unique. Headers must be nonempty and unique, and every row must match the header width. |
 | `--taxid-tsv` | `leaf_name`, `taxid` | `taxid` must be a non-missing integer. |

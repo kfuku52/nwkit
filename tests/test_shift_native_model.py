@@ -7,12 +7,78 @@ from nwkit.shift_native_model import (
     ShiftData,
     ShiftLayout,
     ShiftTree,
+    covariance_geometry,
     evaluate_trait,
+    mean_geometry,
     restore_trait_fit,
 )
 from nwkit.util import read_tree
 
 TREE = "(((a:1,b:1):1,(c:1,d:1):1):1,((e:1,f:1):1,(g:1,h:1):1):1);"
+
+
+def test_fixed_root_ou_retains_short_branches_in_the_brownian_limit():
+    tree = ShiftTree.build(
+        read_tree("((a:1e-170,b:1e-170):1,c:1);", "auto", True, quiet=True)
+    )
+    alpha = 1e-170
+    _, weights = mean_geometry(tree, alpha)
+    _, innovation, root = covariance_geometry(tree, alpha, 2.0, "OUfixedRoot")
+    np.testing.assert_array_equal(weights, tree.times)
+    np.testing.assert_array_equal(innovation, 2.0 * tree.times)
+    assert root == 0.0
+
+
+def test_stationary_ou_keeps_innovations_with_underflowing_exponents():
+    tree = ShiftTree.build(
+        read_tree("((a:1e-170,b:1e-170):1,c:1);", "auto", True, quiet=True)
+    )
+    _, innovations, root = covariance_geometry(tree, 1e-170, 1e308, "OUrandomRoot")
+    index = tree.compiled.leaf_index_by_name["a"]
+    assert innovations[index] == pytest.approx(2e-32, rel=2e-16, abs=0)
+    assert root == 1e308
+
+
+def test_trait_normalization_handles_finite_values_near_float_limits():
+    tree = read_tree("((a:1,b:1):1,(c:1,d:1):1);", "auto", True, quiet=True)
+    values = np.array(
+        [
+            [1e308, -1.7e308],
+            [1.1e308, -1.7e308],
+            [1.2e308, -1.7e308],
+            [1.3e308, 1.7e308],
+        ]
+    )
+    data = ShiftData.build(tree, values, ["same_sign", "mixed_sign"])
+    assert data.centers[0] == pytest.approx(1.15e308, rel=2e-16)
+    assert data.centers[1] == 0.0
+    np.testing.assert_allclose(
+        data.values * data.scales + data.centers, values, rtol=2e-16
+    )
+
+
+def test_trait_variance_output_avoids_squaring_extreme_scales():
+    tree = read_tree(TREE, "auto", True, quiet=True)
+    values = np.arange(8, dtype=float)[:, None] * 1e155
+    data = ShiftData.build(tree, values, ["x"])
+    fit = evaluate_trait(data, ShiftLayout.build(data.tree), 0, 0.6, 1e-5)
+    restored = restore_trait_fit(data, 0, fit)
+    assert restored["process_tip_variance"] == pytest.approx(1.225e306, rel=1e-15)
+    assert restored["measurement_variance"] == 0.0
+    expected_sigma2 = 1.225e306 * (1.2 / -np.expm1(-1.2)) / data.tree.height
+    assert restored["sigma2"] == pytest.approx(expected_sigma2, rel=1e-15)
+    assert np.isfinite(restored["coefficient_covariance"]).all()
+
+
+def test_local_tip_ages_survive_rounding_of_root_to_tip_depths():
+    tree = ShiftTree.build(
+        read_tree("((a:1e-20,b:2e-20):1,c:1);", "auto", True, quiet=True)
+    )
+    tip = tree.compiled.leaf_index_by_name["a"]
+    layout = ShiftLayout.build(tree, [tree.branch_ids[tip]])
+    design = layout.design(tree, 1e20)
+    row = tree.leaf_names.index("a")
+    assert design[row, 1] == pytest.approx(-np.expm1(-1.0), abs=1e-15)
 
 
 def dense_reference(tree, layout, alpha, variance, noise, root):

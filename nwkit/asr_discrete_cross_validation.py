@@ -53,6 +53,10 @@ def discrete_cross_validation(
             training_observed[name] = None
             training_likelihoods[name] = np.ones(len(states))
         fit = refit(training_observed, training_likelihoods)
+        num_training = sum(
+            _is_informative_tip_likelihood(value)
+            for value in training_likelihoods.values()
+        )
         for name in held_out:
             posterior = np.asarray(fit["posterior_by_node"][leaves[name]])
             # Hidden classes are nuisance states, summed before observable scoring.
@@ -66,10 +70,7 @@ def discrete_cross_validation(
                     "fold": fold,
                     "holdout": mode,
                     "name": name,
-                    "num_training": sum(
-                        _is_informative_tip_likelihood(value)
-                        for value in training_likelihoods.values()
-                    ),
+                    "num_training": num_training,
                     "num_held_out": len(held_out),
                     "observed": observed.get(name) or "",
                     "observation_probability": probability,

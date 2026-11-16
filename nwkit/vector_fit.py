@@ -18,7 +18,11 @@ from nwkit.multivariate_gaussian_asr import (
     _validate_posterior_size,
 )
 from nwkit.optimization import deterministic_multistart
-from nwkit.vector_gaussian import VectorProcess, VectorTransition, condition_vector_tree
+from nwkit.vector_gaussian import (
+    VectorProcess,
+    VectorTransition,
+    prepare_vector_conditioning,
+)
 
 
 def _depths(compiled):
@@ -78,27 +82,28 @@ def normalized_vector_observations(data):
         data.node_indices, data.trait_indices, data.values, data.errors, strict=True
     ):
         name = str(data.compiled.nodes[index].name)
-        observed.setdefault(name, [None] * dimension)[trait] = float(value)
-        errors.setdefault(name, np.zeros((dimension, dimension)))[trait, trait] = (
-            error**2
-        )
+        if name not in observed:
+            observed[name] = [None] * dimension
+            errors[name] = np.zeros((dimension, dimension))
+        observed[name][trait] = float(value)
+        errors[name][trait, trait] = error**2
     return observed, errors
 
 
 def _brownian_process(data, sigma, time_scale):
     dimension = len(data.trait_names)
-    return VectorProcess(
-        data.compiled.tree,
-        dimension,
-        {
-            node: VectorTransition(
-                np.eye(dimension),
-                np.zeros(dimension),
-                sigma * (float(node.dist) / time_scale),
-            )
-            for node in data.compiled.nodes[1:]
-        },
-    )
+    identity = np.eye(dimension)
+    intercept = np.zeros(dimension)
+    transitions = {}
+    by_time: dict[float, VectorTransition] = {}
+    for node in data.compiled.nodes[1:]:
+        time = float(node.dist) / time_scale
+        transition = by_time.get(time)
+        if transition is None:
+            transition = VectorTransition(identity, intercept, sigma * time)
+            by_time[time] = transition
+        transitions[node] = transition
+    return VectorProcess(data.compiled.tree, dimension, transitions)
 
 
 def restored_vector_posterior(result, data):
@@ -151,23 +156,28 @@ def fit_pruning_mvbm(
     _validate_sparse_bm_design(data, depths)
     time_scale = float(np.max(depths[data.node_indices])) or 1.0
     initial, bounds = _initial_cholesky(dimension)
-
-    def evaluate(parameters):
-        sigma, _ = _decode_cholesky(parameters, dimension)
-        return sigma, condition_vector_tree(
-            _brownian_process(data, sigma, time_scale),
-            observed,
-            error_covariances=errors,
-        )
+    condition = prepare_vector_conditioning(
+        data.compiled, dimension, observed, error_covariances=errors
+    )
 
     def objective(parameters):
         try:
-            return -evaluate(parameters)[1].log_likelihood
+            sigma, _ = _decode_cholesky(parameters, dimension)
+            process = _brownian_process(data, sigma, time_scale)
+            return -condition(process, likelihood_only=True)
         except (ValueError, ArithmeticError, OverflowError, np.linalg.LinAlgError):
             return 1e100
 
     optimized = deterministic_multistart(objective, initial, bounds, maxiter=1200)
-    sigma_scaled, result = evaluate(optimized.x)
+    sigma_scaled, _ = _decode_cholesky(optimized.x, dimension)
+    process = _brownian_process(data, sigma_scaled, time_scale)
+    if compute_posterior:
+        result = condition(process)
+        likelihood = result.log_likelihood
+        posterior = restored_vector_posterior(result, data)
+    else:
+        likelihood = condition(process, likelihood_only=True)
+        posterior = {}
     eigenvalues = np.linalg.eigvalsh(sigma_scaled)
     tolerance = (
         np.finfo(float).eps * max(1.0, float(np.max(eigenvalues))) * max(100, dimension)
@@ -178,7 +188,7 @@ def fit_pruning_mvbm(
         sigma=_restore_sigma(data, sigma_scaled / time_scale),
         sigma_rank=rank,
         sigma_estimated=True,
-        restricted_log_likelihood=result.log_likelihood
+        restricted_log_likelihood=likelihood
         - _likelihood_scale_adjustment(data, reml=True),
         log_likelihood=None,
         num_observed=data.num_observed_tips,
@@ -193,4 +203,4 @@ def fit_pruning_mvbm(
         model="MV-BM",
         measurement_covariances=measurement_covariances,
     )
-    return restored_vector_posterior(result, data) if compute_posterior else {}, fit
+    return posterior, fit

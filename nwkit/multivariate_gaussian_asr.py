@@ -2,18 +2,101 @@
 
 import math
 from dataclasses import dataclass, replace
+from functools import cached_property
 
 import numpy as np
-from scipy.linalg import cho_factor, cho_solve
+from scipy.linalg import cho_factor, cho_solve, solve_triangular
 
 from nwkit.clade_index import LcaIndex
 from nwkit.compiled_tree import CompiledTree
+from nwkit.evolution import _finite_rate_bound
 from nwkit.multivariate_asr import MultivariateGaussianMarginal
 from nwkit.optimization import FitResourceError, deterministic_multistart
 
 _LOG_2PI = math.log(2.0 * math.pi)
 _MAX_DENSE_OBSERVATIONS = 1000
 _MAX_POSTERIOR_BYTES = 256 * 1024**2
+
+
+def _stationary_diagonal_ou_covariance(covariance, log_alpha, alpha):
+    # Diffusion Cholesky rows are expressed relative to sqrt(2 * alpha_i).
+    # The stationary covariance then needs only the bounded ratio
+    # 2 * sqrt(alpha_i * alpha_j) / (alpha_i + alpha_j).
+    half_gap = 0.5 * np.abs(log_alpha[:, None] - log_alpha[None, :])
+    with np.errstate(under="ignore"):
+        result = covariance * (
+            2.0 * np.exp(-half_gap) / (1.0 + np.exp(-2.0 * half_gap))
+        )
+    first, second = np.where(half_gap > 700.0)
+    if len(first):
+        result[first, second] = _recover_stationary_ou_covariance(
+            covariance[first, second], alpha[first], alpha[second]
+        )
+    return result
+
+
+def _recover_stationary_ou_covariance(covariance, first_alpha, second_alpha):
+    # The denominator rounds to one in this regime. Apply the tiny decay
+    # jointly with the covariance so it does not round before multiplication.
+    small, small_exponent = np.frexp(np.minimum(first_alpha, second_alpha))
+    large, large_exponent = np.frexp(np.maximum(first_alpha, second_alpha))
+    gap = small_exponent - large_exponent
+    ratio = np.sqrt(np.ldexp(small / large, gap % 2))
+    mantissa, covariance_exponent = np.frexp(covariance)
+    with np.errstate(under="ignore"):
+        return np.ldexp(mantissa * ratio, covariance_exponent + gap // 2 + 1)
+
+
+def _diagonal_ou_decay(first_rate, first_path, second_rate, second_path):
+    with np.errstate(over="ignore"):
+        return np.exp(-first_rate * first_path - second_rate * second_path)
+
+
+def _ou_observed_time_scale(distance):
+    # Half the diameter yields a root-to-tip scale for a star. Keep a
+    # positive subnormal diameter when dividing it by two rounds to zero.
+    diameter = float(np.max(distance))
+    return diameter / 2.0 or diameter or 1.0
+
+
+def _multivariate_alpha_bounds(bounds, time_scale, model):
+    if bounds is None:
+        bounds = (
+            _finite_rate_bound(1e-6, time_scale),
+            _finite_rate_bound(50.0, time_scale),
+        )
+    lower, upper = map(float, bounds)
+    if not (math.isfinite(lower) and math.isfinite(upper) and 0.0 < lower < upper):
+        raise ValueError(f"{model} alpha bounds must be increasing and positive.")
+    return lower, upper
+
+
+def _restore_diagonal_ou_diffusion(data, covariance, alpha):
+    # The diffusion rescales each row by sqrt(2*alpha). Combine powers of
+    # two before applying either row scale to preserve reciprocity and avoid
+    # cancellation between large logarithms.
+    rate_mantissa, rate_exponent = np.frexp(alpha)
+    trait_exponent = np.frexp(data.scales)[1] - 1
+    row_mantissa = np.sqrt(np.ldexp(rate_mantissa, rate_exponent % 2))
+    row_exponent = trait_exponent + rate_exponent // 2
+    cov_mantissa, cov_exponent = np.frexp(covariance)
+    with np.errstate(over="ignore", under="ignore"):
+        restored = np.ldexp(
+            cov_mantissa * (row_mantissa[:, None] * row_mantissa[None, :]),
+            cov_exponent + row_exponent[:, None] + row_exponent[None, :] + 1,
+        )
+        # Diagonal entries have an exact alpha multiplier, with no square
+        # roots and their associated rounding of the squared mantissa.
+        diagonal = np.diag_indices_from(covariance)
+        restored[diagonal] = np.ldexp(
+            cov_mantissa[diagonal] * rate_mantissa,
+            cov_exponent[diagonal] + 2 * trait_exponent + rate_exponent + 1,
+        )
+    if np.any(~np.isfinite(restored)):
+        raise ValueError(
+            "MV-OU-DIAG diffusion covariance exceeds floating-point range."
+        )
+    return restored
 
 
 def _needs_vector_pruning(values_by_leaf):
@@ -68,6 +151,14 @@ class _ObservationData:
     count_by_trait: np.ndarray
     num_observed_tips: int
     num_effective_positions: int
+    contracted_positions: np.ndarray
+    exact_by_position: dict[int, dict[int, float]]
+
+    @cached_property
+    def covariance_scale_exponents(self):
+        """Binary exponents for converting covariance to original trait units."""
+        exponents = np.frexp(self.scales)[1] - 1
+        return exponents[:, None] + exponents[None, :]
 
 
 @dataclass(frozen=True)
@@ -78,7 +169,8 @@ class _Geometry:
     observed_distance: np.ndarray
     observed_left: np.ndarray
     observed_right: np.ndarray
-    observed_nodes: np.ndarray
+    unique_observed_nodes: np.ndarray
+    observed_node_inverse: np.ndarray
     lca: LcaIndex
     jump_lengths: tuple[np.ndarray, ...]
     time_scale: float = 1.0
@@ -94,15 +186,16 @@ class _Geometry:
 
     def cross(self, node):
         """One node's geometry, using O(observations) temporary storage."""
-        shared = np.empty(len(self.observed_nodes))
+        shared = np.empty(len(self.unique_observed_nodes))
         left = np.empty_like(shared)
         right = np.empty_like(shared)
-        for index, observed in enumerate(self.observed_nodes):
+        for index, observed in enumerate(self.unique_observed_nodes):
             ancestor = self.lca.common_ancestor_indices(node, int(observed))
             shared[index] = self.depths[ancestor]
             left[index] = self.path_length(node, ancestor)
             right[index] = self.path_length(int(observed), ancestor)
-        return shared, left, right
+        inverse = self.observed_node_inverse
+        return shared[inverse], left[inverse], right[inverse]
 
     def rescaled(self, scale):
         return replace(
@@ -152,7 +245,7 @@ def _prepare_observations(
     compiled = CompiledTree.from_tree(tree)
     contracted_positions = _contracted_positions(compiled)
     raw_records = []
-    exact_by_position: dict[tuple[int, int], float] = {}
+    exact_by_position: dict[int, dict[int, float]] = {}
     observed_tips = set()
     observed_positions = set()
     for name, node_index in compiled.leaf_index_by_name.items():
@@ -178,8 +271,10 @@ def _prepare_observations(
                 nonnegative=True,
             )
             if error == 0.0:
-                key = (int(contracted_positions[node_index]), trait_index)
-                previous = exact_by_position.get(key)
+                exact = exact_by_position.setdefault(
+                    int(contracted_positions[node_index]), {}
+                )
+                previous = exact.get(trait_index)
                 if previous is not None:
                     if previous != value:
                         raise ValueError(
@@ -188,7 +283,7 @@ def _prepare_observations(
                         )
                     observed_tips.add(name)
                     continue
-                exact_by_position[key] = value
+                exact[trait_index] = value
             raw_records.append((node_index, trait_index, value, error))
             observed_tips.add(name)
             observed_positions.add(int(contracted_positions[node_index]))
@@ -246,6 +341,8 @@ def _prepare_observations(
         count_by_trait,
         len(observed_tips),
         len(observed_positions),
+        contracted_positions,
+        exact_by_position,
     )
 
 
@@ -269,8 +366,8 @@ def _geometry(data: _ObservationData) -> _Geometry:
         previous = jumps[-1]
         jumps.append(previous + previous[np.asarray(ancestors)])
 
-    observed_nodes = data.node_indices
-    count = len(observed_nodes)
+    unique_nodes, inverse_nodes = np.unique(data.node_indices, return_inverse=True)
+    count = len(unique_nodes)
     shared = np.empty((count, count), dtype=float)
     distance = np.empty((count, count), dtype=float)
     left = np.empty_like(distance)
@@ -282,26 +379,65 @@ def _geometry(data: _ObservationData) -> _Geometry:
         distance,
         left,
         right,
-        observed_nodes,
+        unique_nodes,
+        inverse_nodes,
         lca,
         tuple(jumps),
     )
-    for first in range(count):
-        first_index = int(observed_nodes[first])
-        for second in range(first + 1):
-            second_index = int(observed_nodes[second])
-            ancestor = lca.common_ancestor_indices(first_index, second_index)
-            shared_value = depths[ancestor]
-            left_value = geometry.path_length(first_index, ancestor)
-            right_value = geometry.path_length(second_index, ancestor)
-            distance_value = left_value + right_value
-            shared[first, second] = shared[second, first] = shared_value
-            distance[first, second] = distance[second, first] = distance_value
-            left[first, second] = right[second, first] = left_value
-            right[first, second] = left[second, first] = right_value
+    lookup_ancestors = lca.indexed_ancestors()
+    path_lengths = _prepare_indexed_path_lengths(lca, jumps)
+    batch_size = max(1, 32_768 // max(1, count))
+    for start in range(0, count, batch_size):
+        stop = min(start + batch_size, count)
+        first = unique_nodes[start:stop, None]
+        second = unique_nodes[None, :]
+        ancestors = lookup_ancestors(first, second)
+        shared[start:stop] = depths[ancestors]
+        left[start:stop] = path_lengths(first, ancestors)
+        right[start:stop] = path_lengths(second, ancestors)
+        distance[start:stop] = left[start:stop] + right[start:stop]
     if np.any(~np.isfinite(distance)):
         raise ValueError("Multivariate tree distances exceed floating-point range.")
-    return geometry
+    return _expand_multivariate_geometry(geometry)
+
+
+def _prepare_indexed_path_lengths(lca, jumps):
+    depths = np.asarray(lca.depth, dtype=np.intp)
+    ancestors = np.asarray(lca.ancestors, dtype=np.intp)
+
+    def path_lengths(nodes, ancestor):
+        steps = depths[nodes] - depths[ancestor]
+        result = np.zeros(steps.shape, dtype=float)
+        correction = np.zeros_like(result)
+        current = np.broadcast_to(nodes, steps.shape)
+        for level, lengths in enumerate(jumps):
+            lift = steps & (1 << level)
+            length = np.where(lift, lengths[current], 0.0)
+            # Sum the selected jumps directly. Taking a difference of node
+            # depths can erase a short branch near the end of a long path.
+            total = result + length
+            correction += np.where(
+                result >= length, (result - total) + length, (length - total) + result
+            )
+            result = total
+            current = np.where(lift, ancestors[level, current], current)
+        return result + correction
+
+    return path_lengths
+
+
+def _expand_multivariate_geometry(geometry):
+    inverse = geometry.observed_node_inverse
+    if np.array_equal(inverse, np.arange(len(geometry.unique_observed_nodes))):
+        return geometry
+    indices = np.ix_(inverse, inverse)
+    return replace(
+        geometry,
+        observed_shared_depth=geometry.observed_shared_depth[indices],
+        observed_distance=geometry.observed_distance[indices],
+        observed_left=geometry.observed_left[indices],
+        observed_right=geometry.observed_right[indices],
+    )
 
 
 def _cached_geometry(data, cache):
@@ -311,6 +447,48 @@ def _cached_geometry(data, cache):
     if key not in cache:
         cache[key] = _geometry(data)
     return cache[key]
+
+
+def _mvbm_stem_geometry(geometry, fixed_mean, *, compute_posterior):
+    if not np.all(np.isnan(fixed_mean)):
+        return geometry, None
+    observed = geometry.unique_observed_nodes
+    lca = geometry.lca
+    origin = lca.common_ancestor_indices(int(observed[0]), int(observed[-1]))
+    if geometry.depths[origin] == 0.0:
+        return geometry, None
+
+    # With a flat root, the observed clade's ancestor also has a flat prior.
+    # Evaluate shared paths from that node so a long stem cannot erase them.
+    lookup = lca.indexed_ancestors()
+    paths = _prepare_indexed_path_lengths(lca, geometry.jump_lengths)
+    nodes = np.arange(len(geometry.depths))
+    ancestors = lookup(nodes, origin)
+    inside = ancestors == origin
+    depths = np.zeros_like(geometry.depths)
+    depths[inside] = paths(nodes[inside], origin)
+    shared = np.empty((len(observed), len(observed)))
+    batch_size = max(1, 32_768 // len(observed))
+    for start in range(0, len(observed), batch_size):
+        stop = min(start + batch_size, len(observed))
+        shared[start:stop] = depths[lookup(observed[start:stop, None], observed)]
+    inverse = geometry.observed_node_inverse
+
+    extension = None
+    if compute_posterior:
+        extension = np.zeros_like(depths)
+        outside = ~inside
+        extension[outside] = paths(origin, ancestors[outside]) + paths(
+            nodes[outside], ancestors[outside]
+        )
+    return (
+        replace(
+            geometry,
+            depths=depths,
+            observed_shared_depth=shared[np.ix_(inverse, inverse)],
+        ),
+        extension,
+    )
 
 
 def _validate_posterior_size(data, compute_posterior):
@@ -440,19 +618,28 @@ def _validate_mvou_diag_alpha_design(data, geometry):
         )
 
 
-def _observation_covariance(data, scalar_covariance, sigma):
-    covariance = (
-        scalar_covariance
-        * sigma[data.trait_indices[:, None], data.trait_indices[None, :]]
-    )
-    covariance = np.asarray(covariance, dtype=float)
-    covariance[np.diag_indices_from(covariance)] += data.errors * data.errors
-    return (covariance + covariance.T) / 2.0
+def _prepare_observation_covariance(data):
+    traits = data.trait_indices.astype(np.int32)
+    indices = np.add.outer(traits * len(data.trait_names), traits)
+    return indices, data.errors * data.errors
 
 
-def _factor_covariance(covariance):
+def _observation_covariance(scalar_covariance, sigma, prepared):
+    # The disposable covariance buffer is column-major for the LAPACK
+    # factorization. Multiply in place to avoid a second dense matrix.
+    indices, error_variance = prepared
+    covariance = sigma.reshape(-1)[indices].T
+    np.multiply(covariance, scalar_covariance, out=covariance)
+    covariance[np.diag_indices_from(covariance)] += error_variance
+    # The scalar kernel and trait covariance are both symmetric.
+    return covariance
+
+
+def _factor_covariance(covariance, *, overwrite=False):
     try:
-        factor = cho_factor(covariance, lower=True, check_finite=False)
+        factor = cho_factor(
+            covariance, lower=True, overwrite_a=overwrite, check_finite=False
+        )
     except np.linalg.LinAlgError as exc:
         raise ValueError(
             "The observed multivariate covariance is singular; positive measurement "
@@ -467,7 +654,7 @@ def _factor_covariance(covariance):
     return factor, log_determinant
 
 
-def _profile_mean(data, covariance, *, reml, fixed_mean=None):
+def _prepare_mean_profile(data, *, fixed_mean=None):
     full_design = _design(data)
     dimension = len(data.trait_names)
     mean = np.zeros(dimension, dtype=float)
@@ -481,26 +668,54 @@ def _profile_mean(data, covariance, *, reml, fixed_mean=None):
         mean[fixed] = fixed_mean[fixed]
         free_mean_indices = np.flatnonzero(~fixed)
     design = full_design[:, free_mean_indices]
-    factor, log_determinant = _factor_covariance(covariance)
     adjusted_values = data.values - full_design @ mean
+    rhs = np.column_stack([design, adjusted_values])
+    return full_design, mean, free_mean_indices, rhs
+
+
+def _profile_mean(
+    data,
+    covariance,
+    *,
+    reml,
+    fixed_mean=None,
+    prepared=None,
+    return_residual=True,
+    overwrite_covariance=False,
+):
+    if prepared is None:
+        prepared = _prepare_mean_profile(data, fixed_mean=fixed_mean)
+    full_design, fixed, free_mean_indices, rhs = prepared
+    mean = fixed.copy()
+    factor, log_determinant = _factor_covariance(
+        covariance, overwrite=overwrite_covariance
+    )
+    whitened = solve_triangular(
+        factor[0],
+        rhs,
+        lower=True,
+        check_finite=False,
+    )
+    whitened_values = whitened[:, -1]
     mean_factor = None
     mean_log_determinant = 0.0
     if len(free_mean_indices):
-        solved_design = cho_solve(factor, design, check_finite=False)
-        information = design.T @ solved_design
+        whitened_design = whitened[:, :-1]
+        information = whitened_design.T @ whitened_design
         try:
             mean_factor = cho_factor(information, lower=True, check_finite=False)
         except np.linalg.LinAlgError as exc:
             raise ValueError(
                 "Multivariate trait means are not separately identifiable."
             ) from exc
-        solved_values = cho_solve(factor, adjusted_values, check_finite=False)
-        fitted = cho_solve(mean_factor, design.T @ solved_values, check_finite=False)
+        fitted = cho_solve(
+            mean_factor, whitened_design.T @ whitened_values, check_finite=False
+        )
         mean[free_mean_indices] = fitted
+        whitened_values = whitened_values - whitened_design @ fitted
         mean_log_determinant = 2.0 * float(np.log(np.diag(mean_factor[0])).sum())
-    residual = data.values - full_design @ mean
-    solved_residual = cho_solve(factor, residual, check_finite=False)
-    quadratic = float(residual @ solved_residual)
+    residual = data.values - full_design @ mean if return_residual else None
+    quadratic = float(whitened_values @ whitened_values)
     if reml:
         rank = len(data.values) - len(free_mean_indices)
         likelihood = -0.5 * (
@@ -538,8 +753,31 @@ def _initial_cholesky(dimension):
     return values, bounds
 
 
-def _restore_sigma(data, sigma):
-    return sigma * data.scales[:, None] * data.scales[None, :]
+def _restore_sigma(data, sigma, *, time_scale=1.0, branch_lengths=None):
+    # Merge powers before rescaling so a small first trait scale cannot
+    # round an off-diagonal entry away before the other scale is applied.
+    trait_exponents = np.frexp(data.scales)[1] - 1
+    exponents = trait_exponents[:, None] + trait_exponents[None, :]
+    time_mantissa, time_exponent = math.frexp(time_scale)
+    with np.errstate(over="ignore"):
+        if branch_lengths is not None:
+            length_mantissa, length_exponent = np.frexp(branch_lengths[:, None, None])
+            mantissa, covariance_exponents = np.frexp(sigma)
+            restored = np.ldexp(
+                mantissa * length_mantissa / time_mantissa,
+                covariance_exponents + exponents + length_exponent - time_exponent,
+            )
+        elif time_mantissa == 0.5:
+            restored = np.ldexp(sigma, exponents + 1 - time_exponent)
+        else:
+            mantissa, covariance_exponents = np.frexp(sigma)
+            restored = np.ldexp(
+                mantissa / time_mantissa,
+                covariance_exponents + exponents - time_exponent,
+            )
+    if np.any(~np.isfinite(restored)):
+        raise ValueError("Multivariate covariance exceeds floating-point range.")
+    return restored
 
 
 def _likelihood_scale_adjustment(data, *, reml):
@@ -548,8 +786,9 @@ def _likelihood_scale_adjustment(data, *, reml):
 
 
 def _mvbm_analysis_data(data):
-    positions = _contracted_positions(data.compiled)
-    root_exact = (positions[data.node_indices] == 0) & (data.errors == 0.0)
+    root_exact = (data.contracted_positions[data.node_indices] == 0) & (
+        data.errors == 0.0
+    )
     fixed_mean = np.full(len(data.trait_names), np.nan, dtype=float)
     fixed_mean[data.trait_indices[root_exact]] = data.values[root_exact]
     if not np.any(root_exact):
@@ -586,6 +825,7 @@ def _posterior(
     *,
     flat_root,
     alpha=None,
+    root_extension=None,
 ):
     dimension = len(data.trait_names)
     design = _design(data)[:, free_mean_indices]
@@ -600,59 +840,151 @@ def _posterior(
         if flat_root and mean_factor is not None
         else None
     )
-    posterior = {}
-    for node_index, node in enumerate(geometry.compiled.nodes):
-        shared, left, right = geometry.cross(node_index)
-        scalar_cross = shared if flat_root else np.exp(-alpha * (left + right))
-        scalar_variance = geometry.depths[node_index] if flat_root else 1.0
-        cross = scalar_cross[None, :] * sigma[:, data.trait_indices]
-        scaled_mean = mean + cross @ solved_residual
-        solved_cross = cho_solve(factor, cross.T, check_finite=False)
-        covariance = scalar_variance * sigma - cross @ solved_cross
-        if flat_root and len(free_mean_indices):
-            adjustment = np.zeros((dimension, len(free_mean_indices)), dtype=float)
-            adjustment[free_mean_indices, np.arange(len(free_mean_indices))] = 1.0
-            adjustment -= cross @ solved_design
-            assert mean_covariance is not None
-            covariance += adjustment @ mean_covariance @ adjustment.T
-        covariance = (covariance + covariance.T) / 2.0
-        eigenvalues, eigenvectors = np.linalg.eigh(covariance)
-        tolerance = (
-            np.finfo(float).eps
-            * max(1.0, float(np.max(np.abs(eigenvalues))))
-            * max(100, dimension)
+    trait_covariance = sigma[:, data.trait_indices]
+
+    def cross_covariance(shared, left, right):
+        cross = (
+            shared if flat_root else _diagonal_ou_decay(alpha, left + right, 0.0, 0.0)
         )
-        if float(np.min(eigenvalues)) < -tolerance:
-            raise ValueError(
-                "A multivariate posterior covariance is not positive semidefinite."
+        return cross[:, None, :] * trait_covariance
+
+    adjustment_base = np.zeros((dimension, len(free_mean_indices)), dtype=float)
+    adjustment_base[free_mean_indices, np.arange(len(free_mean_indices))] = 1.0
+    prior_scales = (
+        geometry.depths if flat_root else np.ones(len(geometry.compiled.nodes))
+    )
+    posterior = {}
+    for start, nodes, cross, conditional_covariance in _posterior_covariance_batches(
+        data, geometry, factor, cross_covariance, need_paths=not flat_root
+    ):
+        scalars = prior_scales[start : start + len(nodes), None, None]
+        covariance = scalars * sigma - conditional_covariance
+        if mean_covariance is not None:
+            adjustment = adjustment_base - cross @ solved_design
+            covariance += adjustment @ mean_covariance @ adjustment.swapaxes(1, 2)
+        means = mean + cross @ solved_residual
+        additional_covariance = None
+        if root_extension is not None:
+            lengths = root_extension[start : start + len(nodes)]
+            if np.any(lengths):
+                additional_covariance = _restore_sigma(
+                    data, sigma, time_scale=geometry.time_scale, branch_lengths=lengths
+                )
+        posterior.update(
+            _restored_posterior_marginals(
+                data, start, nodes, means, covariance, additional_covariance
             )
-        covariance = (eigenvectors * np.maximum(eigenvalues, 0.0)) @ eigenvectors.T
-        restored_mean = data.centers + data.scales * scaled_mean
-        restored_covariance = _restore_sigma(data, covariance)
-        posterior[node] = MultivariateGaussianMarginal(
-            restored_mean, restored_covariance
         )
     return posterior
 
 
-def _diagonal_ou_observation_covariance(data, geometry, beta, stationary_sigma):
+def _posterior_covariance_batches(
+    data, geometry, factor, cross_covariance, *, need_paths=True
+):
+    dimension = len(data.trait_names)
+    observations = len(data.values)
+    batch_size = max(1, 32_768 // (dimension * observations))
+    all_nodes = geometry.compiled.nodes
+    lookup = geometry.lca.indexed_ancestors()
+    path_lengths = _prepare_indexed_path_lengths(geometry.lca, geometry.jump_lengths)
+    observed = geometry.unique_observed_nodes[None, :]
+    inverse = geometry.observed_node_inverse
+    for start in range(0, len(all_nodes), batch_size):
+        nodes = all_nodes[start : start + batch_size]
+        indices = np.arange(start, start + len(nodes))[:, None]
+        ancestor = lookup(indices, observed)
+        shared = geometry.depths[ancestor][:, inverse]
+        left, right = None, None
+        if need_paths:
+            left = path_lengths(indices, ancestor)[:, inverse] / geometry.time_scale
+            right = path_lengths(observed, ancestor)[:, inverse] / geometry.time_scale
+        cross = cross_covariance(shared, left, right)
+        solved_cross = cho_solve(
+            factor, cross.reshape(-1, observations).T, check_finite=False
+        )
+        yield (
+            start,
+            nodes,
+            cross,
+            cross @ solved_cross.T.reshape(cross.shape).swapaxes(1, 2),
+        )
+
+
+def _restored_posterior_marginals(
+    data, start, nodes, means, covariance, additional_covariance=None
+):
+    covariance = (covariance + covariance.swapaxes(1, 2)) / 2.0
+    # An exact observation fixes the same coordinate at every node connected
+    # by zero-length branches. Remove subtraction roundoff before PSD checks.
+    fixed = _exact_posterior_entries(data, start, len(nodes))
+    for row, trait, _ in fixed:
+        covariance[row, trait, :] = 0.0
+        covariance[row, :, trait] = 0.0
+    _clip_roundoff_covariances(covariance, len(data.trait_names))
+    means = data.centers + data.scales * means
+    for row, trait, value in fixed:
+        means[row, trait] = value
+        covariance[row, trait, :] = 0.0
+        covariance[row, :, trait] = 0.0
+    covariance = _restore_sigma(data, covariance)
+    if additional_covariance is not None:
+        with np.errstate(over="ignore"):
+            covariance += additional_covariance
+        if np.any(~np.isfinite(covariance)):
+            raise ValueError("Multivariate covariance exceeds floating-point range.")
+    return {
+        node: MultivariateGaussianMarginal(node_mean, node_covariance)
+        for node, node_mean, node_covariance in zip(
+            nodes, means, covariance, strict=True
+        )
+    }
+
+
+def _clip_roundoff_covariances(covariance, dimension):
+    # Preserve positive semidefinite inputs as computed by the conditional
+    # solve. Only tiny negative eigenvalues need an eigenvector reconstruction.
+    eigenvalues = np.linalg.eigvalsh(covariance)
+    negative = eigenvalues[:, 0] < 0.0
+    if not np.any(negative):
+        return
+    tolerance = (
+        np.finfo(float).eps
+        * np.maximum(1.0, np.max(np.abs(eigenvalues[negative]), axis=1))
+        * max(100, dimension)
+    )
+    if np.any(eigenvalues[negative, 0] < -tolerance):
+        raise ValueError(
+            "A multivariate posterior covariance is not positive semidefinite."
+        )
+    eigenvalues, eigenvectors = np.linalg.eigh(covariance[negative])
+    covariance[negative] = (eigenvectors * np.maximum(eigenvalues, 0.0)[:, None, :]) @ (
+        eigenvectors.swapaxes(1, 2)
+    )
+
+
+def _exact_posterior_entries(data, start, size):
+    if not data.exact_by_position:
+        return ()
+    return [
+        (row, trait, value)
+        for row, position in enumerate(data.contracted_positions[start : start + size])
+        for trait, value in data.exact_by_position.get(int(position), {}).items()
+    ]
+
+
+def _diagonal_ou_observation_decay(data, geometry, beta):
     left = geometry.observed_left
     right = geometry.observed_right
     observed_beta = beta[data.trait_indices]
-    decay = np.exp(-observed_beta[:, None] * left - observed_beta[None, :] * right)
-    covariance = (
-        decay
-        * stationary_sigma[data.trait_indices[:, None], data.trait_indices[None, :]]
+    return _diagonal_ou_decay(
+        observed_beta[:, None], left, observed_beta[None, :], right
     )
-    covariance[np.diag_indices_from(covariance)] += data.errors * data.errors
-    return (covariance + covariance.T) / 2.0
 
 
-def _diagonal_ou_cross_covariance(data, geometry, node_index, beta, stationary_sigma):
-    _, left, right = geometry.cross(node_index)
-    observed_beta = beta[data.trait_indices]
-    decay = np.exp(-beta[:, None] * left - observed_beta[None, :] * right)
-    return decay * stationary_sigma[:, data.trait_indices]
+def _fixed_diagonal_ou_decay(data, geometry, beta):
+    if beta is None:
+        return None
+    return _diagonal_ou_observation_decay(data, geometry, beta)
 
 
 def _diagonal_ou_posterior(
@@ -665,30 +997,27 @@ def _diagonal_ou_posterior(
     factor,
 ):
     solved_residual = cho_solve(factor, residual, check_finite=False)
+    observed_beta = beta[data.trait_indices]
+    trait_covariance = stationary_sigma[:, data.trait_indices]
     posterior = {}
-    dimension = len(data.trait_names)
-    for node_index, node in enumerate(geometry.compiled.nodes):
-        cross = _diagonal_ou_cross_covariance(
-            data, geometry, node_index, beta, stationary_sigma
+
+    def cross_covariance(_, left, right):
+        decay = _diagonal_ou_decay(
+            beta[:, None], left[:, None, :], observed_beta[None, :], right[:, None, :]
         )
-        scaled_mean = mean + cross @ solved_residual
-        solved_cross = cho_solve(factor, cross.T, check_finite=False)
-        covariance = stationary_sigma - cross @ solved_cross
-        covariance = (covariance + covariance.T) / 2.0
-        eigenvalues, eigenvectors = np.linalg.eigh(covariance)
-        tolerance = (
-            np.finfo(float).eps
-            * max(1.0, float(np.max(np.abs(eigenvalues))))
-            * max(100, dimension)
-        )
-        if float(np.min(eigenvalues)) < -tolerance:
-            raise ValueError(
-                "A multivariate posterior covariance is not positive semidefinite."
+        return decay * trait_covariance
+
+    for start, nodes, cross, conditional_covariance in _posterior_covariance_batches(
+        data, geometry, factor, cross_covariance
+    ):
+        posterior.update(
+            _restored_posterior_marginals(
+                data,
+                start,
+                nodes,
+                mean + cross @ solved_residual,
+                stationary_sigma - conditional_covariance,
             )
-        covariance = (eigenvectors * np.maximum(eigenvalues, 0.0)) @ eigenvectors.T
-        posterior[node] = MultivariateGaussianMarginal(
-            data.centers + data.scales * scaled_mean,
-            _restore_sigma(data, covariance),
         )
     return posterior
 
@@ -752,32 +1081,43 @@ def fit_dense_mvbm(
         )
     analysis_data, fixed_mean = _mvbm_analysis_data(data)
     geometry = _cached_geometry(analysis_data, _geometry_cache)
+    geometry, root_extension = _mvbm_stem_geometry(
+        geometry, fixed_mean, compute_posterior=compute_posterior
+    )
     time_scale = float(np.max(geometry.observed_shared_depth)) or 1.0
     geometry = geometry.rescaled(time_scale)
     _validate_mvbm_covariance_design(
         analysis_data, geometry.observed_shared_depth, fixed_mean
     )
     initial, bounds = _initial_cholesky(dimension)
+    mean_profile = _prepare_mean_profile(analysis_data, fixed_mean=fixed_mean)
+    covariance_design = _prepare_observation_covariance(analysis_data)
 
-    def evaluate(parameters):
+    def evaluate(parameters, *, return_residual=True):
         sigma, _ = _decode_cholesky(parameters, dimension)
         covariance = _observation_covariance(
-            analysis_data, geometry.observed_shared_depth, sigma
+            geometry.observed_shared_depth, sigma, covariance_design
         )
         return (
             sigma,
-            covariance,
-            _profile_mean(analysis_data, covariance, reml=True, fixed_mean=fixed_mean),
+            _profile_mean(
+                analysis_data,
+                covariance,
+                reml=True,
+                prepared=mean_profile,
+                return_residual=return_residual,
+                overwrite_covariance=True,
+            ),
         )
 
     def objective(parameters):
         try:
-            return -evaluate(parameters)[2][0]
+            return -evaluate(parameters, return_residual=False)[1][0]
         except (ValueError, ArithmeticError, OverflowError):
             return 1e100
 
     optimized = deterministic_multistart(objective, initial, bounds, maxiter=1200)
-    sigma_scaled, covariance, profile = evaluate(optimized.x)
+    sigma_scaled, profile = evaluate(optimized.x)
     likelihood, mean, residual, factor, mean_factor, free_mean_indices = profile
     posterior = (
         _posterior(
@@ -790,11 +1130,12 @@ def fit_dense_mvbm(
             mean_factor,
             free_mean_indices,
             flat_root=True,
+            root_extension=root_extension,
         )
         if compute_posterior
         else {}
     )
-    sigma = _restore_sigma(data, sigma_scaled / time_scale)
+    sigma = _restore_sigma(data, sigma_scaled, time_scale=time_scale)
     likelihood -= _likelihood_scale_adjustment(data, reml=True)
     # Rank is invariant to trait units.  ``sigma_scaled`` is the covariance in
     # independently normalized trait coordinates; using the restored covariance
@@ -861,22 +1202,18 @@ def fit_dense_mvou(
     geometry = _cached_geometry(data, _geometry_cache)
     # Stationary tip likelihoods do not depend on a shared stem above their
     # MRCA. Use observable distances for units and default attraction bounds.
-    time_scale = float(np.max(geometry.observed_distance)) / 2.0 or 1.0
-    bounds_alpha = (
-        (1e-6 / time_scale, 50.0 / time_scale)
-        if alpha_bounds is None
-        else (float(alpha_bounds[0]), float(alpha_bounds[1]))
-    )
-    if (
-        not all(math.isfinite(value) and value > 0.0 for value in bounds_alpha)
-        or bounds_alpha[0] >= bounds_alpha[1]
-    ):
-        raise ValueError("MV-OU alpha bounds must be increasing and positive.")
+    time_scale = _ou_observed_time_scale(geometry.observed_distance)
+    bounds_alpha = _multivariate_alpha_bounds(alpha_bounds, time_scale, "MV-OU")
     fixed_alpha = None if alpha is None else _finite(alpha, "--alpha")
     if fixed_alpha is not None and fixed_alpha <= 0.0:
         raise ValueError("MV-OU alpha must be positive.")
+    observed_distance = geometry.observed_distance
+    fixed_covariance = None
     if fixed_alpha is None:
-        _validate_mvou_alpha_design(data, geometry.observed_distance)
+        observed_distance = observed_distance / time_scale
+        _validate_mvou_alpha_design(data, observed_distance)
+    else:
+        fixed_covariance = _diagonal_ou_decay(fixed_alpha, observed_distance, 0.0, 0.0)
     covariance_parameters = dimension * (dimension + 1) // 2
     free_parameters = dimension + covariance_parameters + int(fixed_alpha is None)
     if len(data.values) < free_parameters:
@@ -886,33 +1223,50 @@ def fit_dense_mvou(
         )
     initial, bounds = _initial_cholesky(dimension)
     if fixed_alpha is None:
-        initial.insert(0, math.log(math.sqrt(bounds_alpha[0] * bounds_alpha[1])))
-        bounds.insert(0, (math.log(bounds_alpha[0]), math.log(bounds_alpha[1])))
+        log_beta_bounds = (
+            math.log(bounds_alpha[0]) + math.log(time_scale),
+            math.log(bounds_alpha[1]) + math.log(time_scale),
+        )
+        initial.insert(0, 0.5 * sum(log_beta_bounds))
+        bounds.insert(0, log_beta_bounds)
+    mean_profile = _prepare_mean_profile(data)
+    covariance_design = _prepare_observation_covariance(data)
 
-    def evaluate(parameters):
+    def evaluate(parameters, *, return_residual=True):
         offset = 0
-        current_alpha = fixed_alpha
-        if current_alpha is None:
-            current_alpha = math.exp(float(parameters[0]))
+        decay_rate = fixed_alpha
+        if decay_rate is None:
+            decay_rate = math.exp(float(parameters[0]))
             offset = 1
         sigma, _ = _decode_cholesky(parameters, dimension, offset)
-        scalar = np.exp(-current_alpha * geometry.observed_distance)
-        covariance = _observation_covariance(data, scalar, sigma)
+        scalar = (
+            np.exp(-decay_rate * observed_distance)
+            if fixed_covariance is None
+            else fixed_covariance
+        )
+        covariance = _observation_covariance(scalar, sigma, covariance_design)
         return (
-            current_alpha,
+            decay_rate,
             sigma,
-            covariance,
-            _profile_mean(data, covariance, reml=False),
+            _profile_mean(
+                data,
+                covariance,
+                reml=False,
+                prepared=mean_profile,
+                return_residual=return_residual,
+                overwrite_covariance=True,
+            ),
         )
 
     def objective(parameters):
         try:
-            return -evaluate(parameters)[3][0]
+            return -evaluate(parameters, return_residual=False)[2][0]
         except (ValueError, ArithmeticError, OverflowError):
             return 1e100
 
     optimized = deterministic_multistart(objective, initial, bounds, maxiter=1500)
-    fitted_alpha, sigma_scaled, covariance, profile = evaluate(optimized.x)
+    fitted_decay, sigma_scaled, profile = evaluate(optimized.x)
+    fitted_alpha = fixed_alpha if fixed_alpha is not None else fitted_decay / time_scale
     (
         likelihood,
         theta_scaled,
@@ -1015,8 +1369,7 @@ def fit_dense_mvou_diag(
     dimension = len(data.trait_names)
     _validate_posterior_size(data, compute_posterior)
     geometry = _cached_geometry(data, _geometry_cache)
-    time_scale = float(np.max(geometry.observed_distance)) / 2.0 or 1.0
-    scaled_geometry = geometry.rescaled(time_scale)
+    time_scale = _ou_observed_time_scale(geometry.observed_distance)
 
     has_alpha_by_trait = alpha_by_trait is not None and not (
         isinstance(alpha_by_trait, str) and alpha_by_trait == ""
@@ -1033,23 +1386,7 @@ def fit_dense_mvou_diag(
     elif has_alpha_by_trait:
         fixed_alpha = parse_alpha_by_trait(alpha_by_trait, data.trait_names)
 
-    physical_bounds = (
-        (1e-6 / time_scale, 50.0 / time_scale)
-        if alpha_bounds is None
-        else (float(alpha_bounds[0]), float(alpha_bounds[1]))
-    )
-    if (
-        not all(math.isfinite(value) and value > 0.0 for value in physical_bounds)
-        or physical_bounds[0] >= physical_bounds[1]
-    ):
-        raise ValueError("MV-OU-DIAG alpha bounds must be increasing and positive.")
-    beta_bounds = (
-        physical_bounds[0] * time_scale,
-        physical_bounds[1] * time_scale,
-    )
-    if not all(math.isfinite(value) and value > 0.0 for value in beta_bounds):
-        raise ValueError("MV-OU-DIAG scaled alpha bounds exceed floating-point range.")
-
+    physical_bounds = _multivariate_alpha_bounds(alpha_bounds, time_scale, "MV-OU-DIAG")
     free_alpha = fixed_alpha is None
     if free_alpha:
         _validate_mvou_diag_alpha_design(data, geometry)
@@ -1065,72 +1402,68 @@ def fit_dense_mvou_diag(
         )
 
     if free_alpha:
-        initial_beta = np.full(
-            dimension, math.sqrt(beta_bounds[0] * beta_bounds[1]), dtype=float
+        log_beta_bounds = (
+            math.log(physical_bounds[0]) + math.log(time_scale),
+            math.log(physical_bounds[1]) + math.log(time_scale),
         )
-        initial = [math.log(value) for value in initial_beta]
-        bounds = [
-            (math.log(beta_bounds[0]), math.log(beta_bounds[1]))
-            for _ in range(dimension)
-        ]
+        log_initial_beta = 0.5 * sum(log_beta_bounds)
+        initial = [log_initial_beta] * dimension
+        bounds = [log_beta_bounds] * dimension
+        analysis_geometry = geometry.rescaled(time_scale)
     else:
         assert fixed_alpha is not None
-        initial_beta = fixed_alpha * time_scale
-        if np.any(~np.isfinite(initial_beta)):
-            raise ValueError(
-                "MV-OU-DIAG fixed alpha values exceed floating-point range after "
-                "tree-time scaling."
-            )
         initial = []
         bounds = []
+        analysis_geometry = geometry
     diffusion_initial, diffusion_bounds = _initial_cholesky(dimension)
-    triangular_index = 0
-    for row in range(dimension):
-        for column in range(row + 1):
-            if row == column:
-                log_diagonal = 0.5 * math.log(2.0 * initial_beta[row])
-                diffusion_initial[triangular_index] = log_diagonal
-                lower, upper = diffusion_bounds[triangular_index]
-                assert lower is not None and upper is not None
-                diffusion_bounds[triangular_index] = (
-                    min(lower, log_diagonal - 10.0),
-                    max(upper, log_diagonal + 10.0),
-                )
-            triangular_index += 1
     initial.extend(diffusion_initial)
     bounds.extend(diffusion_bounds)
+    mean_profile = _prepare_mean_profile(data)
+    covariance_design = _prepare_observation_covariance(data)
+    fixed_decay = _fixed_diagonal_ou_decay(data, analysis_geometry, fixed_alpha)
 
-    def evaluate(parameters):
+    def evaluate(parameters, *, return_residual=True):
         offset = 0
         if free_alpha:
-            beta = np.exp(np.asarray(parameters[:dimension], dtype=float))
+            log_decay = np.asarray(parameters[:dimension], dtype=float)
+            beta = np.exp(log_decay)
             offset = dimension
         else:
-            beta = initial_beta
-        diffusion_scaled_time, _ = _decode_cholesky(parameters, dimension, offset)
-        stationary_sigma = diffusion_scaled_time / (beta[:, None] + beta[None, :])
-        stationary_sigma = (stationary_sigma + stationary_sigma.T) / 2.0
-        covariance = _diagonal_ou_observation_covariance(
-            data, scaled_geometry, beta, stationary_sigma
+            assert fixed_alpha is not None
+            beta = fixed_alpha
+            log_decay = np.log(beta)
+        correlation_scaled_diffusion, _ = _decode_cholesky(
+            parameters, dimension, offset
         )
+        stationary_sigma = _stationary_diagonal_ou_covariance(
+            correlation_scaled_diffusion, log_decay, beta
+        )
+        decay = fixed_decay
+        if decay is None:
+            decay = _diagonal_ou_observation_decay(data, analysis_geometry, beta)
+        covariance = _observation_covariance(decay, stationary_sigma, covariance_design)
         return (
             beta,
-            diffusion_scaled_time,
+            correlation_scaled_diffusion,
             stationary_sigma,
-            covariance,
-            _profile_mean(data, covariance, reml=False),
+            _profile_mean(
+                data,
+                covariance,
+                reml=False,
+                prepared=mean_profile,
+                return_residual=return_residual,
+                overwrite_covariance=True,
+            ),
         )
 
     def objective(parameters):
         try:
-            return -evaluate(parameters)[4][0]
+            return -evaluate(parameters, return_residual=False)[3][0]
         except (ValueError, ArithmeticError, OverflowError):
             return 1e100
 
     optimized = deterministic_multistart(objective, initial, bounds, maxiter=1800)
-    beta, diffusion_scaled_time, sigma_scaled, _covariance, profile = evaluate(
-        optimized.x
-    )
+    beta, normalized_diffusion, sigma_scaled, profile = evaluate(optimized.x)
     (
         likelihood,
         theta_scaled,
@@ -1142,7 +1475,7 @@ def fit_dense_mvou_diag(
     posterior = (
         _diagonal_ou_posterior(
             data,
-            scaled_geometry,
+            analysis_geometry,
             beta,
             sigma_scaled,
             theta_scaled,
@@ -1153,8 +1486,10 @@ def fit_dense_mvou_diag(
         else {}
     )
     sigma = _restore_sigma(data, sigma_scaled)
-    diffusion_sigma = _restore_sigma(data, diffusion_scaled_time / time_scale)
-    fitted_alpha = beta / time_scale
+    fitted_alpha = beta / time_scale if free_alpha else beta
+    diffusion_sigma = _restore_diagonal_ou_diffusion(
+        data, normalized_diffusion, fitted_alpha
+    )
     theta = data.centers + data.scales * theta_scaled
     likelihood -= _likelihood_scale_adjustment(data, reml=False)
     eigenvalues = np.linalg.eigvalsh(sigma_scaled)

@@ -156,3 +156,15 @@ def test_finite_sample_median_ranks_meet_exact_binomial_coverage(n, error):
     assert int(upper) == n - k
     assert 2 * binom.cdf(k - 1, n, 0.5) <= error
     assert 2 * binom.cdf(k, n, 0.5) > error
+
+
+@pytest.mark.parametrize("n,rank", [(8, 1), (81, 30), (4097, 1961)])
+def test_median_interval_includes_exact_tail_boundary(n, rank):
+    values = np.random.default_rng(825).permutation(n)
+    error = 2 * binom.cdf(rank - 1, n, 0.5)
+    assert median_order_statistic_interval(values, error) == (rank - 1, n - rank)
+    below = median_order_statistic_interval(values, np.nextafter(error, 0))
+    if rank == 1:
+        assert np.isnan(below).all()
+    else:
+        assert below == (rank - 2, n - rank + 1)

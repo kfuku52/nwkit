@@ -746,7 +746,7 @@ def _custom_discrete_data(context):
     return _cached(context, "custom_discrete_data", build)
 
 
-def _fit_single_discrete(context, candidate):
+def _fit_single_discrete(context, candidate, *, compute_posterior=True):
     from nwkit.asr import (
         _parse_rate_bounds,
         compute_covarion_marginals,
@@ -785,6 +785,7 @@ def _fit_single_discrete(context, candidate):
         "root_prior_mode": candidate.root_prior,
         "rate_bounds": rate_bounds,
         "transition_graph": graph,
+        "_compute_posterior": compute_posterior,
     }
     if candidate.model == "HRM":
         return compute_hrm_marginals(
@@ -889,6 +890,7 @@ def _fit_mk_mixture(context, candidate):
         root_prior_mode=candidate.root_prior,
         rate_bounds=_parse_rate_bounds(getattr(candidate_args, "rate_bounds", None)),
         transition_graph=graph,
+        _compute_posterior=False,
     )[1]
 
 
@@ -924,6 +926,7 @@ def _fit_pagel(context, candidate):
         rate=getattr(candidate_args, "rate", None),
         root_prior_mode=candidate.root_prior,
         rate_bounds=_parse_rate_bounds(getattr(candidate_args, "rate_bounds", None)),
+        _compute_posterior=False,
     )[1]
 
 
@@ -979,16 +982,14 @@ def _fit_continuous(context, candidate):
         candidate_args,
         settings,
         regime_assignment,
-        **(
-            {
-                "compute_posterior": bool(
-                    getattr(context.args, "model_average_out", None)
-                    or panels_requested(context.args)
-                ),
-                "geometry_cache": context.cache.setdefault("multivariate_geometry", {}),
-            }
+        compute_posterior=bool(
+            getattr(context.args, "model_average_out", None)
+            or panels_requested(context.args)
+        ),
+        geometry_cache=(
+            context.cache.setdefault("multivariate_geometry", {})
             if candidate.model in MULTIVARIATE_MODELS
-            else {}
+            else None
         ),
     )
     if getattr(context.args, "model_average_out", None):
@@ -1012,7 +1013,14 @@ def _fit_candidate(context, candidate):
         return _fit_mk_mixture(context, candidate)
     if candidate.model in PAGEL_MODELS:
         return _fit_pagel(context, candidate)
-    return _fit_single_discrete(context, candidate)
+    return _fit_single_discrete(
+        context,
+        candidate,
+        compute_posterior=bool(
+            getattr(context.args, "model_average_out", None)
+            or panels_requested(context.args)
+        ),
+    )
 
 
 def _fit_value(fit, name, default=None):

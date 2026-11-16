@@ -41,3 +41,12 @@ def test_rf_does_not_count_root_stems_or_duplicate_unary_clades(rooted):
     first = Tree("((A:1,B:1):1,(C:1,D:1):1):100;", parser=1)
     second = Tree("((((A:1,B:1):1):1,(C:1,D:1):1):1):200;", parser=1)
     assert robinson_foulds(first, second, rooted=rooted)[0] == 0
+
+
+def test_unrooted_rf_counts_distinct_anchor_path_splits():
+    first = Tree("(A,B,(C,(D,(E,F))));", parser=1)
+    rerooted = Tree("((F,(E,((D,(C,(B,A)))))));", parser=1)
+    different = Tree("(A,B,(D,(C,(E,F))));", parser=1)
+
+    assert robinson_foulds(first, rerooted, rooted=False) == (0, 6)
+    assert robinson_foulds(first, different, rooted=False) == (2, 6)

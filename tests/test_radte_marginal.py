@@ -1,3 +1,6 @@
+import math
+from fractions import Fraction
+
 import numpy as np
 import pytest
 from ete4 import Tree
@@ -16,6 +19,40 @@ from nwkit.radte_sequence import (
 from nwkit.reconcile import build_reconciliation_table
 from tests.test_radte import small_chronology
 from tests.test_radte_sequence import simulated_alignment, write_alignment
+
+
+@pytest.mark.parametrize("rho", [0.0, 0.7, math.nextafter(1.0, 0.0)])
+def test_conditional_rate_covariance_matches_exact_path_reference(rho):
+    c = small_chronology()
+    mapping = np.array([0, 0, 1, 2, 3, 4])
+    likelihood = QuadraticLikelihood(np.zeros(5), np.zeros(5), np.eye(5), 0, mapping)
+    problem = MarginalDatingProblem(c, rho=rho, likelihood=likelihood)
+
+    exact_rho = Fraction(rho)
+    paths = {c.gene: (c.gene,)}
+    for node in c.gene.descendants("preorder"):
+        paths[node] = (*paths[node.up], node)
+    covariance = [
+        [exact_rho ** len(set(paths[a]) ^ set(paths[b])) for b in c.edges]
+        for a in c.edges
+    ]
+    first, second = problem.root_edges
+    cross = [row[first] - row[second] for row in covariance]
+    contrast_variance = cross[first] - cross[second]
+    slope = [value / contrast_variance for value in cross]
+    conditional = [
+        [float(value - cross[i] * slope[j]) for j, value in enumerate(row)]
+        for i, row in enumerate(covariance)
+    ]
+    assert problem.contrast_variance == pytest.approx(
+        float(contrast_variance), rel=1e-15, abs=0
+    )
+    np.testing.assert_allclose(
+        problem.conditional_slope, [float(x) for x in slope], atol=0, rtol=1e-15
+    )
+    np.testing.assert_allclose(
+        problem.conditional_covariance, conditional, atol=0, rtol=1e-15
+    )
 
 
 def test_root_rate_integration_matches_independent_two_dimensional_quadrature():

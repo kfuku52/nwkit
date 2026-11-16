@@ -1,13 +1,17 @@
 """Sparse latent-Gaussian helpers for large phylogenetic models."""
 
 from dataclasses import dataclass
-from typing import Mapping
+from typing import Mapping, Sequence
 
 import numpy as np
 from scipy import sparse
 from scipy.sparse.linalg import SuperLU, splu
 
-from nwkit.gaussian import _factor_sparse_lu_with_pivots, _sparse_lu_logdet
+from nwkit.gaussian import (
+    _factor_sparse_lu_with_pivots,
+    _sparse_lu_logdet,
+    symmetric_average,
+)
 
 
 @dataclass(frozen=True)
@@ -35,17 +39,11 @@ class SparseCovarianceModel:
         """Draw one tip vector without materializing its covariance."""
         scale = float(np.sqrt(variance))
         if len(self.sampling_parent) == self.n_states:
-            states = np.empty(self.n_states, dtype=float)
             innovations = rng.normal(size=self.n_states)
-            for index in range(self.n_states):
-                parent = int(self.sampling_parent[index])
-                parent_value = 0.0 if parent < 0 else states[parent]
-                states[index] = (
-                    self.sampling_transition[index] * parent_value
-                    + scale
-                    * np.sqrt(self.sampling_variance[index])
-                    * innovations[index]
-                )
+            deviations = scale * np.sqrt(self.sampling_variance)
+            states = _propagate_sparse_tree_draw(
+                self.sampling_parent, self.sampling_transition, deviations * innovations
+            )
         else:
             precision_factor = self.precision_factor()
             factor = factor_sparse_positive_definite(self.precision)
@@ -91,10 +89,16 @@ class SparseCovarianceModel:
 
     def materialize(self) -> np.ndarray:
         """Materialize the tip covariance for small reference calculations."""
-        factor = factor_sparse_positive_definite(self.precision)
-        solved = factor.solve(self.tip_loading.T.toarray())
-        covariance = np.asarray(self.tip_loading @ solved, dtype=float)
-        return (covariance + covariance.T) / 2.0
+        return materialize_sparse_covariance(self.precision, self.tip_loading)
+
+
+def materialize_sparse_covariance(
+    precision: sparse.csc_matrix, loading: sparse.csr_matrix
+) -> np.ndarray:
+    """Compute the dense covariance of the projected latent variables."""
+    factor = factor_sparse_positive_definite(precision)
+    solved = factor.solve(loading.T.toarray())
+    return symmetric_average(np.asarray(loading @ solved, dtype=float))
 
 
 @dataclass(frozen=True)
@@ -122,6 +126,11 @@ class SparseLatentModel:
     @property
     def n_states(self) -> int:
         return int(self.precision.shape[0])
+
+
+_LatentComponent = tuple[
+    str, sparse.spmatrix, sparse.spmatrix, float, sparse.spmatrix | None
+]
 
 
 @dataclass(frozen=True)
@@ -174,6 +183,18 @@ class GmrfPredictorUncertainty:
     row_scale: np.ndarray | None = None
 
 
+def _propagate_sparse_tree_draw(parents, slopes, innovations):
+    # Branch arithmetic is sequential. Unbox the buffers once so each step
+    # uses native float arithmetic without creating NumPy scalars.
+    parents = parents.tolist()
+    slopes = slopes.tolist()
+    states = innovations.tolist()
+    for index, parent in enumerate(parents):
+        parent_value = 0.0 if parent < 0 else states[parent]
+        states[index] = slopes[index] * parent_value + states[index]
+    return np.asarray(states)
+
+
 def factor_sparse_positive_definite(
     matrix: sparse.spmatrix,
 ) -> SparsePositiveDefiniteFactor:
@@ -202,15 +223,37 @@ def factor_sparse_nonsingular(
     return SparsePositiveDefiniteFactor(factor, logdet)
 
 
+def _expand_sparse_component(matrix, identity, *, format, copy=False):
+    if identity.shape == (1, 1):
+        return matrix.asformat(format, copy=copy)
+    return sparse.kron(matrix, identity, format=format)
+
+
+def _combine_sparse_blocks(blocks, combine, *, format):
+    return blocks[0] if len(blocks) == 1 else combine(blocks, format=format)
+
+
+def _combine_sampling_factors(components, identity, include_sampling_factor):
+    if not include_sampling_factor:
+        return None
+    factors = [
+        _expand_sparse_component(
+            model.precision_factor() / np.sqrt(variance), identity, format="csr"
+        )
+        for variance, model in components.values()
+    ]
+    return _combine_sparse_blocks(factors, sparse.block_diag, format="csr")
+
+
 def combine_sparse_covariance_models(
     components: Mapping[str, tuple[float, SparseCovarianceModel]],
     *,
     random_dimension: int = 1,
+    include_sampling_factor: bool = True,
 ) -> SparseLatentModel:
     """Combine covariance components in independent latent coordinates."""
     identity = sparse.eye(random_dimension, format="csc")
     precisions = []
-    sampling_factors = []
     loadings = []
     component_slices = {}
     component_loadings = {}
@@ -219,17 +262,17 @@ def combine_sparse_covariance_models(
     for name, (variance, model) in components.items():
         if not np.isfinite(variance) or variance <= 0.0:
             raise ValueError("Sparse covariance-component variances must be positive.")
-        precision = sparse.kron(model.precision / variance, identity, format="csc")
-        sampling_factor = sparse.kron(
-            model.precision_factor() / np.sqrt(variance), identity, format="csr"
+        precision = _expand_sparse_component(
+            model.precision / variance, identity, format="csc"
         )
-        loading = sparse.kron(model.tip_loading, identity, format="csr")
+        loading = _expand_sparse_component(
+            model.tip_loading, identity, format="csr", copy=True
+        )
         width = precision.shape[0]
         component_slices[name] = slice(position, position + width)
         component_loadings[name] = loading
         position += width
         precisions.append(precision)
-        sampling_factors.append(sampling_factor)
         loadings.append(loading)
         prior_logdet += random_dimension * (
             model.logdet_covariance + model.n_states * np.log(variance)
@@ -237,9 +280,11 @@ def combine_sparse_covariance_models(
     if not precisions:
         raise ValueError("At least one sparse covariance component is required.")
     return SparseLatentModel(
-        precision=sparse.block_diag(precisions, format="csc"),
-        loading=sparse.hstack(loadings, format="csr"),
-        sampling_precision_factor=sparse.block_diag(sampling_factors, format="csr"),
+        precision=_combine_sparse_blocks(precisions, sparse.block_diag, format="csc"),
+        loading=_combine_sparse_blocks(loadings, sparse.hstack, format="csr").copy(),
+        sampling_precision_factor=_combine_sampling_factors(
+            components, identity, include_sampling_factor
+        ),
         prior_logdet=float(prior_logdet),
         component_slices=component_slices,
         component_loadings=component_loadings,
@@ -251,44 +296,21 @@ def append_identity_latent_components(
     loadings: Mapping[str, sparse.spmatrix],
 ) -> SparseLatentModel:
     """Append standard-normal latent components with supplied loadings."""
-    if not loadings:
-        return model
-    precision_blocks = [model.precision]
-    sampling_blocks = (
-        None
-        if model.sampling_precision_factor is None
-        else [model.sampling_precision_factor]
-    )
-    loading_blocks = [model.loading]
-    slices = dict(model.component_slices)
-    component_loadings = dict(model.component_loadings)
-    position = model.n_states
+    components = []
+    sample = model.sampling_precision_factor is not None
     for name, loading_value in loadings.items():
         loading = sparse.csr_matrix(loading_value, dtype=float)
         if loading.shape[0] != model.loading.shape[0]:
             raise ValueError("Sparse latent-component loading has the wrong height.")
-        width = loading.shape[1]
-        if width == 0:
-            continue
-        precision_blocks.append(sparse.eye(width, format="csc"))
-        if sampling_blocks is not None:
-            sampling_blocks.append(sparse.eye(width, format="csr"))
-        loading_blocks.append(loading)
-        slices[name] = slice(position, position + width)
-        component_loadings[name] = loading
-        position += width
-    return SparseLatentModel(
-        precision=sparse.block_diag(precision_blocks, format="csc"),
-        loading=sparse.hstack(loading_blocks, format="csr"),
-        sampling_precision_factor=(
-            None
-            if sampling_blocks is None
-            else sparse.block_diag(sampling_blocks, format="csr")
-        ),
-        prior_logdet=model.prior_logdet,
-        component_slices=slices,
-        component_loadings=component_loadings,
-    )
+        if loading.shape[1]:
+            components.append(identity_latent_component(name, loading, sample=sample))
+    return append_latent_components(model, components)
+
+
+def identity_latent_component(name, loading, *, sample) -> _LatentComponent:
+    width = loading.shape[1]
+    sampling_factor = sparse.eye(width, format="csr") if sample else None
+    return name, sparse.eye(width, format="csc"), loading, 0.0, sampling_factor
 
 
 def append_latent_component(
@@ -300,36 +322,66 @@ def append_latent_component(
     sampling_precision_factor: sparse.spmatrix | None = None,
 ) -> SparseLatentModel:
     """Append one general latent GMRF component."""
-    loading = sparse.csr_matrix(loading, dtype=float)
-    precision = sparse.csc_matrix(precision, dtype=float)
-    if loading.shape != (model.loading.shape[0], precision.shape[0]) or (
-        precision.shape[0] != precision.shape[1]
-    ):
-        raise ValueError("Appended sparse latent component has invalid dimensions.")
+    return append_latent_components(
+        model,
+        [(name, precision, loading, logdet_covariance, sampling_precision_factor)],
+    )
+
+
+def append_latent_components(
+    model: SparseLatentModel, components: Sequence[_LatentComponent]
+) -> SparseLatentModel:
+    """Append independent latent components in a single sparse assembly."""
+    if not components:
+        return model
+    precisions = [model.precision]
+    loadings = [model.loading]
+    factors = (
+        None
+        if model.sampling_precision_factor is None
+        else [model.sampling_precision_factor]
+    )
     position = model.n_states
     slices = dict(model.component_slices)
-    slices[name] = slice(position, position + precision.shape[0])
-    loadings = dict(model.component_loadings)
-    loadings[name] = loading
-    combined_sampling_factor = None
-    if (
-        model.sampling_precision_factor is not None
-        and sampling_precision_factor is not None
-    ):
-        sampling_factor = sparse.csr_matrix(sampling_precision_factor, dtype=float)
-        if sampling_factor.shape[1] != precision.shape[0]:
-            raise ValueError("Appended sparse sampling factor has invalid dimensions.")
-        combined_sampling_factor = sparse.block_diag(
-            [model.sampling_precision_factor, sampling_factor], format="csr"
-        )
+    component_loadings = dict(model.component_loadings)
+    prior_logdet = model.prior_logdet
+    for name, precision, loading, logdet, factor in components:
+        loading = sparse.csr_matrix(loading, dtype=float)
+        precision = sparse.csc_matrix(precision, dtype=float)
+        width = precision.shape[0]
+        if (
+            loading.shape != (model.loading.shape[0], width)
+            or precision.shape[1] != width
+        ):
+            raise ValueError("Appended sparse latent component has invalid dimensions.")
+        slices[name] = slice(position, position + width)
+        component_loadings[name] = loading
+        precisions.append(precision)
+        loadings.append(loading)
+        if factors is not None:
+            if factor is None:
+                factors = None
+            else:
+                factors.append(_appended_sampling_factor(factor, width))
+        position += width
+        prior_logdet += float(logdet)
     return SparseLatentModel(
-        precision=sparse.block_diag([model.precision, precision], format="csc"),
-        loading=sparse.hstack([model.loading, loading], format="csr"),
-        sampling_precision_factor=combined_sampling_factor,
-        prior_logdet=model.prior_logdet + float(logdet_covariance),
+        precision=sparse.block_diag(precisions, format="csc"),
+        loading=sparse.hstack(loadings, format="csr"),
+        sampling_precision_factor=(
+            None if factors is None else sparse.block_diag(factors, format="csr")
+        ),
+        prior_logdet=prior_logdet,
         component_slices=slices,
-        component_loadings=loadings,
+        component_loadings=component_loadings,
     )
+
+
+def _appended_sampling_factor(factor, width):
+    factor = sparse.csr_matrix(factor, dtype=float)
+    if factor.shape[1] != width:
+        raise ValueError("Appended sparse sampling factor has invalid dimensions.")
+    return factor
 
 
 def prepare_sparse_latent_sampler(model: SparseLatentModel) -> SparseLatentSampler:
@@ -382,7 +434,19 @@ def continuous_predictor_loading(
         if row_scale.shape != (len(indices),) or not np.isfinite(row_scale).all():
             raise ValueError("Continuous predictor row scale is malformed.")
         selected = selected.multiply(row_scale[:, None]).tocsr()
-    return sparse.kron(selected, sparse.csr_matrix(slopes[:, None]), format="csr")
+    return _project_scalar_predictor_loading(selected, slopes)
+
+
+def _project_scalar_predictor_loading(loading, slopes):
+    if len(slopes) != 1 or not np.isfinite(slopes[0]):
+        return sparse.kron(loading, sparse.csr_matrix(slopes[:, None]), format="csr")
+    if slopes[0] == 0.0:
+        return sparse.csr_matrix(
+            loading.shape, dtype=np.result_type(loading.dtype, slopes.dtype)
+        )
+    projected = loading * slopes[0]
+    projected.sum_duplicates()
+    return projected
 
 
 def grouped_predictor_loading(
@@ -401,23 +465,50 @@ def grouped_predictor_loading(
     ranks = np.asarray([factor.shape[1] for factor in uncertainty.factors], dtype=int)
     offsets = np.concatenate([[0], np.cumsum(ranks)])
     response_dimension = slopes.shape[1]
+    shape = (len(indices) * response_dimension, int(offsets[-1]))
+    species_order = np.argsort(indices, kind="stable")
+    sorted_indices = indices[species_order]
+    groups, starts = np.unique(sorted_indices, return_index=True)
+    if len(groups) == len(indices):
+        return _ungrouped_predictor_loading(
+            uncertainty, slopes, indices, offsets, shape
+        )
+    stops = np.append(starts[1:], len(indices))
+    rows = []
+    columns = []
+    values = []
+    for species_index, start, stop in zip(groups, starts, stops, strict=True):
+        block = _project_grouped_factor(uncertainty.factors[species_index], slopes)
+        responses, latent = block.nonzero()
+        observations = species_order[start:stop]
+        rows.append((observations[:, None] * response_dimension + responses).ravel())
+        columns.append(np.tile(offsets[species_index] + latent, len(observations)))
+        values.append(np.tile(block[responses, latent], len(observations)))
+    return sparse.csr_matrix(
+        (np.concatenate(values), (np.concatenate(rows), np.concatenate(columns))),
+        shape=shape,
+    )
+
+
+def _ungrouped_predictor_loading(uncertainty, slopes, indices, offsets, shape):
+    dimension = slopes.shape[1]
     rows = []
     columns = []
     values = []
     for observation, species_index in enumerate(indices):
-        factor = np.asarray(uncertainty.factors[int(species_index)], dtype=float)
-        if factor.ndim != 2 or factor.shape[0] != slopes.shape[0]:
-            raise ValueError("Grouped predictor factor is malformed.")
-        block = slopes.T @ factor
-        for response in range(response_dimension):
-            nonzero = np.flatnonzero(block[response])
-            rows.extend([observation * response_dimension + response] * len(nonzero))
-            columns.extend((offsets[species_index] + nonzero).tolist())
-            values.extend(block[response, nonzero].tolist())
-    return sparse.csr_matrix(
-        (values, (rows, columns)),
-        shape=(len(indices) * response_dimension, int(offsets[-1])),
-    )
+        block = _project_grouped_factor(uncertainty.factors[species_index], slopes)
+        response, latent = block.nonzero()
+        rows.extend((observation * dimension + response).tolist())
+        columns.extend((offsets[species_index] + latent).tolist())
+        values.extend(block[response, latent].tolist())
+    return sparse.csr_matrix((values, (rows, columns)), shape=shape)
+
+
+def _project_grouped_factor(factor, slopes):
+    factor = np.asarray(factor, dtype=float)
+    if factor.ndim != 2 or factor.shape[0] != slopes.shape[0]:
+        raise ValueError("Grouped predictor factor is malformed.")
+    return slopes.T @ factor
 
 
 def joint_predictor_loading(
@@ -458,7 +549,17 @@ def gmrf_predictor_loading(
     ):
         raise ValueError("GMRF predictor indices are malformed.")
     selected = uncertainty.model.tip_loading[indices]
-    return sparse.kron(selected, sparse.csr_matrix(slopes[:, None]), format="csr")
+    selected = _scale_gmrf_predictor_rows(selected, uncertainty.row_scale)
+    return _project_scalar_predictor_loading(selected, slopes)
+
+
+def _scale_gmrf_predictor_rows(loading, row_scale):
+    if row_scale is None:
+        return loading
+    row_scale = np.asarray(row_scale, dtype=float)
+    if row_scale.shape != (loading.shape[0],) or not np.isfinite(row_scale).all():
+        raise ValueError("GMRF predictor row scale is malformed.")
+    return loading.multiply(row_scale[:, None]).tocsr()
 
 
 def condition_sparse_tip_model(

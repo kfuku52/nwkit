@@ -113,6 +113,15 @@ def test_physical_scores_at_boundaries(alpha):
     assert s[0, 1] + s[1, 0] == pytest.approx(derivative, abs=2e-6)
 
 
+@pytest.mark.parametrize("root", ["OUfixedRoot", "OUrandomRoot"])
+def test_dense_covariance_preserves_short_paths_below_shared_ancestor(root):
+    tree = Tree("((a:1e-20,b:2e-20):1,c:1);")
+    data = ShiftData.build(tree, np.array([[1.0], [3.0], [2.0]]), ["x"])
+    context = DenseJointContext(data, root)
+    lower = context.covariance(np.array([1e20]), np.eye(1), np.array([0.1]))[0].lower
+    assert (lower @ lower.T)[0, 1] == pytest.approx(np.exp(-3), rel=1e-14)
+
+
 def test_rounded_tree_and_wholly_missing_tip():
     tree = Tree(
         "(((a:0.4,b:0.400000001):0.3,(c:0.4,d:0.4):0.3):0.3,((e:0.4,f:0.4):0.3,(g:0.4,h:0.4):0.3):0.3);"

@@ -6,6 +6,8 @@ from ete4 import Tree
 from nwkit.sample import (
     _leaf_path_edges,
     _path_gain,
+    _select_tree_max_pd,
+    _select_tree_ranked,
     apply_filters,
     parse_filter_spec,
     sample_main,
@@ -225,6 +227,7 @@ class TestSampleMain:
             )
 
         assert select_max_pd(candidate_order, path_edges_by_leaf, 4) == expected
+        assert _select_tree_max_pd(tree, candidate_order, 4) == expected
 
     def test_max_pd_retains_small_differences_below_a_large_shared_edge(self):
         tree = Tree("((A:1,B:2):1e308,C:3);", parser=1)
@@ -239,6 +242,7 @@ class TestSampleMain:
 
         assert [row["leaf_name"] for row in selected] == ["B", "A"]
         assert selected[1]["pd_gain"] == pytest.approx(1.0)
+        assert _select_tree_max_pd(tree, candidate_order, 2) == selected
 
     def test_ranked_pd_retains_uncovered_small_edge_after_large_path(self):
         tree = Tree("((A:1,B:2):1e308,C:3);", parser=1)
@@ -253,6 +257,7 @@ class TestSampleMain:
 
         assert [row["leaf_name"] for row in selected] == ["A", "B"]
         assert selected[1]["pd_gain"] == pytest.approx(2.0)
+        assert _select_tree_ranked(tree, candidate_order, 2) == selected
 
     @pytest.mark.parametrize("method", ["max-pd", "ranked"])
     @pytest.mark.parametrize(

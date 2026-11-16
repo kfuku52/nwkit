@@ -3,6 +3,7 @@
 import math
 import os
 from dataclasses import dataclass
+from functools import lru_cache
 from types import SimpleNamespace
 
 import numpy as np
@@ -32,7 +33,10 @@ from nwkit.gaussian import (
     DiagonalLowRankCovariance,
     DiagonalSparsePrecisionCovariance,
     draw_from_factor,
+    finite_mean,
     is_diagonal,
+    regression_total_quadratic,
+    sample_standard_errors,
 )
 from nwkit.measurement_error import (
     fit_conditional_eiv_gaussian,
@@ -66,7 +70,6 @@ from nwkit.phylogenetic_glmm import (
 )
 from nwkit.regress import (
     _profile_covariance_fit,
-    _solve_positive_definite,
     validate_dense_gaussian_size,
 )
 from nwkit.regression_observation import read_censoring_models
@@ -280,7 +283,17 @@ def _ordinary_covariance_builder(
     # Pagel's lambda leaves tip variances unchanged and scales every shared
     # depth by lambda. Build and validate the tree covariance once, after the
     # caller's size preflight, instead of repeating all pairwise LCA queries.
-    brownian = build(1.0)
+    return _pagel_lambda_covariance_builder(build(1.0))
+
+
+def _pagel_lambda_covariance_builder(brownian):
+    if is_diagonal(brownian):
+        # Lambda cannot change a covariance with no shared tip paths.
+        def diagonal_covariance(parameter):
+            validate_evolution_parameter("lambda", parameter)
+            return brownian
+
+        return diagonal_covariance
     diagonal = np.diag(brownian).copy()
 
     def lambda_covariance(parameter):
@@ -879,22 +892,12 @@ def _ordinary_inference_samples(
         predictor_columns=predictor_columns,
         allow_large_dense=allow_large_dense,
     )
-    return coefficients, np.std(coefficients, axis=0, ddof=1)
+    return coefficients, sample_standard_errors(coefficients)
 
 
 def _ordinary_response_statistics(y, fit, fixed_covariance, *, intercept):
-    if intercept:
-        null_design = np.ones((len(y), 1))
-        inverse_null = _solve_positive_definite(fit["cholesky"], null_design)
-        null_beta = np.linalg.solve(
-            null_design.T @ inverse_null,
-            null_design.T @ _solve_positive_definite(fit["cholesky"], y),
-        )
-        null_residual = y - null_design @ null_beta
-    else:
-        null_residual = y
-    total_quadratic = float(
-        null_residual @ _solve_positive_definite(fit["cholesky"], null_residual)
+    total_quadratic = regression_total_quadratic(
+        fit["cholesky"], y, intercept=intercept
     )
     r_squared = (
         float("nan")
@@ -910,10 +913,10 @@ def _ordinary_response_statistics(y, fit, fixed_covariance, *, intercept):
     else:
         fixed_array = np.asarray(fixed_covariance, dtype=float)
         fixed_diagonal = fixed_array if fixed_array.ndim == 1 else np.diag(fixed_array)
-    mean_sampling_variance = float(np.mean(fixed_diagonal))
+    mean_sampling_variance = finite_mean(fixed_diagonal)
     fitted_covariance = fit["covariance"]
     if isinstance(fitted_covariance, DiagonalSparsePrecisionCovariance):
-        mean_fitted_variance = float(np.mean(fitted_covariance.marginal_diagonal))
+        mean_fitted_variance = finite_mean(fitted_covariance.marginal_diagonal)
     elif isinstance(fitted_covariance, DiagonalLowRankCovariance):
         update = fitted_covariance.low_rank
         update_diagonal = (
@@ -921,13 +924,11 @@ def _ordinary_response_statistics(y, fit, fixed_covariance, *, intercept):
             if sparse.issparse(update)
             else np.sum(np.square(update), axis=1)
         )
-        mean_fitted_variance = float(
-            np.mean(fitted_covariance.diagonal + update_diagonal)
-        )
+        mean_fitted_variance = finite_mean(fitted_covariance.diagonal + update_diagonal)
     else:
         fitted_array = np.asarray(fitted_covariance, dtype=float)
-        mean_fitted_variance = float(
-            np.mean(fitted_array if fitted_array.ndim == 1 else np.diag(fitted_array))
+        mean_fitted_variance = finite_mean(
+            fitted_array if fitted_array.ndim == 1 else np.diag(fitted_array)
         )
     sampling_fraction = (
         0.0
@@ -1388,14 +1389,9 @@ def _prepare_latent_ordinary_predictors(
             marginal_converged = marginal_fit["optimizer_converged"]
             marginal_message = marginal_fit["optimizer_message"]
             marginal_parameter_boundary = marginal_fit["boundary_warning"]
-            mean_posterior_variance = float(np.mean(np.diag(posterior.covariance)))
-            mean_prior_variance = float(
-                np.mean(
-                    np.diag(
-                        posterior.evolutionary_rate
-                        * marginal_fit["phylogenetic_covariance"]
-                    )
-                )
+            mean_posterior_variance = finite_mean(np.diag(posterior.covariance))
+            mean_prior_variance = posterior.evolutionary_rate * finite_mean(
+                np.diag(marginal_fit["phylogenetic_covariance"])
             )
         posterior_predictor_values[predictor] = dict(
             zip(leaf_names, posterior.mean, strict=True)
@@ -1888,9 +1884,7 @@ def _fit_ordinary_multivariate_response(
         if isinstance(covariance, DiagonalLowRankCovariance):
             fixed_diagonal[start : start + len(leaf_names)] = covariance.diagonal
             fixed_loading_blocks.append(sparse.csr_matrix(covariance.low_rank))
-        elif covariance.ndim == 1 or np.array_equal(
-            covariance, np.diag(np.diag(covariance))
-        ):
+        elif covariance.ndim == 1 or is_diagonal(covariance):
             fixed_diagonal[start : start + len(leaf_names)] = (
                 covariance if covariance.ndim == 1 else np.diag(covariance)
             )
@@ -2844,16 +2838,18 @@ def _ordinary_predictor_values(
     ordered=(),
     allow_missing=False,
 ):
+    leaf_names = list(tree.leaf_names())
     dataframe, _, _ = read_tip_table(
         args.data,
         option_name="--data",
-        tree_leaf_names=list(tree.leaf_names()),
+        tree_leaf_names=leaf_names,
         required_columns=predictors,
         unmatched=args.unmatched,
         missing_values=args.missing_values,
         duplicate_leaf_names=duplicate_leaf_names,
     )
-    dataframe = dataframe[dataframe["leaf_name"].isin(set(tree.leaf_names()))]
+    dataframe = dataframe[dataframe["leaf_name"].isin(leaf_names)]
+    rows_by_leaf = dataframe.groupby("leaf_name", sort=False, observed=True).indices
     values_by_trait = {}
     for predictor in predictors:
         observed = dataframe[predictor].dropna()
@@ -2864,10 +2860,9 @@ def _ordinary_predictor_values(
             or numeric_observed.isna().any()
         )
         values_by_leaf = {}
-        for leaf_name in tree.leaf_names():
-            selected = dataframe.loc[
-                dataframe["leaf_name"] == str(leaf_name), predictor
-            ]
+        column = dataframe[predictor]
+        for leaf_name in leaf_names:
+            selected = column.iloc[rows_by_leaf.get(str(leaf_name), [])]
             if selected.empty or (selected.isna().any() and not allow_missing):
                 raise ValueError(
                     "Predictor '{}' has missing values for tree tip '{}'.".format(
@@ -2927,60 +2922,63 @@ def _ordinary_auxiliary_values(
 ):
     if not columns:
         return {}
+    leaf_names = list(tree.leaf_names())
     dataframe, _, _ = read_tip_table(
         args.data,
         option_name="--data",
-        tree_leaf_names=list(tree.leaf_names()),
+        tree_leaf_names=leaf_names,
         required_columns=columns,
         unmatched=args.unmatched,
         missing_values=args.missing_values,
         duplicate_leaf_names=duplicate_leaf_names,
     )
-    dataframe = dataframe[dataframe["leaf_name"].isin(set(tree.leaf_names()))]
+    dataframe = dataframe[dataframe["leaf_name"].isin(leaf_names)]
+    return _auxiliary_values_by_leaf(
+        dataframe,
+        leaf_names,
+        columns,
+        getattr(args, "biological_id", None),
+        allow_missing=allow_missing,
+        tip_label="tree tip",
+    )
+
+
+def _auxiliary_values_by_leaf(
+    dataframe, leaf_names, columns, biological_id, *, allow_missing, tip_label
+):
+    rows_by_leaf = dataframe.groupby("leaf_name", sort=False, observed=True).indices
+    groups_by_leaf = (
+        _auxiliary_biological_rows(dataframe, biological_id)
+        if biological_id is not None
+        else {}
+    )
     values_by_column = {}
     for column in columns:
         values_by_leaf = {}
-        for leaf_name in tree.leaf_names():
-            selected_rows = dataframe.loc[dataframe["leaf_name"] == str(leaf_name)]
-            biological_id = getattr(args, "biological_id", None)
+        numeric_column = pd.to_numeric(dataframe[column], errors="coerce").to_numpy(
+            float
+        )
+        for leaf_name in leaf_names:
             if biological_id is None:
-                numeric = pd.to_numeric(
-                    selected_rows[column], errors="coerce"
-                ).to_numpy(float)
+                numeric = numeric_column[rows_by_leaf.get(str(leaf_name), [])]
             else:
-                observations = []
-                for _identifier, group in selected_rows.groupby(
-                    biological_id, sort=False, dropna=False
-                ):
-                    group_values = pd.to_numeric(
-                        group[column], errors="coerce"
-                    ).to_numpy(float)
-                    finite_group = group_values[np.isfinite(group_values)]
-                    if len(finite_group) and np.any(finite_group != finite_group[0]):
-                        raise ValueError(
-                            "Auxiliary response column '{}' differs among technical "
-                            "rows for tree tip '{}'.".format(column, leaf_name)
-                        )
-                    observations.append(
-                        float("nan")
-                        if not len(finite_group)
-                        else float(finite_group[0])
-                    )
-                numeric = np.asarray(observations, dtype=float)
+                numeric = _auxiliary_biological_values(
+                    numeric_column,
+                    groups_by_leaf.get(str(leaf_name), ()),
+                    column,
+                    leaf_name,
+                    tip_label,
+                )
             if not allow_missing and (
                 not len(numeric) or not np.isfinite(numeric).all()
             ):
                 raise ValueError(
-                    "Auxiliary response column '{}' must be finite for tree tip '{}'.".format(
-                        column, leaf_name
-                    )
+                    f"Auxiliary response column '{column}' must be finite for {tip_label} '{leaf_name}'."
                 )
             finite = numeric[np.isfinite(numeric)]
             if biological_id is None and len(finite) and np.any(finite != finite[0]):
                 raise ValueError(
-                    "Auxiliary response column '{}' differs among rows for tree tip '{}'.".format(
-                        column, leaf_name
-                    )
+                    f"Auxiliary response column '{column}' differs among rows for {tip_label} '{leaf_name}'."
                 )
             values_by_leaf[str(leaf_name)] = (
                 ReplicatedObservation(tuple(numeric))
@@ -2993,6 +2991,30 @@ def _ordinary_auxiliary_values(
     return values_by_column
 
 
+def _auxiliary_biological_rows(dataframe, biological_id):
+    groups_by_leaf: dict[str, list[np.ndarray]] = {}
+    groups = dataframe.groupby(
+        ["leaf_name", biological_id], sort=False, dropna=False, observed=True
+    ).indices
+    for (leaf, _), rows in groups.items():
+        groups_by_leaf.setdefault(leaf, []).append(rows)
+    return groups_by_leaf
+
+
+def _auxiliary_biological_values(numeric_column, groups, column, leaf_name, tip_label):
+    observations = []
+    for rows in groups:
+        values = numeric_column[rows]
+        finite = values[np.isfinite(values)]
+        if len(finite) and np.any(finite != finite[0]):
+            raise ValueError(
+                f"Auxiliary response column '{column}' differs among technical "
+                f"rows for {tip_label} '{leaf_name}'."
+            )
+        observations.append(float(finite[0]) if len(finite) else float("nan"))
+    return np.asarray(observations, dtype=float)
+
+
 def _response_auxiliary_mapping(column_by_response, values_by_column):
     return {
         response: values_by_column[column]
@@ -3001,60 +3023,74 @@ def _response_auxiliary_mapping(column_by_response, values_by_column):
 
 
 def _sampling_covariance_table(covariance_by_trait, leaf_names):
-    rows = []
-    for trait, covariance in covariance_by_trait.items():
-        if isinstance(covariance, DiagonalLowRankCovariance):
-            diagonal = np.asarray(covariance.diagonal, dtype=float)
-            loading = sparse.hstack(
-                [
-                    sparse.diags(np.sqrt(diagonal), format="csr"),
-                    sparse.csr_matrix(covariance.low_rank),
-                ],
-                format="csr",
-            ).tocoo()
-            latent_names = ["latent:tip:{}".format(name) for name in leaf_names] + [
-                "latent:low-rank:{}".format(index)
+    names = np.asarray(leaf_names, dtype=object)
+
+    @lru_cache(maxsize=1)
+    def upper_indices():
+        return np.triu_indices(len(names))
+
+    parts = [
+        _trait_sampling_covariance_table(
+            trait, covariance, leaf_names, names, upper_indices
+        )
+        for trait, covariance in covariance_by_trait.items()
+    ]
+    nonempty = [part for part in parts if not part.empty]
+    if not nonempty:
+        return pd.DataFrame(columns=ORDINARY_SAMPLING_COVARIANCE_COLUMNS)
+    return pd.concat(nonempty, ignore_index=True)
+
+
+def _trait_sampling_covariance_table(
+    trait, covariance, leaf_names, names, upper_indices
+):
+    representation = "covariance"
+    if isinstance(covariance, DiagonalLowRankCovariance):
+        diagonal = np.asarray(covariance.diagonal, dtype=float)
+        loading = sparse.hstack(
+            [
+                sparse.diags(np.sqrt(diagonal), format="csr"),
+                sparse.csr_matrix(covariance.low_rank, dtype=float),
+            ],
+            format="csr",
+        ).tocoo()
+        latent_names = np.asarray(
+            [f"latent:tip:{name}" for name in leaf_names]
+            + [
+                f"latent:low-rank:{index}"
                 for index in range(covariance.low_rank.shape[1])
-            ]
-            for row, column, value in zip(
-                loading.row, loading.col, loading.data, strict=True
-            ):
-                rows.append(
-                    {
-                        "tree_id": "species",
-                        "trait": trait,
-                        "leaf_name_1": leaf_names[row],
-                        "leaf_name_2": latent_names[column],
-                        "sampling_covariance": float(value),
-                        "covariance_representation": "factor-loading",
-                    }
-                )
-            continue
+            ],
+            dtype=object,
+        )
+        first, second, values = (
+            names[loading.row],
+            latent_names[loading.col],
+            loading.data,
+        )
+        representation = "factor-loading"
+    else:
         matrix = (
             covariance.loc[leaf_names, leaf_names].to_numpy(dtype=float)
             if isinstance(covariance, pd.DataFrame)
             else np.asarray(covariance, dtype=float)
         )
-        for first, first_name in enumerate(leaf_names):
-            second_indices = (
-                range(first, first + 1)
-                if matrix.ndim == 1
-                else range(first, len(leaf_names))
-            )
-            for second in second_indices:
-                rows.append(
-                    {
-                        "tree_id": "species",
-                        "trait": trait,
-                        "leaf_name_1": first_name,
-                        "leaf_name_2": leaf_names[second],
-                        "sampling_covariance": (
-                            matrix[first] if matrix.ndim == 1 else matrix[first, second]
-                        ),
-                        "covariance_representation": "covariance",
-                    }
-                )
-    return pd.DataFrame(rows, columns=ORDINARY_SAMPLING_COVARIANCE_COLUMNS)
+        if matrix.ndim == 1:
+            first = second = names
+            values = matrix[: len(names)]
+        else:
+            rows, columns = upper_indices()
+            first, second, values = names[rows], names[columns], matrix[rows, columns]
+    return pd.DataFrame(
+        {
+            "tree_id": "species",
+            "trait": trait,
+            "leaf_name_1": first,
+            "leaf_name_2": second,
+            "sampling_covariance": values,
+            "covariance_representation": representation,
+        },
+        columns=ORDINARY_SAMPLING_COVARIANCE_COLUMNS,
+    )
 
 
 def build_ordinary_regression(

@@ -5,9 +5,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from nwkit.continuous_asr import compute_bm_marginals
+from nwkit.continuous_asr import _brownian_observation_records, _fit_brownian_edges
 from nwkit.evolution import (
-    build_evolutionary_process,
+    _prepare_edge_variance_transform,
     encoded_evolution_parameter,
     optimization_parameterization,
     parameter_near_boundary,
@@ -85,16 +85,6 @@ def parse_parameter_bounds(value, tree, model):
     return lower, upper
 
 
-def _process(tree, model, parameter):
-    return build_evolutionary_process(
-        tree,
-        model=model,
-        parameter=parameter,
-        root_mode="flat",
-        allow_zero=True,
-    )
-
-
 def compute_transformed_bm_marginals(
     tree,
     values_by_leaf,
@@ -106,6 +96,7 @@ def compute_transformed_bm_marginals(
     profile_ci_level=None,
     standard_errors=None,
     _tree_validated=False,
+    _compute_posterior=True,
 ):
     """Fit and condition a transformed-time Brownian process."""
 
@@ -124,32 +115,46 @@ def compute_transformed_bm_marginals(
         raise ValueError("Evolution-parameter bounds must be increasing and finite.")
     validate_evolution_parameter(model, bounds[0])
     validate_evolution_parameter(model, bounds[1])
+    if evolution_parameter is not None:
+        evolution_parameter = validate_evolution_parameter(model, evolution_parameter)
+    # Geometry, including DELTA ultrametricity, is shared by all candidates.
+    transform = _prepare_edge_variance_transform(tree, model, allow_zero=True)
+    observation_records = None
+    if evolution_parameter is None:
+        observation_records = tuple(
+            _brownian_observation_records(tree, values_by_leaf, standard_errors)
+        )
 
-    def fit_at(parameter):
-        process = _process(tree, model, parameter)
-        return compute_bm_marginals(
+    def fit_at(parameter, *, compute_posterior=True):
+        validated = validate_evolution_parameter(model, parameter)
+        variances = transform(validated)
+        if not all(
+            math.isfinite(value) and value >= 0.0 for value in variances.values()
+        ):
+            raise ValueError(
+                "Transformed edge variances must be non-negative and finite."
+            )
+        return _fit_brownian_edges(
             tree,
             values_by_leaf,
-            sigma2=sigma2,
-            standard_errors=standard_errors,
-            _tree_validated=_tree_validated,
-            _process=process,
+            sigma2,
+            standard_errors,
+            edge_length=variances.__getitem__,
+            tree_validated=_tree_validated,
+            compute_posterior=compute_posterior,
+            observation_records=observation_records,
         )
 
     if evolution_parameter is not None:
-        fitted_parameter = validate_evolution_parameter(model, evolution_parameter)
-        assert fitted_parameter is not None
-        posterior, brownian_fit = fit_at(fitted_parameter)
+        fitted_parameter = evolution_parameter
+        posterior, brownian_fit = fit_at(
+            fitted_parameter, compute_posterior=_compute_posterior
+        )
         parameter_estimated = False
         optimizer_success = True
         optimizer_message = "evolution parameter fixed"
         evaluations = 1
     else:
-        if model == "delta":
-            # Ultrametricity is a structural DELTA requirement, not an invalid
-            # optimizer candidate.  Probe once so the useful model-level error
-            # is not converted into an all-nonfinite search failure.
-            _process(tree, model, 1.0)
         encoded_bounds = (
             encoded_evolution_parameter(model, bounds[0]),
             encoded_evolution_parameter(model, bounds[1]),
@@ -160,7 +165,7 @@ def compute_transformed_bm_marginals(
         evaluated = {}
 
         def candidate(parameter):
-            result = fit_at(parameter)
+            result = fit_at(parameter, compute_posterior=False)
             likelihood = result[1].restricted_log_likelihood
             if likelihood is None or not math.isfinite(likelihood):
                 raise ValueError("The transformed process has no ordinary likelihood.")
@@ -184,7 +189,9 @@ def compute_transformed_bm_marginals(
         if not math.isfinite(float(optimized.fun)):
             raise ValueError(f"Failed to find a finite {model.upper()} likelihood.")
         fitted_parameter = float(decode(float(optimized.x)))
-        posterior, brownian_fit = fit_at(fitted_parameter)
+        posterior, brownian_fit = _selected_transformed_fit(
+            fit_at, fitted_parameter, cache, compute_posterior=_compute_posterior
+        )
         finite_objectives = np.asarray(
             [value for value in evaluated.values() if math.isfinite(value)], dtype=float
         )
@@ -224,8 +231,7 @@ def compute_transformed_bm_marginals(
         from nwkit.asr_diagnostics import profile_likelihood_interval
 
         def profile(parameter):
-            result = fit_at(float(parameter))[1].restricted_log_likelihood
-            return -math.inf if result is None else float(result)
+            return -cache.objective(float(parameter))
 
         profile_interval = profile_likelihood_interval(
             profile,
@@ -268,3 +274,12 @@ def compute_transformed_bm_marginals(
         ),
     )
     return posterior, fit
+
+
+def _selected_transformed_fit(fit_at, parameter, cache, *, compute_posterior):
+    if compute_posterior:
+        return fit_at(parameter)
+    selected = cache.candidate(parameter)
+    if selected is None:
+        raise ValueError("The selected transformed process has no finite likelihood.")
+    return selected

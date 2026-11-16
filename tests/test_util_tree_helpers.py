@@ -2,6 +2,7 @@ import pytest
 from ete4 import Tree
 
 from nwkit.util import (
+    annotate_duplication_confidence_and_count_species,
     annotate_duplication_confidence_scores,
     annotate_scientific_names,
     copy_tree_iteratively,
@@ -40,6 +41,22 @@ class TestCopyTreeIteratively:
         next(copied.leaves()).name = "changed"
         assert tree.props["metadata"] == {"values": [1, 2]}
         assert next(tree.leaves()).name == "T0"
+
+    def test_late_nested_properties_keep_shared_references_in_copy(self):
+        tree = Tree("(A:1,B:1,C:1);", parser=1)
+        first, second, third = tree.children
+        shared = {"properties": first.props, "values": [1, 2]}
+        second.props["metadata"] = third.props["metadata"] = shared
+
+        copied = copy_tree_iteratively(tree)
+
+        _, second_copy, third_copy = copied.children
+        copied_metadata = second_copy.props["metadata"]
+        assert copied_metadata is third_copy.props["metadata"]
+        assert copied_metadata["properties"] == first.props
+        assert copied_metadata["properties"] is not first.props
+        copied_metadata["values"].append(3)
+        assert shared["values"] == [1, 2]
 
 
 class TestSpeciesGrouping:
@@ -285,6 +302,20 @@ class TestAnnotateScientificNames:
 
 
 class TestAnnotateDuplicationConfidenceScores:
+    def test_parent_merge_keeps_child_counts_and_scores(self):
+        tree = Tree("(((A1),B1),(B2,C2));", parser=1)
+        for leaf in tree.leaves():
+            leaf.props["species_label"] = leaf.name[0]
+
+        counts = annotate_duplication_confidence_and_count_species(tree)
+
+        left, right = tree.children
+        assert counts[tree] == 3
+        assert counts[left] == counts[right] == 2
+        assert counts[left.children[0]] == 1
+        assert tree.props["dup_conf_score"] == 1 / 3
+        assert left.props["dup_conf_score"] == right.props["dup_conf_score"] == 0.0
+
     @pytest.mark.parametrize(
         "first,second,expected",
         [

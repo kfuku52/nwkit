@@ -57,6 +57,21 @@ def test_early_burst_rate_is_rejected_when_star_profile_is_flat():
         compute_eb_marginals(tree, {"A": 0.0, "B": 1.0, "C": 2.0, "D": 3.0})
 
 
+def test_legacy_early_burst_api_refines_rate_in_relative_time_units():
+    values = {"A": 0.3, "B": 2.1, "C": 2.3, "D": 8.0}
+    tree = tree_from("(A:1,B:2,C:3,D:4)R;")
+    _, expected = compute_eb_marginals(tree, values, sigma2=1.0)
+    for node in tree.traverse():
+        if not node.is_root:
+            node.dist *= 1e180
+    _, fit = compute_eb_marginals(tree, values, sigma2=1e-180)
+    assert fit.eb_rate * 1e180 == pytest.approx(expected.eb_rate, rel=2e-7)
+    assert fit.restricted_log_likelihood == pytest.approx(
+        expected.restricted_log_likelihood, abs=1e-10
+    )
+    assert fit.fit_status == expected.fit_status == "ok"
+
+
 def test_drift_is_estimated_from_heterochronous_tips():
     tree = tree_from("(A:1,B:2,C:3,D:4)R;")
     values = {
@@ -67,6 +82,32 @@ def test_drift_is_estimated_from_heterochronous_tips():
     assert fit.drift == pytest.approx(2.0, abs=2e-7)
     assert fit.drift_estimated
     assert posterior[tree].mean == pytest.approx(1.0, abs=2e-7)
+
+
+@pytest.mark.parametrize("time_scale", [1e-180, 1e180])
+@pytest.mark.parametrize("sigma2", [None, 1.0])
+def test_drift_estimation_is_invariant_to_extreme_time_units(time_scale, sigma2):
+    values = {"A": 0.3, "B": 2.1, "C": 2.3, "D": 8.0}
+    tree = tree_from("(A:1,B:2,C:3,D:4)R;")
+    expected, expected_fit = compute_bm_drift_marginals(tree, values, sigma2=sigma2)
+    scaled = tree_from(
+        "("
+        + ",".join(
+            f"{name}:{index * time_scale}" for index, name in enumerate(values, 1)
+        )
+        + ")R;"
+    )
+    posterior, fit = compute_bm_drift_marginals(
+        scaled, values, sigma2=None if sigma2 is None else sigma2 / time_scale
+    )
+
+    assert fit.drift * time_scale == pytest.approx(expected_fit.drift, rel=2e-7)
+    assert fit.sigma2 * time_scale == pytest.approx(expected_fit.sigma2)
+    assert fit.restricted_log_likelihood == pytest.approx(
+        expected_fit.restricted_log_likelihood, abs=1e-10
+    )
+    assert posterior[scaled].mean == pytest.approx(expected[tree].mean, rel=2e-7)
+    assert posterior[scaled].variance == pytest.approx(expected[tree].variance)
 
 
 def test_drift_search_expands_beyond_ordinary_least_squares_scale():

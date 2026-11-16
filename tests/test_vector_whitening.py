@@ -5,22 +5,20 @@ import pytest
 from ete4 import Tree
 
 from nwkit.compiled_tree import CompiledTree
-from nwkit.vector_whitening import VectorTreeWhitening, vector_gls
+from nwkit.vector_whitening import VectorTreeWhitening, _mean_design_qr, vector_gls
 
 
 def dense_covariance(compiled, slopes, innovations, root):
-    n, p = slopes.shape
+    n, p = slopes.shape[:2]
     blocks = np.zeros((n, n, p, p))
     blocks[0, 0] = root
     for i in range(1, n):
         parent = compiled.parents[i]
+        slope = np.diag(slopes[i]) if slopes.ndim == 2 else slopes[i]
         for j in range(i):
-            blocks[i, j] = slopes[i, :, None] * blocks[parent, j]
+            blocks[i, j] = slope @ blocks[parent, j]
             blocks[j, i] = blocks[i, j].T
-        blocks[i, i] = (
-            slopes[i, :, None] * blocks[parent, parent] * slopes[i, None, :]
-            + innovations[i]
-        )
+        blocks[i, i] = slope @ blocks[parent, parent] @ slope.T + innovations[i]
     return np.block(
         [[blocks[i, j] for j in compiled.leaf_indices] for i in compiled.leaf_indices]
     )
@@ -29,11 +27,14 @@ def dense_covariance(compiled, slopes, innovations, root):
 @pytest.mark.parametrize("missing", [False, True])
 @pytest.mark.parametrize("noise", [0.0, 0.2])
 @pytest.mark.parametrize("random_root", [False, True])
-def test_joint_whitening_matches_dense(missing, noise, random_root):
+@pytest.mark.parametrize("full_slopes", [False, True])
+def test_joint_whitening_matches_dense(missing, noise, random_root, full_slopes):
     tree = CompiledTree.from_tree(Tree("((a:1,b:1):1,(c:1,(d:0.5,e:0.5):0.5):1);"))
     rng = np.random.default_rng(4)
     p, n = 3, len(tree.nodes)
     slopes = rng.uniform(0.3, 0.95, (n, p))
+    if full_slopes:
+        slopes = slopes[:, :, None] * np.eye(p) + rng.normal(0, 0.1, (n, p, p))
     matrices = rng.normal(size=(n, p, p))
     innovations = matrices @ np.swapaxes(matrices, 1, 2) + np.eye(p) * 0.2
     root = innovations[0] if random_root else np.zeros((p, p))
@@ -84,6 +85,41 @@ def test_zero_process_with_noise_and_singular_rejection():
         VectorTreeWhitening.build(
             *args, np.zeros((3, p, p)), root_covariance=np.zeros((p, p))
         )
+
+
+def test_qr_rank_tolerance_uses_observation_count():
+    design = np.zeros((256, 2))
+    design[0] = [1.0, 1.0]
+    design[1, 1] = 1e-14
+    with pytest.raises(ValueError, match="rank deficient"):
+        _mean_design_qr(design)
+    design[1, 1] = 1e-12
+    q, r, norms = _mean_design_qr(design)
+    np.testing.assert_allclose((q @ r) * norms, design)
+
+
+def test_multifurcation_whitening_matches_dense_covariance():
+    tips, traits = 40, 3
+    newick = "(" + ",".join(f"T{i}:1" for i in range(tips)) + ");"
+    tree = CompiledTree.from_tree(Tree(newick))
+    rng = np.random.default_rng(230)
+    slopes = rng.uniform(0.4, 0.9, (tips + 1, traits))
+    root = np.eye(traits) + 0.2
+    innovations = np.broadcast_to(root, (tips + 1, traits, traits))
+    errors = np.broadcast_to(np.zeros_like(root), (tips, traits, traits))
+    mask = rng.random((tips, traits)) > 0.2
+    dense = dense_covariance(tree, slopes, innovations, root)
+    dense = dense[np.ix_(mask.ravel(), mask.ravel())]
+    factor = VectorTreeWhitening.build(
+        tree, mask, slopes, innovations, errors, root_covariance=root
+    )
+    whitening = factor.apply(np.eye(mask.sum()))
+    np.testing.assert_allclose(
+        whitening @ dense @ whitening.T, np.eye(mask.sum()), atol=1e-12
+    )
+    assert factor.log_determinant == pytest.approx(
+        np.linalg.slogdet(dense)[1], abs=1e-12
+    )
 
 
 def test_observation_plan_reuse_and_identity_checks():

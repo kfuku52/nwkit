@@ -345,6 +345,9 @@ python tools/benchmark.py --case version --baseline /path/to/old/source
 python tools/benchmark.py --case help --baseline /path/to/old/source
 python tools/benchmark.py --case regress-help --baseline /path/to/old/source
 python tools/benchmark.py --case gaussian --tips 512 --repeat 3 --baseline /path/to/old/source
+python tools/benchmark.py --case asr-mixture --tips 128 --repeat 3 --baseline /path/to/old/source
+python tools/benchmark.py --case asr-threshold --tips 64 --repeat 3 --baseline /path/to/old/source
+python tools/benchmark.py --case glmm-poisson --tips 512 --repeat 3 --baseline /path/to/old/source
 ```
 
 JSON output includes wall time, process peak RSS, and comparable outputs. CLI
@@ -353,6 +356,18 @@ after imports and fixture construction. RSS includes the entire child process;
 it is reported as `null` on Windows, where `resource` is unavailable. The Gaussian
 case uses a seeded balanced tree, one response/predictor, REML, and automatic
 lambda estimation. It is not a benchmark of every family or tree shape.
+The Mk mixture case uses a fixed ER base rate and fits four gamma rate
+categories to 16 seeded three-state characters. It compares the likelihood,
+shape, category rates, category and node posterior probabilities, and
+convergence. The threshold case fits a four-state character with two seeded
+chains. It compares thresholds, node probabilities, and liability moments.
+A change in random-number consumption can change individual MCMC runs.
+Compare results across multiple seeds and inspect convergence before
+interpreting differences between samplers.
+The Poisson GLMM case uses one predictor and a simulated phylogenetic random
+effect. It compares coefficients, coefficient covariance, variance components,
+random modes, likelihood, and convergence and boundary flags. Random modes
+use an absolute tolerance of `5e-6` on the log-count scale.
 
 CLI output hashes ignore only the package version. Gaussian coefficients,
 coefficient covariance, likelihood, evolutionary parameter, variance components

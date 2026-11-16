@@ -14,6 +14,9 @@ from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
+from nwkit.draw_quality import measure_figure_renderer
+from nwkit.util import get_subtree_leaf_index_extents
+
 STATUS = ("single", "duplicated", "fragmented", "missing")
 STATUS_LABELS = ("Single-copy", "Duplicated", "Fragmented", "Missing")
 STATUS_COLOURS = ("#000000", "#B22222", "#666666", "#CCCCCC")
@@ -83,11 +86,27 @@ def interval_label(nodes):
     return "; ".join(labels)
 
 
-def read_branch_annotations(path, nodes, ys):
+def _clade_span(names, ranks):
+    try:
+        positions = [ranks[name] for name in names]
+    except KeyError:
+        return None
+    first, last = min(positions), max(positions)
+    count = len(positions)
+    return (first, last, count) if last - first + 1 == count else None
+
+
+def read_branch_annotations(path, nodes, ys, *, clade_lookup=None):
     """Map presentation symbols to exact stem branches, never estimate dates."""
     from matplotlib.colors import is_color_like
 
-    clades = {frozenset(node.leaf_names()): node for node in nodes}
+    if clade_lookup is None:
+        clades = {frozenset(node.leaf_names()): node for node in nodes}
+
+        def lookup(names):
+            return clades.get(frozenset(names))
+    else:
+        lookup = clade_lookup
     required = {"descendant_species", "label", "symbol"}
     optional = {"event_id", "colour", "branch_fraction"}
     events, identifiers, positions = [], set(), set()
@@ -110,7 +129,7 @@ def read_branch_annotations(path, nodes, ys):
                 )
             row = {key: value.strip() for key, value in row.items()}
             names = [name.strip() for name in row["descendant_species"].split(",")]
-            node = clades.get(frozenset(names))
+            node = lookup(names)
             if (
                 not all(names)
                 or len(names) != len(set(names))
@@ -243,11 +262,13 @@ def _prepare_tree_view(
         if len(order) != len(species) or set(order) != set(species):
             raise ValueError("Tip order must contain each tree species exactly once.")
         ranks = {name: rank for rank, name in enumerate(order)}
+        first_ranks = {}
         for node in tree.traverse(strategy="postorder"):
-            if not node.is_leaf:
-                node.children.sort(
-                    key=lambda child: min(ranks[name] for name in child.leaf_names())
-                )
+            if node.is_leaf:
+                first_ranks[node] = ranks[node.name]
+            else:
+                node.children.sort(key=first_ranks.__getitem__)
+                first_ranks[node] = first_ranks[node.children[0]]
         if list(tree.leaf_names()) != order:
             raise ValueError("Requested tip order is not compatible with the topology.")
     return inputs, leaves, order, outfile, outputs, species, tree
@@ -281,35 +302,48 @@ def _prepare_node_annotations(
             if not is_color_like(row["colour"]):
                 raise ValueError("Invalid tip annotation colour.")
             styles[name] = row
+    nodes = list(tree.traverse())
+    ranks = {name: index for index, name in enumerate(order)}
+    extents = (
+        get_subtree_leaf_index_extents(tree, ranks)
+        if age_clades or branch_annotations
+        else {}
+    )
     selected = set()
     if age_clades:
+        requested = set()
         for row in read_metadata_table(age_clades, ["descendant_species"]):
             names = [name.strip() for name in row["descendant_species"].split(",")]
             clade = frozenset(names)
-            if not all(names) or len(names) != len(clade) or clade in selected:
+            if not all(names) or len(names) != len(clade) or clade in requested:
                 raise ValueError(
                     "Age clades require unique nonempty species and no repeated clade."
                 )
-            selected.add(clade)
-        actual = {
-            frozenset(node.leaf_names()) for node in tree.traverse() if not node.is_leaf
+            requested.add(clade)
+        spans = {_clade_span(clade, ranks) for clade in requested}
+        selected = {
+            node for node, span in extents.items() if not node.is_leaf and span in spans
         }
-        if not selected <= actual:
+        if {extents[node] for node in selected} != spans:
             raise ValueError(
                 "A requested age label is not an internal clade in the tree."
             )
-    nodes = list(tree.traverse())
     count = len(species)
-    ranks = {name: index for index, name in enumerate(order)}
     ys = {leaf: float(count - 1 - ranks[leaf.name]) for leaf in leaves}
     for node in tree.traverse(strategy="postorder"):
         if not node.is_leaf:
             ys[node] = (ys[node.children[0]] + ys[node.children[-1]]) / 2
-    events = (
-        read_branch_annotations(branch_annotations, nodes, ys)
-        if branch_annotations
-        else []
-    )
+    events = []
+    if branch_annotations:
+        # Repeated unary clades select the last node in the existing tree order.
+        branch_by_span = {extents[node]: node for node in nodes}
+
+        def find_branch(names):
+            return branch_by_span.get(_clade_span(names, ranks))
+
+        events = read_branch_annotations(
+            branch_annotations, nodes, ys, clade_lookup=find_branch
+        )
     max_age = max(
         float(node.props.get("age_ci_high", node.props["age"])) for node in nodes
     )
@@ -647,8 +681,7 @@ def _draw_geological_axes(
     if period_texts:
         # Spread crowded names within the header while retaining their
         # original time anchors. A short leader connects a shifted name.
-        figure.canvas.draw()
-        renderer = figure.canvas.get_renderer()
+        renderer = measure_figure_renderer(figure)
         ordered = list(reversed(period_texts))
         widths = [text.get_window_extent(renderer).width for text in ordered]
         gap = 2 * figure.dpi / 72
@@ -822,7 +855,7 @@ def _draw_tip_and_age_labels(
         if node.is_leaf or not (
             node_ages == "all"
             or (node_ages == "root" and node.is_root)
-            or frozenset(node.leaf_names()) in selected
+            or node in selected
         ):
             continue
         text = axis.annotate(
@@ -839,11 +872,11 @@ def _draw_tip_and_age_labels(
 
 def _place_age_labels(age_texts, axis, branches, event_markers, figure):
     """Place age labels."""
-    figure.canvas.draw()
-    renderer = figure.canvas.get_renderer()
-    branch_pixels = [
-        (axis.transData.transform(a), axis.transData.transform(b)) for a, b in branches
-    ]
+    import numpy as np
+
+    if not age_texts and not event_markers:
+        return []
+    renderer = measure_figure_renderer(figure)
     event_boxes = [
         marker.get_window_extent(renderer).padded(1.2 * figure.dpi / 72)
         for marker in event_markers
@@ -856,6 +889,11 @@ def _place_age_labels(age_texts, axis, branches, event_markers, figure):
         raise ValueError(
             "Branch symbols overlap; adjust branch_fraction or increase figure size."
         )
+    if not age_texts:
+        return event_boxes
+    endpoints = axis.transData.transform(np.asarray(branches).reshape(-1, 2))
+    lower = np.minimum(endpoints[::2], endpoints[1::2])
+    upper = np.maximum(endpoints[::2], endpoints[1::2])
     occupied = list(event_boxes)
     for text in age_texts:
         placed = False
@@ -881,14 +919,11 @@ def _place_age_labels(age_texts, axis, branches, event_markers, figure):
             text.set_position((dx, dy))
             text.set_ha(align)
             box = text.get_window_extent(renderer).padded(0.5 * figure.dpi / 72)
-            crosses = any(
-                (
-                    min(a[0], b[0]) < box.x1
-                    and max(a[0], b[0]) > box.x0
-                    and min(a[1], b[1]) < box.y1
-                    and max(a[1], b[1]) > box.y0
-                )
-                for a, b in branch_pixels
+            crosses = np.any(
+                (lower[:, 0] < box.x1)
+                & (upper[:, 0] > box.x0)
+                & (lower[:, 1] < box.y1)
+                & (upper[:, 1] > box.y0)
             )
             if (
                 not crosses
@@ -1071,8 +1106,7 @@ def _validate_presentation_bounds(
     """Validate presentation bounds."""
     import matplotlib
 
-    figure.canvas.draw()
-    renderer = figure.canvas.get_renderer()
+    renderer = measure_figure_renderer(figure)
     period_boxes = [text.get_window_extent(renderer) for text in period_texts]
     if any(
         a.overlaps(b) for i, a in enumerate(period_boxes) for b in period_boxes[i + 1 :]

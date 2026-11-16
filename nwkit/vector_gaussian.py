@@ -7,11 +7,14 @@ are eliminated algebraically, without adding a numerical noise floor.
 
 import math
 from dataclasses import dataclass
+from fractions import Fraction
 
 import numpy as np
 from scipy.linalg import cho_factor, cho_solve
 
 from nwkit.compiled_tree import CompiledTree
+
+_ObservationFactor = tuple[np.ndarray, np.ndarray, float, dict[int, float]]
 
 
 @dataclass(frozen=True)
@@ -51,17 +54,24 @@ class VectorConditioning:
             raise ValueError("num_samples must be a positive integer.")
         rng = np.random.default_rng(seed)
         result = np.empty((num_samples, len(self.nodes), self.means.shape[1]))
+        previous = None
         for index in range(len(self.nodes)):
             covariance = self.conditional_covariances[index]
-            eigenvalues, eigenvectors = np.linalg.eigh((covariance + covariance.T) / 2)
-            tolerance = (
-                np.finfo(float).eps * max(1.0, float(np.max(np.abs(eigenvalues)))) * 100
-            )
-            if np.min(eigenvalues) < -tolerance:
-                raise ValueError(
-                    "Posterior conditional covariance is not positive semidefinite."
+            # Compare the bits so signed zeros cannot alter the seeded basis.
+            bits = covariance.tobytes()
+            if bits != previous:
+                eigenvalues, eigenvectors = np.linalg.eigh(_symmetric_part(covariance))
+                tolerance = (
+                    np.finfo(float).eps
+                    * max(1.0, float(np.max(np.abs(eigenvalues))))
+                    * 100
                 )
-            factor = eigenvectors * np.sqrt(np.maximum(eigenvalues, 0))
+                if np.min(eigenvalues) < -tolerance:
+                    raise ValueError(
+                        "Posterior conditional covariance is not positive semidefinite."
+                    )
+                factor = eigenvectors * np.sqrt(np.maximum(eigenvalues, 0))
+                previous = bits
             location = self.conditional_intercepts[index]
             if index:
                 location = (
@@ -82,30 +92,45 @@ def _array(value, shape, label):
     return result
 
 
-def _inverse(matrix, label):
+def _symmetric_part(matrix):
+    try:
+        with np.errstate(over="raise"):
+            return (matrix + matrix.T) / 2
+    except FloatingPointError:
+        with np.errstate(over="ignore"):
+            average = (matrix + matrix.T) / 2
+        overflowed = np.isinf(average) & np.isfinite(matrix) & np.isfinite(matrix.T)
+        average[overflowed] = matrix[overflowed] / 2 + matrix.T[overflowed] / 2
+        return average
+
+
+def _cholesky(matrix, label):
     if not np.allclose(matrix, matrix.T, rtol=1e-12, atol=1e-14):
         raise ValueError(f"{label} must be symmetric.")
     try:
-        factor = cho_factor(matrix, lower=True, check_finite=False)
+        return cho_factor(matrix, lower=True, check_finite=False)
     except np.linalg.LinAlgError as exc:
         raise ValueError(f"{label} must be positive definite.") from exc
+
+
+def _inverse(matrix, label):
+    factor = _cholesky(matrix, label)
     return cho_solve(factor, np.eye(len(matrix))), 2 * float(
         np.log(np.diag(factor[0])).sum()
     )
 
 
 def _observations(
-    process, compiled, observed, error_covariances
-) -> list[tuple[np.ndarray, np.ndarray, float, dict[int, float]]]:
-    d = process.dimension
-    factors: list[tuple[np.ndarray, np.ndarray, float, dict[int, float]]] = [
-        (np.zeros((d, d)), np.zeros(d), 0.0, {}) for _ in compiled.nodes
-    ]
+    d, compiled, observed, error_covariances
+) -> list[_ObservationFactor | None]:
+    factors: list[_ObservationFactor | None] = [None] * len(compiled.nodes)
     unknown = set(observed) - set(compiled.leaf_index_by_name)
     if unknown:
         raise ValueError(
             "Unknown vector observation tips: " + ", ".join(sorted(unknown))
         )
+    zero_covariance = np.zeros((d, d))
+    previous_noisy_covariance = None
     for name, values in observed.items():
         if values is None:
             continue
@@ -120,7 +145,7 @@ def _observations(
         if error_covariances is not None and name not in error_covariances:
             raise ValueError(f"Observation covariance is required for tip '{name}'.")
         covariance = (
-            np.zeros((d, d))
+            zero_covariance
             if error_covariances is None
             else _array(error_covariances[name], (d, d), "Observation covariance")
         )
@@ -131,12 +156,14 @@ def _observations(
                 "An exact observed coordinate cannot have nonzero error covariance."
             )
         noisy = np.flatnonzero(np.diag(covariance) != 0)
-        precision, linear, constant, fixed = factors[compiled.leaf_index_by_name[name]]
-        fixed.update({int(indices[i]): float(y[i]) for i in exact})
+        precision, linear, constant = np.zeros((d, d)), np.zeros(d), 0.0
+        fixed = {int(indices[i]): float(y[i]) for i in exact}
         if len(noisy):
-            inverse, logdet = _inverse(
-                covariance[np.ix_(noisy, noisy)], "Observation covariance"
-            )
+            noisy_covariance = covariance[np.ix_(noisy, noisy)]
+            bits = noisy_covariance.tobytes()
+            if bits != previous_noisy_covariance:
+                inverse, logdet = _inverse(noisy_covariance, "Observation covariance")
+                previous_noisy_covariance = bits
             selected = indices[noisy]
             precision[np.ix_(selected, selected)] += inverse
             linear[selected] += inverse @ y[noisy]
@@ -158,13 +185,21 @@ def _restrict(precision, linear, constant, fixed):
     return free, coordinates, reduced_linear, float(constant)
 
 
-def _propagate(precision, linear, constant, fixed, transition, dimension):
+def _validated_positive_transition(transition, dimension):
     slope = _array(transition.slope, (dimension, dimension), "Branch slope")
     intercept = _array(transition.intercept, (dimension,), "Branch intercept")
     covariance = _array(
         transition.covariance, (dimension, dimension), "Branch covariance"
     )
-    _inverse(covariance, "Branch covariance")
+    # Branch validation only needs the finite Cholesky factor.
+    np.asarray_chkfinite(_cholesky(covariance, "Branch covariance")[0])
+    return slope, intercept, covariance
+
+
+def _propagate(
+    precision, linear, constant, fixed, branch, dimension, *, retain_conditional=True
+):
+    slope, intercept, covariance = branch
     free, coordinates, reduced_linear, constant = _restrict(
         precision, linear, constant, fixed
     )
@@ -191,9 +226,24 @@ def _propagate(precision, linear, constant, fixed, transition, dimension):
         conditional_prior_slope -= gain @ exact_slope
         conditional_prior_mean += gain @ delta
         conditional_prior_covariance -= gain @ covariance[np.ix_(constrained, free)]
-    conditional_covariance = np.zeros((dimension, dimension))
-    conditional_slope = np.zeros((dimension, dimension))
-    location = coordinates.copy()
+        if dimension == 2 and len(free) == 1:
+            f, c = free[0], constrained[0]
+            variance = covariance[f, f]
+            if conditional_prior_covariance[0, 0] <= variance * 1e-4:
+                # Close to perfect correlation, rounding in gain can dominate
+                # the Schur complement. Evaluate it from the original entries.
+                cross = Fraction(float(covariance[f, c]))
+                reverse_cross = Fraction(float(covariance[c, f]))
+                observed_variance = Fraction(float(covariance[c, c]))
+                residual = (
+                    Fraction(float(variance))
+                    - cross * reverse_cross / observed_variance
+                )
+                if residual <= 0:
+                    raise ValueError(
+                        "Conditional branch covariance must be positive definite."
+                    )
+                conditional_prior_covariance[0, 0] = float(residual)
     if len(free):
         local_precision = precision[np.ix_(free, free)]
         update = np.eye(len(free)) + conditional_prior_covariance @ local_precision
@@ -201,7 +251,7 @@ def _propagate(precision, linear, constant, fixed, transition, dimension):
         # equal innovation precisions loses weak/missing-subtree information.
         gain = np.linalg.solve(update, np.eye(len(free)))
         posterior_covariance = gain @ conditional_prior_covariance
-        posterior_covariance = (posterior_covariance + posterior_covariance.T) / 2
+        posterior_covariance = _symmetric_part(posterior_covariance)
         effective_precision = local_precision @ gain
         effective_linear = gain.T @ reduced_linear
         sign, logdet = np.linalg.slogdet(update)
@@ -220,18 +270,20 @@ def _propagate(precision, linear, constant, fixed, transition, dimension):
             )
             + effective_linear @ mean
         )
+    message_precision = _symmetric_part(message_precision)
+    message = (message_precision, message_linear, constant)
+    if not retain_conditional:
+        return message, None
+    conditional_covariance = np.zeros((dimension, dimension))
+    conditional_slope = np.zeros((dimension, dimension))
+    if len(free):
         conditional_covariance[np.ix_(free, free)] = posterior_covariance
         conditional_slope[free] = gain @ matrix
-        location[free] = gain @ mean + posterior_covariance @ reduced_linear
-    message_precision = (message_precision + message_precision.T) / 2
-    return (message_precision, message_linear, constant), (
-        conditional_slope,
-        location,
-        conditional_covariance,
-    )
+        coordinates[free] = gain @ mean + posterior_covariance @ reduced_linear
+    return message, (conditional_slope, coordinates, conditional_covariance)
 
 
-def _root(precision, linear, constant, fixed, process):
+def _root(precision, linear, constant, fixed, process, *, retain_conditional):
     d = process.dimension
     if process.root_mean is not None:
         mean = _array(process.root_mean, (d,), "Root mean")
@@ -239,25 +291,32 @@ def _root(precision, linear, constant, fixed, process):
         # Integrate in covariance form. Adding a nearly singular root's huge
         # precision and then subtracting its quadratic form can create a
         # spurious positive likelihood during covariance optimization.
+        branch = _validated_positive_transition(
+            VectorTransition(np.zeros((d, d)), mean, covariance), d
+        )
         message, conditional = _propagate(
             precision,
             linear,
             constant,
             fixed,
-            VectorTransition(np.zeros((d, d)), mean, covariance),
+            branch,
             d,
+            retain_conditional=retain_conditional,
         )
+        if conditional is None:
+            return None, None, float(message[2])
         return conditional[1], conditional[2], float(message[2])
     elif process.root_covariance is not None:
         raise ValueError("Root covariance requires a root mean.")
     free, mean, reduced_linear, constant = _restrict(precision, linear, constant, fixed)
-    covariance = np.zeros((d, d))
+    covariance = np.zeros((d, d)) if retain_conditional else None
     if len(free):
         inverse, logdet = _inverse(
             precision[np.ix_(free, free)], "Root posterior precision"
         )
         mean[free] = inverse @ reduced_linear
-        covariance[np.ix_(free, free)] = inverse
+        if covariance is not None:
+            covariance[np.ix_(free, free)] = inverse
         constant += 0.5 * (
             len(free) * math.log(2 * math.pi) - logdet + reduced_linear @ mean[free]
         )
@@ -270,37 +329,102 @@ def condition_vector_tree(process, observed, *, error_covariances=None):
     if isinstance(d, bool) or not isinstance(d, int) or d < 1:
         raise ValueError("Vector dimension must be a positive integer.")
     compiled = CompiledTree.from_tree(process.tree)
-    local = _observations(process, compiled, observed, error_covariances)
-    n = len(compiled.nodes)
-    slopes = np.zeros((n, d, d))
-    intercepts = np.zeros((n, d))
-    covariances = np.zeros((n, d, d))
+    local = _observations(d, compiled, observed, error_covariances)
+    return _condition_vector_tree(process, compiled, local)
+
+
+def prepare_vector_conditioning(
+    compiled, dimension, observed, *, error_covariances=None
+):
+    """Reuse observation factors for likelihood or full posterior evaluation."""
+    factors: list[_ObservationFactor | None] | None = None
+
+    def condition(process, *, likelihood_only=False):
+        nonlocal factors
+        compiled.require_tree(process.tree)
+        if process.dimension != dimension:
+            raise ValueError("Vector process dimension differs from its observations.")
+        if factors is None:
+            factors = _observations(dimension, compiled, observed, error_covariances)
+        if likelihood_only:
+            return _prune_vector_tree(process, compiled, factors.copy())[2]
+        return _condition_vector_tree(process, compiled, factors.copy())
+
+    return condition
+
+
+def _prune_vector_tree(process, compiled, local, conditionals=None):
+    d = process.dimension
+    identity = np.eye(d)
+    zero_covariance = np.zeros((d, d))
+    zero_intercept = np.zeros(d)
+    empty: _ObservationFactor = (zero_covariance, zero_intercept, 0.0, {})
+    previous_transition = object()
+    branch = None
+    branch_covariance = None
+    if conditionals is not None:
+        slopes, intercepts, covariances = conditionals
     for index in compiled.postorder:
         if index == 0:
             break
-        precision, linear, constant, fixed = local[index]
-        parent = compiled.parents[index]
-        parent_precision, parent_linear, parent_constant, parent_fixed = local[parent]
         transition = process.transitions[compiled.nodes[index]]
-        if np.array_equal(transition.covariance, np.zeros((d, d))):
-            if not np.array_equal(transition.slope, np.eye(d)) or not np.array_equal(
-                transition.intercept, np.zeros(d)
-            ):
-                raise ValueError(
-                    "Zero-variance vector branches must be identity transitions."
-                )
-            for trait, value in fixed.items():
-                if trait in parent_fixed and parent_fixed[trait] != value:
+        if transition is not previous_transition:
+            previous_transition = transition
+            if np.array_equal(transition.covariance, zero_covariance):
+                if not np.array_equal(transition.slope, identity) or not np.array_equal(
+                    transition.intercept, zero_intercept
+                ):
                     raise ValueError(
-                        "Conflicting exact observations across zero-length branches."
+                        "Zero-variance vector branches must be identity transitions."
                     )
-                parent_fixed[trait] = value
+                branch = None
+            else:
+                branch = _validated_positive_transition(transition, d)
+            branch_covariance = None
+        factor = local[index]
+        if factor is None:
+            # A subtree without observations leaves its branch prior unchanged.
+            if conditionals is None:
+                continue
+            if branch is not None:
+                if branch_covariance is None:
+                    branch_covariance = _symmetric_part(branch[2])
+                slopes[index], intercepts[index], covariances[index] = (
+                    branch[0],
+                    branch[1],
+                    branch_covariance,
+                )
+            else:
+                slopes[index] = identity
+            continue
+        precision, linear, constant, fixed = factor
+        parent = compiled.parents[index]
+        parent_precision, parent_linear, parent_constant, parent_fixed = (
+            local[parent] or empty
+        )
+        if branch is None:
+            if fixed:
+                # Cached local observation factors can be shared between fits.
+                parent_fixed = parent_fixed.copy()
+                for trait, value in fixed.items():
+                    if trait in parent_fixed and parent_fixed[trait] != value:
+                        raise ValueError(
+                            "Conflicting exact observations across zero-length branches."
+                        )
+                    parent_fixed[trait] = value
             message = precision, linear, constant
-            slopes[index] = np.eye(d)
+            conditional = identity, zero_intercept, zero_covariance
         else:
             message, conditional = _propagate(
-                precision, linear, constant, fixed, transition, d
+                precision,
+                linear,
+                constant,
+                fixed,
+                branch,
+                d,
+                retain_conditional=conditionals is not None,
             )
+        if conditionals is not None:
             slopes[index], intercepts[index], covariances[index] = conditional
         local[parent] = (
             parent_precision + message[0],
@@ -308,9 +432,25 @@ def condition_vector_tree(process, observed, *, error_covariances=None):
             parent_constant + message[2],
             parent_fixed,
         )
-    precision, linear, constant, fixed = local[0]
-    intercepts[0], covariances[0], likelihood = _root(
-        precision, linear, constant, fixed, process
+    precision, linear, constant, fixed = local[0] or empty
+    return _root(
+        precision,
+        linear,
+        constant,
+        fixed,
+        process,
+        retain_conditional=conditionals is not None,
+    )
+
+
+def _condition_vector_tree(process, compiled, local):
+    d = process.dimension
+    n = len(compiled.nodes)
+    slopes = np.zeros((n, d, d))
+    intercepts = np.zeros((n, d))
+    covariances = np.zeros((n, d, d))
+    intercepts[0], covariances[0], likelihood = _prune_vector_tree(
+        process, compiled, local, (slopes, intercepts, covariances)
     )
     means = intercepts.copy()
     marginal_covariances = covariances.copy()

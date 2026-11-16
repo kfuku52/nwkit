@@ -17,6 +17,7 @@ from nwkit.shift_native_input import (
     read_native_data,
     read_native_layout,
 )
+from nwkit.shift_native_model import _normalized_ou_duration
 from nwkit.shift_native_provenance import native_provenance, read_native_resume
 
 
@@ -46,15 +47,6 @@ def _finite_optima_supported(record, fit):
     return not limits or max(limits) < fit.log_likelihood - 1.920729410347062
 
 
-def _remaining_times(tree):
-    remaining = np.zeros(len(tree.branch_ids))
-    for i in tree.compiled.postorder:
-        if i:
-            parent = tree.compiled.parents[i]
-            remaining[parent] = max(remaining[parent], tree.times[i] + remaining[i])
-    return remaining
-
-
 def native_tables(data, result, regime_names=None):
     tree, layout = data.tree, result["layout"]
     tip_names = tree.leaf_names
@@ -62,7 +54,9 @@ def native_tables(data, result, regime_names=None):
         "baseline" if 0 in group else f"shift_{min(group)}" for group in layout.groups
     ]
     node_groups = layout.node_groups(tree)
-    remaining = _remaining_times(tree)
+    shift_nodes = sorted(tree.indices_by_branch[branch] for branch in layout.shifts)
+    shift_parents = [tree.compiled.parents[node] for node in shift_nodes]
+    shift_ages = tree.remaining_times[shift_parents]
     branches = [
         {
             "branch_id": branch,
@@ -101,22 +95,14 @@ def native_tables(data, result, regime_names=None):
                     "optimum_identifiable": identified,
                 }
             )
-        for i, branch in enumerate(tree.branch_ids):
-            if branch not in layout.shifts:
-                continue
-            parent = tree.compiled.parents[i]
+        weights = (
+            np.ones_like(shift_ages)
+            if math.isinf(fit.alpha_height)
+            else _normalized_ou_duration(fit.alpha_height, shift_ages)
+        )
+        for i, parent, weight in zip(shift_nodes, shift_parents, weights, strict=True):
+            branch = tree.branch_ids[i]
             group, inherited = node_groups[i], node_groups[parent]
-            age = remaining[parent]
-            weight = (
-                age
-                if fit.alpha_height == 0
-                else (
-                    1.0
-                    if math.isinf(fit.alpha_height)
-                    else -math.expm1(-fit.alpha_height * age)
-                    / -math.expm1(-fit.alpha_height)
-                )
-            )
             delta = offsets[group] - offsets[inherited]
             effects.append(
                 {

@@ -14,6 +14,7 @@ from nwkit.shift_native_heuristic import NativeSearchOptions
 from nwkit.shift_native_model import ShiftLayout
 from nwkit.shift_native_screen import (
     _kkt_residual,
+    _loss_gradient,
     _proximal_step,
     _whitened_matrices,
 )
@@ -50,13 +51,20 @@ def _candidate_path(data, fit, options, point_budget):
     )
     maximum = float(np.max(np.linalg.norm(gradient, axis=1)))
     coefficients = np.zeros((len(branches), len(responses)))
+    loss, gradient = _loss_gradient(matrices, responses, coefficients)
     step = 1 / max(1.0, max(float(np.sum(x * x)) for x in matrices))
     layouts, records = [], []
     for fraction in np.geomspace(0.999, 0.005, 80)[:point_budget]:
         strength = maximum * fraction
         for _iteration in range(options.lasso_iterations):
-            coefficients, gradient, step = _proximal_step(
-                matrices, responses, coefficients, strength, step
+            coefficients, loss, gradient, step = _proximal_step(
+                matrices,
+                responses,
+                coefficients,
+                strength,
+                step,
+                loss=loss,
+                gradient=gradient,
             )
             residual = _kkt_residual(coefficients, gradient, strength)
             if residual <= 1e-5 * max(1.0, maximum):

@@ -3,8 +3,7 @@ import pytest
 from ete4 import Tree
 
 from nwkit.time_tree import (
-    _credible_interval,
-    _hpd_interval,
+    _age_order_statistics,
     annotate_mcmctree_calibrations,
     infer_node_ages_from_branch_lengths,
     paml_node_mapping,
@@ -71,10 +70,28 @@ def test_explicit_ages_and_zero_length_branches_are_preserved():
 
 
 def test_mcmctree_interval_indices_match_paml_order_statistics():
-    values = np.arange(10, dtype=float)
+    values = np.arange(9, -1, -1, dtype=float)
 
-    assert _hpd_interval(values, 0.8) == (0.0, 8.0)
-    assert _credible_interval(values, 0.8, "equal-tail") == (1.0, 9.0)
+    assert _age_order_statistics(values, 0.8, "hpd") == (4.5, 0.0, 8.0)
+    assert _age_order_statistics(values, 0.8, "equal-tail") == (4.5, 1.0, 9.0)
+
+
+@pytest.mark.parametrize("point", ["mean", "median"])
+@pytest.mark.parametrize("ci", ["hpd", "equal-tail"])
+def test_mcmctree_dated_tree_preserves_finite_large_node_ages(point, ci):
+    tree = Tree("((A,B),C);", parser=1)
+    posterior = read_mcmctree_posterior(
+        "Gen t_n4 t_n5\n1 1.6e308 9e307\n2 1.4e308 1e308\n", tree
+    )
+    summarize_mcmctree_posterior(tree, posterior, point=point, ci=ci, level=0.8)
+
+    assert tree.props["age_mean"] == pytest.approx(1.5e308)
+    assert tree.props["age_median"] == pytest.approx(1.5e308)
+    assert tree.props["age_ci_low"] == pytest.approx(1.4e308)
+    assert tree.props["age_ci_high"] == pytest.approx(1.6e308)
+    internal = tree.common_ancestor(["A", "B"])
+    assert internal.dist == pytest.approx(5.5e307)
+    assert tree["A"].dist == pytest.approx(9.5e307)
 
 
 @pytest.mark.parametrize("use_file", [False, True])
@@ -172,6 +189,22 @@ def test_posterior_rejects_chronologically_invalid_sample(tmp_path):
 
     with pytest.raises(ValueError, match="older than its parent"):
         read_mcmctree_posterior(path, tree)
+
+
+@pytest.mark.parametrize("scale", [1e-180, 1e180])
+def test_posterior_age_order_validation_does_not_depend_on_units(scale):
+    tree = Tree("((A,B),C);", parser=1)
+    with pytest.raises(ValueError, match="older than its parent"):
+        read_mcmctree_posterior(f"Gen t_n4 t_n5\n1 {scale} {2 * scale}\n", tree)
+    posterior = read_mcmctree_posterior(f"Gen t_n4 t_n5\n1 {2 * scale} {scale}\n", tree)
+    summarize_mcmctree_posterior(tree, posterior)
+    assert tree["A"].dist / scale == pytest.approx(1.0)
+
+
+def test_inferred_dated_ages_avoid_overflow_in_child_path_average():
+    tree = Tree("(A:1.7e308,B:1.7e308);", parser=1)
+    infer_node_ages_from_branch_lengths(tree)
+    assert tree.props["age"] == 1.7e308
 
 
 def test_posterior_rejects_nonbinary_topology(tmp_path):

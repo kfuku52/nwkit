@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import pytest
 from ete4 import Tree
@@ -69,6 +70,62 @@ def test_tip_sampling_variance_diagonal_rejects_invalid_values(invalid):
             replicate_model_by_trait={"value": "pooled"},
             return_sampling_covariance=True,
         )
+
+
+def test_dense_tip_sampling_covariance_keeps_small_projected_variance():
+    tree = Tree("((A:1,B:1):1,C:2);", parser=1)
+    names = ["A", "B", "C"]
+    diagonal = np.array([1e-200, 2e-200, 1.0])
+    common = dict(
+        sampling_covariance_by_trait={
+            "value": pd.DataFrame(np.diag(diagonal), index=names, columns=names)
+        },
+        replicate_model_by_trait={"value": "pooled"},
+        return_sampling_covariance=True,
+    )
+    table, covariance = build_contrast_table(
+        tree, {"value": {"A": 1.0, "B": 3.0, "C": 4.0}}, **common
+    )
+    assert table["sampling_variance"].min() == pytest.approx(3e-200, abs=0.0)
+    assert covariance["sampling_covariance"].abs().min() == pytest.approx(
+        5e-201, abs=0.0
+    )
+
+
+def test_contrast_table_preserves_trait_specific_sampling_covariance():
+    tree = Tree("((A:1,B:1):1,C:2);", parser=1)
+    values = {
+        "first": {"A": 1.0, "B": 3.0, "C": 4.0},
+        "second": {"A": 5.0, "B": 2.0, "C": -3.0},
+    }
+    covariances = {
+        "first": np.array([0.1, 0.2, 0.3]),
+        "second": np.array([0.8, 0.1, 0.2]),
+    }
+    options = dict(
+        evolution_model="lambda",
+        evolution_parameter=0.65,
+        return_sampling_covariance=True,
+    )
+    table, covariance = build_contrast_table(
+        tree,
+        values,
+        sampling_covariance_by_trait=covariances,
+        replicate_model_by_trait=dict.fromkeys(values, "pooled"),
+        **options,
+    )
+    for trait, observations in values.items():
+        expected, expected_covariance = build_contrast_table(
+            tree,
+            {trait: observations},
+            sampling_covariance_by_trait={trait: covariances[trait]},
+            replicate_model_by_trait={trait: "pooled"},
+            **options,
+        )
+        for combined, single in ((table, expected), (covariance, expected_covariance)):
+            pd.testing.assert_frame_equal(
+                combined.loc[combined["trait"] == trait].reset_index(drop=True), single
+            )
 
 
 def test_contrast_sign_is_invariant_to_newick_child_order():
@@ -434,6 +491,23 @@ def test_stable_variance_formula_avoids_overflow_and_underflow():
     result = calculate_contrasts(tiny, {"A": 1, "B": 2, "C": 3})
     assert result[tiny]["contrast_variance"] == pytest.approx(
         2.5e-300, rel=1e-12, abs=0
+    )
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_ancestral_estimate_retains_representable_weighted_tip(reverse):
+    from fractions import Fraction
+
+    lengths = (1e-100, 1e300)
+    values = (0.0, 1e300)
+    if reverse:
+        lengths, values = lengths[::-1], values[::-1]
+    tree = Tree(f"(A:{lengths[0]},B:{lengths[1]});", parser=1)
+    result = calculate_contrasts(tree, dict(zip("AB", values, strict=True)))
+    a, b = map(Fraction, lengths)
+    expected = (b * Fraction(values[0]) + a * Fraction(values[1])) / (a + b)
+    assert result[tree]["ancestral_estimate"] == pytest.approx(
+        float(expected), rel=2e-15, abs=0
     )
 
 

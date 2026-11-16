@@ -65,6 +65,23 @@ def model_mapping(metadata, design):
     return mapping, tuple(groups)
 
 
+def fixed_events_from_count_model(metadata, design):
+    by_clade = {clade: i for i, clade in enumerate(design.clade_ids)}
+    events = []
+    for row in metadata.get("fixed_background_events", ()):
+        node = by_clade.get(row["species_event_id"])
+        if node is None or node == 0:
+            raise ValueError(
+                "Fixed background event does not match a non-root clade in the species tree."
+            )
+        events.append(
+            MultiplicationEvent(
+                node, row["retention"], row["event_fraction"], row["multiplicity"]
+            )
+        )
+    return tuple(events)
+
+
 def wgd_tree_main(args):
     paths = {
         role: getattr(args, role)
@@ -109,6 +126,7 @@ def wgd_tree_main(args):
         else Path(args.count_model).read_text()
     )
     mapping, groups = model_mapping(metadata, design)
+    fixed = fixed_events_from_count_model(metadata, design)
     model = TopologyLikelihood(
         design,
         gene,
@@ -117,6 +135,7 @@ def wgd_tree_main(args):
         rate_scales=metadata["family_rate_scales"],
         ascertainment=args.ascertainment,
         max_tips=args.max_tips,
+        fixed_events=fixed,
     )
     options = {"tolerance": args.tolerance, "origin_tolerance": args.origin_tolerance}
     background = metadata["background"]
@@ -138,6 +157,7 @@ def wgd_tree_main(args):
         for node, identifier in zip(nodes, gene.node_ids, strict=True)
     }
     rows, results = [], []
+    fixed_nodes = {event.node for event in fixed}
     for item in candidates:
         fit = item["event"]
         selected = fit["event"]
@@ -148,7 +168,21 @@ def wgd_tree_main(args):
         event = MultiplicationEvent(
             node, selected["retention"], selected["fraction"], selected["multiplicity"]
         )
-        result = model.evaluate(fit["rates"], fit["root_mean"], event, **options)
+        # A zero-retention fit with the exact background parameters has the
+        # same topology likelihood and zero origin at every gene node.
+        identical_background = (
+            event.retention == 0
+            and event.multiplicity == 2
+            and node > 0
+            and node not in fixed_nodes
+            and fit["rates"] == background["rates"]
+            and fit["root_mean"] == background["root_mean"]
+        )
+        result = (
+            background_result
+            if identical_background
+            else model.evaluate(fit["rates"], fit["root_mean"], event, **options)
+        )
         results.append(
             {
                 "species_event_id": clade,
@@ -174,7 +208,11 @@ def wgd_tree_main(args):
                     "conditional_log_likelihood_difference": result.log_likelihood
                     - background_result.log_likelihood,
                     "parameter_source": "supplied_count_fit",
-                    "probability_meaning": "latent_node_origin_given_topology_parameters_and_one_event",
+                    "probability_meaning": (
+                        "latent_node_origin_at_candidate_given_topology_and_fixed_background"
+                        if fixed
+                        else "latent_node_origin_given_topology_parameters_and_one_event"
+                    ),
                 }
             )
     columns = [
@@ -207,6 +245,11 @@ def wgd_tree_main(args):
             "Later family origins, HGT, ILS, allopolyploid donor trees and triplication polytomy resolution are not modeled.",
         ],
     }
+    if fixed:
+        report["fixed_background_events"] = metadata["fixed_background_events"]
+        report["limitations"].append(
+            "Background doublings participate in all likelihoods, but only the additional candidate contributes origin markers."
+        )
     with output_transaction(paths.values()) as staged:
         for role, path in paths.items():
             Path(staged[path]).write_text(

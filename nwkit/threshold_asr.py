@@ -9,10 +9,13 @@ all thresholds may be supplied explicitly.
 
 import math
 from dataclasses import dataclass
+from fractions import Fraction
 
 import numpy as np
 import pandas as pd
-from scipy.special import log_ndtr, logsumexp, ndtri
+from scipy import special
+from scipy.fft import irfft, next_fast_len, rfft
+from scipy.special import log_ndtr, ndtri
 from scipy.stats import truncnorm
 
 from nwkit.compiled_tree import CompiledTree
@@ -29,6 +32,9 @@ from nwkit.threshold_diagnostics import (
     trace_storage,
 )
 from nwkit.util import assign_branch_ids, get_node_class, validate_unique_named_leaves
+
+_ndtri_exp = getattr(special, "ndtri_exp", None)
+_MAX_FLOAT = float(np.finfo(float).max)
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,30 +166,35 @@ def _allowed_intervals(allowed, thresholds):
     return intervals
 
 
-def _truncated_draw(mean, sd, allowed, thresholds, rng):
-    intervals = _allowed_intervals(allowed, thresholds)
-    log_masses = []
-    for lower, upper in intervals:
-        a = (lower - mean) / sd
-        b = (upper - mean) / sd
-        # Use survival probabilities in the positive tail, avoiding subtraction
-        # of two CDFs rounded to one. expm1 preserves narrow interval masses.
-        high, low = (
-            (log_ndtr(-a), log_ndtr(-b)) if a >= 0 else (log_ndtr(b), log_ndtr(a))
-        )
-        log_masses.append(high + np.log(-np.expm1(low - high)))
-    normalization = logsumexp(log_masses)
-    if not math.isfinite(normalization):
-        raise ValueError(
-            "Threshold conditional interval masses are not numerically resolvable."
-        )
-    interval = intervals[
-        int(rng.choice(len(intervals), p=np.exp(log_masses - normalization)))
-    ]
-    lower, upper = interval
-    a = -math.inf if lower == -math.inf else (lower - mean) / sd
-    b = math.inf if upper == math.inf else (upper - mean) / sd
-    return float(truncnorm.rvs(a, b, loc=mean, scale=sd, random_state=rng))
+def _truncated_draw(mean, sd, bounds, rng, *, thresholds=None):
+    if not math.isfinite(mean):
+        raise ValueError("An ordinal liability conditional mean is not finite.")
+    if thresholds is not None:
+        bounds = _allowed_intervals(bounds, thresholds)
+    if len(bounds) == 1:
+        lower, upper = bounds[0]
+        a, b = (lower - mean) / sd, (upper - mean) / sd
+    else:
+        intervals = [
+            ((lower - mean) / sd, (upper - mean) / sd) for lower, upper in bounds
+        ]
+        log_masses = _disjoint_interval_log_masses(bounds, intervals, mean, sd)
+        largest = float(np.max(log_masses))
+        if not math.isfinite(largest):
+            raise ValueError(
+                "Could not resolve the allowed ordinal liability intervals."
+            )
+        weights = np.exp(log_masses - largest)
+        index = int(rng.choice(len(intervals), p=weights / weights.sum()))
+        a, b = intervals[index]
+        lower, upper = bounds[index]
+    location = _interval_draw(lower, upper, a, b, mean, sd, rng)
+    # Ordinal categories use (lower, upper]. A continuous tail draw can
+    # round onto its excluded endpoint when projected back into trait units.
+    first_allowed = math.nextafter(lower, math.inf)
+    if not math.isfinite(location) or not math.isfinite(first_allowed):
+        raise ValueError("A sampled ordinal liability exceeds floating-point range.")
+    return min(upper, max(location, first_allowed))
 
 
 def _conditional_parameters(index, values, compiled, process):
@@ -217,19 +228,21 @@ def _initialize_values(compiled, constraints, thresholds, rng):
         category = int(rng.choice(allowed))
         lower, upper = _category_interval(category, thresholds)
         if math.isfinite(lower) and math.isfinite(upper):
-            values[index] = rng.uniform(lower, upper)
+            fraction = rng.random()
+            value = (1.0 - fraction) * lower + fraction * upper
         elif math.isfinite(lower):
-            values[index] = lower + rng.exponential(2.0)
+            value = lower + rng.exponential(2.0)
         elif math.isfinite(upper):
-            values[index] = upper - rng.exponential(2.0)
+            value = upper - rng.exponential(2.0)
+        else:
+            continue
+        values[index] = min(upper, max(value, math.nextafter(lower, math.inf)))
     return values
 
 
 def _update_thresholds(values, allowed_categories, thresholds, rng):
     if len(thresholds) <= 1:
         return
-    scale = max(1.0, float(np.max(np.abs(values))))
-    epsilon = np.finfo(float).eps * scale * 16.0
     for threshold_index in range(1, len(thresholds)):
         previous = float(thresholds[threshold_index - 1])
         following = (
@@ -237,25 +250,33 @@ def _update_thresholds(values, allowed_categories, thresholds, rng):
             if threshold_index + 1 < len(thresholds)
             else math.inf
         )
-        lower = previous + epsilon
-        upper = following - epsilon
-        for value, allowed in zip(values, allowed_categories, strict=True):
-            value = float(value)
-            if value <= previous or value > following:
-                continue
-            lower_category_allowed = threshold_index in allowed
-            upper_category_allowed = threshold_index + 1 in allowed
-            if lower_category_allowed and not upper_category_allowed:
-                lower = max(lower, value)
-            elif upper_category_allowed and not lower_category_allowed:
-                upper = min(upper, value)
-            elif not lower_category_allowed and not upper_category_allowed:
-                raise ValueError(
-                    "Ordinal threshold constraints are internally inconsistent."
-                )
-        if threshold_index + 1 < len(thresholds):
-            upper = min(upper, float(thresholds[threshold_index + 1]) - epsilon)
-        if not lower < upper:
+        # Categories are (lower, upper]. Preserve every representable
+        # admissible cut, including a singleton between adjacent floats.
+        relevant = (values > previous) & (values <= following)
+        allowed_lower = allowed_categories[threshold_index]
+        allowed_upper = allowed_categories[threshold_index + 1]
+        if np.any(relevant & ~allowed_lower & ~allowed_upper):
+            raise ValueError(
+                "Ordinal threshold constraints are internally inconsistent."
+            )
+        lower = float(
+            np.max(
+                values,
+                where=relevant & allowed_lower & ~allowed_upper,
+                initial=previous,
+            )
+        )
+        upper = float(
+            np.min(
+                values,
+                where=relevant & allowed_upper & ~allowed_lower,
+                initial=following,
+            )
+        )
+        if math.isfinite(upper):
+            upper = math.nextafter(upper, -math.inf)
+        lower = max(lower, math.nextafter(previous, math.inf))
+        if lower > upper:
             raise ValueError(
                 "Ordinal threshold update collapsed; increase MCMC burn-in or fix --thresholds."
             )
@@ -328,13 +349,20 @@ def compute_threshold_marginals(
     )
     estimate_thresholds = fixed_thresholds is None and len(states) > 2
     process = build_threshold_process(tree)
+    conditionals = _liability_conditionals(compiled, process)
+    bounds = _liability_bounds(constraints, initial_thresholds, estimate_thresholds)
     constrained_indices = np.asarray(tuple(constraints), dtype=int)
-    allowed_by_constraint = tuple(constraints[index] for index in constraints)
+    allowed_by_constraint = _allowed_categories_by_constraint(constraints, len(states))
     seed_sequences = np.random.SeedSequence(seed).spawn(chains)
     probability_counts = np.zeros((len(compiled.nodes), len(states)), dtype=float)
-    liability_sum = np.zeros(len(compiled.nodes), dtype=float)
-    liability_square_sum = np.zeros(len(compiled.nodes), dtype=float)
-    threshold_sum = np.zeros(len(states) - 1, dtype=float)
+    liability_mean = np.zeros(len(compiled.nodes), dtype=float)
+    liability_m2 = np.zeros(len(compiled.nodes), dtype=float)
+    total_draws = chains * num_samples
+    moment_limit, moment_exponents = _liability_moment_units(
+        compiled, process, initial_thresholds, total_draws
+    )
+    threshold_mean = initial_thresholds.copy()
+    retained_draws = 0
     total_sweeps = burnin + num_samples * thin
     shape = (chains, num_samples, len(compiled.nodes) + len(states) - 1)
     with trace_storage(shape) as diagnostic_traces:
@@ -350,14 +378,24 @@ def compute_threshold_marginals(
             retained = 0
             for sweep in range(total_sweeps):
                 for node_index in rng.permutation(len(compiled.nodes)):
-                    mean, sd = _conditional_parameters(
-                        int(node_index), values, compiled, process
+                    neighbors, sd = conditionals[node_index]
+                    mean = math.fsum(
+                        float(values[neighbor]) * weight
+                        for neighbor, weight in neighbors
                     )
-                    allowed = constraints.get(int(node_index))
+                    allowed = bounds.get(int(node_index))
                     values[node_index] = (
                         rng.normal(mean, sd)
                         if allowed is None
-                        else _truncated_draw(mean, sd, allowed, current_thresholds, rng)
+                        else _truncated_draw(
+                            mean,
+                            sd,
+                            allowed,
+                            rng,
+                            thresholds=current_thresholds
+                            if estimate_thresholds
+                            else None,
+                        )
                     )
                 if estimate_thresholds:
                     _update_thresholds(
@@ -370,9 +408,19 @@ def compute_threshold_marginals(
                     continue
                 categories = np.searchsorted(current_thresholds, values, side="left")
                 probability_counts[np.arange(len(values)), categories] += 1.0
-                liability_sum += values
-                liability_square_sum += values * values
-                threshold_sum += current_thresholds
+                retained_draws += 1
+                moment_values = _scaled_liability_values(
+                    values, liability_mean, liability_m2, moment_limit, moment_exponents
+                )
+                centered = moment_values - liability_mean
+                liability_mean += centered / retained_draws
+                liability_m2 += centered * (moment_values - liability_mean)
+                _accumulate_threshold_mean(
+                    threshold_mean,
+                    current_thresholds,
+                    retained_draws,
+                    estimate_thresholds,
+                )
                 diagnostic_traces[chain_index, retained, : len(values)] = values
                 diagnostic_traces[chain_index, retained, len(values) :] = (
                     current_thresholds
@@ -391,13 +439,14 @@ def compute_threshold_marginals(
         node: probability_counts[index] / total_draws
         for index, node in enumerate(compiled.nodes)
     }
-    means = liability_sum / total_draws
-    variances = np.maximum(0.0, liability_square_sum / total_draws - means * means)
+    means, variances = _liability_moments(
+        liability_mean, liability_m2, total_draws, moment_exponents
+    )
     liabilities = {
         node: GaussianMarginal(float(means[index]), float(variances[index]))
         for index, node in enumerate(compiled.nodes)
     }
-    fitted_thresholds = tuple(float(value) for value in threshold_sum / total_draws)
+    fitted_thresholds = tuple(float(value) for value in threshold_mean)
     summary = summarize_diagnostics(diagnostics)
     fit = ThresholdFit(
         thresholds=fitted_thresholds,
@@ -434,3 +483,298 @@ def threshold_liability_table(tree, fit):
             }
         )
     return pd.DataFrame(rows)
+
+
+def _normal_interval_log_mass(lower, upper):
+    # Reflect positive-tail intervals so the log CDF is evaluated in the tail.
+    if lower > 0.0:
+        lower, upper = -upper, -lower
+    log_upper = float(log_ndtr(upper))
+    log_lower = float(log_ndtr(lower))
+    if log_lower < log_upper:
+        return log_upper + math.log(-math.expm1(log_lower - log_upper))
+    if lower < upper and math.isfinite(log_upper):
+        # Near the center, distinct endpoints can round to the same CDF.
+        midpoint = 0.5 * lower + 0.5 * upper
+        return math.log(upper - lower) - 0.5 * (midpoint**2 + math.log(math.tau))
+    return -math.inf
+
+
+def _truncated_quantile(lower, upper, rng):
+    if _ndtri_exp is None or not lower < upper:
+        return float(truncnorm.rvs(lower, upper, random_state=rng))
+    uniform = float(rng.random())
+    if uniform == 0.0:
+        return lower
+    log_mass = _normal_interval_log_mass(lower, upper)
+    if lower >= 0.0 or (upper > 0.0 and uniform > 0.5):
+        log_survival = np.logaddexp(log_ndtr(-upper), math.log1p(-uniform) + log_mass)
+        return -float(_ndtri_exp(min(0.0, log_survival)))
+    log_cdf = np.logaddexp(log_ndtr(lower), math.log(uniform) + log_mass)
+    return float(_ndtri_exp(min(0.0, log_cdf)))
+
+
+def _narrow_interval_log_mass(lower, upper, a, b, sd):
+    if not math.isfinite(a) or b - a > 1e-12 * (1.0 + abs(a)):
+        return None
+    width = upper - lower
+    # In this regime the normal density changes by at most about one part in
+    # 1e8 across the interval. Work in raw units when CDF inversion loses width.
+    if width <= 0.0 or (width / sd) * (1.0 + abs(a)) > 1e-8:
+        return None
+    midpoint = 0.5 * a + 0.5 * b
+    return (
+        math.log(width)
+        - math.log(sd)
+        - (0.5 * midpoint) * midpoint
+        - 0.5 * math.log(math.tau)
+    )
+
+
+def _interval_log_mass(lower, upper, a, b, sd):
+    narrow_mass = _narrow_interval_log_mass(lower, upper, a, b, sd)
+    return _normal_interval_log_mass(a, b) if narrow_mass is None else narrow_mass
+
+
+def _relative_tail_log_masses(bounds, mean, sd):
+    # The large-distance normal mass is proportional to exp(-z²/2)/z
+    # times the integrated exponential over the finite interval. Subtract
+    # the nearest interval's exponent before converting to float, keeping
+    # even offsets that disappear in the standardized endpoints.
+    center = Fraction(float(mean))
+    variance = Fraction(float(sd)) ** 2
+    distances = [
+        abs(Fraction(lower if lower > mean else upper) - center)
+        for lower, upper in bounds
+    ]
+    closest = min(distances)
+    return np.asarray(
+        [
+            _relative_tail_log_mass(lower, upper, distance, closest, variance)
+            for (lower, upper), distance in zip(bounds, distances, strict=True)
+        ]
+    )
+
+
+def _relative_tail_log_mass(lower, upper, distance, closest, variance):
+    try:
+        penalty = float((distance - closest) * (distance + closest) / (2 * variance))
+    except OverflowError:
+        return -math.inf
+    log_mass = -penalty + _log_fraction(closest / distance)
+    if not math.isfinite(lower) or not math.isfinite(upper):
+        return log_mass
+    width = Fraction(upper) - Fraction(lower)
+    rate_width = width * distance / variance
+    if rate_width > 36:
+        return log_mass
+    if rate_width < 1e-15:
+        return log_mass + _log_fraction(rate_width)
+    return log_mass + math.log(-math.expm1(-float(rate_width)))
+
+
+def _log_fraction(value):
+    floating = float(value)
+    if floating >= 2.0**-1022:
+        return math.log(floating)
+    return math.log(value.numerator) - math.log(value.denominator)
+
+
+def _disjoint_interval_log_masses(bounds, intervals, mean, sd):
+    nearest = min(max(a, -b) for a, b in intervals)
+    if nearest >= 1e14:
+        return _relative_tail_log_masses(bounds, mean, sd)
+    return np.asarray(
+        [
+            _interval_log_mass(lower, upper, a, b, sd)
+            for (lower, upper), (a, b) in zip(bounds, intervals, strict=True)
+        ]
+    )
+
+
+def _interval_draw(lower, upper, a, b, mean, sd, rng):
+    narrow_mass = _narrow_interval_log_mass(lower, upper, a, b, sd)
+    if narrow_mass is not None:
+        return lower + float(rng.random()) * (upper - lower)
+    if a >= 1e5:
+        return _tail_interval_draw(lower, upper, a, mean, sd, rng)
+    if b <= -1e5:
+        return -_tail_interval_draw(-upper, -lower, -b, -mean, sd, rng)
+    if not a < b:
+        raise ValueError("Could not resolve the allowed ordinal liability interval.")
+    return mean + sd * _truncated_quantile(a, b, rng)
+
+
+def _tail_interval_draw(lower, upper, standardized_lower, mean, sd, rng):
+    # Shift the tail to the truncation boundary before drawing the excess.
+    # An exponential proposal with rate a for standardized excess z accepts
+    # with probability exp(-z**2/2), including for finite upper truncation.
+    width = upper - lower
+    reciprocal = 1.0 / standardized_lower
+    if math.isinf(standardized_lower):
+        distance = lower - mean
+        reciprocal = (
+            sd / distance
+            if math.isfinite(distance)
+            else ((0.5 * sd) / (0.5 * lower - 0.5 * mean))
+        )
+    scale = sd * reciprocal
+    if scale == 0.0:
+        return lower
+    ratio = width / scale
+    mass = -math.expm1(-ratio)
+    while True:
+        uniform = float(rng.random())
+        proposal = -math.log1p(-uniform * mass)
+        standardized_excess = proposal * reciprocal
+        if float(rng.random()) < math.exp(-0.5 * standardized_excess**2):
+            excess = width * uniform if ratio < 1e-12 else scale * proposal
+            return lower + excess
+
+
+def _liability_conditionals(compiled, process):
+    """Cache unit-Brownian conditional weights and standard deviations."""
+
+    assert process.root.variance is not None
+    variances = (process.root.variance,) + tuple(
+        process.transitions[node].variance for node in compiled.nodes[1:]
+    )
+    conditionals = []
+    for index, parent in enumerate(compiled.parents):
+        neighbors = (parent, *compiled.children[index])
+        edge_variances = (
+            variances[index],
+            *(variances[child] for child in compiled.children[index]),
+        )
+        smallest = min(edge_variances)
+        precisions = tuple(smallest / variance for variance in edge_variances)
+        total = math.fsum(precisions)
+        standard_deviation = math.sqrt(smallest) / math.sqrt(total)
+        weights = tuple(weight / total for weight in precisions)
+        # The identified Brownian root has mean zero and no parent value.
+        if index == 0:
+            neighbors = neighbors[1:]
+            weights = weights[1:]
+        conditionals.append(
+            (tuple(zip(neighbors, weights, strict=True)), standard_deviation)
+        )
+    return conditionals
+
+
+def _effective_sample_size(centered, pooled):
+    chains, samples = centered.shape
+    total_draws = chains * samples
+    if pooled == 0.0 or samples < 3:
+        return float(total_draws)
+
+    fft_size = next_fast_len(2 * samples - 1, real=True)
+    frequency = rfft(centered, n=fft_size, axis=1)
+    covariance = (
+        irfft(np.mean(frequency.real**2 + frequency.imag**2, axis=0), n=fft_size)[
+            :samples
+        ]
+        / samples
+    )
+    correlations = 1.0 - (covariance[0] - covariance) / pooled
+    correlations[0] = 1.0
+    paired = correlations[: 2 * (samples // 2)].reshape(-1, 2).sum(axis=1)
+    # Geyer's initial positive, monotone sequence of paired correlations.
+    nonpositive = np.flatnonzero(paired <= 0.0)
+    if len(nonpositive):
+        paired = paired[: nonpositive[0]]
+    autocorrelation_time = max(
+        1.0, 2.0 * float(np.minimum.accumulate(paired).sum()) - 1.0
+    )
+    return total_draws / autocorrelation_time
+
+
+def _rhat_and_ess(traces):
+    traces = np.asarray(traces, dtype=float)
+    chains, samples, dimensions = traces.shape
+    rhat = np.full(dimensions, np.nan, dtype=float)
+    ess = np.full(dimensions, chains * samples, dtype=float)
+    for dimension in range(dimensions):
+        values = traces[:, :, dimension]
+        if samples < 2:
+            continue
+        _, exponent = math.frexp(float(np.max(np.abs(values))))
+        scaled = np.ldexp(values, -exponent)
+        means = np.mean(scaled, axis=1, keepdims=True)
+        centered = scaled - means
+        within = float(np.sum(centered**2)) / (chains * (samples - 1))
+        between = float(np.var(means, ddof=1)) if chains > 1 else 0.0
+        pooled = (1.0 - 1.0 / samples) * within + between
+        if chains > 1:
+            rhat[dimension] = (
+                math.sqrt(pooled / within)
+                if within > 0.0
+                else 1.0
+                if between == 0.0
+                else math.inf
+            )
+        ess[dimension] = _effective_sample_size(centered, pooled)
+    return rhat, ess
+
+
+def _accumulate_threshold_mean(mean, thresholds, draw_count, estimated):
+    if estimated:
+        mean += (thresholds - mean) / draw_count
+
+
+def _allowed_categories_by_constraint(constraints, states):
+    allowed = np.zeros((states, len(constraints)), dtype=bool)
+    for index, categories in enumerate(constraints.values()):
+        allowed[categories, index] = True
+    return allowed
+
+
+def _liability_bounds(constraints, thresholds, estimated):
+    if estimated:
+        return constraints
+    return {
+        index: _allowed_intervals(allowed, thresholds)
+        for index, allowed in constraints.items()
+    }
+
+
+def _liability_moment_units(compiled, process, thresholds, retained_draws):
+    # Ordinary trees can accumulate squared deviations in their input units.
+    # For extreme branch lengths or thresholds, allow each node's units to
+    # grow with the magnitude of its actual draws.
+    limit = math.frexp(math.sqrt(_MAX_FLOAT / (256 * retained_draws)))[1] - 1
+    branch_variance = max(
+        (edge.variance for edge in process.transitions.values()), default=1.0
+    )
+    size = max(
+        math.sqrt(branch_variance) * math.sqrt(len(compiled.nodes)),
+        float(np.max(np.abs(thresholds))),
+    )
+    exponents = (
+        None
+        if size < math.ldexp(1.0, limit)
+        else np.zeros(len(compiled.nodes), dtype=int)
+    )
+    return limit, exponents
+
+
+def _scaled_liability_values(values, mean, m2, limit, exponents):
+    if exponents is None:
+        return values
+    _, value_exponents = np.frexp(values)
+    shift = np.maximum(value_exponents - limit - exponents, 0)
+    if np.any(shift):
+        np.ldexp(mean, -shift, out=mean)
+        np.ldexp(m2, -2 * shift, out=m2)
+        exponents += shift
+    return np.ldexp(values, -exponents)
+
+
+def _liability_moments(mean, m2, draws, exponents):
+    variance = np.maximum(0.0, m2 / draws)
+    with np.errstate(over="ignore"):
+        if exponents is not None:
+            mean = np.ldexp(mean, exponents)
+            variance = np.ldexp(variance, 2 * exponents)
+    if not np.isfinite(mean).all() or not np.isfinite(variance).all():
+        raise ValueError("An ordinal liability summary exceeds floating-point range.")
+    return mean, variance

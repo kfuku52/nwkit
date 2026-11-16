@@ -43,8 +43,9 @@ and the runnable [R comparison](../../examples/dtt/reference.R).
 
 `--scale raw` preserves squared-Euclidean geometry, so input units affect the
 relative importance of traits. `--scale standardize` divides each trait by its
-observed sample SD before analysis. Numerical centering and scaling are recorded
-in the model JSON. Every selected trait must be nonconstant.
+observed sample SD before analysis. The analysis centers on the first observation
+in each trait, or on the trait's midrange if the first subtraction would overflow.
+The model JSON records the center and scale. Every selected trait must be nonconstant.
 
 ## Brownian comparison and MDI
 

@@ -134,11 +134,9 @@ def _validate_table_sizes(tree, states, args, count):
 
 
 def write_extended_maps(tree, states, fit, args):
-    import pandas as pd
-
     from nwkit.asr import (
         _merge_simulation_counts,
-        _stochastic_map_rows,
+        _stochastic_map_table,
         _validated_simulation_threads,
         _write_table,
     )
@@ -168,23 +166,10 @@ def write_extended_maps(tree, states, fit, args):
         total, any_count = _merge_simulation_counts(
             draw.counts for draw in sample.draws
         )
-        rows = _stochastic_map_rows(
+        counts = _stochastic_map_table(
             tree, states, sample.branch_ids, total, any_count, len(sample.draws)
         )
-        # Preserve count-only columns, including for a root-only tree.
-        columns = (
-            "branch_id",
-            "parent",
-            "node_class",
-            "name",
-            "from_state",
-            "to_state",
-            "total_count",
-            "mean_count",
-            "posterior_frequency",
-            "num_simulations",
-        )
-        _write_table(pd.DataFrame(rows, columns=columns), args.stochastic_map_out)
+        _write_table(counts, args.stochastic_map_out)
     if getattr(args, "map_probabilities_out", None) or getattr(
         args, "map_figure_out", None
     ):

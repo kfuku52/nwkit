@@ -2,7 +2,9 @@
 
 import math
 from copy import copy
+from functools import lru_cache
 
+import numpy as np
 import pandas as pd
 from scipy.special import erfinv
 
@@ -21,11 +23,16 @@ def _safe_parameter_id(value):
     return "regime_" + text.encode("utf-8").hex()
 
 
-def _summary(marginal, ci_level):
-    sd = math.sqrt(marginal.variance)
+@lru_cache(maxsize=32)
+def _normal_interval_multiplier(ci_level):
     # This centered form retains both tiny levels, where 1-level rounds to one,
     # and the largest representable level below one.
-    width = math.sqrt(2.0) * float(erfinv(ci_level)) * sd
+    return math.sqrt(2.0) * float(erfinv(ci_level))
+
+
+def _summary(marginal, ci_level):
+    sd = math.sqrt(marginal.variance)
+    width = _normal_interval_multiplier(ci_level) * sd
     lower, upper = marginal.mean - width, marginal.mean + width
     if hasattr(marginal, "interval"):
         lower, upper = marginal.interval(ci_level)
@@ -46,43 +53,74 @@ def _summary(marginal, ci_level):
 def continuous_output_table(
     tree, selected_nodes, observed, errors, posterior, *, trait, ci_level
 ):
-    ids = assign_branch_ids(tree)
-    rows = []
+    selected_nodes = tuple(selected_nodes)
+    metadata = _asr_node_metadata(selected_nodes, assign_branch_ids(tree))
+    values, deviations, imputed = [], [], []
     for node in selected_nodes:
-        value = observed.get(str(node.name)) if node.is_leaf else None
-        error = 0.0 if errors is None else errors.get(str(node.name))
-        rows.append(
-            {
-                "branch_id": ids[node],
-                "parent": -1 if node.is_root else ids[node.up],
-                "node_class": get_node_class(node),
-                "name": "" if node.name in (None, "") else str(node.name),
-                "trait": trait,
-                "observed_value": "" if value is None else value,
-                "observed_se": "" if value is None else error,
-                "is_imputed": bool(node.is_leaf and value is None),
-                **_summary(posterior[node], ci_level),
-            }
-        )
-    return pd.DataFrame(
-        rows,
-        columns=[
-            "branch_id",
-            "parent",
-            "node_class",
-            "name",
-            "trait",
-            "observed_value",
-            "observed_se",
-            "is_imputed",
-            "mean",
-            "variance",
-            "sd",
-            "ci_lower",
-            "ci_upper",
-            "ci_level",
-        ],
+        name = str(node.name)
+        value = observed.get(name) if node.is_leaf else None
+        values.append("" if value is None else value)
+        error = 0.0 if errors is None else errors.get(name)
+        deviations.append("" if value is None else error)
+        imputed.append(bool(node.is_leaf and value is None))
+    marginals = [posterior[node] for node in selected_nodes]
+    return _asr_table_from_columns(
+        {
+            **metadata,
+            "trait": np.full(len(selected_nodes), trait, dtype=object),
+            "observed_value": values,
+            "observed_se": deviations,
+            "is_imputed": imputed,
+            **_marginal_columns(
+                np.asarray([marginal.mean for marginal in marginals], dtype=float),
+                np.asarray([marginal.variance for marginal in marginals], dtype=float),
+                ci_level,
+            ),
+        }
     )
+
+
+def _asr_node_metadata(nodes, ids):
+    return {
+        "branch_id": np.asarray([ids[node] for node in nodes], dtype=int),
+        "parent": np.asarray(
+            [-1 if node.is_root else ids[node.up] for node in nodes], dtype=int
+        ),
+        "node_class": np.asarray(
+            [get_node_class(node) for node in nodes], dtype=object
+        ),
+        "name": np.asarray(
+            ["" if node.name in (None, "") else str(node.name) for node in nodes],
+            dtype=object,
+        ),
+    }
+
+
+def _marginal_columns(means, variances, ci_level):
+    if np.any(variances < 0.0):
+        raise ValueError("An ancestral marginal variance is negative.")
+    sd = np.sqrt(variances)
+    width = _normal_interval_multiplier(ci_level) * sd
+    with np.errstate(over="ignore", invalid="ignore"):
+        lower, upper = means - width, means + width
+    if not np.isfinite(lower).all() or not np.isfinite(upper).all():
+        raise ValueError(
+            "An ancestral interval exceeds floating-point range; rescale the trait units."
+        )
+    return {
+        "mean": means,
+        "variance": variances,
+        "sd": sd,
+        "ci_lower": lower,
+        "ci_upper": upper,
+        "ci_level": np.full(means.size, ci_level),
+    }
+
+
+def _asr_table_from_columns(columns):
+    if not len(columns["branch_id"]):
+        return pd.DataFrame(columns=tuple(columns))
+    return pd.DataFrame(columns)
 
 
 def continuous_model_table(fit, args, ci_level):

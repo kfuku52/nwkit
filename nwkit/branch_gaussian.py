@@ -12,6 +12,7 @@ from nwkit.gaussian_tree import (
     GaussianRootPrior,
     GaussianTransition,
     GaussianTreeProcess,
+    _product_ratio,
 )
 from nwkit.util import assign_branch_ids
 
@@ -76,22 +77,6 @@ class GaussianJump:
         object.__setattr__(
             self, "variance", _finite(self.variance, "jump variance", nonnegative=True)
         )
-
-
-def _product_ratio(*factors: float, denominator: float = 1.0) -> float:
-    """Multiply finite nonnegative factors without intermediate range loss."""
-    if any(value == 0.0 for value in factors):
-        return 0.0
-    mantissa, exponent = 1.0, 0
-    for value in factors:
-        part, power = math.frexp(value)
-        mantissa *= part
-        exponent += power
-    divisor, power = math.frexp(denominator)
-    try:
-        return math.ldexp(mantissa / divisor, exponent - power)
-    except OverflowError as exc:
-        raise ValueError("Gaussian transition overflows floating-point range.") from exc
 
 
 def _variance_product(*factors: float, denominator: float = 1.0) -> float:

@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 
+from nwkit.compiled_tree import CompiledTree
 from nwkit.multivariate_gaussian_asr import fit_dense_mvbm
 from nwkit.util import read_tree
 from nwkit.vector_fit import fit_pruning_mvbm
@@ -143,6 +144,20 @@ def test_pruning_ou_matches_dense_fit(diagonal):
         assert sparse[node].covariance == pytest.approx(
             dense[node].covariance, abs=2e-4
         )
+
+
+def test_ou_branch_retains_short_edge_intercept():
+    from types import SimpleNamespace
+
+    from nwkit.vector_ou_fit import _process
+
+    tree = read_tree("(A:1e-18,B:1)R;", "1", True, quiet=True, rooted="yes")
+    data = SimpleNamespace(compiled=CompiledTree.from_tree(tree))
+    theta = np.array([1e18, -1e18])
+    process = _process(data, np.array([1.0, 0.5]), np.eye(2), theta)
+    branch = process.transitions[tree.children[0]]
+    np.testing.assert_array_equal(branch.slope, np.eye(2))
+    np.testing.assert_array_equal(branch.intercept, [1.0, -0.5])
 
 
 @pytest.mark.parametrize("diagonal", [False, True])

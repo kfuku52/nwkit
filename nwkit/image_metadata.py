@@ -393,8 +393,17 @@ def wikimedia_page_mentions_query(page, query_name):
     description = strip_html_markup(
         metadata.get("ImageDescription", {}).get("value", "")
     )
-    combined_text = " ".join([title_text, object_name, description]).lower()
-    return normalize_species_name(query_name).lower() in combined_text
+    combined_text = normalize_species_name(
+        " ".join([title_text, object_name, description])
+    )
+    query = normalize_species_name(query_name)
+    return bool(
+        query
+        and combined_text
+        and re.search(
+            r"(?<!\w)" + re.escape(query) + r"(?!\w)", combined_text, re.IGNORECASE
+        )
+    )
 
 
 def classify_wikimedia_asset(page):

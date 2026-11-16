@@ -9,6 +9,7 @@ import pytest
 
 from nwkit.mul_reconcile import annotated_mapping_text, run_search
 from nwkit.mul_reconcile_model import Reconciliation, hypotheses
+from nwkit.rooting_state import ROOTED_PROP, set_rooting_info
 from nwkit.species_parser import get_species_parser
 from nwkit.util import read_tree
 
@@ -106,11 +107,18 @@ def test_seeded_random_topologies_and_copy_counts_against_full_enumeration():
             second = subtrees.pop(rng.randrange(len(subtrees)))
             subtrees.append(f"({first},{second})")
         gene = tree(subtrees[0] + ";")
+        fast = {
+            index: score
+            for index, score, _ in run_search(
+                candidates, [gene], parser(), collect_checks=False
+            )
+        }
         for candidate in candidates:
             result = Reconciliation(gene, candidate.tree, parser())
             expected = exhaustive(gene, candidate.tree)
             assert sorted((dup, loss) for dup, loss, _ in result.mappings()) == expected
             assert result.score == sum(expected[0])
+            assert fast[candidate.id] == result.score
             assert result.num_maps == len(expected)
             checked += 1
     assert checked == 24 * len(candidates)
@@ -158,6 +166,21 @@ def test_selectors_numbering_and_candidate_placement():
         hypotheses(tree("((A,X),B);"), "A,B")
     with pytest.raises(ValueError, match="max-candidates"):
         hypotheses(tree("((A,X),B);"), max_candidates=1)
+
+
+@pytest.mark.parametrize("size", [(0.0, 0.0), (2.5, 3.0)])
+def test_hypothesis_graft_retains_branch_properties_and_size(size):
+    source = tree("((A,B),C);")
+    set_rooting_info(source, True)
+    source.children[0].props["metadata"] = "retained"
+    source.children[0].size = size
+
+    candidate = hypotheses(source, "A,B", "C")[1]
+    graft = candidate.tree.common_ancestor(["A*", "B*"])
+
+    assert graft.props["metadata"] == "retained"
+    assert ROOTED_PROP not in graft.props
+    assert graft.size == size
 
 
 @pytest.mark.parametrize("label", ["1", "<1>", "A+", "X*"])
@@ -227,10 +250,33 @@ def test_child_order_and_branch_lengths_do_not_change_parsimony():
 
 
 def test_unused_check_rows_are_not_collected():
-    rows = run_search(
-        hypotheses(tree("(A,B);")), [tree("(a_A,b_B);")], parser(), collect_checks=False
-    )
-    assert all(checks == [] for _, _, checks in rows)
+    species = tree("(((A,B),C),D);")
+    genes = [tree("(((a_A,b_B),a2_A),(a3_A,(b2_B,c_C)));"), tree("(a_A,d_D);")]
+    candidates = hypotheses(species)
+    detailed = run_search(candidates, genes, parser(), collect_checks=True)
+    for cpus in (1, 2):
+        rows = run_search(candidates, genes, parser(), cpus=cpus, collect_checks=False)
+        assert rows == tuple((candidate, score, []) for candidate, score, _ in detailed)
+
+
+@pytest.mark.parametrize("cpus", [1, 2])
+def test_search_reuses_single_pass_gene_and_candidate_inputs(cpus):
+    candidates = hypotheses(tree("((A,X),B);"), "X")
+    genes = [
+        tree("((a_A,x1_X),(b_B,x2_X));"),
+        tree("(a_A,b_B);"),
+    ]
+    expected = run_search(candidates, genes, parser())
+    assert run_search(iter(candidates), iter(genes), parser(), cpus=cpus) == expected
+
+
+def test_search_parses_each_gene_tip_once_across_hypotheses():
+    from unittest.mock import Mock
+
+    genes = [tree("((a_A,x1_X),(b_B,x2_X));"), tree("(x1_X,b_B);")]
+    species_parser = Mock(wraps=parser())
+    run_search(hypotheses(tree("((A,X),B);")), genes, species_parser)
+    assert species_parser.parse.call_count == 6
 
 
 def test_legacy_annotation_escapes_comment_metacharacters_but_json_retains_names():
@@ -264,6 +310,48 @@ def test_state_limit_is_failure_not_candidate_dependent_filter():
     candidate = hypotheses(tree("((A,X),B);"), "X", "B")[1]
     with pytest.raises(ValueError, match="max-state-pairs"):
         Reconciliation(tree("((a_A,x1_X),(b_B,x2_X));"), candidate.tree, parser(), 1)
+    with pytest.raises(ValueError, match="max-state-pairs"):
+        run_search(
+            [candidate],
+            [tree("((a_A,x1_X),(b_B,x2_X));")],
+            parser(),
+            max_state_pairs=1,
+            collect_checks=False,
+        )
+
+
+@pytest.mark.parametrize("cpus", [1, 2])
+def test_score_subtree_reuse_keeps_multiplicity_orientation_and_per_family_limits(cpus):
+    candidates = hypotheses(tree("((A,X),B);"), "X", "B")
+    genes = [
+        tree("(((a1_A,x1_X),(a2_A,x2_X)),b1_B);"),
+        tree("(b2_B,((x3_X,a3_A),(x4_X,a4_A)));"),
+        tree("((a5_A,x5_X),b3_B);"),
+    ]
+    expected = tuple(
+        run_search([candidate], genes, parser(), cpus=1, collect_checks=True)[0]
+        for candidate in candidates
+    )
+    assert run_search(candidates, genes, parser(), cpus=cpus) == expected
+    actual = run_search(candidates, genes, parser(), cpus=cpus, collect_checks=False)
+    assert [(i, s) for i, s, _ in actual] == [(i, s) for i, s, _ in expected]
+    # Reusing prior entries must not make repeated state pairs free under the cap.
+    first = max(
+        row["state.pairs"]
+        for _, _, rows in expected
+        for row in rows
+        if row["gene.tree"] == 1
+    )
+    repeated = genes[-1:] + [genes[1]]
+    with pytest.raises(ValueError, match="max-state-pairs"):
+        run_search(
+            candidates,
+            repeated,
+            parser(),
+            cpus=cpus,
+            collect_checks=False,
+            max_state_pairs=first - 1,
+        )
 
 
 def invoke(tmp_path, extra=(), text=None):

@@ -5,7 +5,12 @@ from nwkit.shift_native_fit import fit_native_layout
 from nwkit.shift_native_heuristic import NativeSearchOptions, heuristic_native_search
 from nwkit.shift_native_model import ShiftData, ShiftLayout
 from nwkit.shift_native_quick import NativeQuickProfile
-from nwkit.shift_native_screen import _kkt_residual, _proximal_step, group_lasso_screen
+from nwkit.shift_native_screen import (
+    _kkt_residual,
+    _loss_gradient,
+    _proximal_step,
+    group_lasso_screen,
+)
 from nwkit.shift_native_search import enumerate_native_layouts, exhaustive_native_search
 from tests.test_shift_native_search import sample_data
 
@@ -38,10 +43,13 @@ def test_group_proximal_solution_matches_orthogonal_closed_form():
     strength = 1.2
     norms = np.linalg.norm(target, axis=1)
     expected = target * np.maximum(0, 1 - strength / np.maximum(norms, 1e-100))[:, None]
-    result, gradient, _ = _proximal_step(
-        matrices, responses, np.zeros((4, 2)), strength, 1
+    coefficients = np.zeros((4, 2))
+    loss, gradient = _loss_gradient(matrices, responses, coefficients)
+    result, loss, gradient, _ = _proximal_step(
+        matrices, responses, coefficients, strength, 1, loss=loss, gradient=gradient
     )
     np.testing.assert_allclose(result, expected, atol=1e-12)
+    assert loss == pytest.approx(0.5 * np.sum((result - target) ** 2))
     assert _kkt_residual(result, gradient, strength) < 1e-12
 
 

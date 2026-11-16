@@ -161,7 +161,8 @@ class TestConsensusMain:
             frozenset({"D"}),
         }
 
-    def test_builds_majority_consensus_tree(self, tmp_path):
+    @pytest.mark.parametrize("method", ["greedy", "majority"])
+    def test_builds_majority_consensus_tree(self, tmp_path, method):
         infile = _write_tree_collection(
             tmp_path,
             [
@@ -178,7 +179,7 @@ class TestConsensusMain:
             reference=None,
             reference_format="auto",
             support_scale="percent",
-            method="greedy",
+            method=method,
             branch_length="none",
             weight_tsv=None,
         )
@@ -198,7 +199,7 @@ class TestConsensusMain:
                 "((A:1,C:1):1,(B:1,D:1):1);",
             ],
         )
-        reference = tmp_nwk("((A:1,C:1):1,(B:1,D:1):1);", "reference.nwk")
+        reference = tmp_nwk("((A:5,C:6):7,(B:8,D:9):10);", "reference.nwk")
         outfile = str(tmp_path / "reference_supported.nwk")
         args = make_args(
             infile=infile,
@@ -208,13 +209,20 @@ class TestConsensusMain:
             reference_format="auto",
             support_scale="percent",
             method="greedy",
-            branch_length="none",
+            branch_length="median",
             weight_tsv=None,
         )
         consensus_main(args)
         tree = read_tree(outfile, format="auto", quoted_node_names=True, quiet=True)
         assert abs(tree.common_ancestor(["A", "C"]).support - (100.0 / 3.0)) < 1e-4
         assert abs(tree.common_ancestor(["B", "D"]).support - (100.0 / 3.0)) < 1e-4
+        assert tree.common_ancestor(["A", "C"]).dist == 7.0
+        assert {leaf.name: leaf.dist for leaf in tree.leaves()} == {
+            "A": 5.0,
+            "B": 8.0,
+            "C": 6.0,
+            "D": 9.0,
+        }
 
     def test_rejects_mismatched_leaf_sets(self, tmp_path):
         infile = _write_tree_collection(
@@ -545,6 +553,23 @@ class TestConsensusMain:
         )
         with pytest.raises(ValueError, match="weight"):
             consensus_main(args)
+
+
+def test_exact_consensus_counts_keep_greedy_order_among_conflicting_half_ties():
+    from nwkit.consensus import _select_consensus_masks
+
+    weights = {
+        0b110000: 4.0,
+        0b001111: 4.0,
+        0b000011: 2.0,
+        0b001100: 2.0,
+        0b000101: 2.0,
+        0b001010: 2.0,
+    }
+
+    result = _select_consensus_masks(weights, 4.0, 0.5, exact_counts=True)
+
+    assert [mask for mask, _, _ in result] == [0b001111, 0b110000, 0b000011, 0b001100]
 
 
 @pytest.mark.parametrize("reverse_masks", [False, True])

@@ -11,10 +11,11 @@ from nwkit.shift_joint_screen import JointQuickProfile, joint_group_lasso_screen
 from nwkit.shift_native_bootstrap import simulate_native_data
 from nwkit.shift_native_fit import NativeFitOptions, fit_native_layout
 from nwkit.shift_native_heuristic import NativeSearchOptions, heuristic_native_search
-from nwkit.shift_native_model import ShiftLayout
+from nwkit.shift_native_model import ShiftLayout, evaluate_trait
 from nwkit.shift_simulation import simulate_shift, simulation_from_fit
 from nwkit.shift_simulation_cli import explicit_simulation
 from tests.test_shift_joint_covariance import dense_ou, fixture_data
+from tests.test_shift_native_quick import balanced_tree
 
 
 @pytest.mark.parametrize("root_model", ["OUfixedRoot", "OUrandomRoot"])
@@ -104,6 +105,71 @@ def test_fitted_simulation_and_joint_quick_profile():
         joint_group_lasso_screen(data, fitted, memory_limit=1)
 
 
+def test_explicit_simulation_scales_optima_before_unrepresentable_subtraction():
+    data = fixture_data()
+    spec = explicit_simulation(
+        data.tree,
+        {
+            "trait_names": ["x"],
+            "alpha": 0.01,
+            "shift_branch_ids": [2],
+            "regime_optima": [[-1e308], [1e308]],
+            "process_tip_covariance": [[0.0]],
+        },
+    )
+    attenuation = -np.expm1(-0.01 * data.tree.height)
+    assert spec.coefficients[1, 0] == pytest.approx(2.0 * (1e308 * attenuation))
+    values, latent = simulate_shift(spec)
+    assert np.isfinite(values).all()
+    assert np.isfinite(latent).all()
+
+
+def test_short_branch_mean_changes_accumulate_before_restoring_background():
+    tree = fixture_data().tree
+    node = tree.compiled.children[0][0]
+    baseline = float(2**53)
+    spec = explicit_simulation(
+        tree,
+        {
+            "trait_names": ["x"],
+            "alpha": 0,
+            "shift_branch_ids": [tree.branch_ids[node]],
+            "scaled_regime_coefficients": [[baseline], [1.5]],
+            "process_tip_covariance": [[0.0]],
+        },
+    )
+    values, latent = simulate_shift(spec)
+    first, last = tree.tip_intervals[node]
+    expected = np.full(len(tree.leaf_names), baseline)
+    expected[first:last] += 2.0
+    np.testing.assert_array_equal(values[0, :, 0], expected)
+    np.testing.assert_array_equal(latent[0, tree.compiled.leaf_indices, 0], expected)
+
+
+@pytest.mark.parametrize("joint", [False, True])
+def test_fitted_simulation_restores_representable_extreme_covariance(joint):
+    data = fixture_data()
+    data = replace(data, scales=np.array([1e155, 1e153]))
+    layout = ShiftLayout.build(data.tree)
+    result = {"layout": layout, "root_model": "OUfixedRoot"}
+    variance = 1e-5
+    if joint:
+        result["joint_fit"] = evaluate_joint(
+            data, layout, [0.5, 0.5], np.eye(2) * variance, np.zeros(2)
+        )
+    else:
+        result["fits"] = [
+            evaluate_trait(data, layout, j, 0.5, variance) for j in range(2)
+        ]
+    spec = simulation_from_fit(data, result)
+    expected = np.diag([1e305, 1e301])
+    np.testing.assert_allclose(spec.covariance_coordinate, expected, rtol=5e-16, atol=0)
+    np.testing.assert_array_equal(spec.measurement_covariance, np.zeros((2, 2)))
+    np.testing.assert_array_equal(
+        spec.sampling_variances, np.zeros_like(data.variances)
+    )
+
+
 def test_joint_heuristic_search_uses_correlated_screen():
     data = fixture_data()
     options = NativeFitOptions(trait_covariance="full", alpha_model="shared")
@@ -120,6 +186,32 @@ def test_joint_heuristic_search_uses_correlated_screen():
         == "joint_covariance_whitened_group_lasso"
     )
     assert search.best_information["trait_covariance"] == "full"
+
+
+def test_compressed_joint_profile_matches_full_gls():
+    from ete4 import Tree
+
+    from nwkit.shift_native_model import ShiftData
+
+    values = np.random.default_rng(28).normal(size=(96, 2))
+    values[::7, 1] = np.nan
+    data = ShiftData.build(Tree(balanced_tree(len(values))), values, ["x", "y"])
+    alpha = np.array([0.7, 1.3])
+    covariance = np.array([[1.0, 0.4], [0.4, 0.8]])
+    noise = np.array([0.01, 0.02])
+    null = evaluate_joint(data, ShiftLayout.build(data.tree), alpha, covariance, noise)
+    tips = data.tree.compiled.leaf_indices
+    parent = data.tree.branch_ids[data.tree.compiled.parents[tips[0]]]
+    first, other = data.tree.branch_ids[tips[0]], data.tree.branch_ids[tips[12]]
+    branches = [parent, first, other]
+    layout = ShiftLayout.build(data.tree, branches, [[0, first], [parent, other]])
+    profile = JointQuickProfile(data, {"joint_fit": null}, branches)
+    assert profile.matrix.shape == (7, 6)
+    fit = evaluate_joint(data, layout, alpha, covariance, noise)
+    adjustment = np.isfinite(values).sum(axis=0) @ np.log(data.scales)
+    assert profile.score(layout) == pytest.approx(
+        fit.log_likelihood - adjustment, abs=1e-10
+    )
 
 
 def test_simulation_cli_and_fit_model_roundtrip(tmp_path):

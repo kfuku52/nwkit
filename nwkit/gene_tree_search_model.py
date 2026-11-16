@@ -1,7 +1,7 @@
 """Targeted complete-tip proposals; D+L is a search heuristic, not evidence of error."""
 
 from dataclasses import dataclass, field
-from itertools import combinations, product
+from itertools import combinations, islice, product
 from typing import Any
 
 from nwkit.clade_index import CladeIndex, LcaIndex
@@ -88,15 +88,20 @@ class Proposal:
 def _remove_and_suppress(tree, tips):
     """Detach maximal selected clades, retaining every selected tip for regrafting."""
     tree = copy_tree_iteratively(tree)
-    index = CladeIndex(tree)
     selected = set(tips)
-    components = []
-    for node in list(tree.traverse("preorder")):
-        names = set(index.names_for_node(node))
-        if names <= selected and (
-            node.up is None or not set(index.names_for_node(node.up)) <= selected
-        ):
-            components.append(node)
+    contained = set()
+    for node in tree.traverse("postorder"):
+        if node.is_leaf:
+            whole_clade = str(node.name) in selected
+        else:
+            whole_clade = all(child in contained for child in node.children)
+        if whole_clade:
+            contained.add(node)
+    components = [
+        node
+        for node in tree.traverse("preorder")
+        if node in contained and node.up not in contained
+    ]
     for node in components:
         node.detach()
     for node in list(tree.traverse("postorder")):
@@ -234,10 +239,10 @@ def discover_proposals(
     return ordered[:max_proposals], coverage
 
 
-def _graft(backbone, component, target_names):
+def _graft(backbone, component, target_index):
     tree = copy_tree_iteratively(backbone)
-    index = CladeIndex(tree)
-    target = next(n for n in tree.traverse() if index.names_for_node(n) == target_names)
+    # Cloning preserves traversal order and therefore the attachment index.
+    target = next(islice(tree.traverse(), target_index, None))
     moved = copy_tree_iteratively(component)
     junction = type(tree)()
     if target.up is None:
@@ -281,8 +286,14 @@ def generate_candidates(
     def key(tree):
         return topology_key(tree, rooted=rooted)
 
+    def rank_state(state):
+        identity, tree = state
+        cost = context.cost(tree)
+        return cost.total, cost.duplications, identity if rooted else topology_key(tree)
+
     baseline = Candidate(copy_tree_iteratively(gene), context.cost(gene), id="baseline")
-    candidates = {key(gene): baseline}
+    baseline_key = key(gene)
+    candidates = {baseline_key: baseline}
     coverage: dict[str, Any] = {
         "regraft_states": 0,
         "beam_states_discarded": 0,
@@ -296,22 +307,14 @@ def generate_candidates(
         for component in components:
             states: dict[Any, Any] = {}
             for partial in beam:
-                index = CladeIndex(partial)
-                for target in partial.traverse():
-                    candidate = _graft(partial, component, index.names_for_node(target))
+                for target_index, _ in enumerate(partial.traverse()):
+                    candidate = _graft(partial, component, target_index)
                     identity = key(candidate)
                     states.setdefault(identity, candidate)
                     coverage["regraft_states"] += 1
-            ordered = sorted(
-                states.values(),
-                key=lambda t: (
-                    context.cost(t).total,
-                    context.cost(t).duplications,
-                    topology_key(t),
-                ),
-            )
-            coverage["beam_states_discarded"] += max(0, len(ordered) - beam_width)
-            beam = ordered[:beam_width]
+            ranked_states = sorted(states.items(), key=rank_state)
+            coverage["beam_states_discarded"] += max(0, len(ranked_states) - beam_width)
+            beam = [tree for _, tree in ranked_states[:beam_width]]
         endpoints = []
         for tree in beam:
             candidate = Candidate(
@@ -322,7 +325,7 @@ def generate_candidates(
                 tuple(sorted(proposal.reasons)),
             )
             identity = key(tree)
-            if identity == key(gene):
+            if identity == baseline_key:
                 continue
             old = candidates.get(identity)
             if old is None or len(candidate.moved_tips) < len(old.moved_tips):
@@ -337,7 +340,7 @@ def generate_candidates(
         *sorted((candidates[k] for k in champions), key=candidate_rank),
         *sorted(candidates.values(), key=candidate_rank),
     ]
-    retained = {key(gene): baseline}
+    retained = {baseline_key: baseline}
     for candidate in prioritized:
         if len(retained) >= max_candidates:
             break

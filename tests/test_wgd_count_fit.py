@@ -109,6 +109,125 @@ def test_calibration_uses_maximum_and_repeats_null_fit(monkeypatch):
     assert result.calibration == "plugin-parametric-bootstrap-search-maximum"
 
 
+def test_parallel_bootstrap_preserves_simulation_stream_and_order():
+    data = model(np.tile([2, 2, 1], (10, 1)))
+    observed = scan_counts(data, nodes=(1,), fractions=(0.5,), max_states=64)
+    progress = []
+    serial = calibrate_scan(data, observed, 3, 919, max_states=64)
+    parallel = calibrate_scan(
+        data,
+        observed,
+        3,
+        919,
+        max_states=64,
+        workers=2,
+        progress=lambda done, total: progress.append((done, total)),
+    )
+    assert progress == [(1, 3), (2, 3), (3, 3)]
+    assert parallel.bootstrap_statistics == serial.bootstrap_statistics
+    assert [c.p_value for c in parallel.candidates] == [
+        c.p_value for c in serial.candidates
+    ]
+
+
+def test_parallel_scan_matches_serial_fit_results():
+    from nwkit.wgd_count import _fit_json
+
+    data = model(np.tile([[2, 2, 1], [1, 1, 1], [2, np.nan, 1]], (12, 1)))
+    options = dict(nodes=(3, 1, 2), fractions=(0.25, 0.75), max_states=64)
+    serial = scan_counts(data, **options)
+    parallel = scan_counts(data, workers=2, **options)
+    assert _fit_json(parallel.background) == _fit_json(serial.background)
+    assert parallel.fractions == serial.fractions
+    for first, second in zip(serial.candidates, parallel.candidates, strict=True):
+        assert (second.node, second.improvement, second.burst_aic_difference) == (
+            first.node,
+            first.improvement,
+            first.burst_aic_difference,
+        )
+        assert _fit_json(first.event_fit) == _fit_json(second.event_fit)
+        assert _fit_json(first.burst_fit) == _fit_json(second.burst_fit)
+
+
+def test_bootstrap_refills_while_earlier_draw_is_pending(monkeypatch):
+    from concurrent.futures import Future
+
+    import nwkit.wgd_count_fit as fitting
+
+    submitted = []
+
+    class Pool:
+        def __init__(self, **_):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def submit(self, fn, i):
+            assert fn is fitting._bootstrap_scan_statistic
+            future = Future()
+            submitted.append(future)
+            if i > 0:
+                future.set_result(i + 0.25)
+            if i == 3:
+                submitted[0].set_result(0.25)
+            return future
+
+    draws = iter(range(4))
+    progress = []
+    monkeypatch.setattr(fitting, "ProcessPoolExecutor", Pool)
+    assert fitting._parallel_bootstrap(
+        lambda: (next(draws),), 4, 2, lambda n, _: progress.append(n)
+    ) == [0.25, 1.25, 2.25, 3.25]
+    assert progress == [1, 2, 3, 4]
+
+
+def test_parallel_bootstrap_only_refits_missing_checkpoints(monkeypatch):
+    from concurrent.futures import Future
+
+    import nwkit.wgd_count_fit as fitting
+
+    submitted, simulated, saved = [], [], []
+
+    class Pool:
+        def __init__(self, **_):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def submit(self, fn, i):
+            assert fn is fitting._bootstrap_scan_statistic
+            submitted.append(i)
+            future = Future()
+            future.set_result(i + 0.5)
+            return future
+
+    def draw():
+        i = len(simulated)
+        simulated.append(i)
+        return (i,)
+
+    monkeypatch.setattr(fitting, "ProcessPoolExecutor", Pool)
+    assert fitting._parallel_bootstrap(
+        draw,
+        6,
+        2,
+        None,
+        statistics=[None, 1.5, 2.5, None, 4.5, 5.5],
+        save=lambda x: saved.append(x.copy()),
+    ) == [0.5, 1.5, 2.5, 3.5, 4.5, 5.5]
+    assert submitted == [0, 3]
+    assert simulated == [0, 1, 2, 3]
+    assert [sum(v is not None for v in x) for x in saved] == [5, 6]
+
+
 def test_invalid_scan_and_bound_fail_instead_of_returning_unverified_fit():
     data = model([[1, 1, 1]])
     with pytest.raises(ValueError, match="twice"):
@@ -117,6 +236,8 @@ def test_invalid_scan_and_bound_fail_instead_of_returning_unverified_fit():
         scan_counts(data, fractions=())
     with pytest.raises(ValueError, match="Candidate"):
         scan_counts(data, nodes=(0,))
+    with pytest.raises(ValueError, match="scan workers"):
+        scan_counts(data, workers=0)
     with pytest.raises(ValueError, match="State tolerance"):
         fit_counts(data, state_tolerance=0)
 
@@ -296,3 +417,57 @@ def test_zero_retention_fit_refines_hidden_intermediate_count_bound(monkeypatch)
     assert calls == [8, 16, 32, 64, 128]
     assert fit.max_count == 128
     assert fit.converged and fit.state_error <= 1e-7
+
+
+@pytest.mark.parametrize("retention,gain", [(0.0, 2e-12), (0.1, -0.01)])
+def test_scan_canonicalizes_zero_event_and_checks_split_bound(
+    monkeypatch, retention, gain
+):
+    from dataclasses import replace
+
+    import nwkit.wgd_count_fit as fitting
+
+    data = model([[1, 1, 1]])
+    background = fitting.CountFit(
+        np.array([[0.1, 0.1]]), 1.1, -5.0, 3, 8, 0, True, False, "fit"
+    )
+    reported = replace(
+        background,
+        log_likelihood=background.log_likelihood + gain,
+        num_parameters=4,
+        event=MultiplicationEvent(1, retention, 0.25),
+    )
+    monkeypatch.setattr(fitting, "fit_counts", lambda *a, **kw: reported)
+    checked = []
+
+    def convergence(rates, mean, bound, event):
+        assert event.retention == 0 and event.fraction == 0.25
+        assert rates is background.rates and mean == background.root_mean
+        checked.append(bound)
+        return 1e-4 if bound < 16 else 1e-9
+
+    monkeypatch.setattr(data, "convergence", convergence)
+    observed = scan_counts(
+        data,
+        nodes=(1,),
+        fractions=(0.25,),
+        compare_bursts=False,
+        max_states=32,
+        background=background,
+    )
+    (candidate,) = observed.candidates
+    assert checked == [8, 16]
+    assert candidate.improvement == 0 and candidate.event_fit.event.retention == 0
+    assert candidate.event_fit.log_likelihood == background.log_likelihood
+    assert (
+        candidate.event_fit.max_count == 16 and candidate.event_fit.state_error == 1e-9
+    )
+    with pytest.raises(ValueError, match="zero-retention event"):
+        scan_counts(
+            data,
+            nodes=(1,),
+            fractions=(0.25,),
+            compare_bursts=False,
+            max_states=16,
+            background=background,
+        )
