@@ -4,6 +4,10 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.47.1] - 2026-11-20
+
+- Preserve reconciliation schema digests in Windows checkouts and exercise Unicode input and audited file paths across platforms.
+
 ## [0.47.0] - 2026-11-20
 
 - Report taxonomy and backbone matches for partial constraints and check inferred trees against alignment tips and unrooted constraint splits.

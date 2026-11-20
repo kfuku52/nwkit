@@ -1,6 +1,7 @@
 """Meaningful geometry and real vector-output/rollback checks for N2."""
 
 import copy
+import json
 from pathlib import Path
 
 import pytest
@@ -275,8 +276,11 @@ def test_audit_lists_document_and_does_not_consume_stdin(tmp_path, monkeypatch):
             str(audit),
         ]
     )
-    assert str(TOY.resolve()) in audit.read_text()
-    assert '"argument": "document"' in audit.read_text()
+    inputs = json.loads(audit.read_text(encoding="utf-8"))["inputs"]
+    assert any(
+        row["argument"] == "document" and Path(row["path"]) == TOY.resolve()
+        for row in inputs
+    )
 
 
 def test_expectations_and_missing_placements_are_explicit():

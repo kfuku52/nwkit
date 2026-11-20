@@ -7,6 +7,9 @@
 # Bundled AngioCal records are verified against their canonical LF checksum.
 nwkit/data_angiocal/*.tsv text eol=lf
 
+# Reconciliation schemas are verified against the published byte digests.
+nwkit/data_schema/*.json text eol=lf
+
 # Preserve generated logs, patch context, and the original simulator fixture.
 reviews/**/*.log -whitespace
 reviews/native-scale-2026-09-10/changes.patch -whitespace
