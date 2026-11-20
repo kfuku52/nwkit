@@ -581,3 +581,34 @@ def test_spatial_root_stub_occupies_an_empty_angular_gap(layout_name):
     assert all(
         abs(math.sin(stub_angle - child_angle)) > 1e-6 for child_angle in child_angles
     )
+
+
+def test_crossing_sweep_matches_exhaustive_branch_pairs():
+    from itertools import combinations
+
+    from matplotlib.lines import Line2D
+
+    from nwkit.draw_quality import _count_branch_crossings, _line_segments
+
+    rng = random.Random(71)
+    owners = [object() for _ in range(18)]
+    lines = [
+        (
+            owner,
+            Line2D(
+                [rng.uniform(-1e6, 1e6) for _ in range(4)],
+                [rng.uniform(-1e6, 1e6) for _ in range(4)],
+            ),
+        )
+        for owner in owners
+    ]
+    exhaustive = sum(
+        any(
+            _proper_segment_intersection(a, b)
+            for a in _line_segments(line1)
+            for b in _line_segments(line2)
+        )
+        for (_, line1), (_, line2) in combinations(lines, 2)
+    )
+    assert _count_branch_crossings(lines) == (exhaustive, True)
+    assert _count_branch_crossings(lines, segment_limit=53) == (0, False)

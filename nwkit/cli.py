@@ -2333,6 +2333,14 @@ pdist.set_defaults(handler=command_dist)
 
 
 def command_draw(args):
+    if getattr(args, "panel_columns", None) is not None and not getattr(
+        args, "panel_table", None
+    ):
+        raise ValueError("--panel-columns requires --panel-table.")
+    if getattr(args, "panel_table", None):
+        from nwkit.draw_panels import draw_panels
+
+        return draw_panels(args)
     if (
         getattr(args, "document", None)
         or getattr(args, "comparison", None)
@@ -2372,6 +2380,19 @@ pdraw = subparsers.add_parser(
     "draw",
     help="Draw a phylogenetic tree with tip images, support, categorical properties, and node-probability annotations",
     parents=[p_tree_input, p_species, p_tip_table_policy],
+)
+pdraw.add_argument(
+    "--panel-table",
+    "--panel_table",
+    metavar="TSV",
+    help="Draw a grid from a TSV with title and infile columns. Tree paths are relative to the TSV. Drawing options apply to each panel.",
+)
+pdraw.add_argument(
+    "--panel-columns",
+    "--panel_columns",
+    type=int,
+    metavar="INT",
+    help="Number of columns in a panel grid (default 2).",
 )
 pdraw.add_argument(
     "-o",
@@ -2712,6 +2733,13 @@ pdraw.add_argument(
     default=None,
     type=str,
     help="default=None: Map a categorical Newick/NHX branch property to color.",
+)
+pdraw.add_argument(
+    "--branch-color-scope",
+    "--branch_color_scope",
+    choices=["branch", "clade"],
+    default="branch",
+    help="Colour the annotated incoming branch, or its entire clade. Nested annotations override inherited colours.",
 )
 pdraw.add_argument(
     "--branch-width-property",

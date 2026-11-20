@@ -269,6 +269,7 @@ cells explicitly empty rather than omitting their fields.
 | `--species-map-tsv` | `leaf_name`, and at least one of `species_label` or `taxonomy_query` | Every row must define at least one mapping value. |
 | `image --species-name-tsv` | `leaf_name`, `species_name` | Legacy image-only mapping; prefer `--species-map-tsv` for new workflows. |
 | `image --verified-images-tsv` | `leaf_name`, `source_page_url`, `attribution`, and at least one of each pair `local_path` / `media_url` and `license_code` / `license_url` | One pin per leaf. Exactly one image locator per row. Local paths are relative to the TSV. See the [image guide](IMAGE.md). |
+| `draw --panel-table` | `title`, `infile` | One tree per row, in display order. Relative input paths are resolved from the table directory. |
 | `draw --tip-image-manifest` | `leaf_name`, `local_path` | Multiple rows per tip are allowed and the first is used. Relative paths use the manifest directory or `--tip-image-root`; broken paths are rejected. |
 | `rename --name-tsv` | `old_name`, `new_name` | Both values are non-empty and `old_name` is unique. Headers must be nonempty and unique, and every row must match the header width. |
 | `--taxid-tsv` | `leaf_name`, `taxid` | `taxid` must be a non-missing integer. |
@@ -516,6 +517,21 @@ the previous complete pair. As with any separate filesystem renames, this is not
 a crash-atomic multi-file transaction. Output locks coordinate NWKIT writers, not
 arbitrary external programs. A stdout write can trigger file rollback on failure,
 but already emitted stdout bytes cannot be retracted.
+
+Use `nwkit draw --panel-table panels.tsv --panel-columns 4 -o trees.svg`
+to arrange ordinary tree drawings on one page. The default grid has two columns.
+Width, height, layout, labels and NHX styling apply to each tree. Each row of
+the grid uses the height of its tallest panel. For foreground miniatures, set
+`--tip-labels no --branch-color-property fg --property-color foreground=#a8381b`
+and give each focal stem the NHX property `fg=foreground`. Add
+`--branch-color-scope clade` to propagate its colour to descendant branches.
+The nearest annotated ancestor supplies the colour until a nested annotation
+overrides it. A root annotation can colour all descendants. The default scope
+`branch` applies a colour only to an annotated incoming branch. Branch widths
+are controlled separately by `--branch-width` and `--branch-width-property`.
+SVG uses the
+standard installation. Panel PDF and 300-dpi PNG export use the existing
+`nwkit[image]` extra and native Cairo.
 
 `draw --node-label-property branch_id --node-label-target all` computes the same
 input-tree IDs as `nwk2table` and `asr`. Labels are integers and are assigned before

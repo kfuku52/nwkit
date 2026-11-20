@@ -4,6 +4,19 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.46.12] - 2026-11-20
+
+### Added
+
+- Draw labelled grids of Newick trees from a panel TSV with shared drawing options.
+- Colour a whole clade from one annotated stem with `--branch-color-scope clade`.
+  A nested annotation sets the colour of its own subtree.
+
+### Changed
+
+- Reduce repeated collision checks and bound crossing candidates by their actual
+  segment extents when validating tree figures.
+
 ## [0.46.11] - 2026-11-16
 
 ### Changed

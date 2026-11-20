@@ -86,6 +86,9 @@ from nwkit.draw_helpers import (
     _auto_wrap_candidates as _auto_wrap_candidates,
 )
 from nwkit.draw_helpers import (
+    _branch_color_values as _branch_color_values,
+)
+from nwkit.draw_helpers import (
     _branch_marker_artists as _branch_marker_artists,
 )
 from nwkit.draw_helpers import (
@@ -409,6 +412,7 @@ def _draw_tree(
     densitree_ci_alpha=0.18,
     densitree_ci_color="#56B4E9",
     transactional_output=True,
+    branch_color_scope="branch",
 ):
     _apply_font_style(font_size=font_size, font_family=font_family)
     matplotlib.rcParams["svg.hashsalt"] = "nwkit"
@@ -546,7 +550,9 @@ def _draw_tree(
         unrooted_method=unrooted_method,
     )
 
+    color_values = _branch_color_values(tree, branch_color_property, branch_color_scope)
     color_by_node, width_by_node = _branch_style_maps(
+        color_values=color_values,
         tree=tree,
         base_color=branch_color,
         base_width=branch_width,
@@ -578,9 +584,9 @@ def _draw_tree(
 
     _draw_tree_branches(
         frame=frame,
+        color_values=color_values,
         geometry=geometry,
         branch_color=branch_color,
-        branch_color_property=branch_color_property,
         branch_width=branch_width,
         color_by_node=color_by_node,
         terminal_branch_color=terminal_branch_color,
@@ -618,6 +624,7 @@ def _draw_tree(
     )
 
     legend_handles = _property_legend_handles(
+        color_values=color_values,
         annotations=annotations,
         panels=panels,
         property_style=property_style,
@@ -1091,6 +1098,7 @@ def draw_main(args):
         branch_length_unit=getattr(args, "branch_length_unit", ""),
         branch_width=getattr(args, "branch_width", 0.8),
         branch_color_property=getattr(args, "branch_color_property", None),
+        branch_color_scope=getattr(args, "branch_color_scope", "branch"),
         branch_width_property=getattr(args, "branch_width_property", None),
         branch_width_range=getattr(args, "branch_width_range", "0.4,2.5"),
         tip_label_font_style=getattr(args, "tip_label_font_style", "plain"),

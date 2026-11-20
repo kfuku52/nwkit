@@ -161,6 +161,7 @@ INPUT_PATH_ARGUMENTS = frozenset(
         "table",
         "taxid_tsv",
         "tip_image_manifest",
+        "panel_table",
         "tip_likelihoods",
         "trait",
         "transition_graph",
@@ -367,7 +368,9 @@ def _skip_declared_input_argument(args, argument):
         or getattr(args, "document", None)
         or (
             getattr(args, "command", None) == "draw"
-            and getattr(args, "comparison", None)
+            and (
+                getattr(args, "comparison", None) or getattr(args, "panel_table", None)
+            )
         )
     ):
         return True
@@ -419,6 +422,13 @@ def _verified_image_input_paths(args):
 def _input_path_candidates(args):
     candidates = _declared_input_path_candidates(args)
     candidates.extend(_verified_image_input_paths(args))
+    if getattr(args, "command", None) == "draw" and getattr(args, "panel_table", None):
+        from nwkit.draw_panels import read_panel_table
+
+        candidates.extend(
+            ("panel_table:infile", str(path))
+            for _, path in read_panel_table(args.panel_table)
+        )
     if getattr(args, "command", None) == "draw" and getattr(args, "comparison", None):
         from nwkit.reconciliation_view import read_comparison
 
