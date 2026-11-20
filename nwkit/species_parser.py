@@ -47,6 +47,8 @@ TAXONOMIC_RANK_ALIASES = {
 class ParsedSpecies:
     species_label: str | None = None
     taxonomy_query: str | None = None
+    source: str | None = None
+    anchor_rank: str | None = None
 
 
 def compile_species_regex(species_regex=None):
@@ -172,6 +174,8 @@ def read_species_map_tsv(species_map_tsv):
             overrides[leaf_name] = ParsedSpecies(
                 species_label=species_label,
                 taxonomy_query=taxonomy_query,
+                source=row.get("source") or None,
+                anchor_rank=row.get("anchor_rank") or None,
             )
     finally:
         if handle is not sys.stdin:

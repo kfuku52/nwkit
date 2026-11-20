@@ -4,6 +4,12 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.47.0] - 2026-11-20
+
+- Report taxonomy and backbone matches for partial constraints and check inferred trees against alignment tips and unrooted constraint splits.
+
+- Leave ambiguous NCBI name matches free and detect output label collisions after normalization.
+
 ## [0.46.12] - 2026-11-20
 
 ### Added

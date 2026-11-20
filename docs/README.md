@@ -10,6 +10,7 @@ project entry points and release metadata.
 User-facing command, data-format, model, and mathematical documentation lives
 in [`guides/`](guides/):
 
+- [Partial constraints and inferred-tree verification](guides/PARTIAL_CONSTRAINTS.md)
 - [All optimal reconciliation roots and loss exports](guides/RECONCILIATION_EXPORTS.md)
 - [ASR and ancestral-trait models](guides/ASR.md)
 - [AngioCal fossil minimum-age constraints](guides/ANGIOCAL.md)

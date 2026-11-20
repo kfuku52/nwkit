@@ -151,6 +151,7 @@ INPUT_PATH_ARGUMENTS = frozenset(
         "response_sampling_covariance",
         "root_source",
         "seqin",
+        "constraint",
         "species_list",
         "species_map_tsv",
         "species_name_tsv",

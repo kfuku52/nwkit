@@ -1554,7 +1554,7 @@ pconstrain.add_argument(
 pconstrain.add_argument(
     "--report",
     metavar="PATH",
-    help="Optional TSV of species matches and source provenance for --backbone vertlife.",
+    help="Optional per-input TSV of matches, anchors, free taxa and backbone provenance.",
 )
 pconstrain.add_argument(
     "--rank",
@@ -1579,6 +1579,29 @@ pconstrain.add_argument(
     "The output file may be used as a species tree for phylogeny reconciliation. ",
 )
 pconstrain.set_defaults(handler=command_constrain)
+
+
+def command_check_constraint(args):
+    from nwkit.constraint_check import check_main
+
+    return check_main(args)
+
+
+pcheck = subparsers.add_parser(
+    "check-constraint",
+    parents=[p_parent],
+    help="Verify inferred tree tips and unrooted splits on the constrained subset",
+)
+pcheck.add_argument(
+    "--constraint", required=True, help="Partial or full constraint Newick"
+)
+pcheck.add_argument(
+    "--species-list",
+    "--species_list",
+    required=True,
+    help="All alignment tip IDs, one per line",
+)
+pcheck.set_defaults(handler=command_check_constraint)
 
 
 def command_collapse(args):
