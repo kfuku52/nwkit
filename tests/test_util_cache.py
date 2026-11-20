@@ -614,3 +614,48 @@ class TestDownloadDirHelpers:
             assert ncbi.get_taxid_translator([1])[1] == "root"
         finally:
             ncbi.db.close()
+
+
+@pytest.mark.parametrize("replace_owner", [True, False])
+def test_windows_sharing_conflict_rechecks_owner(tmp_path, monkeypatch, replace_owner):
+    lock = tmp_path / "download.lock"
+    unlink = os.remove
+    attempts = []
+
+    def concurrent_reader(path):
+        attempts.append(path)
+        if len(attempts) == 1:
+            if replace_owner:
+                lock.write_text("123 replaced\n", encoding="ascii")
+            exc = PermissionError("sharing violation")
+            exc.winerror = 32
+            raise exc
+        return unlink(path)
+
+    monkeypatch.setattr(util_mod.os, "remove", concurrent_reader)
+    with acquire_exclusive_lock(lock, timeout_seconds=1):
+        assert lock.is_file()
+    assert len(attempts) == (1 if replace_owner else 2)
+    assert lock.exists() == replace_owner
+    if replace_owner:
+        assert lock.read_text(encoding="ascii") == "123 replaced\n"
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows file sharing")
+def test_windows_unlock_while_another_reader_has_the_file_open(tmp_path, monkeypatch):
+    lock = tmp_path / "download.lock"
+    unlink = os.remove
+    conflicts = []
+    with acquire_exclusive_lock(lock):
+        reader = lock.open("rb")
+
+        def release(path):
+            try:
+                unlink(path)
+            except PermissionError as exc:
+                conflicts.append(exc.winerror)
+                reader.close()
+                raise
+
+        monkeypatch.setattr(util_mod.os, "remove", release)
+    assert conflicts == [32] and not lock.exists()

@@ -4,6 +4,10 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.47.2] - 2026-11-20
+
+- Retry transient Windows sharing violations when releasing cache and output locks, checking the owner again before deletion.
+
 ## [0.47.1] - 2026-11-20
 
 - Preserve reconciliation schema digests in Windows checkouts and exercise Unicode input and audited file paths across platforms.

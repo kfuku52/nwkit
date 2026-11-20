@@ -816,6 +816,11 @@ def _break_stale_lock_if_needed(lock_path, lock_label="Lock"):
         os.remove(lock_path)
     except FileNotFoundError:
         return False
+    except PermissionError as exc:
+        if getattr(exc, "winerror", None) in (32, 33):
+            # The next poll rechecks the stale owner's identity.
+            return False
+        raise
     sys.stderr.write(
         "Removed stale {} lock: {} ({})\n".format(lock_label, lock_path, stale_reason)
     )
@@ -823,6 +828,18 @@ def _break_stale_lock_if_needed(lock_path, lock_label="Lock"):
 
 
 def _remove_owned_lock(lock_path, owner_record, lock_label="Lock"):
+    # Windows readers briefly deny deletion while checking the owner's PID.
+    # Recheck ownership after each conflict so a replacement is preserved.
+    for attempt in range(21):
+        try:
+            return _unlink_owned_lock(lock_path, owner_record, lock_label)
+        except PermissionError as exc:
+            if getattr(exc, "winerror", None) not in (32, 33) or attempt == 20:
+                raise
+            time.sleep(0.05)
+
+
+def _unlink_owned_lock(lock_path, owner_record, lock_label):
     owner_token, owner_device, owner_inode = owner_record
     try:
         stat_before = os.lstat(lock_path)
