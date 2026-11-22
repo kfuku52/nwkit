@@ -19,6 +19,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from dataclasses import dataclass
+from decimal import Decimal
+from itertools import islice
 from pathlib import Path
 
 from nwkit.file_paths import validate_outputs_do_not_replace_inputs
@@ -29,6 +31,8 @@ CHAINS = 4
 RHAT_MAX = 1.01
 ESS_MIN = 400
 MAX_PAML_GENERATIONS = 2**31 - 1
+NEAR_RHAT = 1.02
+NEAR_ESS = 300
 
 
 def _digest(path: Path) -> str:
@@ -56,6 +60,31 @@ class Sampling:
 
     def generations(self, draws: int) -> int:
         return self.burnin + draws * self.sampfreq
+
+    def extra_discards(self, draws: int, percentages: tuple[Decimal, ...]):
+        """Convert percentages of total generations to counts on the saved grid."""
+        total = self.generations(draws)
+        counts = set()
+        for percentage in percentages:
+            numerator, denominator = percentage.as_integer_ratio()
+            cutoff = total * numerator // (100 * denominator)
+            count = (cutoff - self.burnin) // self.sampfreq
+            if 0 < count <= draws - 8:
+                counts.add(count)
+        return sorted(counts)
+
+
+def _burnin_percentages(value: str) -> tuple[Decimal, ...]:
+    if not value.strip():
+        return ()
+    tokens = [part.strip() for part in value.split(",")]
+    if not all(re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", part) for part in tokens):
+        raise ValueError("Use comma-separated burn-in percentages from 0 to below 100.")
+    percentages = set(map(Decimal, tokens))
+    if max(percentages) >= 100:
+        raise ValueError("Burn-in percentages must be below 100.")
+    percentages.discard(Decimal(0))
+    return tuple(sorted(percentages))
 
 
 def paml_control_values(text, hessian=None):
@@ -147,13 +176,20 @@ def _load_inputs(control: Path, max_generations: int | None):
     return values, inputs, Sampling(burnin, frequency, minimum, maximum), raw_control
 
 
-def _next_round(report: Path, draws: int, sampling: Sampling) -> dict:
+def _short_check_interval(draws: int, sampling: Sampling, interval: int) -> int:
+    minimum = (100 // sampling.sampfreq) + 1
+    return max(interval or (draws + 7) // 8, minimum)
+
+
+def _next_round(
+    report: Path, draws: int, sampling: Sampling, interval: int = 0
+) -> dict:
     with report.open(encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle, delimiter="\t"))
     if not rows:
         raise ValueError("No MCMCtree diagnostic parameters.")
     worst_ess = math.inf
-    high_rhat = []
+    max_rhat = 0.0
     failed = []
     for row in rows:
         rhat, bulk, tail = (float(row[key]) for key in ("rhat", "ess_bulk", "ess_tail"))
@@ -161,8 +197,7 @@ def _next_round(report: Path, draws: int, sampling: Sampling) -> dict:
             raise ValueError(
                 f"Undefined convergence diagnostics for {row['parameter']}."
             )
-        if rhat >= RHAT_MAX:
-            high_rhat.append(row["parameter"])
+        max_rhat = max(max_rhat, rhat)
         if rhat >= RHAT_MAX or min(bulk, tail) < ESS_MIN:
             failed.append(row["parameter"])
         worst_ess = min(worst_ess, bulk, tail)
@@ -176,7 +211,16 @@ def _next_round(report: Path, draws: int, sampling: Sampling) -> dict:
     decision = {"state": "unconverged", "failed_parameters": failed}
     if draws == sampling.maximum_draws:
         return {**decision, "reason": "generation_limit"}
-    if high_rhat:
+    if max_rhat < NEAR_RHAT and worst_ess >= NEAR_ESS:
+        interval = _short_check_interval(draws, sampling, interval)
+        return {
+            **decision,
+            "reason": "near_convergence",
+            "next_draws": min(draws + interval, sampling.maximum_draws),
+            "check_interval_draws": interval,
+            "estimated_total_generations_per_chain": None,
+        }
+    if max_rhat >= RHAT_MAX:
         next_draws = 2 * draws
         estimate = None
         reason = "rhat_above_threshold"
@@ -416,7 +460,15 @@ def _append_segment(
 
 
 def _summarize(
-    binary: Path, values, inputs: Path, read_paths, draws, seed, scratch, stop
+    binary: Path,
+    values,
+    inputs: Path,
+    read_paths,
+    draws,
+    seed,
+    scratch,
+    stop,
+    discard=0,
 ):
     with (scratch / "mcmc.txt").open("wb") as output:
         header = None
@@ -432,6 +484,8 @@ def _summarize(
                     )
                 # PAML print=-1 skips Gen when summarizing. Each input trace already
                 # has the validated number of draws and a complete sample grid.
+                if discard:
+                    next(islice(handle, discard - 1, discard), None)
                 shutil.copyfileobj(handle, output)
     count = CHAINS * draws
     _write_control(
@@ -452,8 +506,64 @@ def _summarize(
     )
 
 
+def _check_round(
+    paths, diagnostics, scratch, draws, sampling, jobs, percentages, pending, interval
+):
+    final = draws == sampling.maximum_draws
+    interval_for_confirmation = _short_check_interval(draws, sampling, interval)
+    can_confirm = draws + interval_for_confirmation <= sampling.maximum_draws
+    candidates = sampling.extra_discards(draws, percentages) if can_confirm else []
+    if pending:
+        candidates = [pending, *(count for count in candidates if count != pending)]
+    report = scratch / "candidate-diagnostics.tsv" if candidates else diagnostics
+    with diagnostics.with_suffix(".log").open("w") as log:
+        diagnose_chains(
+            paths,
+            report,
+            log=log,
+            jobs=jobs,
+            stopping_thresholds=(RHAT_MAX, ESS_MIN)
+            if candidates or not final
+            else None,
+            burnin_candidates=candidates,
+            confirm_burnin=pending,
+            final=final,
+        )
+    selected = discard = 0
+    if candidates:
+        with report.open(encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle, delimiter="\t")
+            fields = reader.fieldnames
+            if not fields or fields[-1] != "discarded_draws":
+                raise ValueError("Missing burn-in window in diagnostic output.")
+            rows = list(reader)
+        if not rows:
+            raise ValueError("No MCMCtree diagnostic parameters.")
+        selected = int(rows[-1]["discarded_draws"])
+        discard = selected if selected == pending else 0
+        with diagnostics.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(
+                handle, fields[:-1], delimiter="\t", lineterminator="\n"
+            )
+            writer.writeheader()
+            for row in rows:
+                if int(row.pop("discarded_draws")) == discard:
+                    writer.writerow(row)
+    decision = _next_round(diagnostics, draws, sampling, interval)
+    if selected and not discard:
+        decision.update(
+            reason="burnin_confirmation_required",
+            next_draws=draws + interval_for_confirmation,
+            check_interval_draws=interval_for_confirmation,
+            estimated_total_generations_per_chain=None,
+            candidate_discarded_draws_per_chain=selected,
+            candidate_burnin_generations=sampling.generations(selected),
+        )
+    return decision, discard
+
+
 def _run_rounds(
-    root, scratch, binary, values, sampling, seed, jobs, destinations, stop
+    root, scratch, binary, values, sampling, seed, jobs, destinations, stop, percentages
 ):
     inputs = root / "inputs"
     completed: list[Segment | None] = [None] * CHAINS
@@ -463,6 +573,7 @@ def _run_rounds(
     target = sampling.minimum_draws
     sampled = 0
     number = 0
+    pending = interval = 0
     started = time.monotonic()
     while True:
         if stop.is_set():
@@ -512,17 +623,17 @@ def _run_rounds(
         )
         diagnostics = round_dir / "diagnostics.tsv"
         try:
-            with (round_dir / "diagnostics.log").open("w") as log:
-                diagnose_chains(
-                    paths,
-                    diagnostics,
-                    log=log,
-                    jobs=jobs,
-                    stopping_thresholds=(RHAT_MAX, ESS_MIN)
-                    if sampled < sampling.maximum_draws
-                    else None,
-                )
-            decision = _next_round(diagnostics, sampled, sampling)
+            decision, discard = _check_round(
+                paths,
+                diagnostics,
+                scratch,
+                sampled,
+                sampling,
+                jobs,
+                percentages,
+                pending,
+                interval,
+            )
         except (OSError, ValueError, subprocess.CalledProcessError) as error:
             _save_json(
                 root / "progress.json",
@@ -543,6 +654,7 @@ def _run_rounds(
             {
                 **decision,
                 "draws_per_chain": sampled,
+                "discarded_draws_per_chain": discard,
                 "generations_per_chain": sampling.generations(sampled),
                 "elapsed_seconds": time.monotonic() - started,
             }
@@ -550,6 +662,8 @@ def _run_rounds(
         _save_json(root / "progress.json", {"rounds": history})
         if "next_draws" in decision:
             target = decision["next_draws"]
+            pending = decision.get("candidate_discarded_draws_per_chain", 0)
+            interval = decision.get("check_interval_draws", 0)
             print(
                 f"MCMCtree will check again at {sampling.generations(target):,} "
                 f"generations per chain ({decision['reason']}).",
@@ -557,12 +671,23 @@ def _run_rounds(
             )
             continue
 
-        tree = _summarize(binary, values, inputs, paths, sampled, seed, scratch, stop)
+        retained = sampled - discard
+        tree = _summarize(
+            binary, values, inputs, paths, retained, seed, scratch, stop, discard
+        )
         status = {
             **decision,
             "schema_version": 1,
             "completed_chains": CHAINS,
-            "pooled_samples": sampled * CHAINS,
+            "pooled_samples": retained * CHAINS,
+            "sample_window": {
+                "initial_burnin_generations": sampling.burnin,
+                "effective_burnin_generations": sampling.generations(discard),
+                "discarded_draws_per_chain": discard,
+                "first_generation": sampling.generations(discard + 1),
+                "last_generation": sampling.generations(sampled),
+                "retained_draws_per_chain": retained,
+            },
             "generations_per_chain": sampling.generations(sampled),
             "max_generations_per_chain": sampling.generations(sampling.maximum_draws),
             "rhat_max": RHAT_MAX,
@@ -596,6 +721,7 @@ def run_mcmctree(
     run_store: Path | None = None,
     seed: int = 1729,
     jobs: int = CHAINS,
+    burnin_percentages: str = "",
 ) -> dict:
     """Run a calibrated IQ2MC/PAML control and publish a checked output bundle."""
     if (
@@ -606,6 +732,7 @@ def run_mcmctree(
         raise ValueError("Use a positive integer worker budget below 2147483648.")
     if not 1 <= seed < MAX_PAML_GENERATIONS:
         raise ValueError("Use a positive base seed below 2147483647.")
+    percentages = _burnin_percentages(burnin_percentages)
     executable = shutil.which("mcmctree")
     if not executable:
         raise ValueError("Upstream PAML's mcmctree executable is required on PATH.")
@@ -632,6 +759,7 @@ def run_mcmctree(
         ),
         "max_generations": sampling.generations(sampling.maximum_draws),
         "seed": seed,
+        "burnin_percentages": [format(value, "f") for value in percentages],
     }
     run_id = hashlib.sha256(
         json.dumps(contract, sort_keys=True).encode("utf-8")
@@ -669,6 +797,7 @@ def run_mcmctree(
                 jobs,
                 destinations,
                 stop,
+                percentages,
             )
 
 
@@ -680,6 +809,7 @@ def mcmctree_run_main(args):
         run_store=args.run_store,
         seed=args.seed,
         jobs=args.jobs,
+        burnin_percentages=args.burnin_percentages,
     )
     if status["state"] != "passed":
         print(

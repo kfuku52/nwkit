@@ -5344,6 +5344,12 @@ pmcmctree_run.add_argument(
     help="Total generations per chain, including burn-in. Default: burn-in plus 64 times the initial sampling generations, within PAML's integer range.",
 )
 pmcmctree_run.add_argument(
+    "--burnin-percentages",
+    "--burnin_percentages",
+    default="",
+    help="Optional comma-separated percentages of total generations (e.g. 2.5,5,10,20,40). The smallest passing extra burn-in is confirmed at the next check.",
+)
+pmcmctree_run.add_argument(
     "--jobs",
     type=int,
     default=4,

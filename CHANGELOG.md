@@ -4,6 +4,12 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.47.4] - 2026-11-22
+
+- Check MCMCtree convergence at shorter intervals near the stopping criteria.
+- Optionally confirm the smallest passing common burn-in cutoff before using it for diagnostics and dating.
+- Reject failing burn-in windows early and keep the diagnostic and pooled sample ranges in sync.
+
 ## [0.47.3] - 2026-11-22
 
 - Add `mcmctree-run` for four independent PAML chains, diagnostic-guided extensions, checkpoint restart, and a pooled dated tree.

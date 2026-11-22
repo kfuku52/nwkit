@@ -7,7 +7,16 @@ from pathlib import Path
 
 
 def diagnose_chains(
-    paths, output, *, profile="chain", log=None, jobs=1, stopping_thresholds=None
+    paths,
+    output,
+    *,
+    profile="chain",
+    log=None,
+    jobs=1,
+    stopping_thresholds=None,
+    burnin_candidates=(),
+    confirm_burnin=0,
+    final=False,
 ):
     """Compute reference diagnostics, with an optional worker budget for chains."""
     if profile not in {"chain", "calibration"}:
@@ -26,6 +35,8 @@ def diagnose_chains(
             raise ValueError(
                 "Stopping thresholds must be positive and use the chain profile"
             )
+    if burnin_candidates and stopping_thresholds is None:
+        raise ValueError("Burn-in candidates require stopping thresholds")
     if len(paths) < 2:
         raise ValueError("At least two independent chains are required")
     name = (
@@ -57,6 +68,16 @@ def diagnose_chains(
                 *(
                     ["--stop-at", *map(str, stopping_thresholds)]
                     if stopping_thresholds is not None
+                    else []
+                ),
+                *(
+                    [
+                        "--try-burnin",
+                        ",".join(map(str, burnin_candidates)),
+                        str(confirm_burnin),
+                        str(int(final)),
+                    ]
+                    if burnin_candidates
                     else []
                 ),
                 str(staged[output]),
