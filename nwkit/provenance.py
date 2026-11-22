@@ -439,7 +439,7 @@ def _input_path_candidates(args):
         )
 
     if (
-        getattr(args, "command", None) == "mcmctree"
+        getattr(args, "command", None) in {"mcmctree-tree", "mcmctree"}
         and getattr(args, "angiocal", "no") == "v1.0"
         and not getattr(args, "angiocal_file", None)
     ):
@@ -1025,7 +1025,10 @@ def validate_command_path_roles(args):
         # Regression already validates its raw, precomputed and bundle paths.
         # Keep its established input-overwrite diagnostics at the CLI boundary.
         return
-    if args.command == "mcmctree" and getattr(args, "angiocal", "no") == "v1.0":
+    if (
+        args.command in {"mcmctree-tree", "mcmctree"}
+        and getattr(args, "angiocal", "no") == "v1.0"
+    ):
         from nwkit.angiocal import angiocal_protected_paths
 
         validate_outputs_do_not_replace_inputs(

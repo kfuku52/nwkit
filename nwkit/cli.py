@@ -1,6 +1,7 @@
 import argparse
 import math
 import sys
+from pathlib import Path
 
 from nwkit import __version__
 from nwkit.asr_models import model_names
@@ -5044,8 +5045,9 @@ def command_mcmctree(args):
 
 
 pmcmctree = subparsers.add_parser(
-    "mcmctree",
-    help="Prepare MCMCtree calibrations or summarize its posterior node ages",
+    "mcmctree-tree",
+    aliases=["mcmctree"],
+    help="Prepare a calibrated tree or convert MCMCtree posterior ages to a tree",
     parents=[p_tree_input, p_download, p_species, p_vertlife],
 )
 pmcmctree.add_argument(
@@ -5303,6 +5305,57 @@ pmcmctree.add_argument(
     help="default=%(default)s: Keep every INT-th posterior row.",
 )
 pmcmctree.set_defaults(handler=command_mcmctree)
+
+
+def command_mcmctree_run(args):
+    from nwkit.mcmctree_runner import mcmctree_run_main
+
+    return mcmctree_run_main(args)
+
+
+pmcmctree_run = subparsers.add_parser(
+    "mcmctree-run",
+    help="Run four MCMCtree chains and extend them until convergence criteria are met",
+)
+pmcmctree_run.add_argument(
+    "-i",
+    "--control",
+    type=Path,
+    required=True,
+    help="Calibrated IQ2MC or upstream PAML control file for the initial run.",
+)
+pmcmctree_run.add_argument(
+    "--out-dir",
+    "--out_dir",
+    type=Path,
+    required=True,
+    help="Directory for the tree, summary, diagnostics and restart evidence.",
+)
+pmcmctree_run.add_argument(
+    "--run-store",
+    "--run_store",
+    type=Path,
+    help="Optional persistent directory for raw chains and checkpoint evidence (default: OUT_DIR/runs).",
+)
+pmcmctree_run.add_argument(
+    "--max-generations",
+    "--max_generations",
+    type=int,
+    help="Total generations per chain, including burn-in. Default: burn-in plus 64 times the initial sampling generations, within PAML's integer range.",
+)
+pmcmctree_run.add_argument(
+    "--jobs",
+    type=int,
+    default=4,
+    help="Worker budget for sampling and diagnostics (default: %(default)s). Sampling runs at most four chains.",
+)
+pmcmctree_run.add_argument(
+    "--seed",
+    type=int,
+    default=1729,
+    help="Base seed for independent chains and resumed segments (default: %(default)s).",
+)
+pmcmctree_run.set_defaults(handler=command_mcmctree_run)
 
 
 def command_monophyly(args):
@@ -6637,11 +6690,14 @@ parser_help.add_argument("command", help="command name which help is shown")
 parser_help.set_defaults(handler=command_help)
 
 
+DEPRECATED_COMMAND_ALIASES = {"mcmctree": "mcmctree-tree"}
+
+
 def _add_input_rooting_options():
     from nwkit.rooting_state import ROOTING_INPUT_OPTIONS
 
     for command, command_parser in subparsers.choices.items():
-        if command in {"table2nwk", "help"}:
+        if command in {"table2nwk", "help"} or command in DEPRECATED_COMMAND_ALIASES:
             continue
         input_names = {action.dest for action in command_parser._actions}
         if command == "regress":
@@ -6667,10 +6723,12 @@ def _add_input_rooting_options():
 
 def _add_output_rooting_options():
     for command, command_parser in subparsers.choices.items():
+        if command in DEPRECATED_COMMAND_ALIASES:
+            continue
         outputs = {action.dest for action in command_parser._actions}
         if not outputs.intersection(
             {"outformat", "tree_outformat", "tree_out"}
-        ) and command not in {"convert", "radte", "mcmctree"}:
+        ) and command not in {"convert", "radte", "mcmctree-tree"}:
             continue
         command_parser.add_argument(
             "--rooting-token",
@@ -6819,6 +6877,12 @@ def main(argv=None):
     raw_argv = list(sys.argv[1:] if argv is None else argv)
     args = parser.parse_args(raw_argv)
     if hasattr(args, "handler"):
+        if args.command in DEPRECATED_COMMAND_ALIASES:
+            canonical = DEPRECATED_COMMAND_ALIASES[args.command]
+            sys.stderr.write(
+                f"Warning: command '{args.command}' is deprecated; use '{canonical}' instead.\n"
+            )
+            args.command = canonical
         try:
             if getattr(args, "audit", None) == "-":
                 raise ValueError("'--audit' requires a file path, not '-'.")

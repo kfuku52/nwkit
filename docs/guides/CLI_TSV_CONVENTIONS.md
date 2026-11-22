@@ -24,7 +24,7 @@ are distinct from fitted-parameter conditional intervals in the primary table.
   canonical replacement. New documentation and scripts should use the
   canonical kebab-case names.
 - Most boolean options use explicit `yes|no` values; `--debug` is a value-less
-  flag. `mcmctree --add-header`
+  flag. `mcmctree-tree --add-header`
   continues to accept the historical value-less form as well as `yes|no`.
 - `-i/--infile`, `-o/--outfile`, and `-of/--outformat` are reserved for the
   primary input, primary output, and Newick output format. Commands producing
@@ -69,14 +69,14 @@ NCBI taxonomy uses separate `--taxonomy-cache-max-age-days` and
 from analysis result files; ordinary tree/trait analyses do not resume a saved
 fit automatically on rerun.
 
-`mcmctree --angiocal v1.0` imports a checksum-verified fossil dataset and is
+`mcmctree-tree --angiocal v1.0` imports a checksum-verified fossil dataset and is
 exclusive with TimeTree, posterior conversion and manual calibration selection.
 Its original Ma ages, crown/stem placement rules, source/report schemas, cache
 paths and nominal-bound checks are documented in [ANGIOCAL.md](ANGIOCAL.md).
 Its tree/report pair is staged together; an all-excluded import intentionally
 writes the diagnostic report while leaving the result tree untouched.
 
-`constrain`, `root`, and `mcmctree` can use a checksum-verified VertLife
+`constrain`, `root`, and `mcmctree-tree` can use a checksum-verified VertLife
 reference. The [VertLife guide](VERTLIFE.md) describes the cache, source
 selection, topology and age semantics, and companion TSV schemas.
 
@@ -120,7 +120,7 @@ containers commonly encountered in dating workflows:
 MCMCtree/FigTree `95%HPD` and legacy `95%` node-age comments are normalized to
 `age_ci_low`, `age_ci_high`, `age_ci_kind`, and `age_ci_level` NHX properties.
 This normalization happens before command-specific processing, including for
-STDIN, so a header-bearing `nwkit mcmctree --add-header` result remains valid
+STDIN, so a header-bearing `nwkit mcmctree-tree --add-header` result remains valid
 input to other NWKIT commands.
 
 ### Rootedness and root polytomies
@@ -195,7 +195,7 @@ contract are not presentation outputs and retain their native requirements.
 `convert --to figtree` retains its format-specific NEXUS rooting declaration
 regardless of the standalone token option. Strict `convert --to newick` rejects
 states that cannot be preserved without a token; choose `--rooting-token yes` or
-`--to nhx/figtree`. `mcmctree --posterior` uses the common output policy; its
+`--to nhx/figtree`. `mcmctree-tree --posterior` uses the common output policy; its
 calibration/PAML treefile syntax remains unchanged.
 
 | Tree output path | Commands / artifacts |
@@ -204,7 +204,7 @@ calibration/PAML treefile syntax remains unchanged.
 | Container-preserving conversion | `convert`: Newick, NHX, FigTree/NEXUS |
 | Full-precision dated trees | `radte`: `.dated.nwk`; `mul-reconcile` MSC fixed/fitted `--tree-out`, TSV tree columns and JSON scores |
 | Other direct result serializers | `mul-reconcile`: D+L topology/mapping columns and `--tree-out`, locus JSON population trees; `gene-tree-search`: selected and candidate trees |
-| Native format boundary | `mcmctree`: posterior trees use the policy; PAML calibration syntax is unchanged. Native external-worker inputs and SHIFT analysis tokens retain their private format contracts. |
+| Native format boundary | `mcmctree-tree`: posterior trees use the policy; PAML calibration syntax is unchanged. Native external-worker inputs and SHIFT analysis tokens retain their private format contracts. |
 The `nwkit_rooted` property and private `_nwkit_rooting_*` bookkeeping properties
 are reserved and cannot be reassigned through annotation/property transfer.
 The Python `read_tree` and `read_trees` helpers expose the same policy through

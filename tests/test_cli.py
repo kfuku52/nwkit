@@ -26,6 +26,25 @@ def test_version_option(capsys):
     assert capsys.readouterr().out.strip() == f"nwkit {__version__}"
 
 
+def test_old_mcmctree_alias_produces_the_same_tree(tmp_path, capsys):
+    options = [
+        "-i",
+        "(a:0.1,b:0.1);",
+        "--left-species",
+        "a",
+        "--right-species",
+        "b",
+        "--lower-bound",
+        "1",
+    ]
+    canonical, legacy = tmp_path / "current.nwk", tmp_path / "legacy.nwk"
+    main(["mcmctree-tree", *options, "-o", str(canonical)])
+    assert "deprecated" not in capsys.readouterr().err
+    main(["mcmctree", *options, "-o", str(legacy)])
+    assert "use 'mcmctree-tree' instead" in capsys.readouterr().err
+    assert legacy.read_bytes() == canonical.read_bytes()
+
+
 def test_regress_replaces_pgls_without_compatibility_alias(capsys):
     assert _subcommand_parser("regress").prog == "nwkit regress"
 
@@ -161,7 +180,7 @@ def test_python_module_entry_point():
         ["draw", "--figure-width", "inf"],
         ["consensus", "--min-freq", "-inf"],
         ["consensus", "--min-freq", "1.01"],
-        ["mcmctree", "--min-clade-prop", "-0.01"],
+        ["mcmctree-tree", "--min-clade-prop", "-0.01"],
         ["subtree", "--dup-conf-score-threshold", "1.01"],
         ["root", "--duplication-cost", "-0.01"],
         ["root", "--loss-cost", "inf"],

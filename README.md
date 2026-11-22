@@ -92,6 +92,7 @@ minimal worked example, in
 - [`annotate`](https://github.com/kfuku52/nwkit/wiki/nwkit-annotate): Attaching tip-table values and aggregating them as Newick properties
 - [`asr`](docs/guides/ASR.md): Inferring Mk/covarion/mixture/threshold or scalar/multivariate Gaussian ancestral traits, with regimes, joint evolutionary/individual covariance, model comparison, simulation diagnostics, and automatic trait-type detection; supports [branch-specific BM/OU and fixed Gaussian jumps](docs/guides/BRANCH_GAUSSIAN.md)
 - [`asrcompare`](docs/guides/ASR.md#model-comparison-and-simulation-diagnostics): Batch-fitting applicable ASR models and comparing compatible likelihood/root groups with AIC, AICc, BIC, and an optional PDF
+- [`check-constraint`](docs/guides/PARTIAL_CONSTRAINTS.md): Verifying alignment tips and required splits in an inferred tree
 - [`cladefreq`](https://github.com/kfuku52/nwkit/wiki/nwkit-cladefreq): Summarizing clade frequencies across a tree collection
 - [`collapse`](https://github.com/kfuku52/nwkit/wiki/nwkit-collapse): Collapsing internal branches by support and/or branch length
 - [`compose`](https://github.com/kfuku52/nwkit/wiki/nwkit-compose): Assembling compatible roots, values, and annotations from multiple trees
@@ -111,9 +112,11 @@ minimal worked example, in
 - [`ksrate`](https://github.com/kfuku52/nwkit/wiki/nwkit-ksrate): Focal-lineage Ks correction with multiple outgroups, shared-family bootstrap and inconsistency diagnostics
 - [`label`](https://github.com/kfuku52/nwkit/wiki/nwkit-label): Adding unique node labels
 - [`mark`](https://github.com/kfuku52/nwkit/wiki/nwkit-mark): Adding texts to node labels by identifying the targets with a leaf name regex
-- [`mcmctree`](https://github.com/kfuku52/nwkit/wiki/nwkit-mcmctree): Preparing PAML calibrations, importing [AngioCal fossil minima](docs/guides/ANGIOCAL.md), and converting posterior node ages into pipeable dated NHX trees
+- [`mcmctree-tree`](https://github.com/kfuku52/nwkit/wiki/nwkit-mcmctree-tree): Preparing PAML calibrations, importing [AngioCal fossil minima](docs/guides/ANGIOCAL.md), and converting posterior node ages into pipeable dated NHX trees
+- [`mcmctree-run`](docs/guides/MCMCTREE_RUN.md): Four-chain MCMCtree dating with diagnostic-guided sampling and restartable checkpoints
 - [`monophyly`](https://github.com/kfuku52/nwkit/wiki/nwkit-monophyly): Assessing whether species or trait-defined groups are monophyletic
 - [`mul-reconcile`](https://github.com/kfuku52/nwkit/wiki/nwkit-mul-reconcile): Exact GRAMPA-style MUL-tree D+L parsimony with repeated-subtree reuse and auditable node mappings, [conditional MSC fitting](docs/guides/MUL_MSC.md) and [experimental locus DL + ILS comparison](docs/guides/MUL_LOCUS_MC.md)
+- [`nhx2nwk`](https://github.com/kfuku52/nwkit/wiki/nwkit-nhx2nwk): Writing plain Newick from an NHX tree
 - [`nwk2table`](https://github.com/kfuku52/nwkit/wiki/nwkit-nwk2table): Converting a Newick tree into a parent-child table
 - [`pca`](docs/guides/PCA.md): Phylogenetic PCA with BM or shared lambda, evolutionary loadings, ancestral PC intervals and phylomorphospace figures
 - [`printlabel`](https://github.com/kfuku52/nwkit/wiki/nwkit-printlabel): Searching and printing node labels

@@ -412,7 +412,7 @@ def test_mcmctree_reports_ages_without_altering_input_tree(reference, tmp_path):
     tree_path = tmp_path / "unchanged.nwk"
     report = tmp_path / "ages.tsv"
     main(
-        ["mcmctree", "-i", source, "--report", str(report), "-o", str(tree_path)]
+        ["mcmctree-tree", "-i", source, "--report", str(report), "-o", str(tree_path)]
         + _source_options(reference)
     )
     before = read_tree(source, 1, True, quiet=True)
@@ -438,7 +438,7 @@ def test_mcmctree_keeps_names_carried_alongside_numeric_support(reference, tmp_p
     tree_path, report = (tmp_path / name for name in ("tree.nwk", "ages.tsv"))
     main(
         [
-            "mcmctree",
+            "mcmctree-tree",
             "-i",
             source,
             "-f",
@@ -463,7 +463,7 @@ def test_mcmctree_serializes_numeric_nhx_fields_as_numbers(reference, tmp_path):
     tree_path, report = (tmp_path / name for name in ("tree.nwk", "ages.tsv"))
     main(
         [
-            "mcmctree",
+            "mcmctree-tree",
             "-i",
             source,
             "-f",
@@ -484,7 +484,8 @@ def test_mcmctree_does_not_match_noncontiguous_reference_clades(reference, tmp_p
     report = tmp_path / "ages.tsv"
     source = "((Xenopus_laevis,Bufo_bufo),(Xenopus_tropicalis,Rana_temporaria));"
     main(
-        ["mcmctree", "-i", source, "--report", str(report)] + _source_options(reference)
+        ["mcmctree-tree", "-i", source, "--report", str(report)]
+        + _source_options(reference)
     )
     rows = _read_report(report)
     assert [row["status"] for row in rows] == [
@@ -515,7 +516,8 @@ def test_mcmctree_reports_rooted_polytomy_from_constrain(tmp_path, monkeypatch):
         + ["--branch-length", "original", "-o", str(tree)]
     )
     main(
-        ["mcmctree", "-i", str(tree), "--report", str(report), "-o", str(copy)] + source
+        ["mcmctree-tree", "-i", str(tree), "--report", str(report), "-o", str(copy)]
+        + source
     )
     [row] = _read_report(report)
     assert (row["branch_id"], row["status"], row["age_ma"]) == ("0", "matched", "5.0")
@@ -539,7 +541,7 @@ def test_mcmctree_rolls_back_tree_and_report_on_publish_failure(
     with pytest.raises(OSError, match="injected tree"):
         main(
             [
-                "mcmctree",
+                "mcmctree-tree",
                 "-i",
                 "((Xenopus_laevis,Xenopus_tropicalis),(Bufo_bufo,Rana_temporaria));",
                 "--report",
@@ -560,7 +562,7 @@ def test_mcmctree_rolls_back_tree_and_report_on_publish_failure(
 def test_mcmctree_rejects_combining_calibration_modes(reference, tmp_path, conflicting):
     with pytest.raises(ValueError, match="cannot be combined"):
         main(
-            ["mcmctree", "--report", str(tmp_path / "ages.tsv")]
+            ["mcmctree-tree", "--report", str(tmp_path / "ages.tsv")]
             + _source_options(reference)
             + conflicting
         )

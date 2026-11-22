@@ -37,6 +37,7 @@ in [`guides/`](guides/):
 
 The complete guide list is available in the directory; filenames retain the
 historical names used by the CLI and examples.
+- [Adaptive MCMCtree runs](guides/MCMCTREE_RUN.md)
 
 ## Validation and research notes
 

@@ -37,7 +37,7 @@ def dataset_file(tmp_path, text="1\tSynthetic fossil\t12.5\tcrown\tTestaceae\n")
 def args_for(tmp_path, dataset, **kwargs):
     args = parser.parse_args(
         [
-            "mcmctree",
+            "mcmctree-tree",
             "-i",
             "((A_a:1,B_b:1)Testaceae:1,C_c:2);",
             "--angiocal",
@@ -344,7 +344,7 @@ def test_fossil_export_rejects_names_that_paml_cannot_preserve(tmp_path, tip):
 def test_manual_export_preserves_tip_tokens(tmp_path, tip):
     args = parser.parse_args(
         [
-            "mcmctree",
+            "mcmctree-tree",
             "-i",
             f"(('{tip}':1,B_b:1):1,C_c:2);",
             "--left-species",
@@ -440,7 +440,7 @@ def test_explicit_map_stdin_and_cli_ownership(tmp_path, monkeypatch):
         io.StringIO("fossil_id\tleft_species\tright_species\n1\tA_a\tB_b\n"),
     )
     argv = [
-        "mcmctree",
+        "mcmctree-tree",
         "-i",
         "((A_a,B_b),C_c);",
         "--angiocal",
@@ -483,7 +483,7 @@ def test_incompatible_options_fail_before_input_or_network(
     "option", ["--angiocal-file", "--calibration-map-tsv", "--report"]
 )
 def test_auxiliary_options_require_angiocal(option):
-    args = parser.parse_args(["mcmctree", option, "unused.tsv"])
+    args = parser.parse_args(["mcmctree-tree", option, "unused.tsv"])
     with pytest.raises(ValueError, match="require.*angiocal"):
         mcmctree_main(args)
 
@@ -1011,7 +1011,7 @@ def test_outputs_and_audit_cannot_overwrite_automatic_source_cache(
     with pytest.raises(ValueError, match="overwrite|distinct"):
         main(
             [
-                "mcmctree",
+                "mcmctree-tree",
                 "-i",
                 "((A_a,B_b)Testaceae,C_c);",
                 "--angiocal",
@@ -1035,7 +1035,7 @@ def test_first_download_is_included_in_audit_source_hashes(tmp_path, monkeypatch
     audit = tmp_path / "audit.jsonl"
     main(
         [
-            "mcmctree",
+            "mcmctree-tree",
             "-i",
             "((A_a,B_b)Testaceae,C_c);",
             "--angiocal",
@@ -1066,7 +1066,7 @@ def test_outputs_cannot_replace_ncbi_cache_assets(tmp_path, monkeypatch, role):
     with pytest.raises(ValueError, match="NCBI taxonomy cache"):
         main(
             [
-                "mcmctree",
+                "mcmctree-tree",
                 "-i",
                 "((A_a,B_b)Testaceae,C_c);",
                 "--angiocal",

@@ -4,6 +4,12 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.47.3] - 2026-11-22
+
+- Add `mcmctree-run` for four independent PAML chains, diagnostic-guided extensions, checkpoint restart, and a pooled dated tree.
+- Rename calibration and posterior-tree utilities to `mcmctree-tree`, retaining `mcmctree` as a compatibility alias.
+- Bound concurrent sampler and diagnostic workers, skip MCSE during intermediate checks, and stream traces into the final PAML summary.
+
 ## [0.47.2] - 2026-11-20
 
 - Retry transient Windows sharing violations when releasing cache and output locks, checking the owner again before deletion.

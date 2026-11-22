@@ -133,7 +133,7 @@ CASES = {
         "independent",
     ],
     "mark": ["--insert-text", "marked"],
-    "mcmctree": [
+    "mcmctree-tree": [
         "--left-species",
         "Genus_a",
         "--right-species",
@@ -321,7 +321,7 @@ def test_command_parser_reaches_its_real_handler(
             assert paths["pdf"].read_bytes().startswith(b"%PDF")
     elif command == "draw":
         assert "<svg" in output.read_text()
-    elif command not in {"info", "printlabel", "mcmctree"}:
+    elif command not in {"info", "printlabel", "mcmctree-tree"}:
         result = read_tree(str(output), "auto", True, quiet=True)
         assert list(result.leaves())
 

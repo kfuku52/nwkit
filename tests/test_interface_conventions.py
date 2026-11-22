@@ -134,7 +134,7 @@ def test_non_newick_outputs_do_not_expose_outformat():
         "dist",
         "draw",
         "info",
-        "mcmctree",
+        "mcmctree-tree",
         "monophyly",
         "nwk2table",
         "regress",
@@ -178,7 +178,7 @@ def test_compatibility_aliases_resolve_to_canonical_destinations():
 
     mcmctree_args = parser.parse_args(
         [
-            "mcmctree",
+            "mcmctree-tree",
             "--lower_tailProb",
             "0.1",
             "--upper_tail_prob",
@@ -187,9 +187,13 @@ def test_compatibility_aliases_resolve_to_canonical_destinations():
     )
     assert mcmctree_args.lower_tail_prob == "0.1"
     assert mcmctree_args.upper_tail_prob == "0.2"
-    assert parser.parse_args(["mcmctree", "--add-header"]).add_header is True
-    assert parser.parse_args(["mcmctree", "--add-header", "yes"]).add_header is True
-    assert parser.parse_args(["mcmctree", "--add-header", "no"]).add_header is False
+    assert parser.parse_args(["mcmctree-tree", "--add-header"]).add_header is True
+    assert (
+        parser.parse_args(["mcmctree-tree", "--add-header", "yes"]).add_header is True
+    )
+    assert (
+        parser.parse_args(["mcmctree-tree", "--add-header", "no"]).add_header is False
+    )
 
     assert _parse_targets("leaf,missing-leaf") == {"leaf", "missing-leaf"}
     assert _parse_targets("tip,missing_tip") == {"leaf", "missing-leaf"}
