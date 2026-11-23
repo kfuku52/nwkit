@@ -10,6 +10,15 @@ nwkit wgd-count -i species.nwk --counts families.tsv \
   --bootstrap 199 --seed 71 -o events.tsv --model-out count-model.json
 ```
 
+For a long scan, keep one `--fit-checkpoint` outside the result directory.
+With `--background-only`, the command stops after the verified background fit.
+Run again with the same inputs and search settings and without that flag to
+complete the observed branch scan, saving each completed branch. A third run can
+enable bootstrap and add
+`--bootstrap-checkpoint`, reusing the completed observed fits. The fit
+checkpoint binds the tree, counts, fitting settings, and numerical runtime.
+It is distinct from the checkpoint for completed bootstrap draws.
+
 With the default `--bootstrap 0`, results are exploratory candidates: p-values
 are `NA` and `count_support=not_calibrated`. Increasing the number of bootstrap
 datasets improves Monte Carlo precision, not model adequacy. A p-value is never

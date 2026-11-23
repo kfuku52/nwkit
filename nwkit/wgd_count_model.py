@@ -745,6 +745,11 @@ class CountLikelihood:
             tuple[bool, float, float, float, int], np.ndarray
         ] = OrderedDict()
         self._transition_cache_bytes = 0
+        self._profile_counts = None
+        self._profile_layout: (
+            tuple[list[np.ndarray | None], list[np.ndarray | None], np.ndarray | None]
+            | None
+        ) = None
         self._emission_cache: (
             tuple[tuple[int, bytes, bytes], dict[int, np.ndarray]] | None
         ) = None
@@ -838,33 +843,71 @@ class CountLikelihood:
         )
         return kernel(event.retention, event.multiplicity, max_count)
 
+    def _observation_profiles(self):
+        """Identify identical observations below each node, in input row order."""
+        if self._profile_counts is not None and np.array_equal(
+            self.counts, self._profile_counts, equal_nan=True
+        ):
+            return self._profile_layout
+        size = len(self.tree.parents)
+        tips = {node: column for column, node in enumerate(self.tree.tip_nodes)}
+        indices: list[np.ndarray | None] = [None] * size
+        representatives: list[np.ndarray | None] = [None] * size
+        child_profiles: list[np.ndarray | None] = [None] * size
+        for node in range(size - 1, -1, -1):
+            children = self.children[node]
+            if children:
+                keys = np.column_stack([indices[child] for child in children])
+                _, first, inverse = np.unique(
+                    keys, axis=0, return_index=True, return_inverse=True
+                )
+                for column, child in enumerate(children):
+                    child_profiles[child] = keys[first, column]
+                    indices[child] = None
+            else:
+                _, first, inverse = np.unique(
+                    self.counts[:, tips[node]], return_index=True, return_inverse=True
+                )
+            representatives[node] = first
+            indices[node] = inverse.ravel()
+        self._profile_counts = self.counts.copy()
+        self._profile_layout = representatives, child_profiles, indices[0]
+        return self._profile_layout
+
     def _prune(self, emissions, matrices, prior):
+        representatives, child_profiles, root_profiles = self._observation_profiles()
         size = len(self.tree.parents)
         likelihoods = [None] * size
         scales = [None] * size
-        rows = len(self.counts)
         with np.errstate(divide="ignore"):
             for node in range(size - 1, -1, -1):
+                members = representatives[node]
                 if node in emissions:
-                    likelihoods[node] = emissions[node]
+                    likelihoods[node] = emissions[node][members]
                     continue
-                value = np.ones((rows, len(prior)))
-                scale = np.zeros(rows)
+                value = np.ones((len(members), len(prior)))
+                scale = np.zeros(len(members))
                 for child in self.children[node]:
-                    if (tip := emissions.get(child)) is not None and tip.ndim == 1:
-                        contribution = matrices[child].T[tip]
+                    profiles = child_profiles[child]
+                    child_values = likelihoods[child]
+                    if child_values.ndim == 1:
+                        contribution = matrices[child].T[child_values[profiles]]
                     else:
-                        contribution = likelihoods[child] @ matrices[child].T
-                    # An unobserved subtree integrates to one over the unbounded
-                    # process, not to the truncated transition's row sum.
-                    has_missing = self._subtree_has_missing[child]
-                    if has_missing:
-                        contribution[self.subtree_missing[child]] = 1.0
+                        # Contract each distinct child profile once, then map
+                        # its contribution to all matching parent profiles.
+                        contribution = (child_values @ matrices[child].T)[profiles]
+                    # An entirely missing subtree integrates to one over the
+                    # unbounded process, including states past the bound.
+                    missing = None
+                    if self._subtree_has_missing[child]:
+                        missing = self.subtree_missing[child][members]
+                        contribution[missing] = 1.0
                     value *= contribution
                     if (child_scale := scales[child]) is not None:
-                        if has_missing:
-                            child_scale[self.subtree_missing[child]] = 0.0
-                        scale += child_scale
+                        inherited_scale = child_scale[profiles]
+                        if missing is not None:
+                            inherited_scale[missing] = 0.0
+                        scale += inherited_scale
                     likelihoods[child] = scales[child] = None
                     normalizer = value.max(axis=1)
                     positive = normalizer > 0
@@ -873,7 +916,7 @@ class CountLikelihood:
                     )
                     scale += np.log(normalizer)
                 likelihoods[node], scales[node] = value, scale
-            return np.log(likelihoods[0] @ prior) + scales[0]
+            return (np.log(likelihoods[0] @ prior) + scales[0])[root_profiles]
 
     def _log_transitions(
         self, rates, scale, max_count, event, *, _split_zero_event=False

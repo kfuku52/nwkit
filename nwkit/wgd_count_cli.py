@@ -87,6 +87,12 @@ def register_wgd_count(subparsers, tree_input, table_output, table_policy):
             "Concurrent null refits; use one BLAS thread per worker (default 1).",
         ),
         (
+            "fit-checkpoint",
+            None,
+            str,
+            "Save the converged background and observed scan, and reuse them on restart.",
+        ),
+        (
             "bootstrap-checkpoint",
             None,
             str,
@@ -139,6 +145,11 @@ def register_wgd_count(subparsers, tree_input, table_output, table_policy):
         choices=["homogeneous", "terminal-internal"],
         default="terminal-internal",
         help="Background rate groups (default terminal-internal); explicit rate-group TSV overrides this.",
+    )
+    parser.add_argument(
+        "--background-only",
+        action="store_true",
+        help="Fit only the background and save it to --fit-checkpoint.",
     )
     parser.set_defaults(handler=_command_wgd_count)
 

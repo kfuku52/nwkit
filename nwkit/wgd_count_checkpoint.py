@@ -5,12 +5,16 @@ import json
 import math
 import os
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
+
+import numpy as np
 
 from nwkit.output_transaction import output_lock_path, write_text_output
 from nwkit.shift_native_provenance import native_implementation_sha256
 from nwkit.util import acquire_exclusive_lock
+from nwkit.wgd_count_fit import CountFit, CountScan, ScanCandidate
+from nwkit.wgd_count_model import MultiplicationEvent
 
 
 def _digest(path):
@@ -26,42 +30,34 @@ def checkpoint_inputs(args):
     if getattr(args, "fixed_events_tsv", None):
         inputs += ("fixed_events_tsv",)
     if any(getattr(args, key) == "-" for key in inputs):
-        raise ValueError("WGD bootstrap checkpoint requires file inputs, not STDIN.")
+        raise ValueError("WGD checkpoint requires file inputs, not STDIN.")
     return {
         key: _digest(path) if (path := getattr(args, key)) else None for key in inputs
     }
 
 
-def checkpoint_identity(args, result, inputs):
-    import numpy as np
+_OBSERVED_SETTINGS = (
+    "format",
+    "quoted_node_names",
+    "input_rooted",
+    "missing_values",
+    "rate_model",
+    "candidate_branches",
+    "event_fractions",
+    "multiplicity",
+    "family_gamma_shape",
+    "family_rate_categories",
+    "max_states",
+    "state_tolerance",
+    "max_iterations",
+    "ascertainment",
+)
 
-    from nwkit.wgd_count import _fit_json
 
-    if checkpoint_inputs(args) != inputs:
-        raise ValueError("WGD bootstrap inputs changed during the observed fit.")
-    settings = (
-        "format",
-        "quoted_node_names",
-        "input_rooted",
-        "missing_values",
-        "rate_model",
-        "candidate_branches",
-        "event_fractions",
-        "multiplicity",
-        "family_gamma_shape",
-        "family_rate_categories",
-        "bootstrap",
-        "seed",
-        "max_states",
-        "state_tolerance",
-        "max_iterations",
-        "ascertainment",
-    )
+def observed_identity(args, inputs):
     identity = {
         "inputs": inputs,
-        "settings": {key: getattr(args, key) for key in settings},
-        "background": _fit_json(result.background),
-        "searched_nodes_in_order": [candidate.node for candidate in result.candidates],
+        "settings": {key: getattr(args, key) for key in _OBSERVED_SETTINGS},
         "implementation_sha256": native_implementation_sha256(),
         "numeric_configuration": {
             name: np.__config__.get_info(name)
@@ -79,8 +75,22 @@ def checkpoint_identity(args, result, inputs):
             )
         },
     }
-    # Match the JSON representation on disk even when parser values are tuples.
+
     return json.loads(json.dumps(identity, allow_nan=False, sort_keys=True))
+
+
+def checkpoint_identity(args, result, inputs):
+    from nwkit.wgd_count import _fit_json
+
+    if checkpoint_inputs(args) != inputs:
+        raise ValueError("WGD bootstrap inputs changed during the observed fit.")
+    identity = observed_identity(args, inputs)
+    identity["settings"].update(bootstrap=args.bootstrap, seed=args.seed)
+    identity["background"] = _fit_json(result.background)
+    identity["searched_nodes_in_order"] = [
+        candidate.node for candidate in result.candidates
+    ]
+    return identity
 
 
 @dataclass
@@ -168,3 +178,128 @@ def open_checkpoint(path, identity, draws):
         if not path.exists():
             checkpoint.save(statistics)
         yield checkpoint
+
+
+def _fit_payload(fit):
+    return {**asdict(fit), "rates": fit.rates.tolist()}
+
+
+def _restore_fit(values):
+    fit = CountFit(
+        **{
+            **values,
+            "rates": np.asarray(values["rates"], dtype=float),
+            "event": MultiplicationEvent(**values["event"])
+            if values["event"]
+            else None,
+        }
+    )
+    if not fit.converged or not np.all(np.isfinite(fit.rates)):
+        raise ValueError("WGD fit checkpoint contains an invalid fit.")
+    return fit
+
+
+def _encode_fit_record(record):
+    return json.dumps(record, allow_nan=False, sort_keys=True, separators=(",", ":"))
+
+
+class ObservedCheckpoint:
+    """One atomic record for the background and completed observed scan."""
+
+    def __init__(self, path, identity):
+        self.path = path
+        self.identity = identity
+        self.background = None
+        self.candidates = None
+        self.complete = False
+        if path.exists():
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                data = payload["data"]
+                if (
+                    data["schema_version"] != 1
+                    or data["identity"] != identity
+                    or payload["sha256"] != self._checksum(data)
+                ):
+                    raise ValueError(
+                        "WGD fit checkpoint does not match the inputs, search, or runtime."
+                    )
+                self.background = _restore_fit(data["background"])
+                self.complete = data["complete"]
+                if type(self.complete) is not bool or (
+                    self.complete and not data["candidates"]
+                ):
+                    raise ValueError(
+                        "WGD fit checkpoint has an invalid completion state."
+                    )
+                if data["candidates"] is not None:
+                    self.candidates = tuple(
+                        ScanCandidate(
+                            **{
+                                **values,
+                                "event_fit": _restore_fit(values["event_fit"]),
+                                "burst_fit": _restore_fit(values["burst_fit"]),
+                            }
+                        )
+                        for values in data["candidates"]
+                    )
+            except (KeyError, TypeError) as exc:
+                raise ValueError("Malformed WGD fit checkpoint.") from exc
+
+    @staticmethod
+    def _checksum(data):
+        return hashlib.sha256(_encode_fit_record(data).encode()).hexdigest()
+
+    def save(self, background, candidates=None, *, complete=False):
+        rows = (
+            None
+            if candidates is None
+            else [
+                {
+                    "node": row.node,
+                    "event_fit": _fit_payload(row.event_fit),
+                    "burst_fit": _fit_payload(row.burst_fit),
+                    "improvement": row.improvement,
+                    "burst_aic_difference": row.burst_aic_difference,
+                }
+                for row in candidates
+            ]
+        )
+        data = {
+            "schema_version": 1,
+            "identity": self.identity,
+            "background": _fit_payload(background),
+            "candidates": rows,
+            "complete": complete,
+        }
+        payload = {"data": data, "sha256": self._checksum(data)}
+        write_text_output(
+            self.path, lambda stream: stream.write(_encode_fit_record(payload))
+        )
+        self.background = background
+        self.candidates = candidates
+        self.complete = complete
+
+    def save_candidate(self, candidate):
+        self.save(
+            self.background,
+            (*self.candidates, candidate) if self.candidates else (candidate,),
+        )
+
+    def scan(self, fractions, multiplicity):
+        if not self.complete or self.background is None or self.candidates is None:
+            return None
+        return CountScan(
+            self.background,
+            self.candidates,
+            fractions=fractions,
+            multiplicity=multiplicity,
+        )
+
+
+@contextmanager
+def open_observed_checkpoint(path, args, inputs):
+    path = Path(path).resolve()
+    lock = output_lock_path(str(path)) + ".observed"
+    with acquire_exclusive_lock(lock, lock_label="WGD fit checkpoint"):
+        yield ObservedCheckpoint(path, observed_identity(args, inputs))

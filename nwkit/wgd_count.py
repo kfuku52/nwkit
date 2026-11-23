@@ -26,11 +26,13 @@ from nwkit.wgd_count_checkpoint import (
     checkpoint_identity,
     checkpoint_inputs,
     open_checkpoint,
+    open_observed_checkpoint,
 )
 from nwkit.wgd_count_fit import (
     _burst_model,
     bootstrap_exceedances,
     calibrate_scan,
+    fit_counts,
     initial_count_bound,
     scan_counts,
 )
@@ -261,17 +263,18 @@ def _paths(args):
             )
         if path not in (None, "-"):
             paths[role] = path
-    validate_outputs_do_not_replace_inputs(
-        inputs,
-        [(role, path) for role, path in paths.items()]
-        + [("--bootstrap-checkpoint", getattr(args, "bootstrap_checkpoint", None))],
-    )
-    checkpoint = getattr(args, "bootstrap_checkpoint", None)
-    if checkpoint in ("", "-"):
-        raise ValueError("--bootstrap-checkpoint requires a nonempty file path.")
-    validate_output_targets(
-        [*paths.values(), *([checkpoint] if checkpoint is not None else [])]
-    )
+    checkpoints = {
+        option: getattr(args, option.replace("-", "_"), None)
+        for option in ("bootstrap-checkpoint", "fit-checkpoint")
+    }
+    for option, path in checkpoints.items():
+        if path in ("", "-"):
+            raise ValueError(f"--{option} requires a nonempty file path.")
+    extra_paths = [
+        (option, path) for option, path in checkpoints.items() if path is not None
+    ]
+    validate_outputs_do_not_replace_inputs(inputs, [*paths.items(), *extra_paths])
+    validate_output_targets([*paths.values(), *(path for _, path in extra_paths)])
     return paths
 
 
@@ -282,6 +285,11 @@ def _adequacy_draw_count(args, paths):
             "--background-adequacy-draws requires at least four draws and --model-out."
         )
     return adequacy_draws
+
+
+def _verify_fit_inputs(args, identity):
+    if checkpoint_inputs(args) != identity:
+        raise ValueError("WGD inputs changed during the observed fit.")
 
 
 def wgd_count_main(args):
@@ -309,7 +317,19 @@ def wgd_count_main(args):
     checkpoint_path = getattr(args, "bootstrap_checkpoint", None)
     if checkpoint_path is not None and not args.bootstrap:
         raise ValueError("--bootstrap-checkpoint requires positive --bootstrap.")
-    checkpoint_source = checkpoint_inputs(args) if checkpoint_path is not None else None
+    fit_path = getattr(args, "fit_checkpoint", None)
+    background_only = getattr(args, "background_only", False)
+    if background_only and (
+        fit_path is None or args.bootstrap or adequacy_draws or paths
+    ):
+        raise ValueError(
+            "--background-only requires --fit-checkpoint and writes only that checkpoint."
+        )
+    input_identity = (
+        checkpoint_inputs(args)
+        if checkpoint_path is not None or fit_path is not None
+        else None
+    )
     fractions = tuple(float(value) for value in args.event_fractions.split(","))
     shape = (
         None if args.family_gamma_shape == "none" else float(args.family_gamma_shape)
@@ -356,14 +376,46 @@ def wgd_count_main(args):
         state_tolerance=args.state_tolerance,
         max_iterations=args.max_iterations,
     )
-    result = scan_counts(model, nodes=selected, workers=scan_workers, **options)
+    if fit_path is None:
+        result = scan_counts(model, nodes=selected, workers=scan_workers, **options)
+    else:
+        with open_observed_checkpoint(fit_path, args, input_identity) as observed:
+            if observed.background is None:
+                print("WGM count: fitting background", file=sys.stderr, flush=True)
+                background = fit_counts(
+                    model,
+                    max_states=args.max_states,
+                    state_tolerance=args.state_tolerance,
+                    max_iterations=args.max_iterations,
+                )
+                _verify_fit_inputs(args, input_identity)
+                observed.save(background)
+            if background_only:
+                return
+            result = observed.scan(fractions, args.multiplicity)
+            if result is None:
+                print(
+                    "WGM count: scanning observed branches", file=sys.stderr, flush=True
+                )
+                result = scan_counts(
+                    model,
+                    nodes=selected,
+                    workers=scan_workers,
+                    background=observed.background,
+                    completed=observed.candidates or (),
+                    on_candidate=observed.save_candidate,
+                    **options,
+                )
+                _verify_fit_inputs(args, input_identity)
+                observed.save(result.background, result.candidates, complete=True)
+
     if args.bootstrap:
 
         def progress(done, total):
             print(f"WGM count bootstrap: {done}/{total}", file=sys.stderr)
 
         identity = (
-            checkpoint_identity(args, result, checkpoint_source)
+            checkpoint_identity(args, result, input_identity)
             if checkpoint_path is not None
             else None
         )
@@ -378,11 +430,10 @@ def wgd_count_main(args):
                 checkpoint=checkpoint,
                 **options,
             )
-        if (
-            checkpoint_source is not None
-            and checkpoint_inputs(args) != checkpoint_source
-        ):
+        if input_identity is not None and checkpoint_inputs(args) != input_identity:
             raise ValueError("WGD bootstrap inputs changed during null calibration.")
+    if fit_path is not None and not args.bootstrap:
+        _verify_fit_inputs(args, input_identity)
     rows = []
     for rank, candidate in enumerate(result.candidates, 1):
         fit = candidate.event_fit

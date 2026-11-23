@@ -539,3 +539,72 @@ def test_unknown_root_and_missing_lengths_are_not_invented(tmp_path):
     tree.write_text("((A,B:0.5):0.5,C:1);")
     with pytest.raises(ValueError, match="branch length"):
         main(command(tree, counts))
+
+
+def test_observed_fit_restarts_from_background_then_scan(tmp_path, monkeypatch):
+    import nwkit.wgd_count as count_command
+
+    tree, counts = inputs(tmp_path)
+    args = command(tree, counts)
+    checkpoint = tmp_path / "observed.json"
+    restart = args + ["--fit-checkpoint", str(checkpoint)]
+    main(restart + ["--background-only"])
+    saved = json.loads(checkpoint.read_text())["data"]
+    assert saved["background"]["converged"] and saved["candidates"] is None
+
+    with monkeypatch.context() as patch:
+
+        def no_background(*args, **kwargs):
+            pytest.fail("The complete background was recomputed")
+
+        patch.setattr(count_command, "fit_counts", no_background)
+        main(restart + ["-o", str(tmp_path / "uncalibrated.tsv")])
+    assert len(json.loads(checkpoint.read_text())["data"]["candidates"]) == 1
+
+    expected, resumed = (tmp_path / f"{name}.tsv" for name in ("fresh", "resumed"))
+    main(args + ["--bootstrap", "2", "-o", str(expected)])
+    monkeypatch.setattr(count_command, "scan_counts", no_background)
+    main(restart + ["--bootstrap", "2", "-o", str(resumed)])
+    assert expected.read_bytes() == resumed.read_bytes()
+    counts.write_text(counts.read_text().replace("f0\t2", "f0\t3"))
+    with pytest.raises(ValueError, match="fit checkpoint does not match"):
+        main(restart + ["--background-only"])
+
+
+def test_observed_checkpoint_reuses_finished_branches_after_interruption(
+    tmp_path, monkeypatch
+):
+    import nwkit.wgd_count_fit as fitting
+
+    tree, counts = inputs(tmp_path)
+    checkpoint = tmp_path / "observed.json"
+    args = command(tree, counts) + [
+        "--candidate-branches",
+        "1,2",
+        "--fit-checkpoint",
+        str(checkpoint),
+    ]
+    fit_candidate = fitting._scan_candidate
+    calls = []
+
+    def interrupt_second(model, node, *remaining):
+        calls.append(node)
+        if len(calls) == 2:
+            raise RuntimeError("interrupted scan")
+        return fit_candidate(model, node, *remaining)
+
+    monkeypatch.setattr(fitting, "_scan_candidate", interrupt_second)
+    with pytest.raises(RuntimeError, match="interrupted scan"):
+        main(args)
+    saved = json.loads(checkpoint.read_text())["data"]
+    assert not saved["complete"]
+    assert [row["node"] for row in saved["candidates"]] == calls[:1]
+
+    def record_remaining(model, node, *remaining):
+        calls.append(node)
+        return fit_candidate(model, node, *remaining)
+
+    monkeypatch.setattr(fitting, "_scan_candidate", record_remaining)
+    main(args)
+    assert len(calls) == 3 and calls[2] == calls[1]
+    assert json.loads(checkpoint.read_text())["data"]["complete"]

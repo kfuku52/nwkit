@@ -1,6 +1,6 @@
 """Candidate scanning and plug-in, search-wide parametric bootstrap for counts."""
 
-from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
+from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, as_completed, wait
 from dataclasses import dataclass, replace
 from multiprocessing import get_context
 from typing import Any
@@ -183,6 +183,7 @@ def _fit_at_bound(
         projected = _projected_gradient_norm(result.x, gradient, bounds)
         messages.append(f"{label}{result.message}; projected gradient={projected:.6g}")
         if result.success and np.isfinite(result.fun) and projected <= 1e-5:
+            result.message = messages[-1]
             valid.append(result)
 
     for result in results:
@@ -195,8 +196,16 @@ def _fit_at_bound(
             remaining = max_iterations - int(result.nit)
             if not result.success or remaining <= 0:
                 continue
+            # A large absolute log-likelihood can round away genuine
+            # line-search improvements near the optimum. Use the same gain
+            # as the derivative check: difference per family before summing.
+            reference = family_objective(result.x)
+
+            def centered_objective(parameters, reference=reference):
+                return float(np.sum(family_objective(parameters) - reference))
+
             polished = minimize(
-                objective,
+                centered_objective,
                 result.x,
                 method="L-BFGS-B",
                 jac=lambda parameters: _objective_gradient(
@@ -205,6 +214,7 @@ def _fit_at_bound(
                 bounds=bounds,
                 options={"maxiter": remaining, "ftol": 0.0, "gtol": 1e-5},
             )
+            polished.fun = objective(polished.x)
             verify(polished, "Higher-order polish: ")
     if not valid:
         raise ValueError(f"Count optimizer did not converge: {'; '.join(messages)}")
@@ -403,6 +413,8 @@ def scan_counts(
     background: CountFit | None = None,
     compare_bursts: bool = True,
     workers: int = 1,
+    completed: tuple[ScanCandidate, ...] = (),
+    on_candidate=None,
 ) -> CountScan:
     """Scan one event at a time; multiple simultaneous events are not inferred."""
     if isinstance(workers, bool) or not isinstance(workers, int) or workers < 1:
@@ -436,9 +448,21 @@ def scan_counts(
         max_iterations=max_iterations,
     )
     background = background or fit_counts(model, **options)
-    workers = min(workers, len(nodes))
-    if workers == 1:
-        candidates = [
+    completed_nodes = {candidate.node for candidate in completed}
+    if len(completed_nodes) != len(completed) or not completed_nodes <= set(nodes):
+        raise ValueError("Saved WGD candidates do not match the selected branches.")
+    remaining = tuple(node for node in nodes if node not in completed_nodes)
+    candidates = list(completed)
+
+    def collect(results):
+        for candidate in results:
+            if on_candidate is not None:
+                on_candidate(candidate)
+            candidates.append(candidate)
+
+    workers = min(workers, len(remaining))
+    if workers <= 1:
+        collect(
             _scan_candidate(
                 model,
                 node,
@@ -448,8 +472,8 @@ def scan_counts(
                 compare_bursts,
                 options,
             )
-            for node in nodes
-        ]
+            for node in remaining
+        )
     else:
         data = (
             model.tree,
@@ -473,7 +497,8 @@ def scan_counts(
                 options,
             ),
         ) as pool:
-            candidates = list(pool.map(_scan_worker, nodes))
+            pending = [pool.submit(_scan_worker, node) for node in remaining]
+            collect(future.result() for future in as_completed(pending))
     candidates.sort(
         key=lambda candidate: (
             -candidate.improvement,
