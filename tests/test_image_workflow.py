@@ -48,8 +48,10 @@ def mock_providers(monkeypatch, catalog, *, taxonomy=None):
         def fetch_candidates(self, species_name, fallback_rank):
             calls.append((self.source, species_name, fallback_rank))
             return [
-                media_candidate(self.source, species_name, key)
-                for key in catalog.get((self.source, species_name), ())
+                entry
+                if isinstance(entry, dict)
+                else media_candidate(self.source, species_name, entry)
+                for entry in catalog.get((self.source, species_name), ())
             ]
 
     def build(args, sources):
@@ -223,6 +225,70 @@ def test_first_available_falls_through_on_unusable_media(tmp_path, monkeypatch):
         ("wikimedia", "Panthera leo"),
     ]
     assert downloads == ["dead", "safe", "good"]
+    assert not read_tsv(Path(args.out_dir) / "unmatched.tsv")
+
+
+@pytest.mark.parametrize("first_available", [False, True])
+def test_photo_selection_prefers_living_candidate_and_keeps_specimen_fallback(
+    tmp_path, monkeypatch, first_available
+):
+    args = workflow_args(
+        tmp_path,
+        ["Trapa_bicornis", "Tofieldia_thibetica"],
+        source="gbif,wikimedia",
+        style="photo",
+        first_available=first_available,
+    )
+    gbif = image.GBIFProvider(session=DummySession())
+
+    def specimen(name, key):
+        return gbif._candidate_from_media(
+            {"basisOfRecord": "PRESERVED_SPECIMEN"},
+            {
+                "identifier": f"https://example.org/{key}.jpg",
+                "license": "https://creativecommons.org/publicdomain/zero/1.0/",
+            },
+            name,
+            "species",
+        )
+
+    packaged = gbif._candidate_from_media(
+        {
+            "basisOfRecord": "HUMAN_OBSERVATION",
+            "occurrenceRemarks": "Photo was taken from local shop.",
+        },
+        {
+            "identifier": "https://example.org/packaged.jpg",
+            "license": "https://creativecommons.org/publicdomain/zero/1.0/",
+        },
+        "Trapa bicornis",
+        "species",
+    )
+    calls = mock_providers(
+        monkeypatch,
+        {
+            ("gbif", "Trapa bicornis"): [
+                packaged,
+                specimen("Trapa bicornis", "specimen1"),
+                specimen("Trapa bicornis", "specimen2"),
+            ],
+            ("wikimedia", "Trapa bicornis"): ["living"],
+            ("gbif", "Tofieldia thibetica"): [specimen("Tofieldia thibetica", "rare")],
+        },
+    )
+    downloads = download_stub(monkeypatch)
+
+    image.image_main(args)
+
+    rows = {
+        row["leaf_name"]: row for row in read_tsv(Path(args.out_dir) / "manifest.tsv")
+    }
+    assert rows["Trapa_bicornis"]["provider_record_id"] == "living"
+    assert rows["Tofieldia_thibetica"]["selection_reason"].endswith(
+        "secondary_photo_fallback"
+    )
+    assert ("wikimedia", "Trapa bicornis", "none") in calls
+    assert sorted(downloads) == ["living", "rare"]
     assert not read_tsv(Path(args.out_dir) / "unmatched.tsv")
 
 

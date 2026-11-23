@@ -406,6 +406,55 @@ def wikimedia_page_mentions_query(page, query_name):
     )
 
 
+_SECONDARY_PHOTO = re.compile(
+    r"\b(?:herbarium (?:sheet|specimen)|herbier|herbario|"
+    r"(?:pressed|preserved|pinned|dried) specimen|voucher (?:sheet|specimen)|"
+    r"xylarium|wood (?:sample|specimen|collection)|collection de bois|"
+    r"coupe (?:de )?(?:bois|transversale)|"
+    r"(?:wood|stem|leaf|trunk) cross section|"
+    r"(?:scanning electron|light) micrograph|microscope slide|"
+    r"(?:product|retail|food) (?:packaging|label|package)|"
+    r"packaged (?:food|vegetables|herbs)|ointment|(?:herbal|skin) cream|"
+    r"(?:taken (?:at|from)|bought (?:at|from)|purchased (?:at|from)) "
+    r"(?:(?:a|the) )?(?:local )?(?:shop|supermarket|grocery store)|"
+    r"(?:dried|roasted) (?:herbs|roots|seeds|nuts)|"
+    r"common garden experiment (?:design|set up)|experimental plot layout)\b"
+    r"|\bmhnt[. ]bot\b|標本台紙|腊叶标本",
+    re.IGNORECASE,
+)
+_ORGANISM_PHOTO = re.compile(
+    r"\b(?:whole (?:plant|animal)|plant habit(?:us)?|"
+    r"in (?:its natural habitat|flower|bloom|cultivation)|"
+    r"(?:growing|planted) in (?:the )?(?:wild|foothills|garden|field|forest)|"
+    r"(?:flowering|fruiting) (?:plant|branch|stem|tree|shrub)|"
+    r"foliage and flowers|close up of (?:the )?(?:flowers?|inflorescence))\b",
+    re.IGNORECASE,
+)
+_DETACHED_MEDIA_TITLE = re.compile(
+    r"(?:^|\s)(?:seeds?|grains?|wood section|cross section)(?: [0-9]+)?$",
+    re.IGNORECASE,
+)
+
+
+def classify_photo_subject(*, title="", description="", basis_of_record=""):
+    """Identify metadata evidence about what a photograph primarily depicts."""
+    if not any((title, description, basis_of_record)):
+        return ""
+    title = strip_html_markup(title)
+    description = strip_html_markup(description)
+    text = re.sub(r"[_-]+", " ", f"{title} {description}")
+    basis = re.sub(r"[^a-z]", "", str(basis_of_record or "").lower())
+    if _SECONDARY_PHOTO.search(text) or _DETACHED_MEDIA_TITLE.search(
+        re.sub(r"[_-]+", " ", re.sub(r"\.[a-zA-Z]{2,5}$", "", title)).strip()
+    ):
+        return "secondary"
+    if _ORGANISM_PHOTO.search(text) or basis == "livingspecimen":
+        return "organism"
+    if basis in {"preservedspecimen", "fossilspecimen", "materialsample"}:
+        return "secondary"
+    return ""
+
+
 def classify_wikimedia_asset(page):
     image_info = (page.get("imageinfo") or [{}])[0]
     metadata = image_info.get("extmetadata") or {}

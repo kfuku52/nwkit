@@ -1,6 +1,7 @@
 import re
 import sys
 from collections import Counter, defaultdict
+from functools import lru_cache
 from importlib import resources
 from typing import Any
 
@@ -13,6 +14,7 @@ from nwkit.file_paths import (
     validate_outputs_do_not_replace_inputs,
 )
 from nwkit.rooting_state import set_rooting_info
+from nwkit.species_parser import get_species_parser
 from nwkit.tree_outputs import write_table_report, write_tree_with_tables
 from nwkit.util import (
     TREE_FORMAT_PROP,
@@ -136,28 +138,75 @@ def limit_lineage_to_rank(lineage, ncbi, rank):
     return lineage_ge_rank
 
 
+def _resolve(sp, ncbi, rank):
+    translated = name_to_taxid(sp, ncbi)
+    key = sp if sp in translated else sp.split(" ", 1)[0]
+    if not translated:
+        sys.stderr.write(
+            f"Genus-level match was not found in the NCBI database: Excluded from the output: {sp}\n"
+        )
+        return [], "", "unmatched"
+    ids = translated[key]
+    if len(ids) != 1:
+        sys.stderr.write(f"Ambiguous NCBI name: Excluded from the output: {sp}\n")
+        return [], "", "ambiguous_name"
+    taxid = ids[0]
+    return (
+        limit_lineage_to_rank(ncbi.get_lineage(taxid), ncbi, rank),
+        taxid,
+        ("exact_name" if key == sp else "genus_fallback"),
+    )
+
+
 def get_lineage(sp, ncbi, rank):
-    name2taxid = name_to_taxid(sp, ncbi)
-    if len(name2taxid) == 0:
-        txt = "Genus-level match was not found in the NCBI database: Excluded from the output: {}\n"
-        sys.stderr.write(txt.format(sp))
-        return []
-    key = sp if sp in name2taxid.keys() else re.sub(" .*", "", sp)
-    lineage = ncbi.get_lineage(name2taxid[key][0])
-    return limit_lineage_to_rank(lineage, ncbi, rank)
+    return _resolve(sp, ncbi, rank)[0]
 
 
-def get_lineages(labels, rank, args=None, ncbi=None):
-    splist = [
-        extract_taxonomy_query(label, args=args) or str(label) for label in labels
-    ]
+def _note(audit, label, query, taxid, method, anchor="", rank="", reason=""):
+    if audit is not None:
+        audit.append(
+            dict(
+                leaf_name=label,
+                taxonomy_query=query,
+                taxid=str(taxid),
+                match_method=method,
+                anchor=anchor,
+                anchor_rank=rank,
+                status="free" if reason else "constrained",
+                reason=reason,
+            )
+        )
+
+
+def get_lineages(labels, rank, args=None, ncbi=None, audit=None):
     owns_ncbi = ncbi is None
     if ncbi is None:
         ncbi = get_ete_ncbitaxa(args=args)
+    resolve = lru_cache(maxsize=8192)(lambda query: _resolve(query, ncbi, rank))
+    describe = lru_cache(maxsize=8192)(
+        lambda tid: (
+            ncbi.get_taxid_translator([tid]).get(tid, ""),
+            ncbi.get_rank([tid]).get(tid, ""),
+        )
+    )
     try:
-        lineages = dict()
-        for sp, label in zip(splist, labels, strict=True):
-            lineages[label] = get_lineage(sp, ncbi, rank)
+        lineages = {}
+        for label in labels:
+            sp = extract_taxonomy_query(label, args=args) or str(label)
+            lineage, taxid, method = resolve(sp)
+            lineages[label] = lineage
+            if audit is not None:
+                name, level = describe(lineage[-1]) if lineage else ("", "")
+                _note(
+                    audit,
+                    label,
+                    sp,
+                    taxid,
+                    method,
+                    name,
+                    level,
+                    "" if lineage else method,
+                )
         return lineages
     finally:
         if owns_ncbi:
@@ -169,7 +218,7 @@ def get_lineage_from_taxid(taxid, ncbi, rank):
     return limit_lineage_to_rank(lineage, ncbi, rank)
 
 
-def get_lineages_from_taxid(taxid_df, rank, args=None, ncbi=None):
+def get_lineages_from_taxid(taxid_df, rank, args=None, ncbi=None, audit=None):
     owns_ncbi = ncbi is None
     if ncbi is None:
         ncbi = get_ete_ncbitaxa(args=args)
@@ -187,48 +236,112 @@ def get_lineages_from_taxid(taxid_df, rank, args=None, ncbi=None):
         for label, taxid in zip(
             taxid_df["leaf_name"], taxid_numeric.astype(int), strict=True
         ):
-            lineages[label] = get_lineage_from_taxid(taxid, ncbi, rank)
+            try:
+                lineages[label] = get_lineage_from_taxid(taxid, ncbi, rank) or []
+            except ValueError as exc:
+                if audit is None or not str(exc).startswith("Could not find taxid:"):
+                    raise
+                lineages[label] = []
+            lineage = lineages[label]
+            if audit is not None:
+                anchor = lineage[-1] if lineage else None
+                _note(
+                    audit,
+                    label,
+                    "",
+                    taxid,
+                    "taxid",
+                    ncbi.get_taxid_translator([anchor]).get(anchor, "")
+                    if anchor
+                    else "",
+                    ncbi.get_rank([anchor]).get(anchor, "") if anchor else "",
+                    "" if anchor else "unknown_taxid",
+                )
         return lineages
     finally:
         if owns_ncbi:
             _close_ncbi_db(ncbi)
 
 
-def match_taxa(tree, labels, backbone_method, args=None):
+def match_taxa(tree, labels, backbone_method, args=None, audit=None):
     splist = [
         extract_taxonomy_query(label, args=args) or str(label) for label in labels
     ]
-    ncbi = get_ete_ncbitaxa(args=args) if backbone_method.startswith("ncbi") else None
+    if backbone_method == "user":
+        by_name = {leaf.name: leaf for leaf in tree.leaves()}
+        for sp, label in zip(splist, labels, strict=True):
+            match = by_name.get(sp)
+            _note(
+                audit,
+                label,
+                sp,
+                "",
+                "backbone_name",
+                sp if match is not None else "",
+                reason="" if match is not None else "no_backbone_hit",
+            )
+            if match is not None:
+                match.props["has_taxon"] = True
+                match.props["taxon_names"].append(label)
+        return tree
+    ncbi = get_ete_ncbitaxa(args=args)
     try:
         leaf_names = [ln.replace("_", " ") for ln in tree.leaf_names()]
         leaf_name_set = set(leaf_names)
         leaf_by_name = {leaf.name: leaf for leaf in tree.leaves()}
+        resolve = lru_cache(maxsize=8192)(lambda query: _resolve(query, ncbi, "no"))
+        names_for = lru_cache(maxsize=8192)(lambda ids: ncbi.get_taxid_translator(ids))
+        rank_for = lru_cache(maxsize=8192)(
+            lambda tid: ncbi.get_rank([tid]).get(tid, "")
+        )
         for sp, label in zip(splist, labels, strict=True):
+            level = ""
             ancestor: list[Any]
-            if backbone_method.startswith("ncbi"):
-                assert ncbi is not None
-                lineage = get_lineage(sp, ncbi, rank="no")
-                ancestor_names = ncbi.get_taxid_translator(lineage)
-                ancestor = list(
-                    leaf_name_set.intersection(set(ancestor_names.values()))
+            lineage, taxid, method = resolve(sp)
+            ancestor_names = names_for(tuple(lineage)) if lineage else {}
+            ancestor = list(leaf_name_set.intersection(set(ancestor_names.values())))
+            if backbone_method == "ncbi_apgv":
+                unplaced_family_hits = list(
+                    set(ancestor).intersection(_APG_V_UNPLACED_FAMILIES)
                 )
-                if backbone_method == "ncbi_apgv":
-                    unplaced_family_hits = list(
-                        set(ancestor).intersection(_APG_V_UNPLACED_FAMILIES)
+                if unplaced_family_hits:
+                    ancestor = unplaced_family_hits
+            if len(ancestor) > 1:
+                txt = "Multiple hits. Excluded from the output. Taxon in the list = {}, Taxa in the tree = {}\n"
+                sys.stderr.write(txt.format(sp, ",".join(list(ancestor))))
+                _note(audit, label, sp, taxid, method, reason="multiple_backbone_hits")
+                continue
+            elif len(ancestor) == 0:
+                txt = "No hit. Excluded from the output. Taxon = {}\n"
+                sys.stderr.write(txt.format(sp, ",".join(list(ancestor))))
+                _note(
+                    audit,
+                    label,
+                    sp,
+                    taxid,
+                    method,
+                    reason="no_backbone_hit" if lineage else method,
+                )
+                continue
+            if audit is not None:
+                level = rank_for(
+                    next(
+                        tid
+                        for tid, name in ancestor_names.items()
+                        if name == ancestor[0]
                     )
-                    if unplaced_family_hits:
-                        ancestor = unplaced_family_hits
-                if len(ancestor) > 1:
-                    txt = "Multiple hits. Excluded from the output. Taxon in the list = {}, Taxa in the tree = {}\n"
-                    sys.stderr.write(txt.format(sp, ",".join(list(ancestor))))
-                    continue
-                elif len(ancestor) == 0:
-                    txt = "No hit. Excluded from the output. Taxon = {}\n"
-                    sys.stderr.write(txt.format(sp, ",".join(list(ancestor))))
-                    continue
-            elif backbone_method == "user":
-                ancestor = [sp]
+                )
             leaf = leaf_by_name.get(ancestor[0])
+            _note(
+                audit,
+                label,
+                sp,
+                taxid,
+                method,
+                ancestor[0] if leaf is not None else "",
+                level,
+                "" if leaf is not None else "no_backbone_hit",
+            )
             if leaf is not None:
                 leaf.props["has_taxon"] = True
                 leaf.props["taxon_names"].append(label)
@@ -491,7 +604,6 @@ def _vertlife_constraint_options(args):
     if args.backbone != "vertlife":
         if dated or any(
             (
-                report,
                 getattr(args, "vertlife_dataset", None),
                 getattr(args, "vertlife_file", None),
             )
@@ -582,12 +694,61 @@ def _constrain_vertlife(args, labels, dated):
     _vertlife_constraint_output(tree, args, dated, report)
 
 
+def _report(args, rows):
+    parser = get_species_parser(args=args)
+    for row in rows:
+        override = parser.map_overrides.get(row["leaf_name"])
+        mapped = override and override.taxonomy_query
+        row["query_source"] = (
+            "taxid_tsv"
+            if row["match_method"] == "taxid"
+            else "species_map_tsv"
+            if mapped
+            else "leaf_name"
+        )
+        row["source"] = override.source if mapped else ""
+        if mapped and not row["anchor_rank"] and row["status"] == "constrained":
+            row["anchor_rank"] = override.anchor_rank or ""
+        row["backbone"] = args.backbone
+        row["backbone_source"] = (
+            args.infile
+            if args.backbone.endswith("user")
+            else _APG_BACKBONE_FILES.get(args.backbone, "NCBI Taxonomy")
+        )
+        label = row["leaf_name"]
+        if args.collapse:
+            label = "_".join(label.split("_")[:2])
+        row["output_label"] = (
+            label.replace(" ", "_") if row["status"] == "constrained" else ""
+        )
+    return pd.DataFrame(rows)
+
+
+def _failed_matches(args, audit):
+    if audit is not None:
+        write_table_report(_report(args, audit), args.report)
+    raise ValueError("No taxa from --species-list matched the backbone tree labels.")
+
+
 def constrain_main(args):
     vertlife_dated = _vertlife_constraint_options(args)
     labels, taxid_df = check_input_file(args)
     if vertlife_dated is not None:
         _constrain_vertlife(args, labels, vertlife_dated)
         return
+    report = getattr(args, "report", None)
+    audit: list[dict] | None = [] if report else None
+    outputs = [("--outfile", args.outfile), ("--report", report)]
+    validate_distinct_output_paths(outputs)
+    validate_outputs_do_not_replace_inputs(
+        [
+            (name, getattr(args, name.replace("-", "_"), None))
+            for name in ("infile", "species-list", "taxid-tsv", "species-map-tsv")
+        ],
+        [("--report", report)],
+    )
+    if report == "-":
+        raise ValueError("'--report' requires a file path.")
     if args.backbone == "ncbi":
         ncbi = get_ete_ncbitaxa(args=args)
         try:
@@ -597,6 +758,7 @@ def constrain_main(args):
                     rank=args.rank,
                     args=args,
                     ncbi=ncbi,
+                    audit=audit,
                 )
             else:
                 lineages = get_lineages(
@@ -604,6 +766,19 @@ def constrain_main(args):
                     rank=args.rank,
                     args=args,
                     ncbi=ncbi,
+                    audit=audit,
+                )
+            lineages = {
+                label: lineage for label, lineage in lineages.items() if lineage
+            }
+            if not lineages:
+                _failed_matches(args, audit)
+            if audit is not None and any(
+                row["reason"] == "unknown_taxid" for row in audit
+            ):
+                write_table_report(_report(args, audit), report)
+                raise ValueError(
+                    "Could not find taxid for one or more --taxid-tsv entries. See --report."
                 )
             taxid_counts = get_taxid_counts(lineages)
             tree = taxid2tree(
@@ -630,14 +805,18 @@ def constrain_main(args):
         elif args.backbone in _APG_BACKBONE_FILES:
             tree = _read_apg_backbone(args.backbone)
         tree = initialize_tree(tree)
-        tree = match_taxa(tree, labels, args.backbone, args=args)
+        tree = match_taxa(tree, labels, args.backbone, args=args, audit=audit)
         if not any(leaf.props.get("has_taxon") for leaf in tree.leaves()):
-            raise ValueError(
-                "No taxa from --species-list matched the backbone tree labels."
-            )
+            _failed_matches(args, audit)
         tree = delete_nomatch_leaves(tree)
         tree = polytomize_one2many_matches(tree)
     if args.collapse:
         tree = collapse_genes(tree)
     tree = _prepare_constraint_output(tree, args.backbone)
-    write_tree(tree, args, format=9)
+    validate_unique_named_leaves(tree, option_name="constraint output")
+    if audit is None:
+        write_tree(tree, args, format=9)
+    else:
+        write_tree_with_tables(
+            tree, args, format=9, tables=[(report, _report(args, audit))]
+        )

@@ -1,6 +1,6 @@
 # AngioCal fossil minimum-age constraints
 
-`nwkit mcmctree --angiocal v1.0` imports the 238-record
+`nwkit mcmctree-tree --angiocal v1.0` imports the 238-record
 [AngioCal v1.0 dataset](https://github.com/eflowerproject/angiocal/tree/v1.0)
 and produces a PAML calibration tree. It downloads the original XLS from a
 fixed commit and verifies its SHA-256, then reads the matching normalized
@@ -13,7 +13,7 @@ AngioCal v1.1, published with the 2024
 angiosperm phylogeny, has a different distribution and is not yet supported.
 
 ```sh
-nwkit mcmctree -i species.nwk --angiocal v1.0 \
+nwkit mcmctree-tree -i species.nwk --angiocal v1.0 \
   --species-parser taxonomic --lower-tail-prob 1e-300 \
   --download-dir downloads --report fossils.tsv \
   --add-header yes -o calibrated.tre

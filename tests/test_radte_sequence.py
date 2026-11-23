@@ -25,7 +25,10 @@ from tests.test_radte import cli_inputs, small_chronology
 
 def write_alignment(tmp_path, sequences):
     path = tmp_path / "alignment.fasta"
-    path.write_text("".join(f">{name}\n{seq}\n" for name, seq in sequences.items()))
+    path.write_text(
+        "".join(f">{name}\n{seq}\n" for name, seq in sequences.items()),
+        encoding="utf-8",
+    )
     return path
 
 

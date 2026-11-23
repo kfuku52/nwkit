@@ -1516,6 +1516,27 @@ def _parse_branch_width_range(value):
     return minimum, maximum
 
 
+def _branch_color_values(tree, prop, scope):
+    """Map colours to incoming branches without modifying any tree annotations."""
+    if scope not in ("branch", "clade"):
+        raise ValueError("--branch-color-scope must be branch or clade.")
+    if not prop:
+        if scope == "clade":
+            raise ValueError(
+                "--branch-color-scope clade requires --branch-color-property."
+            )
+        return {}
+    values: dict[Any, str] = {}
+    for node in tree.traverse("preorder"):
+        value = node.props.get(prop)
+        if value in (None, "") and scope == "clade":
+            value = values.get(node.up)
+        if value not in (None, ""):
+            values[node] = str(value)
+    values.pop(tree, None)
+    return values
+
+
 def _branch_style_maps(
     tree,
     base_color,
@@ -1525,32 +1546,26 @@ def _branch_style_maps(
     width_range,
     property_colors,
     palette,
+    color_values=None,
 ):
     width = float(base_width)
     if not math.isfinite(width) or width <= 0.0:
         raise ValueError("'--branch-width' must be greater than zero.")
-    color_by_node = {}
+    if color_values is None:
+        color_values = _branch_color_values(tree, color_property, "branch")
+    colors = {
+        value: _property_color(
+            prop=color_property,
+            value=value,
+            property_colors=property_colors,
+            fallback_index=index,
+            palette=palette,
+        )
+        for index, value in enumerate(sorted(set(color_values.values())))
+    }
+    color_by_node = {node: colors[value] for node, value in color_values.items()}
     width_by_node = {}
     nodes = [node for node in tree.traverse() if not node.is_root]
-    if color_property not in (None, ""):
-        values = sorted(
-            {
-                str(node.props[color_property])
-                for node in nodes
-                if node.props.get(color_property) not in (None, "")
-            }
-        )
-        value_index = {value: index for index, value in enumerate(values)}
-        for node in nodes:
-            value = node.props.get(color_property)
-            if value not in (None, ""):
-                color_by_node[node] = _property_color(
-                    prop=color_property,
-                    value=value,
-                    property_colors=property_colors,
-                    fallback_index=value_index[str(value)],
-                    palette=palette,
-                )
     if width_property not in (None, ""):
         numeric = {}
         for node in nodes:

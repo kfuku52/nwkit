@@ -8,7 +8,7 @@ import os
 import sys
 from collections import Counter
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NamedTuple
 
 
 @dataclass
@@ -125,44 +125,58 @@ def _proper_segment_intersection(first, second):
     )
 
 
+class _BoundedSegment(NamedTuple):
+    bounds: tuple[float, float, float, float]
+    owner: object
+    segment: tuple
+
+
 def _count_branch_crossings(branch_lines, segment_limit=8000):
     """Count crossing branch pairs with a bounded spatial-index audit."""
 
     segment_limit = int(segment_limit)
     if segment_limit < 0:
         return 0, False
-    branch_segments: list[tuple[object, tuple]] = []
+    boxes: list[_BoundedSegment] = []
     for owner, line in branch_lines:
         segments = _line_segments(line)
-        if len(branch_segments) + len(segments) > segment_limit:
+        if len(boxes) + len(segments) > segment_limit:
             return 0, False
-        branch_segments.extend((owner, segment) for segment in segments)
-    cell_size = 36.0
-    grid: dict[tuple[int, int], list[int]] = {}
+        for start, end in segments:
+            x0, x1 = sorted((float(start[0]), float(end[0])))
+            y0, y1 = sorted((float(start[1]), float(end[1])))
+            boxes.append(_BoundedSegment((x0, x1, y0, y1), owner, (start, end)))
+    if not boxes:
+        return 0, True
+
+    # Sweep along the axis with less interval overlap. Only invoke the exact
+    # orientation predicate for segments whose bounds overlap on both axes.
+    def density(axis):
+        extent = max(b.bounds[axis + 1] for b in boxes) - min(
+            b.bounds[axis] for b in boxes
+        )
+        return (
+            sum(b.bounds[axis + 1] - b.bounds[axis] for b in boxes) / extent
+            if extent
+            else len(boxes)
+        )
+
+    axis = 0 if density(0) <= density(2) else 2
+    other = 2 - axis
+    active: list[_BoundedSegment] = []
     crossing_owners = set()
-    for index, (owner, (start, end)) in enumerate(branch_segments):
-        x0, x1 = sorted((float(start[0]), float(end[0])))
-        y0, y1 = sorted((float(start[1]), float(end[1])))
-        cells = [
-            (x_cell, y_cell)
-            for x_cell in range(
-                math.floor(x0 / cell_size),
-                math.floor(x1 / cell_size) + 1,
-            )
-            for y_cell in range(
-                math.floor(y0 / cell_size),
-                math.floor(y1 / cell_size) + 1,
-            )
-        ]
-        candidates = {previous for cell in cells for previous in grid.get(cell, ())}
-        for previous in candidates:
-            other_owner, other_segment = branch_segments[previous]
-            if owner is other_owner:
+    for box in sorted(boxes, key=lambda b: b.bounds[axis]):
+        active = [prev for prev in active if prev.bounds[axis + 1] >= box.bounds[axis]]
+        for prev in active:
+            if (
+                prev.owner is box.owner
+                or prev.bounds[other + 1] < box.bounds[other]
+                or box.bounds[other + 1] < prev.bounds[other]
+            ):
                 continue
-            if _proper_segment_intersection(other_segment, (start, end)):
-                crossing_owners.add(tuple(sorted((id(owner), id(other_owner)))))
-        for cell in cells:
-            grid.setdefault(cell, []).append(index)
+            if _proper_segment_intersection(prev.segment, box.segment):
+                crossing_owners.add(tuple(sorted((id(prev.owner), id(box.owner)))))
+        active.append(box)
     return len(crossing_owners), True
 
 
@@ -190,7 +204,9 @@ def _artist_bounds(figure, artists):
 def _find_collisions(figure, artists, branch_lines):
     visible = [item for item in artists if item.artist.get_visible()]
     bounds = _artist_bounds(figure, visible)
-    collisions = []
+    collisions: list[tuple] = []
+    if not visible:
+        return collisions, bounds, True
     if bounds:
         overall_x = max(bound.x1 for bound in bounds.values()) - min(
             bound.x0 for bound in bounds.values()
@@ -351,7 +367,10 @@ def evaluate_drawing(
         raise ValueError(
             "'--collision-policy' must be resolve, warn, error, or ignore."
         )
-    initial, _, branch_check_complete = _find_collisions(figure, artists, branch_lines)
+    initial, bounds, branch_check_complete = _find_collisions(
+        figure, artists, branch_lines
+    )
+    final = initial
     iterations = 0
     if policy == "resolve" and initial:
         movable = [
@@ -431,9 +450,9 @@ def evaluate_drawing(
         )
         if candidate_score > best_score:
             restore(best_state)
-    final, bounds, branch_check_complete = _find_collisions(
-        figure, artists, branch_lines
-    )
+        final, bounds, branch_check_complete = _find_collisions(
+            figure, artists, branch_lines
+        )
     branch_crossing_count, branch_crossing_check_complete = _count_branch_crossings(
         branch_lines
     )

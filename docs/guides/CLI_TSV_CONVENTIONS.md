@@ -24,7 +24,7 @@ are distinct from fitted-parameter conditional intervals in the primary table.
   canonical replacement. New documentation and scripts should use the
   canonical kebab-case names.
 - Most boolean options use explicit `yes|no` values; `--debug` is a value-less
-  flag. `mcmctree --add-header`
+  flag. `mcmctree-tree --add-header`
   continues to accept the historical value-less form as well as `yes|no`.
 - `-i/--infile`, `-o/--outfile`, and `-of/--outformat` are reserved for the
   primary input, primary output, and Newick output format. Commands producing
@@ -69,14 +69,14 @@ NCBI taxonomy uses separate `--taxonomy-cache-max-age-days` and
 from analysis result files; ordinary tree/trait analyses do not resume a saved
 fit automatically on rerun.
 
-`mcmctree --angiocal v1.0` imports a checksum-verified fossil dataset and is
+`mcmctree-tree --angiocal v1.0` imports a checksum-verified fossil dataset and is
 exclusive with TimeTree, posterior conversion and manual calibration selection.
 Its original Ma ages, crown/stem placement rules, source/report schemas, cache
 paths and nominal-bound checks are documented in [ANGIOCAL.md](ANGIOCAL.md).
 Its tree/report pair is staged together; an all-excluded import intentionally
 writes the diagnostic report while leaving the result tree untouched.
 
-`constrain`, `root`, and `mcmctree` can use a checksum-verified VertLife
+`constrain`, `root`, and `mcmctree-tree` can use a checksum-verified VertLife
 reference. The [VertLife guide](VERTLIFE.md) describes the cache, source
 selection, topology and age semantics, and companion TSV schemas.
 
@@ -120,7 +120,7 @@ containers commonly encountered in dating workflows:
 MCMCtree/FigTree `95%HPD` and legacy `95%` node-age comments are normalized to
 `age_ci_low`, `age_ci_high`, `age_ci_kind`, and `age_ci_level` NHX properties.
 This normalization happens before command-specific processing, including for
-STDIN, so a header-bearing `nwkit mcmctree --add-header` result remains valid
+STDIN, so a header-bearing `nwkit mcmctree-tree --add-header` result remains valid
 input to other NWKIT commands.
 
 ### Rootedness and root polytomies
@@ -195,7 +195,7 @@ contract are not presentation outputs and retain their native requirements.
 `convert --to figtree` retains its format-specific NEXUS rooting declaration
 regardless of the standalone token option. Strict `convert --to newick` rejects
 states that cannot be preserved without a token; choose `--rooting-token yes` or
-`--to nhx/figtree`. `mcmctree --posterior` uses the common output policy; its
+`--to nhx/figtree`. `mcmctree-tree --posterior` uses the common output policy; its
 calibration/PAML treefile syntax remains unchanged.
 
 | Tree output path | Commands / artifacts |
@@ -204,7 +204,7 @@ calibration/PAML treefile syntax remains unchanged.
 | Container-preserving conversion | `convert`: Newick, NHX, FigTree/NEXUS |
 | Full-precision dated trees | `radte`: `.dated.nwk`; `mul-reconcile` MSC fixed/fitted `--tree-out`, TSV tree columns and JSON scores |
 | Other direct result serializers | `mul-reconcile`: D+L topology/mapping columns and `--tree-out`, locus JSON population trees; `gene-tree-search`: selected and candidate trees |
-| Native format boundary | `mcmctree`: posterior trees use the policy; PAML calibration syntax is unchanged. Native external-worker inputs and SHIFT analysis tokens retain their private format contracts. |
+| Native format boundary | `mcmctree-tree`: posterior trees use the policy; PAML calibration syntax is unchanged. Native external-worker inputs and SHIFT analysis tokens retain their private format contracts. |
 The `nwkit_rooted` property and private `_nwkit_rooting_*` bookkeeping properties
 are reserved and cannot be reassigned through annotation/property transfer.
 The Python `read_tree` and `read_trees` helpers expose the same policy through
@@ -269,6 +269,7 @@ cells explicitly empty rather than omitting their fields.
 | `--species-map-tsv` | `leaf_name`, and at least one of `species_label` or `taxonomy_query` | Every row must define at least one mapping value. |
 | `image --species-name-tsv` | `leaf_name`, `species_name` | Legacy image-only mapping; prefer `--species-map-tsv` for new workflows. |
 | `image --verified-images-tsv` | `leaf_name`, `source_page_url`, `attribution`, and at least one of each pair `local_path` / `media_url` and `license_code` / `license_url` | One pin per leaf. Exactly one image locator per row. Local paths are relative to the TSV. See the [image guide](IMAGE.md). |
+| `draw --panel-table` | `title`, `infile` | One tree per row, in display order. Relative input paths are resolved from the table directory. |
 | `draw --tip-image-manifest` | `leaf_name`, `local_path` | Multiple rows per tip are allowed and the first is used. Relative paths use the manifest directory or `--tip-image-root`; broken paths are rejected. |
 | `rename --name-tsv` | `old_name`, `new_name` | Both values are non-empty and `old_name` is unique. Headers must be nonempty and unique, and every row must match the header width. |
 | `--taxid-tsv` | `leaf_name`, `taxid` | `taxid` must be a non-missing integer. |
@@ -516,6 +517,21 @@ the previous complete pair. As with any separate filesystem renames, this is not
 a crash-atomic multi-file transaction. Output locks coordinate NWKIT writers, not
 arbitrary external programs. A stdout write can trigger file rollback on failure,
 but already emitted stdout bytes cannot be retracted.
+
+Use `nwkit draw --panel-table panels.tsv --panel-columns 4 -o trees.svg`
+to arrange ordinary tree drawings on one page. The default grid has two columns.
+Width, height, layout, labels and NHX styling apply to each tree. Each row of
+the grid uses the height of its tallest panel. For foreground miniatures, set
+`--tip-labels no --branch-color-property fg --property-color foreground=#a8381b`
+and give each focal stem the NHX property `fg=foreground`. Add
+`--branch-color-scope clade` to propagate its colour to descendant branches.
+The nearest annotated ancestor supplies the colour until a nested annotation
+overrides it. A root annotation can colour all descendants. The default scope
+`branch` applies a colour only to an annotated incoming branch. Branch widths
+are controlled separately by `--branch-width` and `--branch-width-property`.
+SVG uses the
+standard installation. Panel PDF and 300-dpi PNG export use the existing
+`nwkit[image]` extra and native Cairo.
 
 `draw --node-label-property branch_id --node-label-target all` computes the same
 input-tree IDs as `nwk2table` and `asr`. Labels are integers and are assigned before

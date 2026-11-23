@@ -62,10 +62,10 @@ edge. Branch lengths are written at full precision on the input tree's scale.
 Specify VertLife explicitly in the source list to enable it. The default
 source order remains `ncbi,opentree,timetree`.
 
-## Divergence age reports with `mcmctree`
+## Divergence age reports with `mcmctree-tree`
 
 ```sh
-nwkit mcmctree -i species.nwk --vertlife-dataset amphibians-2018-consensus \
+nwkit mcmctree-tree -i species.nwk --vertlife-dataset amphibians-2018-consensus \
   --report node-ages.tsv -o species.copy.nwk
 ```
 

@@ -21,6 +21,7 @@ from nwkit.image import (
     resolve_ncbi_taxonomy_image_cache_dir,
     wikimedia_page_mentions_query,
 )
+from nwkit.image_metadata import classify_photo_subject
 from tests.image_test_support import (
     DummyProvider,
     DummySession,
@@ -138,6 +139,54 @@ class TestLicenseHelpers:
 
 
 class TestFetchLimits:
+    @pytest.mark.parametrize(
+        ("metadata", "expected"),
+        [
+            ({"basis_of_record": "PRESERVED_SPECIMEN"}, "secondary"),
+            ({"basis_of_record": "LivingSpecimen"}, "organism"),
+            ({"basis_of_record": "HUMAN_OBSERVATION"}, ""),
+            ({"title": "File:Example_-_seeds.jpg"}, "secondary"),
+            ({"title": "Example seedlings growing beside a trail"}, ""),
+            (
+                {"description": "<p>Herbal skin cream with Example alba</p>"},
+                "secondary",
+            ),
+            ({"description": "Example alba, foliage and flowers"}, "organism"),
+            (
+                {
+                    "title": "Flowering plant in the field",
+                    "basis_of_record": "PRESERVED_SPECIMEN",
+                },
+                "organism",
+            ),
+        ],
+    )
+    def test_photo_subject_requires_metadata_evidence(self, metadata, expected):
+        assert classify_photo_subject(**metadata) == expected
+
+    def test_photo_subject_preserves_taxonomic_match_and_silhouette_priority(self):
+        neutral = {
+            "matched_rank": "species",
+            "asset_type": "photo",
+            "license_code": "cc-by",
+        }
+        specimen = dict(neutral, photo_subject="secondary")
+        organism = dict(neutral, photo_subject="organism")
+        silhouette = dict(neutral, asset_type="silhouette")
+        genus = dict(organism, matched_rank="genus")
+
+        assert candidate_score(genus, style="photo") < candidate_score(
+            specimen, provider_index=1, style="photo"
+        )
+        assert candidate_score(specimen) < candidate_score(neutral, provider_index=1)
+        assert candidate_score(
+            organism, provider_index=1, style="photo"
+        ) > candidate_score(neutral, style="photo")
+        assert candidate_score(silhouette) > candidate_score(organism, provider_index=1)
+        assert candidate_score(specimen, style="silhouette") == candidate_score(
+            neutral, style="silhouette"
+        )
+
     def test_candidate_score_prioritizes_source_order_before_license_and_quality(self):
         first_source = {
             "matched_rank": "species",

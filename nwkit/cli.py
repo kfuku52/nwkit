@@ -1,6 +1,7 @@
 import argparse
 import math
 import sys
+from pathlib import Path
 
 from nwkit import __version__
 from nwkit.asr_models import model_names
@@ -1554,7 +1555,7 @@ pconstrain.add_argument(
 pconstrain.add_argument(
     "--report",
     metavar="PATH",
-    help="Optional TSV of species matches and source provenance for --backbone vertlife.",
+    help="Optional per-input TSV of matches, anchors, free taxa and backbone provenance.",
 )
 pconstrain.add_argument(
     "--rank",
@@ -1579,6 +1580,29 @@ pconstrain.add_argument(
     "The output file may be used as a species tree for phylogeny reconciliation. ",
 )
 pconstrain.set_defaults(handler=command_constrain)
+
+
+def command_check_constraint(args):
+    from nwkit.constraint_check import check_main
+
+    return check_main(args)
+
+
+pcheck = subparsers.add_parser(
+    "check-constraint",
+    parents=[p_parent],
+    help="Verify inferred tree tips and unrooted splits on the constrained subset",
+)
+pcheck.add_argument(
+    "--constraint", required=True, help="Partial or full constraint Newick"
+)
+pcheck.add_argument(
+    "--species-list",
+    "--species_list",
+    required=True,
+    help="All alignment tip IDs, one per line",
+)
+pcheck.set_defaults(handler=command_check_constraint)
 
 
 def command_collapse(args):
@@ -2333,6 +2357,14 @@ pdist.set_defaults(handler=command_dist)
 
 
 def command_draw(args):
+    if getattr(args, "panel_columns", None) is not None and not getattr(
+        args, "panel_table", None
+    ):
+        raise ValueError("--panel-columns requires --panel-table.")
+    if getattr(args, "panel_table", None):
+        from nwkit.draw_panels import draw_panels
+
+        return draw_panels(args)
     if (
         getattr(args, "document", None)
         or getattr(args, "comparison", None)
@@ -2372,6 +2404,19 @@ pdraw = subparsers.add_parser(
     "draw",
     help="Draw a phylogenetic tree with tip images, support, categorical properties, and node-probability annotations",
     parents=[p_tree_input, p_species, p_tip_table_policy],
+)
+pdraw.add_argument(
+    "--panel-table",
+    "--panel_table",
+    metavar="TSV",
+    help="Draw a grid from a TSV with title and infile columns. Tree paths are relative to the TSV. Drawing options apply to each panel.",
+)
+pdraw.add_argument(
+    "--panel-columns",
+    "--panel_columns",
+    type=int,
+    metavar="INT",
+    help="Number of columns in a panel grid (default 2).",
 )
 pdraw.add_argument(
     "-o",
@@ -2712,6 +2757,13 @@ pdraw.add_argument(
     default=None,
     type=str,
     help="default=None: Map a categorical Newick/NHX branch property to color.",
+)
+pdraw.add_argument(
+    "--branch-color-scope",
+    "--branch_color_scope",
+    choices=["branch", "clade"],
+    default="branch",
+    help="Colour the annotated incoming branch, or its entire clade. Nested annotations override inherited colours.",
 )
 pdraw.add_argument(
     "--branch-width-property",
@@ -3343,7 +3395,7 @@ pimage.add_argument(
     metavar="yes|no",
     type=strtobool,
     default=False,
-    help="Stop querying providers once enough images have been saved for a taxon.",
+    help="Stop after saving enough suitable images. Defer known fallback photos until other providers have been tried.",
 )
 pimage.add_argument(
     "--resume",
@@ -4993,8 +5045,9 @@ def command_mcmctree(args):
 
 
 pmcmctree = subparsers.add_parser(
-    "mcmctree",
-    help="Prepare MCMCtree calibrations or summarize its posterior node ages",
+    "mcmctree-tree",
+    aliases=["mcmctree"],
+    help="Prepare a calibrated tree or convert MCMCtree posterior ages to a tree",
     parents=[p_tree_input, p_download, p_species, p_vertlife],
 )
 pmcmctree.add_argument(
@@ -5252,6 +5305,63 @@ pmcmctree.add_argument(
     help="default=%(default)s: Keep every INT-th posterior row.",
 )
 pmcmctree.set_defaults(handler=command_mcmctree)
+
+
+def command_mcmctree_run(args):
+    from nwkit.mcmctree_runner import mcmctree_run_main
+
+    return mcmctree_run_main(args)
+
+
+pmcmctree_run = subparsers.add_parser(
+    "mcmctree-run",
+    help="Run four MCMCtree chains and extend them until convergence criteria are met",
+)
+pmcmctree_run.add_argument(
+    "-i",
+    "--control",
+    type=Path,
+    required=True,
+    help="Calibrated IQ2MC or upstream PAML control file for the initial run.",
+)
+pmcmctree_run.add_argument(
+    "--out-dir",
+    "--out_dir",
+    type=Path,
+    required=True,
+    help="Directory for the tree, summary, diagnostics and restart evidence.",
+)
+pmcmctree_run.add_argument(
+    "--run-store",
+    "--run_store",
+    type=Path,
+    help="Optional persistent directory for raw chains and checkpoint evidence (default: OUT_DIR/runs).",
+)
+pmcmctree_run.add_argument(
+    "--max-generations",
+    "--max_generations",
+    type=int,
+    help="Total generations per chain, including burn-in. Default: burn-in plus 64 times the initial sampling generations, within PAML's integer range.",
+)
+pmcmctree_run.add_argument(
+    "--burnin-percentages",
+    "--burnin_percentages",
+    default="",
+    help="Optional comma-separated percentages of total generations (e.g. 2.5,5,10,20,40). The smallest passing extra burn-in is confirmed at the next check.",
+)
+pmcmctree_run.add_argument(
+    "--jobs",
+    type=int,
+    default=4,
+    help="Worker budget for sampling and diagnostics (default: %(default)s). Sampling runs at most four chains.",
+)
+pmcmctree_run.add_argument(
+    "--seed",
+    type=int,
+    default=1729,
+    help="Base seed for independent chains and resumed segments (default: %(default)s).",
+)
+pmcmctree_run.set_defaults(handler=command_mcmctree_run)
 
 
 def command_monophyly(args):
@@ -6586,11 +6696,14 @@ parser_help.add_argument("command", help="command name which help is shown")
 parser_help.set_defaults(handler=command_help)
 
 
+DEPRECATED_COMMAND_ALIASES = {"mcmctree": "mcmctree-tree"}
+
+
 def _add_input_rooting_options():
     from nwkit.rooting_state import ROOTING_INPUT_OPTIONS
 
     for command, command_parser in subparsers.choices.items():
-        if command in {"table2nwk", "help"}:
+        if command in {"table2nwk", "help"} or command in DEPRECATED_COMMAND_ALIASES:
             continue
         input_names = {action.dest for action in command_parser._actions}
         if command == "regress":
@@ -6616,10 +6729,12 @@ def _add_input_rooting_options():
 
 def _add_output_rooting_options():
     for command, command_parser in subparsers.choices.items():
+        if command in DEPRECATED_COMMAND_ALIASES:
+            continue
         outputs = {action.dest for action in command_parser._actions}
         if not outputs.intersection(
             {"outformat", "tree_outformat", "tree_out"}
-        ) and command not in {"convert", "radte", "mcmctree"}:
+        ) and command not in {"convert", "radte", "mcmctree-tree"}:
             continue
         command_parser.add_argument(
             "--rooting-token",
@@ -6768,6 +6883,12 @@ def main(argv=None):
     raw_argv = list(sys.argv[1:] if argv is None else argv)
     args = parser.parse_args(raw_argv)
     if hasattr(args, "handler"):
+        if args.command in DEPRECATED_COMMAND_ALIASES:
+            canonical = DEPRECATED_COMMAND_ALIASES[args.command]
+            sys.stderr.write(
+                f"Warning: command '{args.command}' is deprecated; use '{canonical}' instead.\n"
+            )
+            args.command = canonical
         try:
             if getattr(args, "audit", None) == "-":
                 raise ValueError("'--audit' requires a file path, not '-'.")

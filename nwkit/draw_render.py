@@ -213,7 +213,7 @@ def _draw_tree_branches(
     frame: RenderFrame,
     geometry: DrawingPlacement,
     branch_color,
-    branch_color_property,
+    color_values,
     branch_width,
     color_by_node,
     terminal_branch_color,
@@ -221,14 +221,9 @@ def _draw_tree_branches(
     width_by_node,
 ):
     for node, path in geometry.drawing_layout.edge_paths.items():
-        if branch_color_property not in (None, "") and node.props.get(
-            branch_color_property
-        ) not in (None, ""):
-            edge_color = color_by_node[node]
-        elif node.is_leaf and terminal_branch_color:
+        edge_color = color_by_node[node]
+        if node.is_leaf and terminal_branch_color and node not in color_values:
             edge_color = terminal_branch_color
-        else:
-            edge_color = color_by_node[node]
         path_x, path_y = zip(*path, strict=True)
         line = frame.ax.plot(
             path_x,
@@ -557,6 +552,7 @@ def _draw_node_type_markers(
 
 def _property_legend_handles(
     *,
+    color_values,
     annotations: AnnotationOptions,
     panels: DrawingPanels,
     property_style: PropertyStyle,
@@ -604,14 +600,7 @@ def _property_legend_handles(
         for label, color in panels.tip_track_legend_entries
     )
     if branch_color_property not in (None, ""):
-        branch_values = sorted(
-            {
-                str(node.props[branch_color_property])
-                for node in tree.traverse()
-                if not node.is_root
-                and node.props.get(branch_color_property) not in (None, "")
-            }
-        )
+        branch_values = sorted(set(color_values.values()))
         branch_value_index = {value: index for index, value in enumerate(branch_values)}
         legend_handles.extend(
             Line2D(
@@ -629,11 +618,7 @@ def _property_legend_handles(
             )
             for value in branch_values
         )
-        if any(
-            node.props.get(branch_color_property) in (None, "")
-            for node in tree.traverse()
-            if not node.is_root
-        ):
+        if len(color_values) < len(width_by_node):
             legend_handles.append(
                 Line2D(
                     [0],
@@ -1561,13 +1546,15 @@ def _finalize_drawing_quality(
             raise ValueError(overflow_message)
         if str(collision_policy).strip().lower() in {"resolve", "warn"}:
             sys.stderr.write(overflow_message + "\n")
-    final_quality = evaluate_drawing(
-        figure=frame.fig,
-        artists=frame.drawing_artists,
-        branch_lines=frame.branch_lines,
-        policy="ignore",
-        max_iterations=0,
-    )
+    final_quality = quality_report
+    if frame.drawing_artists:
+        final_quality = evaluate_drawing(
+            figure=frame.fig,
+            artists=frame.drawing_artists,
+            branch_lines=frame.branch_lines,
+            policy="ignore",
+            max_iterations=0,
+        )
     final_collision_count = final_quality["final_collision_count"]
     if final_collision_count:
         collision_message = (

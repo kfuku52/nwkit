@@ -66,7 +66,7 @@ def tmp_nwk(tmp_path):
 
     def _make(nwk_str, name="tree.nwk"):
         p = tmp_path / name
-        p.write_text(nwk_str)
+        p.write_text(nwk_str, encoding="utf-8")
         return str(p)
 
     return _make

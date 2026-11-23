@@ -33,6 +33,7 @@ def regression_bundle_lock_path(prefix: str) -> str:
 
 
 STDIN_INPUT_DESTS = (
+    "constraint",
     "calibration_map_tsv",
     "branch_fit",
     "branch_models",
@@ -88,6 +89,7 @@ def get_stdin_input_options(args: Any) -> list[tuple[str, str]]:
             and (
                 getattr(args, "radte_prefix", None)
                 or getattr(args, "document", None)
+                or getattr(args, "panel_table", None)
                 or (
                     getattr(args, "command", None) == "constrain"
                     and getattr(args, "backbone", None) == "vertlife"
