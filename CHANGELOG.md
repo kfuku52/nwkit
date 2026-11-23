@@ -4,6 +4,10 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## 0.47.5 (2026-11-23)
+
+- Dependabot dependency update (automated metadata).
+
 ## [0.47.4] - 2026-11-22
 
 - Check MCMCtree convergence at shorter intervals near the stopping criteria.
