@@ -1,11 +1,13 @@
 """Profile and bootstrap uncertainty for the explicitly conditional RADTE model."""
 
 from dataclasses import replace
+from functools import partial
 
 import numpy as np
 from scipy.optimize import brentq
 from scipy.stats import chi2
 
+from nwkit.bootstrap_workers import bootstrap_map, validate_bootstrap_workers
 from nwkit.radte_model import DatingOptimizationError, fit_dates, solve_problem
 from nwkit.radte_studentized import chronology_domain
 
@@ -258,6 +260,71 @@ def profile_intervals(fit, problem, *, level=0.95, starts=3, maxiter=2000, seed=
         fit.interval_status += "-calibration-limited"
 
 
+def _branch_bootstrap_lengths(chronology, rng, durations, fit, rho):
+    values = {chronology.gene: rng.normal(0, fit.log_rate_sd)}
+    lengths = []
+    for index, node in enumerate(chronology.edges):
+        values[node] = rho * values[node.up] + rng.normal(
+            0, fit.log_rate_sd * np.sqrt(1 - rho**2)
+        )
+        lengths.append(
+            durations[index]
+            * chronology.scale
+            * np.exp(fit.log_rate_mean + values[node])
+        )
+    return lengths
+
+
+def _fit_bootstrap_ages(
+    likelihood, chronology, original, *, marginal, maxiter, **options
+):
+    # A replicate may own a temporary IQ-TREE directory and a live worker.
+    try:
+        initial_lengths = getattr(likelihood, "initial_lengths", original)
+        if likelihood is not None and getattr(likelihood, "fit_settings", {}):
+            from nwkit.radte_sequence_fit import fit_sequence_model
+
+            fit_sequence_model(
+                likelihood, original, maxiter=maxiter, **likelihood.fit_settings
+            )
+            initial_lengths = getattr(likelihood, "initial_lengths", original)
+        dated_likelihood = likelihood
+        if marginal:
+            from nwkit.radte_sequence import build_quadratic
+
+            dated_likelihood = build_quadratic(likelihood, initial_lengths, maxiter)
+        sample, sample_problem = fit_dates(
+            chronology,
+            likelihood=dated_likelihood,
+            maxiter=maxiter,
+            inference="marginal" if marginal else "joint-map",
+            **options,
+        )
+        if marginal and not all(
+            check[0] for check in sample_problem.approximation_checks(sample.parameters)
+        ):
+            raise ValueError(
+                "Bootstrap quadratic approximation failed exact validation."
+            )
+        return sample.ages, None
+    except (ValueError, FloatingPointError) as exc:
+        return None, str(exc)
+    finally:
+        if hasattr(likelihood, "close"):
+            likelihood.close()
+
+
+def _dating_bootstrap_draw(task, *, chronology, fit_ages, fit_sites, seed):
+    replicate, data = task
+    if fit_sites is None:
+        for node, length in zip(chronology.edges, data, strict=True):
+            node.dist = length
+        likelihood = None
+    else:
+        likelihood = fit_sites(data)
+    return fit_ages(likelihood, seed=seed + replicate + 1)
+
+
 def bootstrap_intervals(
     fit,
     problem,
@@ -269,7 +336,9 @@ def bootstrap_intervals(
     maxiter=2000,
     seed=1,
     rate_sd=None,
+    workers=1,
 ):
+    validate_bootstrap_workers(workers)
     if replicates < 20:
         raise ValueError("Bootstrap intervals require at least 20 replicates.")
     if not 0 < level < 1:
@@ -285,64 +354,52 @@ def bootstrap_intervals(
         )
     rng = np.random.default_rng(seed)
     original = np.array([n.dist for n in c.edges])
-    samples, failures = [], []
+    fit_ages = partial(
+        _fit_bootstrap_ages,
+        chronology=c,
+        original=original,
+        marginal=getattr(problem, "marginal", False),
+        maxiter=maxiter,
+        rho=rho,
+        rate_sd=rate_sd,
+        starts=starts,
+    )
     try:
-        for replicate in range(replicates):
+        if exact is not None and workers == 1:
+            results = [
+                fit_ages(exact.bootstrap(rng), seed=seed + draw + 1)
+                for draw in range(replicates)
+            ]
+        else:
             if exact is None:
-                # Stationary Gaussian AR(1) on the actual gene genealogy.
-                values = {c.gene: rng.normal(0, fit.log_rate_sd)}
-                lengths = []
-                duration = c.durations(fit.ages)
-                for i, node in enumerate(c.edges):
-                    values[node] = rho * values[node.up] + rng.normal(
-                        0, fit.log_rate_sd * np.sqrt(1 - rho**2)
-                    )
-                    lengths.append(
-                        duration[i] * c.scale * np.exp(fit.log_rate_mean + values[node])
-                    )
-                for node, length in zip(c.edges, lengths, strict=True):
-                    node.dist = length
-                likelihood = None
-            else:
-                likelihood = exact.bootstrap(rng)
-            try:
-                initial_lengths = getattr(likelihood, "initial_lengths", original)
-                if likelihood is not None and getattr(likelihood, "fit_settings", {}):
-                    from nwkit.radte_sequence_fit import fit_sequence_model
-
-                    fit_sequence_model(
-                        likelihood, original, maxiter=maxiter, **likelihood.fit_settings
-                    )
-                    initial_lengths = getattr(likelihood, "initial_lengths", original)
-                if getattr(problem, "marginal", False):
-                    from nwkit.radte_sequence import build_quadratic
-
-                    likelihood = build_quadratic(likelihood, initial_lengths, maxiter)
-                sample, sample_problem = fit_dates(
-                    c,
-                    rho=rho,
-                    likelihood=likelihood,
-                    rate_sd=rate_sd,
-                    starts=starts,
-                    maxiter=maxiter,
-                    seed=seed + replicate + 1,
-                    inference="marginal"
-                    if getattr(problem, "marginal", False)
-                    else "joint-map",
+                durations = c.durations(fit.ages)
+                draws = (
+                    _branch_bootstrap_lengths(c, rng, durations, fit, rho)
+                    for _ in range(replicates)
                 )
-                if getattr(problem, "marginal", False) and not all(
-                    check[0]
-                    for check in sample_problem.approximation_checks(sample.parameters)
-                ):
-                    raise ValueError(
-                        "Bootstrap quadratic approximation failed exact validation."
-                    )
-                samples.append(sample.ages)
-            except (ValueError, FloatingPointError) as exc:
-                failures.append(str(exc))
+                fit_sites = None
+            else:
+                count, fit_sites = exact.bootstrap_sampler()
+                draws = (rng.integers(0, count, count) for _ in range(replicates))
+            results = list(
+                bootstrap_map(
+                    partial(
+                        _dating_bootstrap_draw,
+                        chronology=c,
+                        fit_ages=fit_ages,
+                        fit_sites=fit_sites,
+                        seed=seed,
+                    ),
+                    enumerate(draws),
+                    workers=workers,
+                    replicates=replicates,
+                )
+            )
     finally:
         for node, length in zip(c.edges, original, strict=True):
             node.dist = length
+    samples = [ages for ages, error in results if error is None]
+    failures = [error for _, error in results if error is not None]
     fit.diagnostics.append(f"bootstrap_successes={len(samples)}/{replicates}")
     if failures:
         fit.diagnostics.append("bootstrap_first_failure=" + failures[0])

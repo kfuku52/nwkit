@@ -60,6 +60,7 @@ def conditional_intervals(
                 maxiter=args.maxiter,
                 seed=args.seed,
                 rate_sd=args.rate_sd,
+                workers=getattr(args, "bootstrap_workers", 1),
             )
     except (ValueError, FloatingPointError) as exc:
         result.interval_lower = result.interval_upper = None

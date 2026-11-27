@@ -1571,7 +1571,7 @@ def test_parametric_bootstrap_is_reproducible_and_reports_empirical_inference(
         seed=19,
     )
     first = fit_reconciled_pgls(**arguments).iloc[0]
-    second = fit_reconciled_pgls(**arguments).iloc[0]
+    second = fit_reconciled_pgls(**arguments, bootstrap_workers=2).iloc[0]
 
     for column in [
         "coefficient",
@@ -3415,6 +3415,8 @@ def test_pgls_raw_bootstrap_refits_automatic_gene_parameter(tmp_path, inference)
             "--inference",
             inference,
             "--bootstrap-replicates",
+            "2",
+            "--bootstrap-workers",
             "2",
             "--seed",
             "7",

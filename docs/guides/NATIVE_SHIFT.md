@@ -167,6 +167,13 @@ the plus-one correction. Known SE values and missingness masks remain fixed.
 Failed draws abort rather than disappear from the denominator. Plug-in calibration
 has no proven uniform composite-null guarantee.
 
+Use `--bootstrap-workers 4` to distribute native calibration or selection-support
+refits across four processes. The default is one worker. Draws retain their
+seeded order, and tests still stop at the first non-rejection. If a support
+replicate runs its own calibration, that calibration uses one worker.
+Set `OPENBLAS_NUM_THREADS=1` and `OMP_NUM_THREADS=1` when running multiple
+workers, and reserve memory for one fit per worker.
+
 `--bootstrap N` additionally simulates from the selected fit and repeats the
 **entire configured selection**, including the inner bootstrap when using
 bootstrap selection. This can be much

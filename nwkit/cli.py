@@ -4745,6 +4745,12 @@ pregress_inference.add_argument(
     help="default=%(default)s: Number of simulations for bootstrap inference.",
 )
 pregress_inference.add_argument(
+    "--bootstrap-workers",
+    type=int,
+    default=1,
+    help="Concurrent bootstrap refits (default: 1).",
+)
+pregress_inference.add_argument(
     "--seed",
     metavar="INT",
     default=1,

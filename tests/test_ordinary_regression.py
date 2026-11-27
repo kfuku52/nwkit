@@ -807,7 +807,7 @@ def test_ordinary_pgls_parametric_bootstrap_is_reproducible():
         seed=19,
     )
     first = fit_ordinary_regression(**arguments)
-    second = fit_ordinary_regression(**arguments)
+    second = fit_ordinary_regression(**arguments, bootstrap_workers=2)
     pd.testing.assert_frame_equal(first, second)
     assert set(first["inference_method"]) == {"parametric-bootstrap"}
     assert set(first["measurement_error_model"]) == {"latent-predictor"}
@@ -2651,6 +2651,7 @@ def test_non_gaussian_parametric_bootstrap_refits_the_family(values, response_fa
         coefficient_penalty="none",
         inference="parametric-bootstrap",
         bootstrap_replicates=4,
+        bootstrap_workers=2,
         seed=17,
     )
 

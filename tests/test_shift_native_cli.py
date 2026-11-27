@@ -452,3 +452,27 @@ def test_native_support_repeats_global_gate_with_distinct_seeds(
     assert len(seeds) == len(set(seeds)) == 3
     model = json.loads((tmp_path / "model.json").read_text())
     assert model["selection_support"]["replicates"] == 2
+
+
+def test_parallel_native_calibration_and_support_match_serial(native_inputs, tmp_path):
+    index = native_inputs.index("--regime-map")
+    del native_inputs[index : index + 2]
+    native_inputs.extend(
+        [
+            "--max-shifts",
+            "1",
+            "--calibration-replicates",
+            "3",
+            "--calibration-level",
+            "0.3",
+            "--bootstrap",
+            "2",
+        ]
+    )
+    main(native_inputs)
+    model_path = tmp_path / "model.json"
+    serial = json.loads(model_path.read_text())
+    main(native_inputs + ["--bootstrap-workers", "2"])
+    parallel = json.loads(model_path.read_text())
+    for field in ("selection_calibration", "selection_support", "shift_branch_ids"):
+        assert serial[field] == parallel[field]

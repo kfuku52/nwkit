@@ -465,6 +465,7 @@ def run_dating(c, args):
             maxiter=args.maxiter,
             seed=args.seed,
             rate_sd=args.rate_sd,
+            workers=getattr(args, "bootstrap_workers", 1),
         )
     elif args.uncertainty == "input-ensemble":
         from nwkit.radte_ensemble import ensemble_intervals
@@ -648,6 +649,9 @@ def result_tables(c, fit, *, bound_policy="hard"):
 
 
 def radte_main(args):
+    from nwkit.bootstrap_workers import validate_bootstrap_workers
+
+    validate_bootstrap_workers(getattr(args, "bootstrap_workers", 1))
     start = time.monotonic()
     validate_options(args)
     requested_options = {

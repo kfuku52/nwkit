@@ -2,9 +2,11 @@
 
 import itertools
 import math
+from functools import partial
 
 import numpy as np
 
+from nwkit.bootstrap_workers import bootstrap_map
 from nwkit.shift_native_model import (
     ShiftData,
     _restore_trait_variance,
@@ -59,7 +61,28 @@ def _family_statistic(search, complexity):
     )
 
 
-def calibrate_native_search(data, search, run_search, *, replicates, seed, level=0.05):
+def _calibration_draw(task, *, data, fit, run_search, complexity):
+    draw, stream = task
+    try:
+        simulated = simulate_native_data(data, fit, np.random.default_rng(stream))
+        searched = run_search(simulated)
+        return (
+            _aic_gain(searched)
+            if complexity is None
+            else _family_statistic(searched, complexity)
+        )
+    except (ValueError, ArithmeticError, np.linalg.LinAlgError) as exc:
+        label = (
+            f"Native global-null calibration failed at draw {draw}"
+            if complexity is None
+            else f"Native calibration failed at complexity {complexity}, draw {draw}"
+        )
+        raise ValueError(f"{label}; no draws discarded: {exc}") from exc
+
+
+def calibrate_native_search(
+    data, search, run_search, *, replicates, seed, level=0.05, workers=1
+):
     """Repeat the complete search for each draw; stop at first accepted family.
 
     run_search must capture exactly the same configuration used for search.
@@ -79,18 +102,20 @@ def calibrate_native_search(data, search, run_search, *, replicates, seed, level
     selected = families[-1][1]
     for family_index, (complexity, restricted) in enumerate(families[:-1]):
         statistic = _family_statistic(search, complexity)
-        samples = []
-        for draw, stream in enumerate(streams[family_index].spawn(replicates)):
-            try:
-                simulated = simulate_native_data(
-                    data, restricted, np.random.default_rng(stream)
-                )
-                bootstrap = run_search(simulated)
-                samples.append(_family_statistic(bootstrap, complexity))
-            except (ValueError, ArithmeticError, np.linalg.LinAlgError) as exc:
-                raise ValueError(
-                    f"Native calibration failed at complexity {complexity}, draw {draw}; no draws discarded: {exc}"
-                ) from exc
+        samples = list(
+            bootstrap_map(
+                partial(
+                    _calibration_draw,
+                    data=data,
+                    fit=restricted,
+                    run_search=run_search,
+                    complexity=complexity,
+                ),
+                enumerate(streams[family_index].spawn(replicates)),
+                workers=workers,
+                replicates=replicates,
+            )
+        )
         exceedances = sum(
             value >= statistic - 1e-10 * max(1, statistic) for value in samples
         )
@@ -143,7 +168,9 @@ def _aic_gain(search):
     return max(0.0, scores[0] - scores[1])
 
 
-def gate_native_aic(data, search, run_search, *, replicates, seed, level=0.05):
+def gate_native_aic(
+    data, search, run_search, *, replicates, seed, level=0.05, workers=1
+):
     """Test the global no-shift null by replaying the entire AIC search.
 
     The statistic is max(0, AIC(null) - min AIC). Passing the gate retains
@@ -159,15 +186,20 @@ def gate_native_aic(data, search, run_search, *, replicates, seed, level=0.05):
         raise ValueError("Calibration draws cannot resolve the requested test level.")
     statistic = _aic_gain(search)
     null = search.best_by_complexity[0]
-    samples = []
-    for draw, stream in enumerate(np.random.SeedSequence(seed).spawn(replicates)):
-        try:
-            simulated = simulate_native_data(data, null, np.random.default_rng(stream))
-            samples.append(_aic_gain(run_search(simulated)))
-        except (ValueError, ArithmeticError, np.linalg.LinAlgError) as exc:
-            raise ValueError(
-                f"Native global-null calibration failed at draw {draw}; no draws discarded: {exc}"
-            ) from exc
+    samples = list(
+        bootstrap_map(
+            partial(
+                _calibration_draw,
+                data=data,
+                fit=null,
+                run_search=run_search,
+                complexity=None,
+            ),
+            enumerate(np.random.SeedSequence(seed).spawn(replicates)),
+            workers=workers,
+            replicates=replicates,
+        )
+    )
     exceedances = sum(
         value >= statistic - 1e-10 * max(1, statistic) for value in samples
     )
@@ -193,7 +225,25 @@ def gate_native_aic(data, search, run_search, *, replicates, seed, level=0.05):
     }
 
 
-def native_selection_support(data, selected, select_data, *, replicates, seed):
+def _selection_draw(task, *, data, fit, select_data):
+    draw, stream = task
+    simulation_stream, selection_stream = stream.spawn(2)
+    try:
+        simulated = simulate_native_data(
+            data, fit, np.random.default_rng(simulation_stream)
+        )
+        return select_data(simulated, int(selection_stream.generate_state(1)[0]))[
+            "layout"
+        ]
+    except (ValueError, ArithmeticError, np.linalg.LinAlgError) as exc:
+        raise ValueError(
+            f"Native support failed at draw {draw}; no draws discarded: {exc}"
+        ) from exc
+
+
+def native_selection_support(
+    data, selected, select_data, *, replicates, seed, workers=1
+):
     """Stability frequencies; select_data replays the entire selection procedure."""
     if (
         isinstance(replicates, bool)
@@ -208,23 +258,18 @@ def native_selection_support(data, selected, select_data, *, replicates, seed):
         for pair in itertools.combinations((0, *selected["layout"].shifts), 2)
     }
     streams = np.random.SeedSequence(seed).spawn(replicates)
-    for draw, stream in enumerate(streams):
-        simulation_stream, selection_stream = stream.spawn(2)
-        try:
-            simulated = simulate_native_data(
-                data, selected, np.random.default_rng(simulation_stream)
-            )
-            result = select_data(simulated, int(selection_stream.generate_state(1)[0]))
-        except (ValueError, ArithmeticError, np.linalg.LinAlgError) as exc:
-            raise ValueError(
-                f"Native support failed at draw {draw}; no draws discarded: {exc}"
-            ) from exc
-        for branch in result["layout"].shifts:
+    for layout in bootstrap_map(
+        partial(_selection_draw, data=data, fit=selected, select_data=select_data),
+        enumerate(streams),
+        workers=workers,
+        replicates=replicates,
+    ):
+        for branch in layout.shifts:
             branches[branch] += 1
-        grouping += result["layout"] == selected["layout"]
+        grouping += layout == selected["layout"]
         labels = {
             branch: group
-            for group, members in enumerate(result["layout"].groups)
+            for group, members in enumerate(layout.groups)
             for branch in members
         }
         for (first, second), counts in pairs.items():

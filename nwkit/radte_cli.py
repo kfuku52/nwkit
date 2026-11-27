@@ -238,6 +238,12 @@ def register_radte(subparsers, audit_parent, species_parent, finite_float):
         help="Bootstrap refits when requested (default: 100).",
     )
     add(
+        "bootstrap_workers",
+        type=int,
+        default=1,
+        help="Concurrent bootstrap refits (default: 1). IQ-TREE threads apply per refit.",
+    )
+    add(
         "starts",
         type=int,
         default=3,

@@ -153,6 +153,35 @@ def test_partial_gy_parameters_and_bootstrap(tmp_path, iqtree):
     assert np.isfinite(boot.value_gradient(boot.initial_lengths)[0])
 
 
+def _iqtree_replicate_score(columns, *, prepare):
+    replicate = prepare(columns)
+    try:
+        return replicate.prefit_nll
+    finally:
+        replicate.close()
+
+
+@pytest.mark.integration
+def test_parallel_site_factory_recreates_iqtree_refits(tmp_path, iqtree):
+    from functools import partial
+
+    from nwkit.bootstrap_workers import bootstrap_map
+
+    exact = IQTreeLikelihood(
+        small_chronology(), alignment(tmp_path), "GY{0.5,2}+FQ", executable=iqtree
+    )
+    try:
+        count, prepare = exact.bootstrap_sampler()
+        rng = np.random.default_rng(4)
+        draws = [rng.integers(0, count, count) for _ in range(2)]
+        worker = partial(_iqtree_replicate_score, prepare=prepare)
+        serial = list(bootstrap_map(worker, draws, workers=1, replicates=2))
+        parallel = list(bootstrap_map(worker, draws, workers=2, replicates=2))
+        np.testing.assert_array_equal(serial, parallel)
+    finally:
+        exact.close()
+
+
 @pytest.mark.parametrize(
     "options,error",
     [

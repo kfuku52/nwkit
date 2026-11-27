@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import tempfile
 from collections import OrderedDict
+from functools import partial
 from itertools import chain, islice
 from pathlib import Path
 
@@ -585,30 +586,40 @@ class IQTreeLikelihood:
         return nll, gradient[mapping]
 
     def bootstrap(self, rng):
+        count, fit = self.bootstrap_sampler()
+        return fit(rng.integers(0, count, count))
+
+    def bootstrap_sampler(self):
+        # Only pass reconstructable settings to bootstrap workers. This
+        # likelihood may own a live subprocess and temporary files.
         width = 3 if self.alphabet == "codon" else 1
         count = len(self.sequences[self.names[0]]) // width
-        columns = rng.integers(0, count, count)
-        path = self.directory / "bootstrap.fa"
-        path.write_text(
-            "".join(
-                f">{name}\n"
-                + "".join(
-                    self.sequences[name][i * width : (i + 1) * width] for i in columns
-                )
-                + "\n"
-                for name in self.names
-            )
-        )
-        return IQTreeLikelihood(
-            self.chronology,
-            path,
-            self.model,
+        return count, partial(
+            _iqtree_bootstrap_sites,
+            chronology=self.chronology,
+            records=tuple((name, self.sequences[name]) for name in self.names),
+            width=width,
+            model=self.model,
             executable=self.executable,
             threads=self.threads,
             seed=self.seed,
             interface="library" if self.worker_info else "cli",
             worker=self.worker_info["executable"] if self.worker_info else None,
         )
+
+
+def _iqtree_bootstrap_sites(columns, *, chronology, records, width, model, **options):
+    with tempfile.TemporaryDirectory(prefix="nwkit-iqtree-bootstrap-") as directory:
+        path = Path(directory) / "bootstrap.fa"
+        path.write_text(
+            "".join(
+                f">{name}\n"
+                + "".join(sequence[i * width : (i + 1) * width] for i in columns)
+                + "\n"
+                for name, sequence in records
+            )
+        )
+        return IQTreeLikelihood(chronology, path, model, **options)
 
 
 def prepare_iqtree(c, args):

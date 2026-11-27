@@ -372,7 +372,13 @@ class SequenceLikelihood:
         return -float((total - np.log(len(self.rates))) @ self.counts), -gradient
 
     def bootstrap(self, rng):
-        columns = rng.integers(0, self.raw_matrix.shape[1], self.raw_matrix.shape[1])
+        count, fit = self.bootstrap_sampler()
+        return fit(rng.integers(0, count, count))
+
+    def bootstrap_sampler(self):
+        return self.raw_matrix.shape[1], self._bootstrap_sites
+
+    def _bootstrap_sites(self, columns):
         result = SequenceLikelihood(
             self.chronology,
             None,

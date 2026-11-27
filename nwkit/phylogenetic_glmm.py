@@ -5,7 +5,7 @@ import math
 import warnings
 from dataclasses import dataclass, replace
 from decimal import Decimal, localcontext
-from functools import lru_cache
+from functools import lru_cache, partial
 from typing import Callable, Mapping, Sequence
 
 import numpy as np
@@ -28,13 +28,14 @@ from scipy.stats import chi2
 from scipy.stats import nbinom as nbinom_distribution
 from scipy.stats import poisson as poisson_distribution
 
+from nwkit.bootstrap_workers import bootstrap_map, validate_bootstrap_workers
 from nwkit.evolution import EvolutionaryCovarianceFactory
 from nwkit.gaussian import finite_mean, symmetric_average
 from nwkit.measurement_error import _finite_difference_hessian
 from nwkit.model_matrix import CategoricalObservation, ReplicatedObservation
 from nwkit.regression_inference import (
     BootstrapTest,
-    bootstrap_test,
+    bootstrap_statistic_test,
     invert_bootstrap_grid,
     objective_difference,
 )
@@ -3063,6 +3064,7 @@ class _GlmmCallOptions:
     inference: str
     confidence_level: float
     bootstrap_replicates: int
+    bootstrap_workers: int
     seed: int
     allow_large_dense: bool
     fixed_coefficients: Mapping[int, float] | None
@@ -3230,6 +3232,7 @@ def _call_phylogenetic_glmm(
         inference=options.inference,
         confidence_level=options.confidence_level,
         bootstrap_replicates=options.bootstrap_replicates,
+        bootstrap_workers=options.bootstrap_workers,
         seed=options.seed,
         allow_large_dense=options.allow_large_dense,
         fixed_coefficients=options.fixed_coefficients,
@@ -3329,6 +3332,47 @@ def _prepare_glmm_sampler(fit, design, phylogenetic_covariance, options):
     return lambda rng: random_cholesky @ rng.normal(size=len(random_cholesky))
 
 
+def _glmm_coefficient_draw(task, *, design, covariance, options):
+    response, observation_options = task
+    try:
+        fitted = _call_phylogenetic_glmm(
+            response, design, covariance, replace(options, **observation_options)
+        )
+    except (ValueError, RuntimeError, np.linalg.LinAlgError):
+        return None
+    if not fitted.optimizer_converged or not np.isfinite(fitted.log_likelihood):
+        return None
+    coefficients = fitted.coefficients.reshape(-1)
+    return coefficients if np.isfinite(coefficients).all() else None
+
+
+def _glmm_null_draw(task, *, design, covariance, options):
+    response, observation_options = task
+    generated = replace(options, **observation_options)
+    null = _call_phylogenetic_glmm(response, design, covariance, generated)
+    full = _call_phylogenetic_glmm(
+        response, design, covariance, replace(generated, fixed_coefficients=None)
+    )
+    return objective_difference(_glmm_objective(full), _glmm_objective(null))
+
+
+def _glmm_bootstrap_draws(rng, response, design, fit, sample_latent, options):
+    for _ in range(options.bootstrap_replicates):
+        simulated, generated = _draw_bootstrap_dataset(
+            rng, response, design, fit, sample_latent(rng), options
+        )
+        # Transfer per-observation changes only, retaining the common model
+        # and predictor/options configuration in each worker.
+        yield (
+            simulated,
+            {}
+            if generated is options
+            else {
+                key: getattr(generated, key) for key in ("censor_lower", "censor_upper")
+            },
+        )
+
+
 def _fit_parametric_bootstrap_glmm(
     response_values,
     design,
@@ -3344,31 +3388,29 @@ def _fit_parametric_bootstrap_glmm(
         fit, design_array, phylogenetic_covariance, options
     )
     rng = np.random.default_rng(options.seed)
-    samples: list[np.ndarray] = []
-    maximum_attempts = options.bootstrap_replicates
-    attempts = 0
+    attempts = options.bootstrap_replicates
     refit_options = replace(
         wald_options,
         levels=fit.levels or options.levels,
         reference=fit.reference or options.reference,
     )
-    while len(samples) < options.bootstrap_replicates and attempts < maximum_attempts:
-        attempts += 1
-        latent = sample_latent(rng)
-        simulated, generated_options = _draw_bootstrap_dataset(
-            rng, response_values, design_array, fit, latent, refit_options
+    samples = [
+        value
+        for value in bootstrap_map(
+            partial(
+                _glmm_coefficient_draw,
+                design=design_array,
+                covariance=phylogenetic_covariance,
+                options=refit_options,
+            ),
+            _glmm_bootstrap_draws(
+                rng, response_values, design_array, fit, sample_latent, refit_options
+            ),
+            workers=options.bootstrap_workers,
+            replicates=attempts,
         )
-        try:
-            refit = _call_phylogenetic_glmm(
-                simulated, design_array, phylogenetic_covariance, generated_options
-            )
-        except (ValueError, RuntimeError, np.linalg.LinAlgError):
-            continue
-        if not refit.optimizer_converged or not np.isfinite(refit.log_likelihood):
-            continue
-        coefficients = refit.coefficients.reshape(-1)
-        if np.isfinite(coefficients).all():
-            samples.append(coefficients)
+        if value is not None
+    ]
     if len(samples) < options.bootstrap_replicates:
         raise RuntimeError(
             "Non-Gaussian parametric bootstrap produced only {} of {} "
@@ -3422,28 +3464,28 @@ def _fit_null_bootstrap_glmm(response_values, design, phylogenetic_covariance, o
                 null, design, phylogenetic_covariance, null_options
             )
 
-            def simulate_statistic(rng):
-                simulated, generated_options = _draw_bootstrap_dataset(
-                    rng, response_values, design, null, sample_latent(rng), null_options
-                )
-                fitted_null = _call_phylogenetic_glmm(
-                    simulated, design, phylogenetic_covariance, generated_options
-                )
-                fitted_full = _call_phylogenetic_glmm(
-                    simulated,
-                    design,
-                    phylogenetic_covariance,
-                    replace(generated_options, fixed_coefficients=None),
-                )
-                return objective_difference(
-                    _glmm_objective(fitted_full), _glmm_objective(fitted_null)
-                )
-
-            result = bootstrap_test(
+            draws = _glmm_bootstrap_draws(
+                np.random.default_rng(options.seed + index),
+                response_values,
+                design,
+                null,
+                sample_latent,
+                null_options,
+            )
+            result = bootstrap_statistic_test(
                 observed,
-                simulate_statistic,
-                replicates=options.bootstrap_replicates,
-                seed=options.seed + index,
+                bootstrap_map(
+                    partial(
+                        _glmm_null_draw,
+                        design=design,
+                        covariance=phylogenetic_covariance,
+                        options=null_options,
+                    ),
+                    draws,
+                    workers=options.bootstrap_workers,
+                    replicates=options.bootstrap_replicates,
+                ),
+                options.bootstrap_replicates,
             )
             attempted += options.bootstrap_replicates
             cache[value] = result
@@ -3499,6 +3541,7 @@ def fit_phylogenetic_glmm(
     inference: str = "wald",
     confidence_level: float = 0.95,
     bootstrap_replicates: int = 1000,
+    bootstrap_workers: int = 1,
     seed: int = 1,
     allow_large_dense: bool = False,
     fixed_coefficients: Mapping[int, float] | None = None,
@@ -3528,11 +3571,13 @@ def fit_phylogenetic_glmm(
         inference=inference,
         confidence_level=confidence_level,
         bootstrap_replicates=bootstrap_replicates,
+        bootstrap_workers=bootstrap_workers,
         seed=seed,
         allow_large_dense=allow_large_dense,
         fixed_coefficients=fixed_coefficients,
         coefficient_profile_grid=coefficient_profile_grid,
     )
+    validate_bootstrap_workers(bootstrap_workers)
     _validate_glmm_call_options(options)
     if censoring_model is not None:
         censoring_model.validate_observed(response_values, censor_lower, censor_upper)

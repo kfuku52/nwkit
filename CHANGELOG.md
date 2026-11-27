@@ -4,6 +4,13 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.47.7] - 2026-11-27
+
+- Run native SHIFT calibration and support, RADTE dating intervals, and
+  regression bootstrap refits concurrently with `--bootstrap-workers`.
+- Preserve seeded draw order and each method's handling of failed refits when
+  using multiple workers.
+
 ## [0.47.6] - 2026-11-27
 
 - Resume observed WGD count fits and retain completed bootstrap draws.

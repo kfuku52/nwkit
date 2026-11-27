@@ -48,6 +48,13 @@ def register_shift(subparsers, tree_input, table_output):
         help="Calibration test level (default: 0.05; plug-in calibration, not an exact error guarantee).",
     )
     parser.add_argument(
+        "--bootstrap-workers",
+        "--bootstrap_workers",
+        type=int,
+        default=1,
+        help="Concurrent native calibration or support refits (default: 1).",
+    )
+    parser.add_argument(
         "--trait", required=True, help="TSV with leaf_name and a numeric trait column."
     )
     parser.add_argument(
@@ -230,6 +237,9 @@ def _register_native_options(parser):
 
 
 def _command_shift(args):
+    from nwkit.bootstrap_workers import validate_bootstrap_workers
+
+    validate_bootstrap_workers(getattr(args, "bootstrap_workers", 1))
     if args.global_null_gate and (
         args.selection != "native" or args.criterion != "AIC" or args.regime_map
     ):

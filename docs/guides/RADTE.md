@@ -460,6 +460,12 @@ approximation fails. Substitution parameters remain conditional throughout datin
 Bootstrap replicates resample complete codons (or NT/AA columns) and refit the
 requested IQ-TREE model.
 
+Use `--bootstrap-workers 4` with bootstrap uncertainty to fit replicates in four
+independent processes. The default is one worker. Branch-only simulations and
+site resampling use the same draw order for a fixed seed at any worker count.
+For IQ-TREE, `--iqtree-threads` applies to each refit. Keep the product of workers
+and IQ-TREE threads within the CPU allocation, and reserve memory for each refit.
+
 Model prefit and frozen-model consistency checks require the likelihood and model
 parameters, without consuming IQ2MC derivatives. Exact clock optimization
 evaluates trial likelihoods before requesting derivatives.

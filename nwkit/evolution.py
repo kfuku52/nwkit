@@ -735,7 +735,7 @@ def optimization_parameterization(
     if model == "ou":
         return _ou_rate_parameterization(height)
     if model == "delta":
-        return (math.log(1e-4), math.log(1e4)), lambda value: math.exp(float(value))
+        return (math.log(1e-4), math.log(1e4)), math.exp
     raise ValueError("No optimizer parameterization for model '{}'.".format(model))
 
 
@@ -752,7 +752,7 @@ def _ou_rate_parameterization(height):
     )
     if bounds[0] >= bounds[1]:
         raise ValueError("The OU rate bounds exceed floating-point range.")
-    return bounds, lambda value: math.exp(float(value))
+    return bounds, math.exp
 
 
 def encoded_evolution_parameter(model: str, parameter: float) -> float:

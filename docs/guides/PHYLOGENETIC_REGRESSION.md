@@ -878,6 +878,13 @@ with fewer than 20 unique species events and fits at a variance boundary are
 flagged. Conditional event deviations and lineage slopes can be written with
 `--random-effects-out`.
 
+`--bootstrap-workers 4` fits bootstrap replicates with four processes. The
+default is one worker. Ordinary and reconciled regression retain the same draws,
+retry rules and reduction order for a fixed seed. Each null-bootstrap replicate
+refits both hypotheses in the same worker. Use one BLAS thread per worker
+(for example `OPENBLAS_NUM_THREADS=1` and `OMP_NUM_THREADS=1`) and reserve memory
+for each fit.
+
 `--inference studentized-bootstrap` is an opt-in Gaussian coefficient method.
 Each draw refits the covariance and computes the selected coefficient and its
 model-based standard error. It compares `(beta* - beta_hat)/SE*` with

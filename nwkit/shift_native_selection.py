@@ -1,5 +1,8 @@
 """Replayable native search with bootstrap or information-criterion selection."""
 
+from functools import partial
+
+from nwkit.bootstrap_workers import validate_bootstrap_workers
 from nwkit.shift_native_bootstrap import (
     calibrate_native_search,
     gate_native_aic,
@@ -85,6 +88,40 @@ class NativeSearchRunner:
         )
 
 
+def _choose_native(
+    searched, sample, seed, *, runner, criterion, gate, replicates, level, workers=1
+):
+    if gate:
+        return gate_native_aic(
+            sample,
+            searched,
+            runner,
+            replicates=replicates,
+            seed=seed,
+            level=level,
+            workers=workers,
+        )
+    if criterion is not None:
+        if searched.best_information is None:
+            raise ValueError("No candidate has finite native information criterion.")
+        return searched.best_information, None
+    return calibrate_native_search(
+        sample,
+        searched,
+        runner,
+        replicates=replicates,
+        seed=seed,
+        level=level,
+        workers=workers,
+    )
+
+
+def _select_support_model(sample, seed, *, runner, choose):
+    # An outer support draw can contain its own full calibration. Keep that
+    # calibration serial so the requested worker count is a total limit.
+    return choose(runner(sample), sample, seed)[0]
+
+
 def select_native(data, args, arguments):
     if args.bootstrap < 0 or args.seed < 0 or args.bootstrap_seed < 0:
         raise ValueError("Native bootstrap count and seeds must be nonnegative.")
@@ -99,44 +136,29 @@ def select_native(data, args, arguments):
         or 1 / (args.calibration_replicates + 1) > args.calibration_level
     ):
         raise ValueError("Calibration draws cannot resolve the requested test level.")
+    workers = getattr(args, "bootstrap_workers", 1)
+    validate_bootstrap_workers(workers)
     runner = NativeSearchRunner(data, args, arguments)
     search = runner(data)
 
-    def choose(searched, sample, seed):
-        if gate:
-            return gate_native_aic(
-                sample,
-                searched,
-                runner,
-                replicates=args.calibration_replicates,
-                seed=seed,
-                level=args.calibration_level,
-            )
-        if args.criterion is not None:
-            if searched.best_information is None:
-                raise ValueError(
-                    "No candidate has finite native information criterion."
-                )
-            return searched.best_information, None
-        return calibrate_native_search(
-            sample,
-            searched,
-            runner,
-            replicates=args.calibration_replicates,
-            seed=seed,
-            level=args.calibration_level,
-        )
-
-    result, calibration = choose(search, data, args.seed)
+    choose = partial(
+        _choose_native,
+        runner=runner,
+        criterion=args.criterion,
+        gate=gate,
+        replicates=args.calibration_replicates,
+        level=args.calibration_level,
+    )
+    result, calibration = choose(search, data, args.seed, workers=workers)
     support = None
     if args.bootstrap:
-
-        def select(sample, seed):
-            searched = runner(sample)
-            return choose(searched, sample, seed)[0]
-
         support = native_selection_support(
-            data, result, select, replicates=args.bootstrap, seed=args.bootstrap_seed
+            data,
+            result,
+            partial(_select_support_model, runner=runner, choose=choose),
+            replicates=args.bootstrap,
+            seed=args.bootstrap_seed,
+            workers=workers,
         )
     return result, {
         "inference_role": "research_joint_shift_selection",

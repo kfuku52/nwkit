@@ -209,10 +209,31 @@ def test_bootstrap_reproducible_and_does_not_change_inputs():
     fit, problem = fit_dates(c)
     bootstrap_intervals(fit, problem, replicates=20, seed=6)
     first = fit.samples.copy()
-    bootstrap_intervals(fit, problem, replicates=20, seed=6)
+    bootstrap_intervals(fit, problem, replicates=20, seed=6, workers=2)
     np.testing.assert_array_equal(first, fit.samples)
     assert [n.dist for n in c.edges] == original
     assert fit.interval_status == "conditional-parametric-rate-bootstrap"
+
+
+def test_parallel_sequence_bootstrap_matches_serial():
+    from nwkit.radte_sequence import SequenceLikelihood
+
+    chronology = small_chronology(max_age=100)
+    rng = np.random.default_rng(90)
+    matrix = np.tile(rng.integers(0, 4, size=480), (4, 1))
+    for row in matrix:
+        changed = rng.choice(row.size, 68, replace=False)
+        row[changed] = rng.integers(0, 4, size=len(changed))
+    likelihood = SequenceLikelihood(
+        chronology, None, model="hky", matrix=(1 << matrix).astype(np.uint32)
+    )
+    fit, problem = fit_dates(chronology, likelihood=likelihood, rate_sd=0.4, starts=1)
+    options = dict(replicates=40, rate_sd=0.4, starts=2, seed=33)
+    bootstrap_intervals(fit, problem, **options)
+    samples = fit.samples.copy()
+    bootstrap_intervals(fit, problem, workers=2, **options)
+    np.testing.assert_array_equal(fit.samples, samples)
+    assert fit.interval_status == "site-bootstrap"
 
 
 @pytest.mark.parametrize(

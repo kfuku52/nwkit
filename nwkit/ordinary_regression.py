@@ -3,7 +3,8 @@
 import math
 import os
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import lru_cache, partial
+from itertools import islice
 from types import SimpleNamespace
 
 import numpy as np
@@ -12,6 +13,7 @@ from scipy import sparse
 from scipy.stats import chi2, norm
 from scipy.stats import t as student_t
 
+from nwkit.bootstrap_workers import bootstrap_map, validate_bootstrap_workers
 from nwkit.contrast import (
     _read_mixed_replicate_traits,
     _validate_replicate_options,
@@ -32,7 +34,6 @@ from nwkit.evolution import (
 from nwkit.gaussian import (
     DiagonalLowRankCovariance,
     DiagonalSparsePrecisionCovariance,
-    draw_from_factor,
     finite_mean,
     is_diagonal,
     regression_total_quadratic,
@@ -69,6 +70,8 @@ from nwkit.phylogenetic_glmm import (
     summarize_glmm_threshold,
 )
 from nwkit.regress import (
+    _gaussian_bootstrap_draws,
+    _gaussian_coefficient_refit,
     _profile_covariance_fit,
     validate_dense_gaussian_size,
 )
@@ -494,38 +497,46 @@ def _ordinary_bootstrap_coefficients(
     predictor_uncertainties=(),
     predictor_columns=(),
     allow_large_dense=False,
+    workers=1,
 ):
-    rng = np.random.default_rng(seed)
     coefficients: list[np.ndarray] = []
-    mean = design @ fit["beta"]
     maximum_attempts = max(replicates * 3, replicates + 10)
+    draws = _gaussian_bootstrap_draws(fit, design @ fit["beta"], maximum_attempts, seed)
+    fit_response = partial(
+        _fit_ordinary_gaussian,
+        design=design,
+        fixed_covariance=fixed_covariance,
+        tree=tree,
+        leaf_names=leaf_names,
+        evolution_model=evolution_model,
+        evolution_parameter=evolution_parameter,
+        branch_length=branch_length,
+        custom_covariance=custom_covariance,
+        reml=reml,
+        predictor_uncertainties=predictor_uncertainties,
+        predictor_columns=predictor_columns,
+        allow_large_dense=allow_large_dense,
+    )
+    refit = partial(
+        _gaussian_coefficient_refit,
+        fit_response=fit_response,
+        design=design,
+        event_groups=None,
+        studentized=False,
+    )
     attempts = 0
     while len(coefficients) < replicates and attempts < maximum_attempts:
-        attempts += 1
-        simulated = mean + draw_from_factor(
-            fit["cholesky"], rng.standard_normal(len(mean)), rng=rng
-        )
-        try:
-            bootstrap_fit = _fit_ordinary_gaussian(
-                simulated,
-                design,
-                fixed_covariance,
-                tree,
-                leaf_names,
-                evolution_model=evolution_model,
-                evolution_parameter=evolution_parameter,
-                branch_length=branch_length,
-                custom_covariance=custom_covariance,
-                reml=reml,
-                predictor_uncertainties=predictor_uncertainties,
-                predictor_columns=predictor_columns,
-                allow_large_dense=allow_large_dense,
+        # A batch can produce at most the number of successes still needed.
+        # Start replacement draws only after all earlier fits are counted.
+        count = min(replicates - len(coefficients), maximum_attempts - attempts)
+        coefficients.extend(
+            value
+            for value in bootstrap_map(
+                refit, islice(draws, count), replicates=count, workers=workers
             )
-        except ValueError:
-            continue
-        if not bootstrap_fit["optimizer_converged"]:
-            continue
-        coefficients.append(bootstrap_fit["beta"])
+            if value is not None
+        )
+        attempts += count
     if len(coefficients) < replicates:
         raise ValueError(
             "Parametric bootstrap produced only {} successful ordinary PGLS fits in {} attempts.".format(
@@ -866,6 +877,7 @@ def _ordinary_inference_samples(
     custom_covariance,
     inference,
     bootstrap_replicates,
+    bootstrap_workers=1,
     seed,
     reml,
     predictor_uncertainties=(),
@@ -887,6 +899,7 @@ def _ordinary_inference_samples(
         custom_covariance=custom_covariance,
         reml=reml,
         replicates=bootstrap_replicates,
+        workers=bootstrap_workers,
         seed=seed,
         predictor_uncertainties=predictor_uncertainties,
         predictor_columns=predictor_columns,
@@ -2011,6 +2024,7 @@ def _fit_ordinary_non_gaussian_response(
     inference,
     confidence_level,
     bootstrap_replicates,
+    bootstrap_workers=1,
     seed,
     intercept,
     allow_large_dense,
@@ -2076,6 +2090,7 @@ def _fit_ordinary_non_gaussian_response(
         inference=inference,
         confidence_level=confidence_level,
         bootstrap_replicates=bootstrap_replicates,
+        bootstrap_workers=bootstrap_workers,
         seed=seed + response_index,
         allow_large_dense=allow_large_dense,
     )
@@ -2119,6 +2134,7 @@ def _fit_ordinary_gaussian_response(
     custom_covariance,
     inference,
     bootstrap_replicates,
+    bootstrap_workers=1,
     seed,
     reml,
     intercept,
@@ -2163,6 +2179,7 @@ def _fit_ordinary_gaussian_response(
         custom_covariance=custom_covariance,
         inference=inference,
         bootstrap_replicates=bootstrap_replicates,
+        bootstrap_workers=bootstrap_workers,
         seed=seed + response_index,
         reml=effective_reml,
         predictor_uncertainties=predictor_uncertainty_values,
@@ -2214,6 +2231,7 @@ def fit_ordinary_regression(
     confidence_level=0.95,
     inference="wald",
     bootstrap_replicates=1000,
+    bootstrap_workers=1,
     seed=1,
     reml=True,
     predictor_evolution_model=None,
@@ -2305,6 +2323,7 @@ def fit_ordinary_regression(
         factor_references=factor_references,
         factor_coding=factor_coding,
     )
+    validate_bootstrap_workers(bootstrap_workers)
     covariance_by_trait = response_sampling_covariance or {}
     offset = 1 if intercept else 0
     term_index = {
@@ -2445,6 +2464,7 @@ def fit_ordinary_regression(
                     inference=inference,
                     confidence_level=confidence_level,
                     bootstrap_replicates=bootstrap_replicates,
+                    bootstrap_workers=bootstrap_workers,
                     seed=seed,
                     intercept=intercept,
                     allow_large_dense=allow_large_dense,
@@ -2477,6 +2497,7 @@ def fit_ordinary_regression(
                 custom_covariance=custom_covariance,
                 inference=inference,
                 bootstrap_replicates=bootstrap_replicates,
+                bootstrap_workers=bootstrap_workers,
                 seed=seed,
                 reml=reml,
                 intercept=intercept,
@@ -3348,6 +3369,7 @@ def build_ordinary_regression(
         confidence_level=effective.confidence_level,
         inference=effective.inference,
         bootstrap_replicates=effective.bootstrap_replicates,
+        bootstrap_workers=getattr(effective, "bootstrap_workers", 1),
         seed=effective.seed,
         reml=effective.reml,
         predictor_evolution_model=getattr(effective, "predictor_evolution_model", None),

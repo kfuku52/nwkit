@@ -355,17 +355,22 @@ def test_shape_bootstrap_preserves_tip_noise_when_no_shared_effects_are_added():
     np.testing.assert_allclose([simulated[leaf.name] for leaf in leaves], base)
 
 
+def _eight_tip_identity_covariance(_parameter):
+    return np.eye(8)
+
+
 def test_penalized_poisson_null_bootstrap_refits_both_models():
     x = np.column_stack([np.ones(8), np.linspace(-1.0, 1.0, 8)])
-    fit = fit_phylogenetic_glmm(
-        [0.0, 1.0, 0.0, 2.0, 1.0, 3.0, 2.0, 4.0],
-        x,
-        lambda _: np.eye(8),
+    args = ([0.0, 1.0, 0.0, 2.0, 1.0, 3.0, 2.0, 4.0], x, _eight_tip_identity_covariance)
+    options = dict(
         family="poisson",
         inference="null-bootstrap",
         bootstrap_replicates=2,
         seed=4,
     )
+    serial = fit_phylogenetic_glmm(*args, **options)
+    fit = fit_phylogenetic_glmm(*args, **options, bootstrap_workers=2)
+    np.testing.assert_array_equal(fit.coefficient_p_values, serial.coefficient_p_values)
     assert np.all(np.isfinite(fit.coefficient_p_values))
     assert np.all(np.isin(fit.coefficient_p_values, [1 / 3, 2 / 3, 1]))
     assert summarize_glmm_coefficient(fit, 1, float(fit.coefficients.flat[1]), 1.96)[

@@ -4,6 +4,7 @@ import math
 import os
 import sys
 import warnings
+from functools import partial
 from io import StringIO
 from typing import Any
 
@@ -15,6 +16,7 @@ from scipy.optimize import minimize
 from scipy.stats import chi2
 from scipy.stats import t as student_t
 
+from nwkit.bootstrap_workers import bootstrap_map, validate_bootstrap_workers
 from nwkit.event_regression import (
     event_average_estimate,
     event_average_fit,
@@ -1969,11 +1971,44 @@ def _component_adds_rank(components, candidate):
     return int(np.linalg.matrix_rank(normalized, tol=tolerance)) > existing_rank
 
 
-def _parametric_bootstrap_coefficients(
+def _gaussian_bootstrap_draws(fit, mean, replicates, seed):
+    rng = np.random.default_rng(seed)
+    for _ in range(replicates):
+        yield mean + draw_from_factor(
+            fit["cholesky"], rng.standard_normal(len(mean)), rng=rng
+        )
+
+
+def _gaussian_coefficient_refit(
+    response, *, fit_response, design, event_groups, studentized
+):
+    try:
+        fitted = fit_response(response)
+        if not fitted["optimizer_converged"]:
+            return None
+        if studentized and event_groups is not None:
+            fitted = event_average_fit(response, design, event_groups, fitted)
+    except ValueError:
+        return None
+    if studentized:
+        error = np.sqrt(np.maximum(np.diag(fitted["beta_covariance"]), 0.0))
+        if not np.isfinite(error).all() or np.any(error <= 0.0):
+            return None
+        return fitted["beta"], error
+    return (
+        event_average_estimate(response, design, event_groups)[0]
+        if event_groups is not None
+        else fitted["beta"]
+    )
+
+
+def _gaussian_coefficient_bootstrap(
     fit,
     design,
     fixed_covariance,
     components,
+    predictor_uncertainties,
+    predictor_columns,
     *,
     reml,
     replicates,
@@ -1984,49 +2019,65 @@ def _parametric_bootstrap_coefficients(
     likelihood_logdet_offset=0.0,
     likelihood_groups=None,
     event_groups=None,
+    workers=1,
+    studentized=False,
 ):
-    if replicates < 2:
+    if not studentized and replicates < 2:
         raise ValueError("Parametric bootstrap requires at least two replicates.")
-    rng = np.random.default_rng(seed)
-    coefficients: list[np.ndarray] = []
-    mean = design @ fit["beta"]
-    maximum_attempts = replicates
-    attempts = 0
-    while len(coefficients) < replicates and attempts < maximum_attempts:
-        attempts += 1
-        response = mean + draw_from_factor(
-            fit["cholesky"], rng.standard_normal(len(mean)), rng=rng
+    fit_response = partial(
+        _fit_profile_or_eiv,
+        design=design,
+        fixed_covariance=fixed_covariance,
+        components=components,
+        predictor_uncertainties=predictor_uncertainties,
+        predictor_columns=predictor_columns,
+        reml=reml,
+        component_factors=component_factors,
+        allow_large_dense=allow_large_dense,
+        likelihood_observations=likelihood_observations,
+        likelihood_logdet_offset=likelihood_logdet_offset,
+        likelihood_groups=likelihood_groups,
+        starting_fit={key: fit[key] for key in ("beta", "log_variances")},
+    )
+    successful = [
+        value
+        for value in bootstrap_map(
+            partial(
+                _gaussian_coefficient_refit,
+                fit_response=fit_response,
+                design=design,
+                event_groups=event_groups,
+                studentized=studentized,
+            ),
+            _gaussian_bootstrap_draws(fit, design @ fit["beta"], replicates, seed),
+            workers=workers,
+            replicates=replicates,
         )
-        try:
-            bootstrap_fit = _profile_covariance_fit(
-                response,
-                design,
-                fixed_covariance,
-                components,
-                reml=reml,
-                starting_log_variances=fit["log_variances"],
-                component_factors=component_factors,
-                allow_large_dense=allow_large_dense,
-                likelihood_observations=likelihood_observations,
-                likelihood_logdet_offset=likelihood_logdet_offset,
-                likelihood_groups=likelihood_groups,
+        if value is not None
+    ]
+    if len(successful) != replicates:
+        message = (
+            "Studentized bootstrap produced only {} successful fits in {} attempts."
+            if studentized
+            else (
+                "Parametric bootstrap produced only {} successful errors-in-variables fits in {} attempts."
+                if predictor_uncertainties
+                else "Parametric bootstrap produced only {} successful fits in {} attempts."
             )
-        except ValueError:
-            continue
-        if not bootstrap_fit["optimizer_converged"]:
-            continue
-        coefficients.append(
-            event_average_estimate(response, design, event_groups)[0]
-            if event_groups is not None
-            else bootstrap_fit["beta"]
         )
-    if len(coefficients) < replicates:
-        raise ValueError(
-            "Parametric bootstrap produced only {} successful fits in {} attempts.".format(
-                len(coefficients), attempts
-            )
-        )
-    return np.asarray(coefficients, dtype=float)
+        raise ValueError(message.format(len(successful), replicates))
+    if studentized:
+        coefficients, errors = zip(*successful, strict=True) if successful else ((), ())
+        return np.asarray(coefficients), np.asarray(errors)
+    return np.asarray(successful, dtype=float)
+
+
+def _parametric_bootstrap_coefficients(
+    fit, design, fixed_covariance, components, **options
+):
+    return _gaussian_coefficient_bootstrap(
+        fit, design, fixed_covariance, components, (), (), **options
+    )
 
 
 def _parametric_bootstrap_eiv_coefficients(
@@ -2036,61 +2087,17 @@ def _parametric_bootstrap_eiv_coefficients(
     predictor_columns,
     fixed_covariance,
     components,
-    *,
-    reml,
-    replicates,
-    seed,
-    component_factors=None,
-    allow_large_dense=False,
-    likelihood_observations=None,
-    likelihood_logdet_offset=0.0,
-    likelihood_groups=None,
-    event_groups=None,
+    **options,
 ):
-    if replicates < 2:
-        raise ValueError("Parametric bootstrap requires at least two replicates.")
-    rng = np.random.default_rng(seed)
-    coefficients: list[np.ndarray] = []
-    mean = design @ fit["beta"]
-    maximum_attempts = replicates
-    attempts = 0
-    starting = np.concatenate([fit["beta"], fit["log_variances"]])
-    while len(coefficients) < replicates and attempts < maximum_attempts:
-        attempts += 1
-        response = mean + draw_from_factor(
-            fit["cholesky"], rng.standard_normal(len(mean)), rng=rng
-        )
-        try:
-            bootstrap_fit = fit_conditional_eiv_gaussian(
-                response,
-                design,
-                predictor_uncertainties,
-                predictor_columns,
-                fixed_covariance,
-                components,
-                reml=False,
-                starting_parameters=starting,
-                component_factors=component_factors,
-                allow_large_dense=allow_large_dense,
-                likelihood_observations=likelihood_observations,
-                likelihood_logdet_offset=likelihood_logdet_offset,
-                likelihood_groups=likelihood_groups,
-            )
-        except ValueError:
-            continue
-        if not bootstrap_fit["optimizer_converged"]:
-            continue
-        coefficients.append(
-            event_average_estimate(response, design, event_groups)[0]
-            if event_groups is not None
-            else bootstrap_fit["beta"]
-        )
-    if len(coefficients) < replicates:
-        raise ValueError(
-            "Parametric bootstrap produced only {} successful errors-in-variables "
-            "fits in {} attempts.".format(len(coefficients), attempts)
-        )
-    return np.asarray(coefficients, dtype=float)
+    return _gaussian_coefficient_bootstrap(
+        fit,
+        design,
+        fixed_covariance,
+        components,
+        predictor_uncertainties,
+        predictor_columns,
+        **options,
+    )
 
 
 def _studentized_bootstrap_coefficients(
@@ -2100,64 +2107,18 @@ def _studentized_bootstrap_coefficients(
     components,
     predictor_uncertainties,
     predictor_columns,
-    *,
-    reml,
-    replicates,
-    seed,
-    component_factors,
-    allow_large_dense,
-    likelihood_observations,
-    likelihood_logdet_offset,
-    likelihood_groups,
-    event_groups,
+    **options,
 ):
-    """Refit the covariance and estimator for each studentized Gaussian draw."""
-    rng = np.random.default_rng(seed)
-    coefficients = []
-    standard_errors = []
-    mean = design @ fit["beta"]
-    for _ in range(replicates):
-        response = mean + draw_from_factor(
-            fit["cholesky"], rng.standard_normal(len(mean)), rng=rng
-        )
-        try:
-            bootstrap_fit = _fit_profile_or_eiv(
-                response,
-                design,
-                fixed_covariance,
-                components,
-                predictor_uncertainties,
-                predictor_columns,
-                reml=reml,
-                component_factors=component_factors,
-                allow_large_dense=allow_large_dense,
-                likelihood_observations=likelihood_observations,
-                likelihood_logdet_offset=likelihood_logdet_offset,
-                likelihood_groups=likelihood_groups,
-                starting_fit=fit,
-            )
-            if not bootstrap_fit["optimizer_converged"]:
-                continue
-            if event_groups is not None:
-                bootstrap_fit = event_average_fit(
-                    response, design, event_groups, bootstrap_fit
-                )
-        except ValueError:
-            continue
-        standard_error = np.sqrt(
-            np.maximum(np.diag(bootstrap_fit["beta_covariance"]), 0.0)
-        )
-        if not np.isfinite(standard_error).all() or np.any(standard_error <= 0.0):
-            continue
-        coefficients.append(bootstrap_fit["beta"])
-        standard_errors.append(standard_error)
-    if len(coefficients) != replicates:
-        raise ValueError(
-            "Studentized bootstrap produced only {} successful fits in {} attempts.".format(
-                len(coefficients), replicates
-            )
-        )
-    return np.asarray(coefficients), np.asarray(standard_errors)
+    return _gaussian_coefficient_bootstrap(
+        fit,
+        design,
+        fixed_covariance,
+        components,
+        predictor_uncertainties,
+        predictor_columns,
+        studentized=True,
+        **options,
+    )
 
 
 def _fit_profile_or_eiv(
@@ -2373,6 +2334,15 @@ def _lineage_test_models(
     return models
 
 
+def _gaussian_likelihood_ratio_draw(response, *, fit_null, fit_full):
+    try:
+        null = fit_null(response)
+        full = fit_full(response)
+    except ValueError:
+        return None
+    return _likelihood_ratio(null, full)
+
+
 def _parametric_bootstrap_likelihood_ratio(
     null_fit,
     null_model,
@@ -2386,56 +2356,45 @@ def _parametric_bootstrap_likelihood_ratio(
     likelihood_observations=None,
     likelihood_logdet_offset=0.0,
     likelihood_groups=None,
+    workers=1,
 ):
-    rng = np.random.default_rng(seed)
-    mean = null_model["design"] @ null_fit["beta"]
-    statistics: list[float] = []
-    attempts = 0
-    maximum_attempts = replicates
-    while len(statistics) < replicates and attempts < maximum_attempts:
-        attempts += 1
-        response = mean + draw_from_factor(
-            null_fit["cholesky"], rng.standard_normal(len(mean)), rng=rng
+    def fit_model(model, start):
+        return partial(
+            _fit_profile_or_eiv,
+            design=model["design"],
+            fixed_covariance=fixed_covariance,
+            components=model["components"],
+            predictor_uncertainties=model["predictor_uncertainties"],
+            predictor_columns=model["predictor_columns"],
+            reml=False,
+            component_factors=model["component_factors"],
+            allow_large_dense=allow_large_dense,
+            likelihood_observations=likelihood_observations,
+            likelihood_logdet_offset=likelihood_logdet_offset,
+            likelihood_groups=likelihood_groups,
+            starting_fit={key: start[key] for key in ("beta", "log_variances")},
         )
-        try:
-            bootstrap_null = _fit_profile_or_eiv(
-                response,
-                null_model["design"],
-                fixed_covariance,
-                null_model["components"],
-                null_model["predictor_uncertainties"],
-                null_model["predictor_columns"],
-                reml=False,
-                component_factors=null_model["component_factors"],
-                allow_large_dense=allow_large_dense,
-                likelihood_observations=likelihood_observations,
-                likelihood_logdet_offset=likelihood_logdet_offset,
-                likelihood_groups=likelihood_groups,
-                starting_fit=null_fit,
-            )
-            bootstrap_full = _fit_profile_or_eiv(
-                response,
-                full_model["design"],
-                fixed_covariance,
-                full_model["components"],
-                full_model["predictor_uncertainties"],
-                full_model["predictor_columns"],
-                reml=False,
-                component_factors=full_model["component_factors"],
-                allow_large_dense=allow_large_dense,
-                likelihood_observations=likelihood_observations,
-                likelihood_logdet_offset=likelihood_logdet_offset,
-                likelihood_groups=likelihood_groups,
-                starting_fit=full_model["fit"],
-            )
-        except ValueError:
-            continue
-        statistic = _likelihood_ratio(bootstrap_null, bootstrap_full)
-        statistics.append(statistic)
+
+    statistics = [
+        value
+        for value in bootstrap_map(
+            partial(
+                _gaussian_likelihood_ratio_draw,
+                fit_null=fit_model(null_model, null_fit),
+                fit_full=fit_model(full_model, full_model["fit"]),
+            ),
+            _gaussian_bootstrap_draws(
+                null_fit, null_model["design"] @ null_fit["beta"], replicates, seed
+            ),
+            workers=workers,
+            replicates=replicates,
+        )
+        if value is not None
+    ]
     if len(statistics) < replicates:
         raise ValueError(
             "Lineage parametric bootstrap produced only {} successful fits in "
-            "{} attempts.".format(len(statistics), attempts)
+            "{} attempts.".format(len(statistics), replicates)
         )
     return _empirical_tail_probability(statistics, observed_statistic)
 
@@ -2767,6 +2726,7 @@ def _append_lineage_inference_rows(
     *,
     lineage_inference,
     bootstrap_replicates,
+    bootstrap_workers=1,
     seed,
     allow_large_dense,
     likelihood_observations=None,
@@ -2830,6 +2790,7 @@ def _append_lineage_inference_rows(
                 full_model,
                 statistic,
                 replicates=bootstrap_replicates,
+                workers=bootstrap_workers,
                 seed=seed + test_index,
                 fixed_covariance=fixed_covariance,
                 allow_large_dense=allow_large_dense,
@@ -3175,6 +3136,7 @@ def _fit_covariance_model(
     model,
     inference,
     bootstrap_replicates,
+    bootstrap_workers=1,
     seed,
     reml,
     event_random_effect,
@@ -3311,6 +3273,7 @@ def _fit_covariance_model(
                 eiv_components,
                 reml=effective_reml,
                 replicates=bootstrap_replicates,
+                workers=bootstrap_workers,
                 seed=seed,
                 component_factors=component_factors,
                 allow_large_dense=allow_large_dense,
@@ -3327,6 +3290,7 @@ def _fit_covariance_model(
                 components,
                 reml=effective_reml,
                 replicates=bootstrap_replicates,
+                workers=bootstrap_workers,
                 seed=seed,
                 component_factors=component_factors,
                 allow_large_dense=allow_large_dense,
@@ -3347,6 +3311,7 @@ def _fit_covariance_model(
                 predictor_uncertainty_columns,
                 reml=effective_reml,
                 replicates=bootstrap_replicates,
+                workers=bootstrap_workers,
                 seed=seed,
                 component_factors=component_factors,
                 allow_large_dense=allow_large_dense,
@@ -3529,6 +3494,7 @@ def _fit_covariance_model(
         predictor_uncertainty_columns,
         lineage_inference=lineage_inference,
         bootstrap_replicates=bootstrap_replicates,
+        bootstrap_workers=bootstrap_workers,
         seed=seed,
         allow_large_dense=allow_large_dense,
         likelihood_observations=likelihood_observations,
@@ -4070,6 +4036,7 @@ def fit_reconciled_pgls(
     predictor_sampling_covariance=None,
     inference="wald",
     bootstrap_replicates=1000,
+    bootstrap_workers=1,
     seed=1,
     reml=True,
     event_random_effect="auto",
@@ -4085,6 +4052,7 @@ def fit_reconciled_pgls(
     predictor_group_uncertainties=None,
     allow_large_dense=False,
 ):
+    validate_bootstrap_workers(bootstrap_workers)
     event_weighting = resolve_event_weighting(event_weighting, regression_estimand)
     _validate_reconciled_pgls_options(
         confidence_level=confidence_level,
@@ -4223,6 +4191,7 @@ def fit_reconciled_pgls(
                 model=model,
                 inference=inference,
                 bootstrap_replicates=bootstrap_replicates,
+                bootstrap_workers=bootstrap_workers,
                 seed=seed + model_index,
                 reml=reml,
                 event_random_effect=event_random_effect,
@@ -5028,6 +4997,7 @@ def _validate_regression_file_output_paths(args):
 
 
 def regress_main(args):
+    validate_bootstrap_workers(getattr(args, "bootstrap_workers", 1))
     responses = _parse_names(args.responses, "--responses")
     predictors = _parse_names(args.predictors, "--predictors")
     input_mode = _regression_input_mode(args)
@@ -5148,6 +5118,7 @@ def regress_main(args):
         predictor_sampling_covariance=predictor_sampling_covariance,
         inference=getattr(args, "inference", "wald"),
         bootstrap_replicates=getattr(args, "bootstrap_replicates", 1000),
+        bootstrap_workers=getattr(args, "bootstrap_workers", 1),
         seed=getattr(args, "seed", 1),
         reml=getattr(args, "reml", True),
         event_random_effect=getattr(args, "event_random_effect", None) or "auto",

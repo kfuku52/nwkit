@@ -13,6 +13,7 @@ import pandas as pd
 from scipy import sparse
 from scipy.stats import norm, t
 
+from nwkit.bootstrap_workers import bootstrap_map
 from nwkit.clade_index import CladeIndex
 from nwkit.contrast import (
     _orient_children,
@@ -1680,6 +1681,48 @@ def _simulate_response_tip_values(
     return {str(leaf.name): float(reconstructed[leaf]) for leaf in leaves}
 
 
+def _shape_bootstrap_refit(
+    simulated_values,
+    *,
+    args,
+    gene_tree,
+    reconciliation,
+    response_inputs,
+    response,
+    species_contrasts,
+    predictor_sampling_covariance,
+    predictors,
+    predictor_group_uncertainties,
+):
+    simulated_inputs = _GeneResponseInputs(
+        values_by_trait={**response_inputs.values_by_trait, response: simulated_values},
+        sampling_covariance_by_trait=response_inputs.sampling_covariance_by_trait,
+        replicate_model_by_trait=response_inputs.replicate_model_by_trait,
+        tip_summary=response_inputs.tip_summary,
+    )
+    try:
+        _, _, _, fitted = _estimate_gene_response_parameter(
+            args,
+            gene_tree,
+            reconciliation,
+            simulated_inputs,
+            response,
+            species_contrasts,
+            predictor_sampling_covariance,
+            predictors,
+            predictor_group_uncertainties,
+        )
+        fitted = fitted.set_index("term")
+    except ValueError:
+        return None
+    if (fitted["optimizer_converged"] != "yes").any():
+        return None
+    return (
+        fitted.loc[predictors, "coefficient"].to_numpy(dtype=float),
+        fitted.loc[predictors, "standard_error"].to_numpy(dtype=float),
+    )
+
+
 def _bootstrap_shape_refitted_coefficients(
     args: Any,
     gene_tree,
@@ -1704,59 +1747,40 @@ def _bootstrap_shape_refitted_coefficients(
         parameter,
         fit_state["contrast_ids"],
     )
-    reconciliation_by_id = simulator["reconciliation_by_id"]
     rng = np.random.default_rng(seed)
-    coefficients: list[np.ndarray] = []
-    standard_errors: list[np.ndarray] = []
-    maximum_attempts = args.bootstrap_replicates
-    attempts = 0
-    while len(coefficients) < args.bootstrap_replicates and attempts < maximum_attempts:
-        attempts += 1
-        simulated_values = _simulate_response_tip_values(
-            gene_tree,
-            fit_state,
-            simulator,
-            rng,
+    replicates = args.bootstrap_replicates
+    successful = [
+        value
+        for value in bootstrap_map(
+            partial(
+                _shape_bootstrap_refit,
+                args=args,
+                gene_tree=gene_tree,
+                reconciliation=simulator["reconciliation_by_id"],
+                response_inputs=response_inputs,
+                response=response,
+                species_contrasts=species_contrasts,
+                predictor_sampling_covariance=predictor_sampling_covariance,
+                predictors=predictors,
+                predictor_group_uncertainties=predictor_group_uncertainties,
+            ),
+            (
+                _simulate_response_tip_values(gene_tree, fit_state, simulator, rng)
+                for _ in range(replicates)
+            ),
+            workers=getattr(args, "bootstrap_workers", 1),
+            replicates=replicates,
         )
-        simulated_inputs = _GeneResponseInputs(
-            values_by_trait={
-                **response_inputs.values_by_trait,
-                response: simulated_values,
-            },
-            sampling_covariance_by_trait=response_inputs.sampling_covariance_by_trait,
-            replicate_model_by_trait=response_inputs.replicate_model_by_trait,
-            tip_summary=response_inputs.tip_summary,
-        )
-        try:
-            _, _, _, bootstrap_result = _estimate_gene_response_parameter(
-                args,
-                gene_tree,
-                reconciliation_by_id,
-                simulated_inputs,
-                response,
-                species_contrasts,
-                predictor_sampling_covariance,
-                predictors,
-                predictor_group_uncertainties,
-            )
-            bootstrap_result = bootstrap_result.set_index("term")
-        except ValueError:
-            continue
-        if (bootstrap_result["optimizer_converged"] != "yes").any():
-            continue
-        coefficients.append(
-            bootstrap_result.loc[predictors, "coefficient"].to_numpy(dtype=float)
-        )
-        standard_errors.append(
-            bootstrap_result.loc[predictors, "standard_error"].to_numpy(dtype=float)
-        )
-    if len(coefficients) < args.bootstrap_replicates:
+        if value is not None
+    ]
+    if len(successful) < replicates:
         raise ValueError(
             "Shape-parameter-refitted bootstrap produced only {} successful fits "
             "in {} attempts for response '{}'.".format(
-                len(coefficients), attempts, response
+                len(successful), replicates, response
             )
         )
+    coefficients, standard_errors = zip(*successful, strict=True)
     return np.asarray(coefficients, dtype=float), np.asarray(
         standard_errors, dtype=float
     )
@@ -2478,6 +2502,7 @@ def _fit_one_reconciled_categorical_response(
         inference=args.inference,
         confidence_level=args.confidence_level,
         bootstrap_replicates=args.bootstrap_replicates,
+        bootstrap_workers=getattr(args, "bootstrap_workers", 1),
         seed=args.seed,
         allow_large_dense=args.allow_large_dense,
     )
@@ -3007,6 +3032,7 @@ def _fit_reconciled_gaussian_responses(
         predictor_group_uncertainties=predictor_group_uncertainties,
         inference="wald" if refit_shape else raw_args.inference,
         bootstrap_replicates=raw_args.bootstrap_replicates,
+        bootstrap_workers=getattr(raw_args, "bootstrap_workers", 1),
         seed=raw_args.seed,
         reml=raw_args.reml,
         event_random_effect=raw_args.event_random_effect,

@@ -20,16 +20,23 @@ def bootstrap_test(observed, simulate_statistic: Callable, *, replicates, seed):
     A failure aborts inference: replacing a failed dataset with another one
     conditions the reference distribution on successful optimization.
     """
+    rng = np.random.default_rng(seed)
+    return bootstrap_statistic_test(
+        observed, (simulate_statistic(rng) for _ in range(replicates)), replicates
+    )
+
+
+def bootstrap_statistic_test(observed, statistics, replicates):
     if replicates < 2 or not np.isfinite(observed):
         raise ValueError("Bootstrap needs a finite statistic and at least two draws.")
-    rng = np.random.default_rng(seed)
+    statistics = iter(statistics)
     exceedances = 0
     for index in range(replicates):
         try:
-            statistic = float(simulate_statistic(rng))
+            statistic = float(next(statistics))
             if not np.isfinite(statistic):
                 raise ValueError("Non-finite bootstrap statistic.")
-        except (ValueError, RuntimeError, np.linalg.LinAlgError) as exc:
+        except (ValueError, RuntimeError, np.linalg.LinAlgError, StopIteration) as exc:
             raise RuntimeError(
                 f"Null bootstrap failed at dataset {index + 1}/{replicates}; "
                 "no p-value was computed and no failed dataset was replaced."
