@@ -130,13 +130,16 @@ def test_parallel_bootstrap_preserves_simulation_stream_and_order():
     ]
 
 
-def test_parallel_scan_matches_serial_fit_results():
+@pytest.mark.parametrize("nodes,workers", [((3, 1, 2), 2), ((1,), 4)])
+def test_parallel_scan_matches_serial_fit_results(nodes, workers):
     from nwkit.wgd_count import _fit_json
 
     data = model(np.tile([[2, 2, 1], [1, 1, 1], [2, np.nan, 1]], (12, 1)))
-    options = dict(nodes=(3, 1, 2), fractions=(0.25, 0.75), max_states=64)
+    options = dict(nodes=nodes, fractions=(0.25, 0.75), max_states=64)
     serial = scan_counts(data, **options)
-    parallel = scan_counts(data, workers=2, **options)
+    saved = []
+    parallel = scan_counts(data, workers=workers, on_candidate=saved.append, **options)
+    assert sorted(candidate.node for candidate in saved) == sorted(nodes)
     assert _fit_json(parallel.background) == _fit_json(serial.background)
     assert parallel.fractions == serial.fractions
     for first, second in zip(serial.candidates, parallel.candidates, strict=True):

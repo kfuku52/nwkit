@@ -169,9 +169,12 @@ Use `--bootstrap-workers` to run multiple null refits concurrently. Use one
 BLAS thread per worker (for example, set `OPENBLAS_NUM_THREADS=1` and
 `OMP_NUM_THREADS=1` before launching the command) and allow memory for one
 fit per worker. Simulation and reduction order stay the same for a fixed seed.
-Use `--scan-workers` to run candidate-branch fits on the observed counts
-concurrently after the common background fit. The observed scan and null
-bootstrap run in sequence, so their worker pools do not multiply each other.
+Use `--scan-workers` to fit WGD positions and the branch-burst comparison on
+the observed counts concurrently after the common background fit. A single
+candidate branch with the default three event positions can use up to four
+workers. Reserve one core and memory for a fit per worker. The observed scan
+and null bootstrap run in sequence, so their worker pools do not multiply
+each other.
 
 For long scans, `--bootstrap-checkpoint /path/to/bootstrap.json` saves each
 completed null refit. Rerun with the same file inputs, search settings, seed,

@@ -21,6 +21,9 @@ _EDGE_PROBABILITY_CACHE_ENTRIES = 4096
 _EMISSION_CACHE_BYTES = 16 * 1024**2
 _SELECTION_PROBABILITY_FLOOR = np.finfo(float).tiny / np.finfo(float).eps
 _GEOMETRIC_RECURRENCE_MIN_COUNT = 256
+_WIDE_PRUNING_MIN_STATES = 256
+_PRUNING_UPSCALE = 2.0**500
+_PRUNING_DOWNSCALE = 2.0**-1000
 _CLOSED_FORM_MIN_COUNT = 32
 _MIN_NORMAL_FLOAT = float(np.finfo(float).tiny)
 
@@ -164,13 +167,16 @@ def _geometric_transition(extinction, geometric_ratio, coefficient, max_count):
     return result
 
 
-def _birth_death_log_transition(duplication, loss, time, max_count):
+def _birth_death_log_transition(duplication, loss, time, max_count, max_tip_count=None):
     """The same unbounded kernel, including probabilities below float range."""
     duplication = _nonnegative(duplication, "Duplication rate")
     loss = _nonnegative(loss, "Loss rate")
     time = _nonnegative(time, "Time")
+    if max_tip_count is None:
+        max_tip_count = max_count
+    shape = (max_count + 1, max_tip_count + 1)
     if time == 0 or duplication == loss == 0:
-        result = np.full((max_count + 1, max_count + 1), -np.inf)
+        result = np.full(shape, -np.inf)
         np.fill_diagonal(result, 0.0)
         return result
     log_a, log_b, log_survival, log_success = _birth_death_log_probabilities(
@@ -178,14 +184,14 @@ def _birth_death_log_transition(duplication, loss, time, max_count):
     )
     if max_count >= _CLOSED_FORM_MIN_COUNT and (duplication == 0 or loss == 0):
         return _one_way_log_transition(
-            max_count, log_a, log_b, log_survival, log_success
+            max_count, max_tip_count, log_a, log_b, log_survival, log_success
         )
-    result = np.full((max_count + 1, max_count + 1), -np.inf)
+    result = np.full(shape, -np.inf)
     result[0, 0] = 0.0
     result[1:, 0] = np.arange(1, max_count + 1) * log_a
     log_one = log_survival + log_success
     positive = np.full(max_count, -np.inf)
-    for descendants in range(1, max_count + 1):
+    for descendants in range(1, max_tip_count + 1):
         # For n ancestors and k descendants, the last ancestor produces
         # exactly one copy with probability d, or a positive geometric tail
         # with continuation b. Its positive contribution obeys
@@ -206,20 +212,24 @@ def _birth_death_log_transition(duplication, loss, time, max_count):
     return result
 
 
-def _one_way_log_transition(max_count, log_a, log_b, log_survival, log_success):
-    result = np.full((max_count + 1, max_count + 1), -np.inf)
+def _one_way_log_transition(
+    max_count, max_tip_count, log_a, log_b, log_survival, log_success
+):
+    result = np.full((max_count + 1, max_tip_count + 1), -np.inf)
     result[0, 0] = 0.0
     states = np.arange(max_count + 1)
     log_factorial = gammaln(states + 1.0)
     batch = max(1, _LOG_PRUNING_WORKSPACE_BYTES // (64 * len(states)))
-    for start in range(1, len(states), batch):
-        stop = min(start + batch, len(states))
+    row_limit = len(states) if log_b == -np.inf else max_tip_count + 1
+    for start in range(1, row_limit, batch):
+        stop = min(start + batch, row_limit)
         ancestral = states[start:stop, None]
         if log_b == -np.inf:
+            width = min(stop, max_tip_count + 1)
             _fill_pure_loss(
-                result[start:stop, :stop],
+                result[start:stop, :width],
                 ancestral,
-                states[:stop],
+                states[:width],
                 log_factorial,
                 log_a,
                 log_survival,
@@ -228,7 +238,7 @@ def _one_way_log_transition(max_count, log_a, log_b, log_survival, log_success):
             _fill_pure_birth(
                 result[start:stop, start:],
                 ancestral,
-                states[start:],
+                states[start : max_tip_count + 1],
                 log_factorial,
                 log_b,
                 log_success,
@@ -307,7 +317,7 @@ def _log_matrix_product(left, right):
     return result
 
 
-def _log_pulse_transition(before, after, event):
+def _log_pulse_factors(before, after, event):
     size = len(before)
     if event.retention in (0.0, 1.0):
         # The intermediate count is deterministic. Only include states whose
@@ -317,12 +327,12 @@ def _log_pulse_transition(before, after, event):
         if event.fraction == 0:
             result = np.full_like(after, -np.inf)
             result[:limit] = after[::multiplier]
-            return result
+            return (result,)
         if event.fraction == 1:
             result = np.full_like(before, -np.inf)
             result[:, ::multiplier] = before[:, :limit]
-            return result
-        return _log_matrix_product(before[:, :limit], after[::multiplier])
+            return (result,)
+        return before[:, :limit], after[::multiplier]
 
     kernel = (
         _cached_log_multiplication_transition
@@ -331,10 +341,10 @@ def _log_pulse_transition(before, after, event):
     )
     pulse = kernel(event.retention, event.multiplicity, size)
     if event.fraction == 0:
-        return _log_matrix_product(pulse, after)
+        return pulse, after
     if event.fraction == 1:
-        return _log_matrix_product(before, pulse)
-    return _log_matrix_product(_log_matrix_product(before, pulse), after)
+        return before, pulse
+    return before, pulse, after
 
 
 @lru_cache(maxsize=8)
@@ -742,7 +752,7 @@ class CountLikelihood:
             bool(self.subtree_missing[node].any()) for node in range(len(tree.parents))
         )
         self._transition_cache: OrderedDict[
-            tuple[bool, float, float, float, int], np.ndarray
+            tuple[bool, float, float, float, int, int | None], np.ndarray
         ] = OrderedDict()
         self._transition_cache_bytes = 0
         self._profile_counts = None
@@ -754,16 +764,22 @@ class CountLikelihood:
             tuple[tuple[int, bytes, bytes], dict[int, np.ndarray]] | None
         ) = None
 
-    def _cached_transition(self, duplication, loss, time, max_count, *, log=False):
+    def _cached_transition(
+        self, duplication, loss, time, max_count, *, log=False, max_tip_count=None
+    ):
         # Optimizer perturbations leave many branch groups unchanged. Cache
         # exact keys only, with bounds on both matrix payload and entry count.
-        key = (log, float(duplication), float(loss), time, max_count)
+        key = (log, float(duplication), float(loss), time, max_count, max_tip_count)
         cached = self._transition_cache.get(key)
         if cached is not None:
             self._transition_cache.move_to_end(key)
             return cached
-        kernel = _birth_death_log_transition if log else birth_death_transition
-        matrix = kernel(duplication, loss, time, max_count)
+        if log:
+            matrix = _birth_death_log_transition(
+                duplication, loss, time, max_count, max_tip_count
+            )
+        else:
+            matrix = birth_death_transition(duplication, loss, time, max_count)
         if matrix.nbytes <= _TRANSITION_CACHE_BYTES and _TRANSITION_CACHE_ENTRIES > 0:
             while (
                 self._transition_cache_bytes + matrix.nbytes > _TRANSITION_CACHE_BYTES
@@ -895,7 +911,20 @@ class CountLikelihood:
                     else:
                         # Contract each distinct child profile once, then map
                         # its contribution to all matching parent profiles.
-                        contribution = (child_values @ matrices[child].T)[profiles]
+                        matrix = matrices[child]
+                        if len(prior) >= _WIDE_PRUNING_MIN_STATES:
+                            # Wide count spaces contain long probability tails.
+                            # Shift both inputs by powers of two to avoid most
+                            # subnormal products inside BLAS. Both operands are
+                            # bounded by one, and their dot product is at most
+                            # the number of states before rescaling.
+                            contracted = (child_values * _PRUNING_UPSCALE) @ (
+                                matrix.T * _PRUNING_UPSCALE
+                            )
+                            contracted *= _PRUNING_DOWNSCALE
+                        else:
+                            contracted = child_values @ matrix.T
+                        contribution = contracted[profiles]
                     # An entirely missing subtree integrates to one over the
                     # unbounded process, including states past the bound.
                     missing = None
@@ -919,12 +948,32 @@ class CountLikelihood:
             return (np.log(likelihoods[0] @ prior) + scales[0])[root_profiles]
 
     def _log_transitions(
-        self, rates, scale, max_count, event, *, _split_zero_event=False
+        self,
+        rates,
+        scale,
+        max_count,
+        event,
+        *,
+        _split_zero_event=False,
+        factored=False,
+        rows=None,
     ):
         matrices, cache = {}, {}
+        tip_bounds = {}
+        if rows is not None:
+            # A perfectly observed tip only reads columns for its exact counts.
+            # Keep the full ancestral state space, including at each WGD factor.
+            tip_counts = np.nan_to_num(self.counts[rows], nan=0.0).max(axis=0)
+            tip_bounds = {
+                node: int(count)
+                for node, count, detection in zip(
+                    self.tree.tip_nodes, tip_counts, self.detection, strict=True
+                )
+                if detection == 1 and count < max_count
+            }
+        rates = np.asarray(rates)
         for node, time in enumerate(self.tree.lengths[1:], 1):
-            duplication, loss = np.asarray(rates)[self.branch_groups[node]] * scale
-            key = (float(duplication), float(loss), time)
+            duplication, loss = rates[self.branch_groups[node]] * scale
             pulse_event = (
                 event
                 if event is not None and event.node == node
@@ -933,9 +982,16 @@ class CountLikelihood:
             if pulse_event is None or (
                 pulse_event.retention == 0 and not _split_zero_event
             ):
+                tip_bound = tip_bounds.get(node)
+                key = (float(duplication), float(loss), time, tip_bound)
                 if key not in cache:
                     cache[key] = self._cached_transition(
-                        duplication, loss, time, max_count, log=True
+                        duplication,
+                        loss,
+                        time,
+                        max_count,
+                        log=True,
+                        max_tip_count=tip_bound,
                     )
                 matrices[node] = cache[key]
                 continue
@@ -949,7 +1005,14 @@ class CountLikelihood:
                 max_count,
                 log=True,
             )
-            matrices[node] = _log_pulse_transition(before, after, pulse_event)
+            factors = _log_pulse_factors(before, after, pulse_event)
+            if factored:
+                matrices[node] = factors
+                continue
+            matrix = factors[0]
+            for factor in factors[1:]:
+                matrix = _log_matrix_product(matrix, factor)
+            matrices[node] = matrix
         return matrices
 
     def _prune_log(self, matrices, root_mean, max_count, rows):
@@ -984,14 +1047,22 @@ class CountLikelihood:
                 continue
             value = np.zeros((len(rows), max_count + 1))
             for child in self.children[node]:
+                edge = matrices[child]
+                factors = edge if isinstance(edge, tuple) else (edge,)
                 if (tip := exact_counts.pop(child, None)) is not None:
                     counts, missing = tip
-                    contribution = matrices[child].T[counts]
-                    contribution[missing] = 0.0
+                    contribution = factors[-1].T[counts]
                 else:
                     contribution = _log_pruning_contribution(
-                        matrices[child], likelihoods.pop(child)
+                        factors[-1], likelihoods.pop(child)
                     )
+                # Only these families need log arithmetic. Project their
+                # messages through the edge factors without composing a dense
+                # log transition for every pair of ancestral and tip states.
+                for factor in reversed(factors[:-1]):
+                    contribution = _log_pruning_contribution(factor, contribution)
+                if tip is not None:
+                    contribution[missing] = 0.0
                 if self._subtree_has_missing[child]:
                     contribution[self.subtree_missing[child][rows]] = 0.0
                 value += contribution
@@ -1248,7 +1319,13 @@ class CountLikelihood:
             rare = np.flatnonzero(logs < arithmetic_limit)
             if len(rare):
                 log_transitions = self._log_transitions(
-                    rates, scale, max_count, event, _split_zero_event=_split_zero_event
+                    rates,
+                    scale,
+                    max_count,
+                    event,
+                    _split_zero_event=_split_zero_event,
+                    factored=True,
+                    rows=rare,
                 )
                 logs[rare] = self._prune_log(
                     log_transitions, root_mean, max_count, rare

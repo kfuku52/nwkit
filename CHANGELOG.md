@@ -4,6 +4,14 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.47.6] - 2026-11-27
+
+- Resume observed WGD count fits and retain completed bootstrap draws.
+- Reuse identical subtree observations, avoid dense log-space WGD pulse
+  composition, and speed up pruning over large copy-count state spaces.
+- Run WGD position fits and the branch-burst comparison concurrently within a
+  candidate branch while preserving the search and tie order.
+
 ## 0.47.5 (2026-11-23)
 
 - Dependabot dependency update (automated metadata).

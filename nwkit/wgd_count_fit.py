@@ -1,6 +1,6 @@
 """Candidate scanning and plug-in, search-wide parametric bootstrap for counts."""
 
-from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, as_completed, wait
+from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
 from dataclasses import dataclass, replace
 from multiprocessing import get_context
 from typing import Any
@@ -324,43 +324,33 @@ def _null_event_fit(model, background, node, fraction, multiplicity, options):
     raise ValueError("State truncation did not converge for the zero-retention event.")
 
 
-def _scan_candidate(
-    model, node, fractions, multiplicity, background, compare_bursts, options
-):
-    fit = max(
-        (
-            fit_counts(
-                model,
-                node=node,
-                fraction=fraction,
-                multiplicity=multiplicity,
-                initial=background,
-                **options,
-            )
-            for fraction in fractions
-        ),
-        key=lambda result: result.log_likelihood,
-    )
+def _select_event_fit(model, node, fits, multiplicity, background, options):
+    fit = max(fits, key=lambda result: result.log_likelihood)
     # At q=0 the event is the fitted null, not an improvement obtained by
     # comparing independent fits or different state bounds for the same model.
     event = fit.event
     if event is None:
         raise ValueError("Count scan returned a candidate without an event.")
     if event.retention == 0 or fit.log_likelihood < background.log_likelihood:
-        fit = _null_event_fit(
+        return _null_event_fit(
             model, background, node, event.fraction, multiplicity, options
         )
-    if compare_bursts:
-        burst_model = _burst_model(model, node)
-        burst_rates = np.zeros((burst_model.num_groups, 2))
-        for branch in range(1, len(model.tree.parents)):
-            burst_rates[burst_model.branch_groups[branch]] = background.rates[
-                model.branch_groups[branch]
-            ]
-        burst_initial = replace(background, rates=burst_rates)
-        burst = fit_counts(burst_model, initial=burst_initial, **options)
-    else:
-        burst = background
+    return fit
+
+
+def _fit_burst(model, node, background, options):
+    burst_model = _burst_model(model, node)
+    burst_rates = np.zeros((burst_model.num_groups, 2))
+    for branch in range(1, len(model.tree.parents)):
+        burst_rates[burst_model.branch_groups[branch]] = background.rates[
+            model.branch_groups[branch]
+        ]
+    return fit_counts(
+        burst_model, initial=replace(background, rates=burst_rates), **options
+    )
+
+
+def _scan_candidate_result(node, fit, burst, background):
     return ScanCandidate(
         node,
         fit,
@@ -368,6 +358,27 @@ def _scan_candidate(
         max(0.0, 2 * (fit.log_likelihood - background.log_likelihood)),
         burst.aic - fit.aic,
     )
+
+
+def _scan_candidate(
+    model, node, fractions, multiplicity, background, compare_bursts, options
+):
+    fits = (
+        fit_counts(
+            model,
+            node=node,
+            fraction=fraction,
+            multiplicity=multiplicity,
+            initial=background,
+            **options,
+        )
+        for fraction in fractions
+    )
+    fit = _select_event_fit(model, node, fits, multiplicity, background, options)
+    burst = (
+        _fit_burst(model, node, background, options) if compare_bursts else background
+    )
+    return _scan_candidate_result(node, fit, burst, background)
 
 
 _scan_worker_arguments: (
@@ -391,14 +402,69 @@ def _init_scan_worker(
     )
 
 
-def _scan_worker(node):
+def _scan_fit_worker(node, index):
+    arguments = _scan_worker_arguments
+    if arguments is None:
+        raise RuntimeError("Count scan worker has no initialized model.")
+    model, fractions, multiplicity, background, _, options = arguments
+    if index == len(fractions):
+        return _fit_burst(model, node, background, options)
+    return fit_counts(
+        model,
+        node=node,
+        fraction=fractions[index],
+        multiplicity=multiplicity,
+        initial=background,
+        **options,
+    )
+
+
+def _scan_finalize_worker(node, fits):
     arguments = _scan_worker_arguments
     if arguments is None:
         raise RuntimeError("Count scan worker has no initialized model.")
     model, fractions, multiplicity, background, compare_bursts, options = arguments
-    return _scan_candidate(
-        model, node, fractions, multiplicity, background, compare_bursts, options
+    fit = _select_event_fit(
+        model, node, fits[: len(fractions)], multiplicity, background, options
     )
+    burst = fits[-1] if compare_bursts else background
+    return _scan_candidate_result(node, fit, burst, background)
+
+
+def _parallel_scan(pool, nodes, fits_per_node, workers):
+    # Each branch's fits are independent. Prioritize finishing candidates so
+    # their checkpoints can be written even while later branches are fitting.
+    tasks = ((node, index) for node in nodes for index in range(fits_per_node))
+    pending: dict[Future[Any], tuple[int, int | None]] = {}
+    partial: dict[int, dict[int, CountFit]] = {}
+    try:
+        while True:
+            for _ in range(workers - len(pending)):
+                task = next(tasks, None)
+                if task is None:
+                    break
+                pending[pool.submit(_scan_fit_worker, *task)] = task
+            if not pending:
+                return
+            finished, _ = wait(pending, return_when=FIRST_COMPLETED)
+            for future in finished:
+                node, index = pending.pop(future)
+                if index is None:
+                    yield future.result()
+                    continue
+                fits = partial.setdefault(node, {})
+                fits[index] = future.result()
+                if len(fits) == fits_per_node:
+                    # Keep the caller's position order for equal likelihoods.
+                    ordered = tuple(fits[i] for i in range(fits_per_node))
+                    del partial[node]
+                    pending[pool.submit(_scan_finalize_worker, node, ordered)] = (
+                        node,
+                        None,
+                    )
+    finally:
+        for future in pending:
+            future.cancel()
 
 
 def scan_counts(
@@ -460,7 +526,8 @@ def scan_counts(
                 on_candidate(candidate)
             candidates.append(candidate)
 
-    workers = min(workers, len(remaining))
+    fits_per_node = len(fractions) + int(compare_bursts)
+    workers = min(workers, len(remaining) * fits_per_node)
     if workers <= 1:
         collect(
             _scan_candidate(
@@ -497,8 +564,7 @@ def scan_counts(
                 options,
             ),
         ) as pool:
-            pending = [pool.submit(_scan_worker, node) for node in remaining]
-            collect(future.result() for future in as_completed(pending))
+            collect(_parallel_scan(pool, remaining, fits_per_node, workers))
     candidates.sort(
         key=lambda candidate: (
             -candidate.improvement,

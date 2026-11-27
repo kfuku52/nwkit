@@ -463,7 +463,10 @@ def test_log_pulse_transition_matches_explicit_truncated_matrices(
     model = CountLikelihood(tree(), np.array([[1, 1]]))
     rates, bound = [[0.6, 0.2]], 7
     event = MultiplicationEvent(1, retention, fraction, multiplicity)
-    actual = model._log_transitions(rates, 1, bound, event, _split_zero_event=True)
+    edges = model._log_transitions(
+        rates, 1, bound, event, _split_zero_event=True, factored=True
+    )
+    factors = edges[1]
     time = model.tree.lengths[1]
     before = birth_death_transition(*rates[0], time * fraction, bound)
     after = birth_death_transition(*rates[0], time * (1 - fraction), bound)
@@ -477,8 +480,67 @@ def test_log_pulse_transition_matches_explicit_truncated_matrices(
                 * (1 - retention) ** (trials - extra)
             )
     expected = before @ pulse @ after
-    np.testing.assert_array_equal(np.isfinite(actual[1]), expected > 0)
-    np.testing.assert_allclose(np.exp(actual[1]), expected, rtol=2e-13, atol=1e-15)
+    actual = np.eye(bound + 1)
+    for factor in factors:
+        actual = actual @ np.exp(factor)
+    np.testing.assert_array_equal(actual > 0, expected > 0)
+    np.testing.assert_allclose(actual, expected, rtol=2e-13, atol=1e-15)
+
+
+def test_factored_log_pruning_preserves_internal_pulse_and_missing_subtree():
+    design = CountTree(
+        (-1, 0, 1, 1, 0),
+        (0.0, 0.4, 0.2, 0.5, 0.7),
+        (2, 3, 4),
+        ("A", "B", "C"),
+        (0, 1, 2, 3, 4),
+        ("ABC", "AB", "A", "B", "C"),
+    )
+    model = CountLikelihood(design, [[15, 12, 1], [np.nan, np.nan, 1], [1, np.nan, 3]])
+    rates = [[0.012, 0.021]]
+    event = MultiplicationEvent(1, 0.4, 0.6)
+    rows = np.arange(3)
+    dense = model._log_transitions(rates, 1, 20, event)
+    factored = model._log_transitions(rates, 1, 20, event, factored=True, rows=rows)
+    assert factored[2].shape == (21, 16)
+    np.testing.assert_allclose(
+        model._prune_log(factored, 1.1, 20, rows),
+        model._prune_log(dense, 1.1, 20, rows),
+        rtol=0,
+        atol=2e-13,
+    )
+
+
+def test_wide_probability_pruning_matches_unscaled_pruning(monkeypatch):
+    design = CountTree(
+        (-1, 0, 1, 1, 0),
+        (0.0, 0.4, 0.2, 0.5, 0.7),
+        (2, 3, 4),
+        ("A", "B", "C"),
+        (0, 1, 2, 3, 4),
+        ("ABC", "AB", "A", "B", "C"),
+    )
+    observations = [[100, 110, 115], [np.nan, np.nan, 1], [1, np.nan, 35], [1, 1, 1]]
+    model = CountLikelihood(design, observations, detection=[1, 0.95, 1])
+    bound = 256
+    rates = [[0.08, 0.003]]
+    event = MultiplicationEvent(1, 0.8, 0.6)
+    arguments = (
+        model._emissions(bound),
+        model.transitions(rates, 1, bound, event),
+        root_probabilities(1.1, bound),
+    )
+    actual = model._prune(*arguments)
+    monkeypatch.setattr(wgd_count_model, "_WIDE_PRUNING_MIN_STATES", bound + 2)
+    np.testing.assert_allclose(actual, model._prune(*arguments), rtol=0, atol=2e-13)
+
+
+@pytest.mark.parametrize("rates", [(0.2, 0.3), (0.2, 0), (0, 0.3), (0, 0)])
+@pytest.mark.parametrize("max_tip_count", [0, 7])
+def test_log_tip_transition_matches_columns_of_full_transition(rates, max_tip_count):
+    expected = _birth_death_log_transition(*rates, 0.5, 40)
+    actual = _birth_death_log_transition(*rates, 0.5, 40, max_tip_count)
+    np.testing.assert_array_equal(actual, expected[:, : max_tip_count + 1])
 
 
 def test_time_units_and_semigroup():

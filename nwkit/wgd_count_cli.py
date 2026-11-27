@@ -78,7 +78,7 @@ def register_wgd_count(subparsers, tree_input, table_output, table_policy):
             "scan-workers",
             1,
             int,
-            "Concurrent candidate-branch fits before calibration; use one BLAS thread per worker (default 1).",
+            "Concurrent WGD-position and branch-burst fits before calibration; use one BLAS thread per worker (default 1).",
         ),
         (
             "bootstrap-workers",
@@ -148,6 +148,7 @@ def register_wgd_count(subparsers, tree_input, table_output, table_policy):
     )
     parser.add_argument(
         "--background-only",
+        "--background_only",
         action="store_true",
         help="Fit only the background and save it to --fit-checkpoint.",
     )

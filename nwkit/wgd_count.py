@@ -292,9 +292,7 @@ def _verify_fit_inputs(args, identity):
         raise ValueError("WGD inputs changed during the observed fit.")
 
 
-def wgd_count_main(args):
-    paths = _paths(args)
-    adequacy_draws = _adequacy_draw_count(args, paths)
+def _validate_count_run(args, paths, adequacy_draws):
     workers = getattr(args, "bootstrap_workers", 1)
     scan_workers = getattr(args, "scan_workers", 1)
     if workers < 1:
@@ -325,6 +323,15 @@ def wgd_count_main(args):
         raise ValueError(
             "--background-only requires --fit-checkpoint and writes only that checkpoint."
         )
+    return workers, scan_workers, checkpoint_path, fit_path, background_only
+
+
+def wgd_count_main(args):
+    paths = _paths(args)
+    adequacy_draws = _adequacy_draw_count(args, paths)
+    workers, scan_workers, checkpoint_path, fit_path, background_only = (
+        _validate_count_run(args, paths, adequacy_draws)
+    )
     input_identity = (
         checkpoint_inputs(args)
         if checkpoint_path is not None or fit_path is not None
