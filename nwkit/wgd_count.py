@@ -411,10 +411,14 @@ def wgd_count_main(args):
                     background=observed.background,
                     completed=observed.candidates or (),
                     on_candidate=observed.save_candidate,
+                    completed_components=observed.components,
+                    on_component=observed.save_component,
                     **options,
                 )
                 _verify_fit_inputs(args, input_identity)
-                observed.save(result.background, result.candidates, complete=True)
+                observed.save(
+                    result.background, result.candidates, complete=True, components={}
+                )
 
     if args.bootstrap:
 

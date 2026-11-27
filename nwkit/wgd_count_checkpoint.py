@@ -204,7 +204,7 @@ def _encode_fit_record(record):
 
 
 class ObservedCheckpoint:
-    """One atomic record for the background and completed observed scan."""
+    """One atomic record for the background, candidates and unfinished branches."""
 
     def __init__(self, path, identity):
         self.path = path
@@ -212,6 +212,7 @@ class ObservedCheckpoint:
         self.background = None
         self.candidates = None
         self.complete = False
+        self.components: dict[int, dict[int, CountFit]] = {}
         if path.exists():
             try:
                 payload = json.loads(path.read_text(encoding="utf-8"))
@@ -243,14 +244,26 @@ class ObservedCheckpoint:
                         )
                         for values in data["candidates"]
                     )
-            except (KeyError, TypeError) as exc:
+                self.components = {
+                    int(node): {
+                        int(index): _restore_fit(fit) for index, fit in fits.items()
+                    }
+                    for node, fits in data.get("components", {}).items()
+                }
+                if self.complete and self.components:
+                    raise ValueError(
+                        "A completed WGD fit checkpoint has unfinished components."
+                    )
+            except (AttributeError, KeyError, TypeError) as exc:
                 raise ValueError("Malformed WGD fit checkpoint.") from exc
 
     @staticmethod
     def _checksum(data):
         return hashlib.sha256(_encode_fit_record(data).encode()).hexdigest()
 
-    def save(self, background, candidates=None, *, complete=False):
+    def save(self, background, candidates=None, *, complete=False, components=None):
+        if components is None:
+            components = self.components
         rows = (
             None
             if candidates is None
@@ -272,6 +285,13 @@ class ObservedCheckpoint:
             "candidates": rows,
             "complete": complete,
         }
+        if components:
+            data["components"] = {
+                str(node): {
+                    str(index): _fit_payload(fit) for index, fit in fits.items()
+                }
+                for node, fits in components.items()
+            }
         payload = {"data": data, "sha256": self._checksum(data)}
         write_text_output(
             self.path, lambda stream: stream.write(_encode_fit_record(payload))
@@ -279,11 +299,27 @@ class ObservedCheckpoint:
         self.background = background
         self.candidates = candidates
         self.complete = complete
+        self.components = components
+
+    def save_component(self, node, index, fit):
+        self.save(
+            self.background,
+            self.candidates,
+            components={
+                **self.components,
+                node: {**self.components.get(node, {}), index: fit},
+            },
+        )
 
     def save_candidate(self, candidate):
         self.save(
             self.background,
             (*self.candidates, candidate) if self.candidates else (candidate,),
+            components={
+                node: fits
+                for node, fits in self.components.items()
+                if node != candidate.node
+            },
         )
 
     def scan(self, fractions, multiplicity):

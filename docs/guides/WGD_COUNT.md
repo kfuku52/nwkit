@@ -13,7 +13,9 @@ nwkit wgd-count -i species.nwk --counts families.tsv \
 For a long scan, keep one `--fit-checkpoint` outside the result directory.
 With `--background-only`, the command stops after the verified background fit.
 Run again with the same inputs and search settings and without that flag to
-complete the observed branch scan, saving each completed branch. A third run can
+complete the observed branch scan. Each completed position or burst fit is
+saved in the same atomic checkpoint, so a run interrupted during a branch
+reuses those fits as well as the completed branches. A third run can
 enable bootstrap and add
 `--bootstrap-checkpoint`, reusing the completed observed fits. The fit
 checkpoint binds the tree, counts, fitting settings, and numerical runtime.

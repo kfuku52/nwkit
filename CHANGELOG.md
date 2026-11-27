@@ -4,6 +4,11 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.47.8] - 2026-11-27
+
+- Save completed WGD position and competing branch-burst fits in the observed
+  checkpoint so interrupted branches can reuse them.
+
 ## [0.47.7] - 2026-11-27
 
 - Run native SHIFT calibration and support, RADTE dating intervals, and

@@ -608,3 +608,49 @@ def test_observed_checkpoint_reuses_finished_branches_after_interruption(
     main(args)
     assert len(calls) == 3 and calls[2] == calls[1]
     assert json.loads(checkpoint.read_text())["data"]["complete"]
+
+
+@pytest.mark.parametrize("workers", [1, 2])
+def test_observed_checkpoint_reuses_fits_within_interrupted_branch(
+    tmp_path, monkeypatch, workers
+):
+    import nwkit.wgd_count_fit as fitting
+    from nwkit.wgd_count_checkpoint import ObservedCheckpoint
+
+    tree, counts = inputs(tmp_path)
+    fresh, resumed, checkpoint = (
+        tmp_path / name for name in ("a.tsv", "b.tsv", "fit.json")
+    )
+    args = command(tree, counts)
+    args[args.index("--event-fractions") + 1] = "0.25,0.5,0.75"
+    main(args + ["-o", str(fresh)])
+    args += ["--fit-checkpoint", str(checkpoint), "-o", str(resumed)]
+    original = fitting._fit_scan_component
+
+    def interrupt(model, node, index, *rest):
+        if index == 1:
+            raise RuntimeError("interrupted between positions")
+        return original(model, node, index, *rest)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(fitting, "_fit_scan_component", interrupt)
+        with pytest.raises(RuntimeError, match="interrupted between positions"):
+            main(args)
+    saved = json.loads(checkpoint.read_text())["data"]
+    assert saved["candidates"] is None and not saved["complete"]
+    assert list(saved["components"]["1"]) == ["0"]
+    assert not resumed.exists()
+
+    recorded = []
+    save = ObservedCheckpoint.save_component
+
+    def record(self, node, index, fit):
+        recorded.append((node, index))
+        save(self, node, index, fit)
+
+    monkeypatch.setattr(ObservedCheckpoint, "save_component", record)
+    main(args + ["--scan-workers", str(workers)])
+    assert sorted(recorded) == [(1, 1), (1, 2), (1, 3)]
+    assert resumed.read_bytes() == fresh.read_bytes()
+    saved = json.loads(checkpoint.read_text())["data"]
+    assert saved["complete"] and "components" not in saved

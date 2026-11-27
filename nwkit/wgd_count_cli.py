@@ -90,7 +90,7 @@ def register_wgd_count(subparsers, tree_input, table_output, table_policy):
             "fit-checkpoint",
             None,
             str,
-            "Save the converged background and observed scan, and reuse them on restart.",
+            "Resume the converged background and completed position and burst fits.",
         ),
         (
             "bootstrap-checkpoint",

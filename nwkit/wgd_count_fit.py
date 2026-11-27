@@ -360,24 +360,45 @@ def _scan_candidate_result(node, fit, burst, background):
     )
 
 
-def _scan_candidate(
-    model, node, fractions, multiplicity, background, compare_bursts, options
+def _fit_scan_component(
+    model, node, index, fractions, multiplicity, background, options
 ):
-    fits = (
-        fit_counts(
-            model,
-            node=node,
-            fraction=fraction,
-            multiplicity=multiplicity,
-            initial=background,
-            **options,
+    if index == len(fractions):
+        return _fit_burst(model, node, background, options)
+    return fit_counts(
+        model,
+        node=node,
+        fraction=fractions[index],
+        multiplicity=multiplicity,
+        initial=background,
+        **options,
+    )
+
+
+def _scan_candidate(
+    model,
+    node,
+    fractions,
+    multiplicity,
+    background,
+    compare_bursts,
+    options,
+    saved=None,
+    on_component=None,
+):
+    def component(index):
+        if saved is not None and index in saved:
+            return saved[index]
+        fit = _fit_scan_component(
+            model, node, index, fractions, multiplicity, background, options
         )
-        for fraction in fractions
-    )
+        if on_component is not None:
+            on_component(node, index, fit)
+        return fit
+
+    fits = (component(index) for index in range(len(fractions)))
     fit = _select_event_fit(model, node, fits, multiplicity, background, options)
-    burst = (
-        _fit_burst(model, node, background, options) if compare_bursts else background
-    )
+    burst = component(len(fractions)) if compare_bursts else background
     return _scan_candidate_result(node, fit, burst, background)
 
 
@@ -407,15 +428,8 @@ def _scan_fit_worker(node, index):
     if arguments is None:
         raise RuntimeError("Count scan worker has no initialized model.")
     model, fractions, multiplicity, background, _, options = arguments
-    if index == len(fractions):
-        return _fit_burst(model, node, background, options)
-    return fit_counts(
-        model,
-        node=node,
-        fraction=fractions[index],
-        multiplicity=multiplicity,
-        initial=background,
-        **options,
+    return _fit_scan_component(
+        model, node, index, fractions, multiplicity, background, options
     )
 
 
@@ -431,19 +445,40 @@ def _scan_finalize_worker(node, fits):
     return _scan_candidate_result(node, fit, burst, background)
 
 
-def _parallel_scan(pool, nodes, fits_per_node, workers):
+def _parallel_scan(pool, nodes, fits_per_node, workers, partial, on_component):
     # Each branch's fits are independent. Prioritize finishing candidates so
     # their checkpoints can be written even while later branches are fitting.
-    tasks = ((node, index) for node in nodes for index in range(fits_per_node))
+    def tasks():
+        for node in nodes:
+            saved = partial.get(node, {})
+            if len(saved) == fits_per_node:
+                yield node, None
+            else:
+                # The dictionary changes as the submitted fits finish.
+                missing = tuple(
+                    index for index in range(fits_per_node) if index not in saved
+                )
+                yield from ((node, index) for index in missing)
+
+    queue = tasks()
     pending: dict[Future[Any], tuple[int, int | None]] = {}
-    partial: dict[int, dict[int, CountFit]] = {}
+
+    def finalize(node):
+        fits = partial.pop(node)
+        ordered = tuple(fits[i] for i in range(fits_per_node))
+        pending[pool.submit(_scan_finalize_worker, node, ordered)] = (node, None)
+
     try:
         while True:
             for _ in range(workers - len(pending)):
-                task = next(tasks, None)
+                task = next(queue, None)
                 if task is None:
                     break
-                pending[pool.submit(_scan_fit_worker, *task)] = task
+                node, index = task
+                if index is None:
+                    finalize(node)
+                else:
+                    pending[pool.submit(_scan_fit_worker, node, index)] = task
             if not pending:
                 return
             finished, _ = wait(pending, return_when=FIRST_COMPLETED)
@@ -452,16 +487,13 @@ def _parallel_scan(pool, nodes, fits_per_node, workers):
                 if index is None:
                     yield future.result()
                     continue
+                fit = future.result()
+                if on_component is not None:
+                    on_component(node, index, fit)
                 fits = partial.setdefault(node, {})
-                fits[index] = future.result()
+                fits[index] = fit
                 if len(fits) == fits_per_node:
-                    # Keep the caller's position order for equal likelihoods.
-                    ordered = tuple(fits[i] for i in range(fits_per_node))
-                    del partial[node]
-                    pending[pool.submit(_scan_finalize_worker, node, ordered)] = (
-                        node,
-                        None,
-                    )
+                    finalize(node)
     finally:
         for future in pending:
             future.cancel()
@@ -481,6 +513,8 @@ def scan_counts(
     workers: int = 1,
     completed: tuple[ScanCandidate, ...] = (),
     on_candidate=None,
+    completed_components: dict[int, dict[int, CountFit]] | None = None,
+    on_component=None,
 ) -> CountScan:
     """Scan one event at a time; multiple simultaneous events are not inferred."""
     if isinstance(workers, bool) or not isinstance(workers, int) or workers < 1:
@@ -527,7 +561,17 @@ def scan_counts(
             candidates.append(candidate)
 
     fits_per_node = len(fractions) + int(compare_bursts)
-    workers = min(workers, len(remaining) * fits_per_node)
+    partial = {node: fits.copy() for node, fits in (completed_components or {}).items()}
+    if not partial.keys() <= set(remaining) or any(
+        not fits.keys() <= set(range(fits_per_node)) for fits in partial.values()
+    ):
+        raise ValueError(
+            "Saved WGD fit components do not match the unfinished branches."
+        )
+    work_items = sum(
+        max(1, fits_per_node - len(partial.get(node, {}))) for node in remaining
+    )
+    workers = min(workers, work_items)
     if workers <= 1:
         collect(
             _scan_candidate(
@@ -538,6 +582,8 @@ def scan_counts(
                 background,
                 compare_bursts,
                 options,
+                partial.get(node),
+                on_component,
             )
             for node in remaining
         )
@@ -564,7 +610,11 @@ def scan_counts(
                 options,
             ),
         ) as pool:
-            collect(_parallel_scan(pool, remaining, fits_per_node, workers))
+            collect(
+                _parallel_scan(
+                    pool, remaining, fits_per_node, workers, partial, on_component
+                )
+            )
     candidates.sort(
         key=lambda candidate: (
             -candidate.improvement,
