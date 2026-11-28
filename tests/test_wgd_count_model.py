@@ -511,7 +511,8 @@ def test_factored_log_pruning_preserves_internal_pulse_and_missing_subtree():
     )
 
 
-def test_wide_probability_pruning_matches_unscaled_pruning(monkeypatch):
+@pytest.mark.parametrize("root_mean", [1.0, 1.001, 1.2])
+def test_wide_probability_pruning_matches_unscaled_pruning(monkeypatch, root_mean):
     design = CountTree(
         (-1, 0, 1, 1, 0),
         (0.0, 0.4, 0.2, 0.5, 0.7),
@@ -528,7 +529,7 @@ def test_wide_probability_pruning_matches_unscaled_pruning(monkeypatch):
     arguments = (
         model._emissions(bound),
         model.transitions(rates, 1, bound, event),
-        root_probabilities(1.1, bound),
+        root_probabilities(root_mean, bound),
     )
     actual = model._prune(*arguments)
     monkeypatch.setattr(wgd_count_model, "_WIDE_PRUNING_MIN_STATES", bound + 2)
@@ -541,6 +542,51 @@ def test_log_tip_transition_matches_columns_of_full_transition(rates, max_tip_co
     expected = _birth_death_log_transition(*rates, 0.5, 40)
     actual = _birth_death_log_transition(*rates, 0.5, 40, max_tip_count)
     np.testing.assert_array_equal(actual, expected[:, : max_tip_count + 1])
+
+
+@pytest.mark.parametrize("rates", [(0.02, 0.04), (0.02, 1e-8), (5.0, 5.0)])
+def test_wide_log_transition_matches_unshifted_recurrence(rates, monkeypatch):
+    actual = _birth_death_log_transition(*rates, 0.6, 272)
+    monkeypatch.setattr(wgd_count_model, "_LOG_BRANCH_BLOCK_SIZE", 272)
+    expected = _birth_death_log_transition(*rates, 0.6, 272)
+    np.testing.assert_allclose(actual, expected, rtol=1e-13, atol=2e-12)
+
+
+@pytest.mark.parametrize("tip_bound", [0, 7])
+def test_wide_exact_tip_columns_equal_full_probability_transition(tip_bound):
+    rates, time, bound = (0.02, 0.3), 0.6, 272
+    rectangular = wgd_count_model._probability_transition(
+        *rates, time, bound, tip_bound
+    )
+    dense = birth_death_transition(*rates, time, bound)
+    np.testing.assert_array_equal(rectangular, dense[:, : tip_bound + 1])
+
+
+def test_wide_terminal_pulse_prunes_only_exact_tip_columns(monkeypatch):
+    model = CountLikelihood(
+        tree(), [[35, 12], [1, np.nan], [np.nan, 2]], detection=[1, 0.92]
+    )
+    event = MultiplicationEvent(1, 0.4, 0.6)
+    original = model.transitions
+    bounded_edges = []
+
+    def record(*args, **kwargs):
+        edges = original(*args, **kwargs)
+        bounded_edges.append(edges[1].shape)
+        return edges
+
+    args = ([[0.05, 0.07]], 1.2, 272, event)
+    monkeypatch.setattr(model, "transitions", record)
+    actual = model.family_log_likelihoods(*args)
+    assert bounded_edges == [(273, 36)]
+
+    def full(*args, **kwargs):
+        kwargs.pop("_tip_bounds")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(model, "transitions", full)
+    expected = model.family_log_likelihoods(*args)
+    np.testing.assert_allclose(actual, expected, rtol=0, atol=2e-12)
 
 
 def test_time_units_and_semigroup():

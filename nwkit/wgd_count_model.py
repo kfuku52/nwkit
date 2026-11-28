@@ -21,6 +21,7 @@ _EDGE_PROBABILITY_CACHE_ENTRIES = 4096
 _EMISSION_CACHE_BYTES = 16 * 1024**2
 _SELECTION_PROBABILITY_FLOOR = np.finfo(float).tiny / np.finfo(float).eps
 _GEOMETRIC_RECURRENCE_MIN_COUNT = 256
+_LOG_BRANCH_BLOCK_SIZE = 32
 _WIDE_PRUNING_MIN_STATES = 256
 _PRUNING_UPSCALE = 2.0**500
 _PRUNING_DOWNSCALE = 2.0**-1000
@@ -134,30 +135,44 @@ def birth_death_transition(
     geometric number of descendants. Independent copies are convolved. Paths
     that temporarily exceed the count bound and return are included here.
     """
+    return _probability_transition(duplication, loss, time, max_count)
+
+
+def _probability_transition(duplication, loss, time, max_count, max_tip_count=None):
     if isinstance(max_count, bool) or not isinstance(max_count, int) or max_count < 1:
         raise ValueError("max_count must be a positive integer.")
+    if max_tip_count is None:
+        max_tip_count = max_count
     a, b, survival, geometric_success = _birth_death_probabilities(
         duplication, loss, time
     )
     coefficient = survival * geometric_success
+    if coefficient == 1 and a == b == 0:
+        return np.eye(max_count + 1, max_tip_count + 1)
     if max_count >= _GEOMETRIC_RECURRENCE_MIN_COUNT:
-        return _geometric_transition(a, b, coefficient, max_count)
-    one = np.empty(max_count + 1)
+        return _geometric_transition(a, b, coefficient, max_count, max_tip_count)
+    one = np.empty(max_tip_count + 1)
     one[0] = a
-    one[1:] = coefficient * b ** np.arange(max_count)
-    result = np.zeros((max_count + 1, max_count + 1))
+    one[1:] = coefficient * b ** np.arange(max_tip_count)
+    result = np.zeros((max_count + 1, max_tip_count + 1))
     result[0, 0] = 1.0
     for count in range(1, max_count + 1):
-        result[count] = np.convolve(result[count - 1], one)[: max_count + 1]
+        result[count] = np.convolve(result[count - 1], one)[: max_tip_count + 1]
     return result
 
 
-def _geometric_transition(extinction, geometric_ratio, coefficient, max_count):
+def _geometric_transition(
+    extinction, geometric_ratio, coefficient, max_count, max_tip_count
+):
     from scipy.signal import lfilter
 
     # Convolution with the geometric tail obeys g[j] = c*p[j-1] + b*g[j-1].
     # Evaluate it in C for each ancestral count, without subtractive cancellation.
-    result = np.zeros((max_count + 1, max_count + 1))
+    if max_tip_count == 0:
+        first_column = np.full(max_count + 1, extinction)
+        first_column[0] = 1.0
+        return np.cumprod(first_column)[:, None]
+    result = np.zeros((max_count + 1, max_tip_count + 1))
     result[0, 0] = 1.0
     numerator, denominator = (coefficient,), (1.0, -geometric_ratio)
     for count in range(1, max_count + 1):
@@ -191,6 +206,14 @@ def _birth_death_log_transition(duplication, loss, time, max_count, max_tip_coun
     result[1:, 0] = np.arange(1, max_count + 1) * log_a
     log_one = log_survival + log_success
     positive = np.full(max_count, -np.inf)
+    block_size = _LOG_BRANCH_BLOCK_SIZE
+    blocked = max_count >= 8 * block_size and -log_a * (block_size - 1) <= 1024
+    if blocked:
+        terms = np.full(
+            ((max_count + block_size - 1) // block_size, block_size), -np.inf
+        )
+        offsets = log_a * np.arange(block_size)
+        carry_distances = log_a + offsets
     for descendants in range(1, max_tip_count + 1):
         # For n ancestors and k descendants, the last ancestor produces
         # exactly one copy with probability d, or a positive geometric tail
@@ -199,17 +222,30 @@ def _birth_death_log_transition(duplication, loss, time, max_count, max_tip_coun
         positive = np.logaddexp(
             log_one + result[:-1, descendants - 1], log_b + positive
         )
-        column = positive.copy()
-        # Double the number of ancestor terms accumulated at each step.
-        # Terms are nonnegative, and impossible states stay at -inf.
-        shift = 1
-        while shift < max_count:
-            column[shift:] = np.logaddexp(
-                column[shift:], shift * log_a + column[:-shift]
+        if blocked:
+            # Remove the geometric weight only within short blocks, keeping
+            # the shift bounded. Combine completed blocks without subtraction.
+            terms.ravel()[:max_count] = positive
+            column_blocks = np.logaddexp.accumulate(terms - offsets, axis=1) + offsets
+            carry = column_blocks[:-1, -1].copy()
+            _weighted_log_prefix(carry, log_a * block_size)
+            column_blocks[1:] = np.logaddexp(
+                column_blocks[1:], carry[:, None] + carry_distances
             )
-            shift *= 2
+            column = column_blocks.ravel()[:max_count]
+        else:
+            column = positive.copy()
+            _weighted_log_prefix(column, log_a)
         result[1:, descendants] = column
     return result
+
+
+def _weighted_log_prefix(terms, log_weight):
+    # Double the accumulated span at each step without exponentiating.
+    shift = 1
+    while shift < len(terms):
+        terms[shift:] = np.logaddexp(terms[shift:], shift * log_weight + terms[:-shift])
+        shift *= 2
 
 
 def _one_way_log_transition(
@@ -779,7 +815,9 @@ class CountLikelihood:
                 duplication, loss, time, max_count, max_tip_count
             )
         else:
-            matrix = birth_death_transition(duplication, loss, time, max_count)
+            matrix = _probability_transition(
+                duplication, loss, time, max_count, max_tip_count
+            )
         if matrix.nbytes <= _TRANSITION_CACHE_BYTES and _TRANSITION_CACHE_ENTRIES > 0:
             while (
                 self._transition_cache_bytes + matrix.nbytes > _TRANSITION_CACHE_BYTES
@@ -801,6 +839,7 @@ class CountLikelihood:
         _split_zero_event=False,
         _kernel=None,
         _pulse=None,
+        _tip_bounds=None,
     ):
         rates = np.asarray(rates, dtype=float)
         if (
@@ -815,12 +854,14 @@ class CountLikelihood:
             raise ValueError("Multiplication event must identify a non-root branch.")
         if event is not None and event.node in self._fixed_by_node:
             raise ValueError("A candidate event cannot overlap a fixed genome event.")
-        kernel = birth_death_transition if _kernel is None else _kernel
+        kernel = _probability_transition if _kernel is None else _kernel
         matrices = {}
         cache = {}
+        tip_bounds = _tip_bounds or {}
         for node, time in enumerate(self.tree.lengths[1:], 1):
             duplication, loss = rates[self.branch_groups[node]] * scale
-            key = (float(duplication), float(loss), time)
+            tip_bound = tip_bounds.get(node)
+            key = (float(duplication), float(loss), time, tip_bound)
             pulse_event = (
                 event
                 if event is not None and event.node == node
@@ -830,14 +871,17 @@ class CountLikelihood:
                 pulse_event.retention == 0 and not _split_zero_event
             ):
                 if key not in cache:
-                    cache[key] = kernel(duplication, loss, time, max_count)
+                    cache[key] = kernel(
+                        duplication, loss, time, max_count, max_tip_count=tip_bound
+                    )
                 matrices[node] = cache[key]
             else:
                 before = kernel(
                     duplication, loss, time * pulse_event.fraction, max_count
                 )
+                after_time = time * (1 - pulse_event.fraction)
                 after = kernel(
-                    duplication, loss, time * (1 - pulse_event.fraction), max_count
+                    duplication, loss, after_time, max_count, max_tip_count=tip_bound
                 )
                 pulse = (
                     _pulse
@@ -895,23 +939,33 @@ class CountLikelihood:
         size = len(self.tree.parents)
         likelihoods = [None] * size
         scales = [None] * size
+        root_states = slice(None)
+        if len(prior) >= _WIDE_PRUNING_MIN_STATES:
+            support = np.flatnonzero(prior)
+            # These states already have exactly zero mass in this arithmetic.
+            # Rare-family log pruning still uses the full positive prior.
+            root_states = slice(support[0], support[-1] + 1)
+        root_prior = prior[root_states]
         with np.errstate(divide="ignore"):
             for node in range(size - 1, -1, -1):
                 members = representatives[node]
                 if node in emissions:
                     likelihoods[node] = emissions[node][members]
                     continue
-                value = np.ones((len(members), len(prior)))
+                width = len(prior) if node else len(root_prior)
+                value = np.ones((len(members), width))
                 scale = np.zeros(len(members))
                 for child in self.children[node]:
                     profiles = child_profiles[child]
                     child_values = likelihoods[child]
+                    matrix = matrices[child]
+                    if node == 0:
+                        matrix = matrix[root_states]
                     if child_values.ndim == 1:
-                        contribution = matrices[child].T[child_values[profiles]]
+                        contribution = matrix.T[child_values[profiles]]
                     else:
                         # Contract each distinct child profile once, then map
                         # its contribution to all matching parent profiles.
-                        matrix = matrices[child]
                         if len(prior) >= _WIDE_PRUNING_MIN_STATES:
                             # Wide count spaces contain long probability tails.
                             # Shift both inputs by powers of two to avoid most
@@ -945,7 +999,7 @@ class CountLikelihood:
                     )
                     scale += np.log(normalizer)
                 likelihoods[node], scales[node] = value, scale
-            return (np.log(likelihoods[0] @ prior) + scales[0])[root_profiles]
+            return (np.log(likelihoods[0] @ root_prior) + scales[0])[root_profiles]
 
     def _log_transitions(
         self,
@@ -1018,9 +1072,8 @@ class CountLikelihood:
     def _prune_log(self, matrices, root_mean, max_count, rows):
         states = np.arange(max_count + 1)
         prior = np.full(max_count + 1, -np.inf)
-        if root_mean == 1:
-            prior[1] = 0.0
-        else:
+        single_root_state = root_mean == 1
+        if not single_root_state:
             prior[1:] = -np.log(root_mean) + np.arange(max_count) * np.log1p(
                 -1 / root_mean
             )
@@ -1045,10 +1098,13 @@ class CountLikelihood:
         for node in range(len(self.tree.parents) - 1, -1, -1):
             if not self.children[node]:
                 continue
-            value = np.zeros((len(rows), max_count + 1))
+            single_state = node == 0 and single_root_state
+            value = np.zeros((len(rows), 1 if single_state else max_count + 1))
             for child in self.children[node]:
                 edge = matrices[child]
                 factors = edge if isinstance(edge, tuple) else (edge,)
+                if single_state:
+                    factors = (factors[0][1:2], *factors[1:])
                 if (tip := exact_counts.pop(child, None)) is not None:
                     counts, missing = tip
                     contribution = factors[-1].T[counts]
@@ -1067,6 +1123,8 @@ class CountLikelihood:
                     contribution[self.subtree_missing[child][rows]] = 0.0
                 value += contribution
             likelihoods[node] = value
+        if single_root_state:
+            return likelihoods[0][:, 0]
         return logsumexp(likelihoods[0] + prior[None, :], axis=1)
 
     def _selection_logs(self, rates, scale, root_mean, event):
@@ -1286,6 +1344,17 @@ class CountLikelihood:
             raise ValueError("Maximum state count is below an observed count.")
         prior = root_probabilities(root_mean, max_count)
         emissions = self._emissions(max_count)
+        # With perfect detection a leaf message selects only the observed
+        # columns. Keep all ancestral and pulse states at the original bound.
+        tip_bounds = (
+            {
+                node: count
+                for node, values in emissions.items()
+                if values.ndim == 1 and (count := int(values.max())) < max_count
+            }
+            if max_count >= _GEOMETRIC_RECURRENCE_MIN_COUNT
+            else None
+        )
         pulse = None
         if event is not None and (event.retention != 0 or _split_zero_event):
             # The event matrix only depends on retention and multiplicity, not
@@ -1303,6 +1372,7 @@ class CountLikelihood:
                 _split_zero_event=_split_zero_event,
                 _kernel=self._cached_transition,
                 _pulse=pulse,
+                _tip_bounds=tip_bounds,
             )
             logs = self._prune(emissions, transitions, prior)
             # Scaling cannot recover a transition or latent-state contribution

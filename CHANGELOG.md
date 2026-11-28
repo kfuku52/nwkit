@@ -4,6 +4,12 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.47.9] - 2026-11-28
+
+- Accelerate WGD count likelihoods with blocked log-space transitions,
+  narrower transition matrices for exactly observed tips, and pruning
+  restricted to the represented root-prior support.
+
 ## [0.47.8] - 2026-11-27
 
 - Save completed WGD position and competing branch-burst fits in the observed
